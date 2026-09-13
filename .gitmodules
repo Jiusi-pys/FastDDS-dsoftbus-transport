@@ -1,0 +1,7 @@
+[submodule "Fast-DDS"]
+	path = Fast-DDS
+	url = git@github.com:eProsima/Fast-DDS.git
+
+[submodule "communication_dsoftbus"]
+	path = communication_dsoftbus
+	url = git@gitcode.com:openharmony/communication_dsoftbus.git
