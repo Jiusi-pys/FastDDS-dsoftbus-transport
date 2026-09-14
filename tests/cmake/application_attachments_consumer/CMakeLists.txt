@@ -1,0 +1,31 @@
+cmake_minimum_required(VERSION 3.22)
+project(mdds_application_attachments_consumer LANGUAGES C CXX)
+
+get_filename_component(MDDS_ATTACHMENTS_CONSUMER_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set(MDDS_FASTDDS_MODE CONFIG CACHE STRING "Actual library consumer" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "External consumer owns its test" FORCE)
+set(BUILD_INTERFACE_PROBE OFF CACHE BOOL "No source-interface harness" FORCE)
+set(BUILD_SOFTBUS_CAPABILITY_PROBE OFF CACHE BOOL "No Socket provider" FORCE)
+set(BUILD_NATIVE_PERMISSION_PROBE OFF CACHE BOOL "No permission provider" FORCE)
+set(BUILD_DSOFTBUS_DIRECTORY ON CACHE BOOL "Attachment dependency" FORCE)
+set(BUILD_DSOFTBUS_SEND_QUEUE OFF CACHE BOOL "Receive-only consumer" FORCE)
+set(BUILD_DSOFTBUS_INPUT_CHANNELS ON CACHE BOOL "Attachment dependency" FORCE)
+set(BUILD_DSOFTBUS_RUNTIME_SEND_PATH OFF CACHE BOOL "Receive-only consumer" FORCE)
+set(BUILD_DSOFTBUS_TRANSPORT_FACADE OFF CACHE BOOL "No facade" FORCE)
+set(BUILD_DSOFTBUS_APPLICATION_ATTACHMENTS ON CACHE BOOL "Public attachment target under test" FORCE)
+add_subdirectory("${MDDS_ATTACHMENTS_CONSUMER_ROOT}" mdds)
+
+if(NOT TARGET mdds_dsoftbus_application_attachments)
+    message(FATAL_ERROR "ATTACHMENTS_CONSUMER_CONTRACT: requested public mdds_dsoftbus_application_attachments target is missing")
+endif()
+if(NOT TARGET fastdds OR NOT TARGET mdds_fastdds_binding)
+    message(FATAL_ERROR "ATTACHMENTS_CONSUMER_CONTRACT: actual CONFIG binding is missing")
+endif()
+
+add_executable(application_attachments_consumer main.cpp)
+# All upstream/project headers, C++17 and ABI definitions come from this one
+# PUBLIC dependency chain. No direct Fast DDS link or manual ABI macro repair.
+target_link_libraries(application_attachments_consumer PRIVATE mdds_dsoftbus_application_attachments)
+enable_testing()
+add_test(NAME attachments.external_consumer COMMAND application_attachments_consumer)
+set_tests_properties(attachments.external_consumer PROPERTIES TIMEOUT 15)

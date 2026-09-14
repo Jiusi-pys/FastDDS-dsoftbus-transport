@@ -1,0 +1,33 @@
+cmake_minimum_required(VERSION 3.22)
+project(mdds_transport_facade_consumer LANGUAGES C CXX)
+
+get_filename_component(MDDS_FACADE_CONSUMER_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set(MDDS_FASTDDS_MODE CONFIG CACHE STRING "Actual library consumer" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "External consumer owns its test" FORCE)
+set(BUILD_INTERFACE_PROBE OFF CACHE BOOL "No source-interface harness" FORCE)
+set(BUILD_SOFTBUS_CAPABILITY_PROBE OFF CACHE BOOL "No Socket provider" FORCE)
+set(BUILD_NATIVE_PERMISSION_PROBE OFF CACHE BOOL "No permission provider" FORCE)
+set(BUILD_DSOFTBUS_DIRECTORY ON CACHE BOOL "Facade dependency" FORCE)
+set(BUILD_DSOFTBUS_SEND_QUEUE ON CACHE BOOL "Facade dependency" FORCE)
+set(BUILD_DSOFTBUS_INPUT_CHANNELS ON CACHE BOOL "Facade dependency" FORCE)
+set(BUILD_DSOFTBUS_RUNTIME_SEND_PATH ON CACHE BOOL "Facade dependency" FORCE)
+set(BUILD_DSOFTBUS_TRANSPORT_FACADE ON CACHE BOOL "Public facade under test" FORCE)
+add_subdirectory("${MDDS_FACADE_CONSUMER_ROOT}" mdds)
+
+if(NOT TARGET mdds_dsoftbus_transport_facade)
+    message(FATAL_ERROR "FACADE_CONSUMER_CONTRACT: requested public mdds_dsoftbus_transport_facade target is missing")
+endif()
+if(NOT TARGET fastdds OR NOT TARGET mdds_fastdds_binding)
+    message(FATAL_ERROR "FACADE_CONSUMER_CONTRACT: actual CONFIG binding is missing")
+endif()
+
+add_executable(transport_facade_consumer main.cpp)
+# Inherit all facade/core/upstream headers, C++ standard and ABI definitions from
+# the public target. No manual upstream includes, symbols or ABI macro repairs.
+target_link_libraries(transport_facade_consumer PRIVATE mdds_dsoftbus_transport_facade)
+if(NOT WIN32)
+    target_link_libraries(transport_facade_consumer PRIVATE ${CMAKE_DL_LIBS})
+endif()
+enable_testing()
+add_test(NAME facade.external_consumer COMMAND transport_facade_consumer)
+set_tests_properties(facade.external_consumer PROPERTIES TIMEOUT 15)
