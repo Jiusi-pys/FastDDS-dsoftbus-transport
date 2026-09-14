@@ -17,7 +17,7 @@ class SocketCallTicket;
 class ListenCallTicket;
 class BindCallTicket;
 class ShutdownCallTicket;
-namespace detail { struct NativeState; class NativeOperationToken; class NativeSendCallTicket; }
+namespace detail { struct NativeState; class NativeOperationToken; class NativeSendCallTicket; class NativeEgressBridge; }
 
 using NativeSocketId = std::int32_t;
 enum class RouteDirection { Dial, Accept };
@@ -46,7 +46,8 @@ enum class NativeStatus
     NoOwnedId, ShutdownAlreadyObserved, ShutdownAlreadyEntered, ShutdownAlreadyReturned,
     ForeignIdCollision, AdmissionSaturated, UnknownPeer, UnsupportedDataType,
     DirectionMismatch, DuplicateConnection, UnknownSocket, NotReady, StaleVersion,
-    StaleGeneration, IdentityExhausted, CounterExhausted, WrongOperationKind
+    StaleGeneration, IdentityExhausted, CounterExhausted, WrongOperationKind,
+    DeadlineExpired, ProviderContractFault
 };
 enum class ConfigIndexKind { None, Local, Route };
 struct ConfigIndex
@@ -86,6 +87,7 @@ struct NativeUsageSnapshot
     bool admission_sealed = false, entered_context_lost = false;
     NativeStatus seal_reason = NativeStatus::None;
 };
+enum class NativeProviderFault { None, InvalidPositiveReturn, ExceptionUnwind };
 struct NativeOwnerObservation
 {
     NativeStatus status = NativeStatus::InvalidHandle;
@@ -101,6 +103,8 @@ struct NativeOwnerObservation
     std::int32_t error_code = 0;
     NativeStatus failure = NativeStatus::None;
     NativeQuiescence quiescence = NativeQuiescence::Unproven;
+    NativeProviderFault provider_fault = NativeProviderFault::None;
+    std::optional<std::int32_t> invalid_provider_return;
 };
 struct NativeCompletion
 {
@@ -174,6 +178,7 @@ private:
     friend class ::mdds::dsoftbus::ShutdownCallTicket;
     friend class ::mdds::dsoftbus::NativeOwnerTableTestAccess;
     friend class NativeSendCallTicket;
+    friend class NativeEgressBridge;
     friend struct NativeState;
     NativeStatus Enter(NativeCallKind) noexcept;
     NativeCompletion Complete(NativeCallKind, bool success, std::int32_t result) noexcept;
@@ -267,6 +272,7 @@ public:
 private:
     friend class ::mdds::dsoftbus::NativeOwnerTable;
     friend struct NativeState;
+    friend class NativeEgressBridge;
     NativeOperationToken token_;
 };
 }
@@ -341,6 +347,7 @@ public:
 private:
     friend class NativeOwnerTableTestAccess;
     explicit NativeOwnerTable(std::shared_ptr<detail::NativeState>) noexcept;
+    friend class detail::NativeEgressBridge;
     NativeResult<detail::NativeSendCallTicket> TestReserveSend(const NativeOwnerLease&,
             std::uint64_t route_version, std::uint64_t generation) noexcept;
     void TestSetNextIdentity(std::uint64_t) noexcept;

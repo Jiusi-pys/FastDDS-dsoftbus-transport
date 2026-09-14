@@ -1,4 +1,5 @@
 #include <mdds/dsoftbus/NativeOwnerTable.hpp>
+#include "NativeSendExecutionInternal.hpp"
 #include <algorithm>
 #include <limits>
 #include <mutex>
@@ -146,6 +147,7 @@ struct NativeState
     std::uint64_t next_identity=1,generation_high_water=0;
     bool sealed=false,entered_context_lost=false;
     NativeStatus seal_reason=NativeStatus::None;
+    NativeEgressUsage egress_usage{};
 
     bool ValidOwner(std::size_t slot,std::uint64_t incarnation) const noexcept
     { return slot<owners.size()&&owners[slot].used&&owners[slot].facts.incarnation==incarnation; }
@@ -288,6 +290,113 @@ struct NativeState
         return NativeStatus::None;
     }
 };
+
+std::shared_ptr<NativeState> NativeEgressBridge::Bind(NativeOwnerTable& table) noexcept
+{ return table.state_; }
+NativeStatus NativeEgressBridge::Reserve(RuntimeCeilingLease& lease,const NativeTableConfiguration& exact) noexcept
+{
+    auto& s=*lease.state_;const auto& l=lease.limits_;
+    if(!l.peer_records||!l.peer_bytes||!l.global_records||!l.global_bytes||!l.max_record_bytes||
+            l.max_record_bytes>std::numeric_limits<std::uint32_t>::max()||
+            l.max_record_bytes>l.peer_bytes||l.max_record_bytes>l.global_bytes||
+            l.global_records>NativeEgressUsage::record_limit||l.global_bytes>NativeEgressUsage::byte_limit)
+        return NativeStatus::InvalidLimits;
+    std::lock_guard<std::mutex> lock(s.gate);
+    if(s.sealed) return NativeStatus::ServiceClosing;
+    if(!NativeSameConfiguration(s.config,exact)) return NativeStatus::ConfigurationMismatch;
+    auto& u=s.egress_usage;
+    if(u.runtimes==NativeEgressUsage::runtime_limit||l.global_records>NativeEgressUsage::record_limit-u.records||
+            l.global_bytes>NativeEgressUsage::byte_limit-u.bytes) return NativeStatus::AdmissionSaturated;
+    ++u.runtimes;u.records+=l.global_records;u.bytes+=l.global_bytes;lease.charged_=true;
+    return NativeStatus::None;
+}
+RuntimeCeilingLease::~RuntimeCeilingLease() noexcept
+{
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(charged_) {auto& u=state_->egress_usage;--u.runtimes;u.records-=limits_.global_records;u.bytes-=limits_.global_bytes;}
+}
+NativeStatus NativeEgressBridge::Publish(EgressState& r) noexcept
+{
+    auto& s=*r.ceiling_->state_;std::lock_guard<std::mutex> lock(s.gate);
+    if(s.sealed) return NativeStatus::ServiceClosing;
+    r.active_=true;return NativeStatus::None;
+}
+NativeStatus NativeEgressBridge::Check(const std::shared_ptr<NativeState>& s,const EgressState& r) noexcept
+{
+    if(s!=r.ceiling_->state_) return NativeStatus::ForeignState;
+    std::lock_guard<std::mutex> lock(s->gate);
+    if(s->sealed) return NativeStatus::ServiceClosing;
+    return r.active_?NativeStatus::None:NativeStatus::Revoked;
+}
+NativeStatus NativeEgressBridge::Revoke(const std::shared_ptr<NativeState>& s,EgressState& r) noexcept
+{
+    if(s!=r.ceiling_->state_) return NativeStatus::ForeignState;
+    std::lock_guard<std::mutex> lock(s->gate);r.active_=false;return NativeStatus::None;
+}
+NativeEgressUsage NativeEgressBridge::Usage(const std::shared_ptr<NativeState>& s) noexcept
+{std::lock_guard<std::mutex> lock(s->gate);return s->egress_usage;}
+bool NativeEgressBridge::Resolve(const RuntimeCeilingLease& lease,const Route& r,SendConnectionSnapshot& output) noexcept
+{
+    auto& s=*lease.state_;std::lock_guard<std::mutex> lock(s.gate);
+    if(s.sealed) return false;
+    const auto route=NativeFindRoute(s.config.directory,r.key);
+    if(route==no_index||s.config.directory.routes[route].route_version!=r.route_version) return false;
+    const auto role=s.config.directions[route]==RouteDirection::Dial?NativeOwnerRole::Dial:NativeOwnerRole::Accepted;
+    const auto owner=s.FindPlan(role,route);
+    if(owner==no_index) return false;
+    const auto& f=s.owners[owner].facts;
+    if(f.close_intent||f.phase!=NativeOwnerPhase::Ready) return false;
+    output={r.key,r.route_version,f.generation};return true;
+}
+NativeStatus NativeEgressBridge::Admit(const std::shared_ptr<NativeState>& s,const EgressState& r,
+        const RuntimeIdentityHandle& identity,const Route& route,std::uint64_t generation,
+        SendQueue::Clock::time_point deadline,NativeSendCallTicket& ticket,NativeSocketId& id) noexcept
+{
+    if(s!=r.ceiling_->state_) return NativeStatus::ForeignState;
+    std::lock_guard<std::mutex> lock(s->gate);
+    if(s->sealed) return NativeStatus::ServiceClosing;
+    if(!r.active_) return NativeStatus::Revoked;
+    if(!identity||identity!=r.identity_) return NativeStatus::InvalidHandle;
+    if(SendQueue::Clock::now()>=deadline) return NativeStatus::DeadlineExpired;
+    const auto index=NativeFindRoute(s->config.directory,route.key);
+    if(index==no_index) return NativeStatus::NotFound;
+    if(s->config.directory.routes[index].route_version!=route.route_version) return NativeStatus::StaleVersion;
+    const auto role=s->config.directions[index]==RouteDirection::Dial?NativeOwnerRole::Dial:NativeOwnerRole::Accepted;
+    const auto owner=s->FindPlan(role,index);
+    if(owner==no_index) return NativeStatus::NotReady;
+    const auto& f=s->owners[owner].facts;
+    if(f.close_intent||f.phase!=NativeOwnerPhase::Ready||!f.owned_id) return NativeStatus::NotReady;
+    if(f.generation!=generation) return NativeStatus::StaleGeneration;
+    const auto slot=s->FreeOperation(NativeCallKind::Send);
+    if(slot==no_index||s->HasOperation(owner,NativeCallKind::Send)) return NativeStatus::SendBusy;
+    if(!s->IdentitiesAvailable(1)) return NativeStatus::IdentityExhausted;
+    s->Mint(ticket.token_,s,owner,slot,NativeCallKind::Send);id=*f.owned_id;return NativeStatus::None;
+}
+NativeStatus NativeEgressBridge::Enter(NativeSendCallTicket& ticket,SendQueue::Clock::time_point deadline) noexcept
+{
+    auto& t=ticket.token_;if(!t.state_) return NativeStatus::InvalidHandle;
+    auto& s=*t.state_;std::lock_guard<std::mutex> lock(s.gate);
+    const auto status=s.CheckToken(t,NativeCallKind::Send);if(status!=NativeStatus::None) return status;
+    auto& op=s.operations[t.operation_slot_];
+    if(op.phase==NativeOperationPhase::Entered) return NativeStatus::AlreadyEntered;
+    // Sample AFTER waiting for this gate; no stale pre-lock deadline sample.
+    if(SendQueue::Clock::now()>=deadline) {s.ReleaseReserved(t.operation_slot_);t.settled_=true;return NativeStatus::DeadlineExpired;}
+    op.phase=NativeOperationPhase::Entered;return NativeStatus::None;
+}
+NativeCompletion NativeEgressBridge::Fault(NativeSendCallTicket& ticket,NativeProviderFault fault,
+        std::optional<std::int32_t> code) noexcept
+{
+    auto& t=ticket.token_;if(!t.state_) return {NativeStatus::InvalidHandle};
+    auto& s=*t.state_;std::lock_guard<std::mutex> lock(s.gate);
+    const auto status=s.CheckToken(t,NativeCallKind::Send);if(status!=NativeStatus::None) return {status};
+    auto& op=s.operations[t.operation_slot_];auto& cell=s.owners[t.owner_slot_];
+    if(op.phase!=NativeOperationPhase::Entered) return {NativeStatus::NotEntered,cell.facts};
+    auto& f=cell.facts;f.provider_fault=fault;f.invalid_provider_return=code;
+    f.failure=NativeStatus::ProviderContractFault;f.close_intent=true;
+    op.phase=NativeOperationPhase::Free;t.settled_=true;s.RefreshStopped(cell);
+    return {NativeStatus::ProviderContractFault,f};
+}
+std::mutex& NativeEgressBridge::TestGate(const std::shared_ptr<NativeState>& s) noexcept {return s->gate;}
 }
 
 NativeOwnerTable::NativeOwnerTable(std::shared_ptr<detail::NativeState> s) noexcept : state_(std::move(s)) {}

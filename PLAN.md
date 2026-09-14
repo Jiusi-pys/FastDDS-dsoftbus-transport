@@ -10,6 +10,8 @@
 
 ## 1. 目标、授权与执行状态
 
+状态更正（2026-09-14）：N1 精确提交已完成（HEAD `2c28e9325b941a2b8c0f198b0ddd82f90c4b073e`，tree `8147a261e437cb3a62b59ccd7c9a3f456be93bd5`）。N2 是未提交的工作树范围；用户已授权 N2 模型单独提交，本记录仍是提交前证据快照，不等于完整 Transport 验证。下文较早的 N1 “仍须提交”描述属于历史门槛记录，不代表当前状态。
+
 后续 LC 实机启动准入补充：按 `.artifacts/review/20260914T-lifecycle-launch-binding/MAIN_DECISION.md` 完成的纯校验器之后，LC observation runner 四文件 TDD 已获批准（`.artifacts/review/20260914T-lc-runner/MAIN_DECISION.md`）；最终独立 tester 已通过 harness 80/80、runner 42/42 及相关 validator/diagnostic。runner 必须保留固定 profile、原始证据与权限边界；它不授予权限，也不证明 Transport 或同名 Participant 热重建。实际设备启动需独立验收，本项不改变同名 Participant 热重建硬要求。
 
 目标是在 Fast DDS Transport 扩展边界内接入 DSoftBus 公共 Socket API，保留现有 DDS/RTPS 语义、发现、QoS、可靠性、分片和历史缓存。用户已审阅整体方向及两轮修订，并于本轮要求保存本计划、按 AGENTS.md 开始执行。先完成计划审定，再以 TDD 实现；本文件不是测试通过证明。
@@ -445,10 +447,12 @@ TDD 发现的前置修复例外：真实 Debug 分配失败栈及 Main 新增 IC
 
 有限方案见 `.artifacts/review/20260914T-attachments-wiring/PLAN.md`：新增 PUBLIC 静态 attachment target 和依赖 input 的独立构建开关，注册既有八组 attachment 测试及两个纯 LC/record 兼容 Node suite；新增配置矩阵与真实 CONFIG 外部 consumer。先证明根目标缺失的 RED，再接线，不改已验证模块行为或旧测试预期。最终独立 tester `.artifacts/verification/attachments-wiring-final-20260914T093400Z/RESULT.md` 报告选项 7/7、SOURCE Debug/Release 22/22、CONFIG Release facade ON 23/23、consumer、binding/facade 矩阵和 SDK23 arm64 link PASS；接线 review 无 blocking。外部 consumer 不调用 SDK、不创建 Participant；本项仅表示 root build wiring 限定范围完成，不表示完整 Transport、DSoftBus runtime、DDS 或实机热重建完成。
 
-### 16.12 N2 native send execution（设计闭合；实现未开始）
+### 16.12 N2 native send execution（限定模型已实现；完整 Transport 未验证）
 
 N2 仅负责在同一原始 `NativeState` 上注册受控 egress execution，并复用现有 `RuntimeSendPath` / `OwnedSendRecord`；不创建第二套 payload queue、不接入真实 Socket、不启动线程、不启用 facade、不修改 DDS/RTPS，也不提供 RMW。设计资料为 `.artifacts/review/20260914T-native-send-execution/{DRAFT,REVIEW,MAIN_DECISION,CLOSURE}.md`；closure 无 actionable contract finding。
 
 实施契约固定为：不暴露 runtime getter/raw `TryTake` 造假入口；Attach 只能经 private runtime bridge；一个 `NativeState` 统一承担 whole-runtime ceilings，必须计入 externally retained sender；`Revoke`、taken、P0-admitted、provider-entered 三窗口分别定义；实际 positive return/exception 使用 typed fault/unknown-submission，不伪造 SDK code；最终 entry gate 后重新检查原始绝对 deadline。注册、工作和调用对象的清理在 gate 外完成，不能关闭健康 native owner。
 
-N2 硬门首先是 N1 适用生产/根构建前置文件形成可重建、经 review/test 证据支持的显式 commit closure，并由用户要求的 N1 commit 完成；只有该 N1 commit 之后才可开始 N2。N1 completion final 已验证候选树 87/87 字节一致、所有 18 个 disjoint graph batches 非 partial/non-truncated，87 路径 union 与 3,221 symbols 对齐；候选 closure 与 review/test 证据已具备，但 Main 仍须完成精确提交和最终 Git gate，不能通过“全部 stage”替代。N2 还需要 production/test 文件各自 fresh GitNexus impact、TDD RED/GREEN、独立 review 和 final tester；N2 六文件实现、构建、设备、DDS 与热重建仍 `NOT_RUN`。N2 设计闭合不等于 implementation 或 verification；首版同名 Participant 热重建仍是硬要求，不能用改名、进程重启或模型循环替代。
+N1 精确提交 `2c28e9325b941a2b8c0f198b0ddd82f90c4b073e`（tree `8147a261e437cb3a62b59ccd7c9a3f456be93bd5`）后，N2 六文件模型已完成实现、TDD RED/GREEN、独立 review 与 final tester。Canonical final receipt 为 `.artifacts/n2-execution/final-tester/RESULT.md`（SHA-256 `3AC3B952B424D3EDFF1A16D584463ABA89F369D9E0A37527316B32D3955612F7`）；SOURCE Debug/Release 各 24/24、CONFIG 25/25、20×10 repeat、N1 9/9、attachments 7/7、binding 32/32、facade 4/4、SDK23 arm64 link/readelf 均 PASS。六文件 closure2 certutil hashes 与 initial/review receipts 一致；review SHA `227E9479AC4CA318B1B89BD51AE66D554ED47F69819DE2B13E1CAB8CA6D660D7` 无 actionable findings。
+
+该状态仅为 `IMPLEMENTED / BUILDS / HOST_TESTED / SDK23 ABI LINK/ELF TESTED / REVIEWED` 的 SDK-free injected synchronous model。隔离入口 `.artifacts/n2-execution/build/CMakeLists.txt` 被忽略，root CMake 有意不暴露 N2；其完整内容、创建位置、SOURCE/CONFIG/SDK 复现命令及外部依赖路径见 `docs/N2_COMPLETION.md`。真实 Socket/API、SDK Send、DDS/RTPS、设备/跨设备、RMW、同名 Participant 热重建仍 `NOT RUN`；device 仅对此模型 slice 为 N/A。首版同名 Participant 热重建硬要求仍有效，64 model cycles 不替代该验收；N2 仍未提交，用户已授权 N2 模型单独提交；本记录为提交前证据快照，不等于完整 Transport 验证；scoped model gate PASS 不等于完整 Transport DONE。

@@ -85,6 +85,14 @@ external prerequisites, not source artifacts reconstructed by this repository.
 N1 is scoped PASS only and does not establish native DSoftBus, DDS, RMW, board,
 or same-name Participant hot-rebuild verification.
 
+## N2 completion baseline (2026-09-14 UTC)
+
+The approved N2 synchronous egress model is present in six working-tree files and is documented in [N2_COMPLETION.md](N2_COMPLETION.md). N1 HEAD is committed at `2c28e9325b941a2b8c0f198b0ddd82f90c4b073e` (tree `8147a261e437cb3a62b59ccd7c9a3f456be93bd5`); N2 remains uncommitted as a pre-commit evidence snapshot, and the user has authorized a standalone N2 model commit. Canonical final tester receipt: `.artifacts/n2-execution/final-tester/RESULT.md`, SHA-256 `3AC3B952B424D3EDFF1A16D584463ABA89F369D9E0A37527316B32D3955612F7`.
+
+Scoped final evidence is PASS for SOURCE Debug/Release 24/24 each, CONFIG facade Release 25/25, repeat 20×10 groups, N1 options 9/9, attachment options 7/7, Fast DDS binding 32/32, facade options 4/4, and SDK23 arm64 link/readelf. Review `REVIEW.md` SHA-256 is `227E9479AC4CA318B1B89BD51AE66D554ED47F69819DE2B13E1CAB8CA6D660D7`, with no actionable finding. Earlier invalid-hash diagnostics are retained but excluded; closure2 certutil receipts are authoritative.
+
+Status is `IMPLEMENTED / BUILDS / HOST_TESTED / SDK23 ABI LINK/ELF TESTED / REVIEWED` for this SDK-free injected synchronous model only. Native Socket/API operation, actual SDK Send, DDS/RTPS, SPDP/SEDP, RMW, deployment, device/cross-device transport and same-name Participant hot rebuild are NOT RUN; device is N/A only for this model slice. Root CMake intentionally does not expose N2, and the scoped model commit gate does not grant a normal project commit.
+
 RecordPairHarness final 证据为 `.artifacts/verification/record-pair-harness-final-20260914T014315Z/`，closure review 为 `.artifacts/review/20260914T014207Z-record-pair-harness-closure/`；该结果仅覆盖 host/simulated helper，不覆盖真实 SDK records。Record timing final 为 `.artifacts/verification/record-timing-final-20260914T014906Z/`，Debug/Release 各 21 组及平台交叉构建通过；A/B 拒权模式真实退出 6、非法参数退出 64，符合负例预期。这是退出码，不是测试组数；`BindReturned` 仅为时序 checkpoint。
 
 SendQueue 原单目标 final 证据为 `.artifacts/verification/send-queue-final-20260914T023024Z/`；当前 S3-D1 batch final 证据为 `.artifacts/verification/20260914T041229981Z-send-batch-final/`，direct Debug/Release 各 26 组、root Debug/Release 各 14/14、consumer 与 SDK23 arm64 static build PASS。冻结哈希为 header `449967D484A09AB173C04FCB538CD8F1924E66A5049D0B786C210D42436B7AB4`、implementation `FBD412D50B1CF0705D0C1F7B1B16A691E796D50C7AB749F36DD7F54B8496592A`、tests `C0398F585D73D67F7DBC6C75437A37159C73BCBB81A9CA4C999A4B8B90BDF3C1`。独立 review `.artifacts/review/20260914T040359Z-send-batch/REVIEW.md` 无 blocking。该结果仅证明队列原子接纳与记录所有权移交，仍无 SDK Send/真实 Transport 或设备通信证据，因此 S3-B/D1 未 DEVICE_TESTED/完整 VERIFIED。
