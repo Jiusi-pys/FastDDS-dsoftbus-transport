@@ -1,5 +1,7 @@
 # Fast DDS / OpenHarmony DSoftBus Transport 实施计划
 
+> 当前规划裁量（2026-09-15）：N3 范围和七条硬契约已由用户冻结，见 §17。N2 已提交为 `def10ea376cb3bf9921c1c7ea74c92b1da9e04e8`；下文 N2 “未提交”等文字保留为原提交前快照。N3 仍为 PLANNED，不包含本项目 install/export package，也没有新增真实 backend、DDS 或同名 Participant 热重建通过证据。
+
 > LC pure-validator 当前证据（2026-09-14）：实现已存在；独立 final host tester、code review 与 review 后复测均 PASS。已记录的那次实验结束时两板权限已撤销，但身份记录保留；这不等于设备启动或 Transport 验证。LC observation runner 四文件的独立 final tester 已通过 harness 80/80、runner 42/42 及相关 validator/diagnostic；full log overlap、SDK quiescence 和设备 Transport 仍未验证，整体仍 NOT VERIFIED。N1 tester 的 scoped gate 已 PASS；Main 必须在提交前独立完成文档、最终图与 Git 门槛。
 
 > 用户新增硬要求（2026-09-14）：首版必须支持同名 Participant 在同一进程内热重建。此前“不复用已关闭 SoftBus 名称/ID，从而不支持同名热重建”的 native backend 候选方案未获批准，不可作为首版范围限制。按相同 DDS Participant 名称与逻辑配置建立销毁/重建验收，不以修改 DDS 名称或重启进程通过。进程级稳定底层端点与每代 receiver 交付寿命分离的方向已独立审核；首个纯接收 attachment 切片按 §16.9 修订后批准 TDD。它不能继承旧队列任务、伪造 SDK 回调代数或改变 DDS/RTPS 语义，尚不是实现/设备通过结论。
@@ -456,3 +458,170 @@ N2 仅负责在同一原始 `NativeState` 上注册受控 egress execution，并
 N1 精确提交 `2c28e9325b941a2b8c0f198b0ddd82f90c4b073e`（tree `8147a261e437cb3a62b59ccd7c9a3f456be93bd5`）后，N2 六文件模型已完成实现、TDD RED/GREEN、独立 review 与 final tester。Canonical final receipt 为 `.artifacts/n2-execution/final-tester/RESULT.md`（SHA-256 `3AC3B952B424D3EDFF1A16D584463ABA89F369D9E0A37527316B32D3955612F7`）；SOURCE Debug/Release 各 24/24、CONFIG 25/25、20×10 repeat、N1 9/9、attachments 7/7、binding 32/32、facade 4/4、SDK23 arm64 link/readelf 均 PASS。六文件 closure2 certutil hashes 与 initial/review receipts 一致；review SHA `227E9479AC4CA318B1B89BD51AE66D554ED47F69819DE2B13E1CAB8CA6D660D7` 无 actionable findings。
 
 该状态仅为 `IMPLEMENTED / BUILDS / HOST_TESTED / SDK23 ABI LINK/ELF TESTED / REVIEWED` 的 SDK-free injected synchronous model。隔离入口 `.artifacts/n2-execution/build/CMakeLists.txt` 被忽略，root CMake 有意不暴露 N2；其完整内容、创建位置、SOURCE/CONFIG/SDK 复现命令及外部依赖路径见 `docs/N2_COMPLETION.md`。真实 Socket/API、SDK Send、DDS/RTPS、设备/跨设备、RMW、同名 Participant 热重建仍 `NOT RUN`；device 仅对此模型 slice 为 N/A。首版同名 Participant 热重建硬要求仍有效，64 model cycles 不替代该验收；N2 仍未提交，用户已授权 N2 模型单独提交；本记录为提交前证据快照，不等于完整 Transport 验证；scoped model gate PASS 不等于完整 Transport DONE。
+
+## 17. N3 冻结实施契约（2026-09-15；PLANNED）
+
+本节记录用户接受独立设计审核后作出的最终范围裁量。N3 以本节为准；与 §6、§16.9、§16.12 中早期规划或 N2 历史行为冲突的内容，不再作为 N3 实施规格。那些章节及 `docs/N2_COMPLETION.md` 的原始提交前证据继续保留，不改写为 N3 测试结果。
+
+### 17.1 基线、目标和证据边界
+
+开工基线为 N2 提交 `def10ea376cb3bf9921c1c7ea74c92b1da9e04e8`。独立设计审核位于 `.artifacts/n3-contract/INDEPENDENT_REVIEW.md`；审核指出的发送排空、锁外关闭、真实 receiver lease 和 copying 排空要求已由用户提升为硬契约。设计名称仅表达职责，不能据此认定 API 已经存在。
+
+目标：复用真实 N1、N2、ApplicationAttachments 和 InputChannels，组合出具有严格 application 代际边界的运行模型；所有成功准入的发送可终局结算，接收同时固定 native/application/receiver 身份，copying/delivery 均有账本，冻结不在协调门内等待，联合 Detach 完成后才允许同 local 下一代发布。
+
+当前本节状态仅为 PLANNED / 用户范围已冻结；N3 实现、构建、测试、SDK23 验证及提交均须重新取得证据。N2 历史通过不能继承为 N3 PASS。
+
+### 17.2 构建范围：根目标，不交付安装包
+
+N1、N2、N3 均进入根 CMake 生产目标；测试链接同一生产目标，不通过另一份源码列表重复编译形成影子实现。N3-1 先独立完成 N2 根接线并复现原验证，再开展生命周期修改。
+
+保留以下验证：
+
+- SOURCE Debug / Release（当前 CMake 模式字面值为 `SOURCE_PROBE`）。
+- CONFIG facade 和根构建外部消费者：已安装 Fast DDS + 本项目作为源码子工程。
+- SDK23 编译、链接、AArch64 ELF 检查，分别记录命令、产物和结果。
+- 无真实 backend 时 `DSoftBusTransport::init()` 继续以 `NativeBackendUnavailable` fail-closed。
+
+本项目自身的 `install(TARGETS ...)`、`install(EXPORT ...)`、项目 Config/ConfigVersion 文件、`find_package(FastDDSDSoftBusTransport ...)`、安装后 include/lib 布局、package namespace/exported target ABI 和独立安装树消费者均不属于 N3。后续单列分发契约：install tree → find_package → imported target → 外部消费者。当前仅保持 PUBLIC/PRIVATE、include 可见性和测试依赖隔离的基本卫生。
+
+### 17.3 七条不可豁免的不变量
+
+| 编号 | 硬契约 |
+| --- | --- |
+| N3-I1 | 记录一旦固定到 application P0，永远不能重新绑定 P1。 |
+| N3-I2 | 接收记录的 native 身份是独立约束，不依赖长期持有 NativeCallbackLease。 |
+| N3-I3 | Revoke 线性化点阻止新的成功准入；此前成功准入的所有 invocation 都计入待排空集合，包括尚未 Run 的 invocation。 |
+| N3-I4 | 接收执行许可必须同时取得 InputChannels 对原 receiver incarnation 的真实使用租约。 |
+| N3-I5 | Detach 等待本 application copying activity 归零，不能仅等待现有队列状态。 |
+| N3-I6 | 协调门仅作短状态转换；Close、Revoke 等待、provider/receiver 调用和排空等待都在锁外。可能反向调用的清理/析构也在锁外。 |
+| N3-I7 | P0 尚未 Detached 时，同 local 的 P1 不得发布。 |
+
+application、native connection 和 process service 三种寿命独立：application 换代不强制 native generation 换代，native 重连也不自动创建新 application。稳定服务可跨 application 存活，但不能保留旧 receiver 权限或重置容量账本。application 不默认等同 Participant 名称、GUID 或 Socket。
+
+### 17.4 成组创建、发布和回滚
+
+Coordinator 内部创建不可拼接的 ApplicationBundle，封装原 claim、egress registration、接收附件及代际；外部只取得受控句柄。
+
+Preparing → Active → Detaching → Detached；Preparing 失败进入回滚，不对外发布：
+
+1. 预留同 local 槽位。
+2. 准备 claim、N2 registration 和附件。
+3. 成组发布 Active 后，才返回可执行的句柄。
+4. 任一失败点撤销并结算已经获得的资源；回滚完成前保留 local 占用。
+
+允许 Active 尚未打开 receiver；此时接收为 NoReceiver，不保存给未来 receiver。Preparing 或无 application 空窗期的输入不进入下一代。创建失败注入覆盖登记、分配、附件准备及准备期间服务关闭；同 local 并发 Attach 不得出现双发布。
+
+### 17.5 发送准入与可组合撤销
+
+发送 drain 使用 application 级 `admitted_outstanding`，不是仅使用 `provider_inflight`：
+
+成功 Admit 加一；终局结算恰好减一。计数绑定执行权寿命，不绑定 C++ invocation 壳对象的析构。必须保持 `provider_inflight <= admitted_outstanding`。
+
+最新用户 S1/S2 明确要求 N3 **取消并终局结算已准入但尚未进入 provider 的 invocation**；即使调用者从不 Run 或保留旧壳，也不能永久阻止排空；恢复 Run 不得进入 provider。已经进入 provider 的 invocation 则等待其实际返回和结算，不能伪造取消成功。
+
+这是相对当前 N2 legacy Revoke 行为的显式扩展：现有 N2 允许已经 Admit 的调用在 Revoke 后继续 Run。不得静默改写旧测试或把它称为既有缺陷；N3 使用受控的组合撤销接口及新的确定性测试建立更强契约，不复制 N2 执行器。
+
+窄接口职责（名称待实现确定）：
+
+- BeginRevoke：短时冻结新成功准入，撤销未进入 provider 的旧调用资格，取得稳定关闭票据；不等待 provider，不在协调门内执行 Runtime Close/释放记录。
+- PollRevoke / AwaitRevoked：锁外推进必要清理并检查/等待所有成功准入调用的终局结算。
+- BeginRevoke 与最终 provider entry 必须有共同、可证明的先后关系，不能由两个无关 bool 检查拼成。
+- 终局结算必须涵盖取消、过期、失败、异常和正常返回；持有终局对象仍占其实际 retained 资源，但不再占执行活动计数。
+
+保留原字节、目标、generation、route version、绝对 deadline、transport_priority 及 N2 全局容量契约。旧发送资源撤销后不得重新获权，仍持有的 runtime 继续计费；不得为了热重建清零账本。
+
+### 17.6 接收身份、复制及真正的交付许可
+
+复用现有接收 payload、预留、容量、队列和记录所有权，不新增第二套存储。
+
+每条受控记录固定 service/state incarnation、原 application、原 receiver incarnation、native owner/generation、route version、local/remote、自有字节及额度。Socket ID 仅关联和诊断，不是完整身份；固定约束不能公开任意拼接。
+
+NativeIdentityConstraint 是不可执行、可验证撤销的原始身份约束，不增加 callback_inflight。NativeCallbackLease 仅覆盖 SDK callback 栈上活动，不能留在 Queued/Binding 记录中。身份约束不意味着 owner 当前 Ready，也不凭 Socket ID 重新补上最新 generation。
+
+Capture 在最早受控入口固定原归属、预留额度并增加 application copying_inflight；退出门复制字节，再入门仅验证原凭据后提交或取消。所有额度、记录所有权转移/退款结算完成后，才减少 copying_inflight。RAII 覆盖失败/异常；copying=0 必须意味着不再有旧 capture 能产生记录或改变旧 application 接收账本。
+
+最终 TryEnterDelivery 联合验证原 application、receiver、native owner/generation/route/version、Ready、未过期及 once-only 状态，同时取得 InputChannels **实际** receiver-use lease，并进入 Dispatching、增加真实在途计数。锁外使用此 lease 调用原 receiver；不重新查找当前 receiver。异常同样完成租约和记录结算，不重复交付。
+
+不得在排队时长期持有 receiver-use lease。撤销之前已取得真实许可的交付属于在途，允许原 receiver 完成，关闭等待其返回；撤销之后不能再获许可。当前 InputChannels 的原 ticket 已不会改投新 receiver，本修订补的是联合准入与真实租约的原子边界，不宣称当前核心已经存在 R0→R1 误投缺陷。
+
+### 17.7 共同裁决和联合 Detach
+
+实施前列明现有 native、attachment、input、runtime/queue 锁顺序及全部状态修改入口，包括 N1 operation 完成、RequestClose、OnShutdown、service close。只让接收路径遵循一把 coordinator mutex 不足以建立共同裁决。使用窄桥接/受控入口，不要求无关 N1 模型调用者采用 N3。
+
+三阶段：
+
+- Freeze：门内 Active→Detaching，永久关闭本代新发送/接收准入及许可，固定原 registration/receiver/control 对象，保留 local。
+- Revoke / Close / Drain：门外关闭队列/receiver，推进未进入 provider 的调用和待处理记录终局结算，等待已进入 provider、复制、真实接收租约归还。
+- Finalize：再次短暂入门，确认仍为原代 Detaching 且联合条件成立，再标 Detached 并释放 local。
+
+Detached(A) 至少要求同时满足：
+
+```text
+ClosedForAdmission(A)
+AND SendAdmittedOutstanding(A) == 0
+AND ReceiveCopyingInflight(A) == 0
+AND ReceiveDispatchInflight(A) == 0
+AND PendingAttachmentWork(A) == 0
+AND BindingHeldRecords(A) == 0
+AND NoFutureExecutablePermit(A)
+```
+
+先 Freeze 后 Drain，不能先看计数为零再封入口。已撤销的外部壳可以晚释放，但必须已失去执行权/receiver 使用权，仍按实际资源计费。重复 Detach 指向同一过程；Pending 显示具体阻塞项，不是生产关闭成功。可在 callback 内发起非阻塞关闭，不可等待包含自身的 drain。SDK/provider 不返回时保持 Pending，不允许 P1 提前发布，也不杀进程掩盖失败。
+
+### 17.8 Binding 有界停驻
+
+Binding 记录必须已经固定 P0、R0、O0/G0/V0、字节、容量和绝对到期时间；不是等待未来主人的缓存。到期时间为 `min(bind_deadline, capture_time + finite_binding_hold)`；无 bind deadline 时也必须有有限 hold。唤醒、Ready、复查和重新排队不得重置时间或取得免费额度。
+
+同一身份 Ready 后才可能获得最终交付许可；失败、native/application/receiver 撤销、原路由失效或过期都使原记录作废，不改投新身份。晚到 Ready 不复活 P0；callback lease 可以已归还，而 Binding 记录独立存活。不得让长期 Binding owner 造成其他 Ready owner 全局队首阻塞。
+
+N3 使用注入时钟和受控驱动器，不引入生产计时线程。当前 NativeState 配置不可变；路由失效检查针对原身份/版本及撤销，不扩张为未经批准的动态配置发布系统。
+
+### 17.9 必测矩阵及证据规则
+
+测试链接真实 N1/N2/Attachments/InputChannels，仅注入外部 provider、时钟及确定性驱动；不得用三个 mock 的各自成功替代组合证据。
+
+| 标识 | 确定性交错/失败 | 必须观察到的结果 |
+| --- | --- | --- |
+| A1–A3 | claim 成功 egress 失败、Preparing 来流、同 local 并发 Attach | 回滚完成前不让出 local；未发布不可执行；无双发布 |
+| R1–R5 | 错 native/generation/version、复制中换代、空窗、receiver 换代、凭据重复使用 | 拒绝/原代结算，不重新绑定、不重复交付/退费 |
+| R6–R7 | native revoke 时 Binding/Queued/Taken；真实许可后暂停 | 未获许可作废；已获许可计在途、仅原 receiver 完成 |
+| B1–B3 | 同步 Bind 返回前字节；失败/关闭/到期与 Ready 竞争；转 Ready | 有界停驻、唯一终局、不复活、不重置期限/复制/额度 |
+| D1–D4 | Taken 未准入后 detach；provider 进入后暂停；持有旧 sender；重复/回调发起 detach | 无新 provider 进入；等待真实结算；旧壳计费无权；不自等待 |
+| H1–H2 | 多轮同 local 重建；故意保留旧句柄达到上限 | 正常释放回基线；明确拒绝，释放后恢复，不重置容量 |
+| S1 | Admit 成功但从不 Run，然后 Detach | 不以 provider_inflight=0 提前成功；撤销使未进入 invocation 终局结算，不等待壳析构 |
+| S2 | Admit 后暂停，Revoke，再恢复 Run | 不进入 provider，恰好结算一次 |
+| S3 | 已进入 provider，Revoke | 等实际返回及 settlement，不能伪造完成 |
+| S4 | 一个 local 排空受阻，同时 Attach 其他 local/P1 | 同 local P1 不发布；无关 local 不被大锁阻塞 |
+| R8 | 外层检查后、真实 receiver lease 前，关闭/替换 receiver | 恢复后不能调用新 receiver，也不能使用已撤销的原 receiver |
+| R9 | 真正 ReceiverLease 已获得后 Detach | 等原 lease 返回，允许原 receiver 完成 |
+| R10–R11 | P0 正在复制但队列为空，revoke 并请求 P1 | copying 非零不能 Detached；复制取消结算，无 P1 record |
+| N3-N1 | callback 返回而记录仍排队 | callback_inflight 可为零；原 native constraint 仍在 |
+| N3-N2 | G0 记录排队后 Socket ID 被 G1 使用 | G0 不能借 G1 获权；注入身份不算真实 SDK 复用证明 |
+| B4 | Binding 等待时 callback lease 释放 | callback 正常排空，记录仍受独立额度/原期限约束 |
+
+N3-N1/N3-N2 是接收测试标识，不混淆既有 N1/N2 开发阶段，也不对应历史 G1/G6。
+
+barrier 至少覆盖固定归属后、复制结束前、Taken 后、真实许可后、provider 进入后、provider 返回但结算前。重复运行和线程检测仅补充，不能用 sleep 或循环次数代替交错证明。每轮重建检查计费与权限；故意不让 provider 返回只能证明安全 Pending，不能算正常关闭 PASS。安全性与在明确进展前提下的最终 Detached 分开记录。
+
+### 17.10 执行顺序及准入门
+
+| 切片 | 交付及准入 |
+| --- | --- |
+| N3-0 | 固定 HEAD/已有差异，刷新 GitNexus；核对锁、句柄、清理和本节硬契约；不清理用户/子模块改动 |
+| N3-1 | 独立构建接线变更：N2 根目标、测试复用目标，先 RED 再 GREEN；复现原 SOURCE/CONFIG/消费者/SDK 验证 |
+| N3-2 | pinned 接收、独立 native constraint、真实 receiver lease、once-only 许可；补必要窄接口和确定性测试 |
+| N3-3 | 成组发布/回滚/Detach；N2 短撤销和 admitted_outstanding、copying 账本及联合 drain |
+| N3-4 | 有界 Binding、完整竞态矩阵、容量边界、多轮同 local 模型重建 |
+| N3-5 | 独立审核、修复后复测、文档同步、完整 pre-commit gate；明确实际 backend 后续准入缺口 |
+
+语义切片实施前对最终接口和锁顺序做窄范围核对；不能因一个接口尚未存在而擅自减掉硬契约。各正常实现提交必须依次满足 §10 和 AGENTS：IMPLEMENT → 独立 TEST → agentic-review → FIX → 独立 RE-TEST → docs_updater → PRE_COMMIT → COMMIT。N3-1 的构建提交和后续语义提交保持可分辨。
+
+### 17.11 N3 完成不等于真实 backend 交付
+
+N3 scoped 完成需：上述代码范围、全部适用矩阵、SOURCE Debug/Release、CONFIG facade/源码子工程消费者、SDK23 compile/link/ELF、独立审核/复测/文档和提交门。未执行项目不得记 PASS。
+
+N3 之后仍不得宣称：生产 Transport、真实 SendBytes、SDK callback 收尾、DDS SPDP、SEDP、样本、可靠性恢复、真实同进程同名 Participant 热重建或 RMW 已通过。
+
+真实 backend 准入紧接 N3：实际 provider、callback 归属、固定线程、service 关闭及实际 DDS 热重建另取证。公开 callback 的 Socket ID 没有项目 generation；不能查当前 owner 后给迟到旧事件补新身份。必须以可验证 callback 收尾/无歧义复用或经批准的公开机制解决，不能把模型注入正确 generation 当解决方案。
+
+首版真实热重建硬门槛不变：同一测试进程持续存活，复用同一 Participant 名称与 Transport local 配置，真实创建/销毁 Participant/Writer/Reader，新代分别完成 SPDP、SEDP 和校验样本；正常释放时资源不按轮次无界增长，无需杀进程、重启板卡/服务或换名。禁止将已固定到 P0 的内部记录投给 P1，但不把 DDS 合法的可靠性/持久性历史交付误判为内部串代。
