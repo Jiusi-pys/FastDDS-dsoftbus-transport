@@ -95,11 +95,26 @@ RuntimeSendPath::RuntimeSendPath(EgressPlan::Snapshot plan, SendQueueLimits limi
 RuntimeSendPath::~RuntimeSendPath() { Close(); }
 RuntimeIdentityHandle RuntimeSendPath::identity() const noexcept { return identity_; }
 EgressPlan::Snapshot RuntimeSendPath::plan() const noexcept { return plan_; }
-bool RuntimeSendPath::stop_requested() const noexcept { return stop_requested_.load(); }
+bool RuntimeSendPath::stop_requested() const noexcept { return (producer_state_.load() & closed_bit_) != 0; }
+bool RuntimeSendPath::TryEnterProducer() noexcept
+{
+    auto observed = producer_state_.load();
+    for (;;) {
+        if ((observed & closed_bit_) != 0 || observed == closed_bit_ - 1) return false;
+        if (producer_state_.compare_exchange_weak(observed, observed + 1)) return true;
+    }
+}
 RuntimeSendPath::Clock::time_point RuntimeSendPath::Now() const noexcept { return hooks_.now ? hooks_.now() : Clock::now(); }
 RuntimeSendReport RuntimeSendPath::Submit(const std::vector<NetworkBuffer>& buffers, std::uint32_t total_bytes,
         Iterator* begin, Iterator* end, Clock::time_point original_deadline, std::int32_t priority)
 {
+    if (!TryEnterProducer()) return {stop_requested() ? RuntimeSendStatus::RuntimeClosed : RuntimeSendStatus::PreparationFailed};
+    // This guard predates all preparation/queue temporaries. A decrement means
+    // all copying, publication or refund is finished, not merely memcpy return.
+    struct ProducerActivity final {
+        std::atomic<std::uint64_t>& state;
+        ~ProducerActivity() { state.fetch_sub(1); }
+    } activity{producer_state_};
     RuntimeSendReport report;
     if (stop_requested()) return {RuntimeSendStatus::RuntimeClosed};
     if (Now() >= original_deadline) return {RuntimeSendStatus::DeadlineExpired};
@@ -170,7 +185,7 @@ void RuntimeSendPath::Close() noexcept
 {
     {
         std::lock_guard<std::mutex> lock(attachment_mutex_);
-        stop_requested_.store(true);
+        FreezeAdmissions();
     }
     if (hooks_.after_close_request) hooks_.after_close_request();
     queue_->Close();

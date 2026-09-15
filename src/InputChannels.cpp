@@ -54,28 +54,74 @@ struct InputChannelsState final
 } // namespace detail
 
 namespace {
-// Construction copies only a shared_ptr, so acquiring a lease cannot allocate
-// or throw between incrementing the counters and installing the scope guard.
-class InputDeliveryLease final
+InputDeliveryResult ValidateRoute(const detail::InputChannelsState& state,
+        const detail::InputChannelEntry& entry, const Locator& remote)
 {
-public:
-    InputDeliveryLease(detail::InputChannelsState& state,
-            const std::shared_ptr<detail::InputChannelEntry>& entry) noexcept
-        : state_(state), entry_(entry) {}
-    ~InputDeliveryLease()
-    {
-        std::lock_guard<std::mutex> lock(state_.mutex);
-        --entry_->in_flight;
-        --state_.in_flight;
-        state_.changed.notify_all();
+    try {
+        if (!state.directory->ResolveOutbound({entry.local, remote}).value)
+            return InputDeliveryResult::InvalidRoute;
+    } catch (const std::bad_alloc&) {
+        return InputDeliveryResult::AllocationFailure;
     }
-    InputDeliveryLease(const InputDeliveryLease&) = delete;
-    InputDeliveryLease& operator=(const InputDeliveryLease&) = delete;
-private:
-    detail::InputChannelsState& state_;
-    const std::shared_ptr<detail::InputChannelEntry> entry_;
-};
+    return InputDeliveryResult::Delivered; // Internal validation sentinel only.
+}
 } // namespace
+
+InputReceiverLease::InputReceiverLease(std::shared_ptr<detail::InputChannelsState> state,
+        std::shared_ptr<detail::InputChannelEntry> entry) noexcept
+    : state_(std::move(state)), entry_(std::move(entry)) {}
+InputReceiverLease::~InputReceiverLease() { Release(); }
+InputReceiverLease::InputReceiverLease(InputReceiverLease&& other) noexcept
+    : state_(std::move(other.state_)), entry_(std::move(other.entry_)),
+      failure_(std::exchange(other.failure_, InputDeliveryResult::InvalidTicket)) {}
+InputReceiverLease& InputReceiverLease::operator=(InputReceiverLease&& other) noexcept
+{
+    if (this != &other) {
+        Release();
+        state_ = std::move(other.state_);
+        entry_ = std::move(other.entry_);
+        failure_ = std::exchange(other.failure_, InputDeliveryResult::InvalidTicket);
+    }
+    return *this;
+}
+void InputReceiverLease::Release() noexcept
+{
+    // Last references must die after unlocking, not while destroying the mutex
+    // or executing another module's final-reference cleanup under this gate.
+    auto state = std::move(state_);
+    auto entry = std::move(entry_);
+    if (state) {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        --entry->in_flight;
+        --state->in_flight;
+        state->changed.notify_all();
+    }
+}
+InputDeliveryResult InputReceiverLease::InvokeValidated(const Locator& remote,
+        const void* data, std::size_t size)
+{
+    if (!state_) return failure_;
+    try {
+        // Closing cannot clear this original receiver until our counter drops.
+        entry_->receiver->OnDataReceived(static_cast<const std::uint8_t*>(data),
+                static_cast<std::uint32_t>(size), entry_->local, remote);
+        return InputDeliveryResult::Delivered;
+    } catch (...) {
+        return InputDeliveryResult::CallbackFailure;
+    }
+}
+InputDeliveryResult InputReceiverLease::Deliver(const Locator& remote,
+        const void* data, std::size_t size)
+{
+    auto permit = std::move(*this);
+    if (!permit) return permit.failure_;
+    if (!data || size == 0) return InputDeliveryResult::InvalidBuffer;
+    if (size > std::numeric_limits<std::uint32_t>::max() || size > permit.state_->max_record_bytes)
+        return InputDeliveryResult::TooLarge;
+    const auto validation = ValidateRoute(*permit.state_, *permit.entry_, remote);
+    if (validation != InputDeliveryResult::Delivered) return validation;
+    return permit.InvokeValidated(remote, data, size);
+}
 
 InputChannels::InputChannels(EndpointDirectory::Snapshot directory, std::size_t limit)
     : InputChannels(std::move(directory), limit, {}) {}
@@ -86,7 +132,7 @@ InputChannels::InputChannels(EndpointDirectory::Snapshot directory,
     if (!directory || limit == 0 || limit > std::numeric_limits<std::uint32_t>::max()) {
         throw std::invalid_argument("InputChannels requires a directory and a 1..UINT32_MAX record limit");
     }
-    state_ = std::make_unique<detail::InputChannelsState>(std::move(directory), limit);
+    state_ = std::make_shared<detail::InputChannelsState>(std::move(directory), limit);
 }
 
 InputChannels::~InputChannels() { DisableAll(); }
@@ -144,33 +190,28 @@ InputDeliveryResult InputChannels::Deliver(const InputChannelTicket& ticket,
     // The entry local is immutable even when closed; neither route lookup nor
     // the following membership check can retarget a historical ticket.
     const auto entry = ticket.entry_;
-    try {
-        if (!state.directory->ResolveOutbound({entry->local, remote}).value) return InputDeliveryResult::InvalidRoute;
-    } catch (const std::bad_alloc&) {
-        // ResolveOutbound returns an owned Route, whose strings/aliases may
-        // allocate. This failure precedes the delivery lease and any callback.
-        return InputDeliveryResult::AllocationFailure;
-    }
-    std::unique_lock<std::mutex> lock(state.mutex);
-    if (state.disabled) return InputDeliveryResult::Disabled;
+    const auto validation = ValidateRoute(state, *entry, remote);
+    if (validation != InputDeliveryResult::Delivered) return validation;
+    auto lease = TryAcquireReceiver(ticket);
+    return lease.InvokeValidated(remote, data, size);
+}
+
+InputReceiverLease InputChannels::TryAcquireReceiver(const InputChannelTicket& ticket)
+{
+    auto& state = *state_;
+    if (ticket.identity_ != state.identity || !ticket.entry_)
+        return InputReceiverLease(InputDeliveryResult::InvalidTicket);
+    const auto entry = ticket.entry_;
+    std::lock_guard<std::mutex> lock(state.mutex);
+    if (state.disabled) return InputReceiverLease(InputDeliveryResult::Disabled);
     if (entry->phase != detail::InputChannelEntry::Phase::Open || !entry->receiver ||
             std::find(state.entries.begin(), state.entries.end(), entry) == state.entries.end()) {
-        return InputDeliveryResult::Closed;
+        return InputReceiverLease(InputDeliveryResult::Closed);
     }
     ++entry->in_flight;
     ++state.in_flight;
-    InputDeliveryLease lease(state, entry);
-    auto* receiver = entry->receiver;
-    lock.unlock();
-    try {
-        receiver->OnDataReceived(static_cast<const std::uint8_t*>(data),
-                static_cast<std::uint32_t>(size), entry->local, remote);
-        return InputDeliveryResult::Delivered;
-    } catch (...) {
-        // Partial callback effects are possible. Release the lease without
-        // reporting success, rolling back the receiver, or retrying delivery.
-        return InputDeliveryResult::CallbackFailure;
-    }
+    // Both shared_ptr copies and the lease move are nonthrowing/nonallocating.
+    return InputReceiverLease(state_, entry);
 }
 
 void InputChannels::Close(const Locator& local)

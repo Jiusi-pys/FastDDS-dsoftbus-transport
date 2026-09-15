@@ -50,6 +50,36 @@ struct InputChannelUsage
     bool drained = false;
 };
 
+// One already-admitted use of the original receiver. This is NOT a queued
+// identity pin: acquire only at final delivery admission. Close/DisableAll and
+// destruction wait for it even if Deliver has not started. Keep the receiver
+// alive until that drain completes. Never synchronously drain on its own stack.
+// A lease is exclusively owned: no concurrent Deliver, move or destruction.
+class InputReceiverLease final
+{
+public:
+    InputReceiverLease() noexcept = default;
+    ~InputReceiverLease();
+    InputReceiverLease(InputReceiverLease&&) noexcept;
+    InputReceiverLease& operator=(InputReceiverLease&&) noexcept;
+    InputReceiverLease(const InputReceiverLease&) = delete;
+    InputReceiverLease& operator=(const InputReceiverLease&) = delete;
+    explicit operator bool() const noexcept { return bool(state_); }
+    // Consumes the permit on every outcome. No current-receiver lookup, no
+    // retry, no locks around OnDataReceived; borrows expire at return/unwind.
+    InputDeliveryResult Deliver(const Locator& remote, const void* data, std::size_t size);
+private:
+    friend class InputChannels;
+    explicit InputReceiverLease(InputDeliveryResult failure) noexcept : failure_(failure) {}
+    InputReceiverLease(std::shared_ptr<detail::InputChannelsState>,
+            std::shared_ptr<detail::InputChannelEntry>) noexcept;
+    void Release() noexcept;
+    InputDeliveryResult InvokeValidated(const Locator&, const void*, std::size_t);
+    std::shared_ptr<detail::InputChannelsState> state_;
+    std::shared_ptr<detail::InputChannelEntry> entry_;
+    InputDeliveryResult failure_ = InputDeliveryResult::InvalidTicket;
+};
+
 class InputChannels final
 {
 public:
@@ -68,6 +98,11 @@ public:
     // Allocation failure leaves all existing registrations intact.
     InputOpenResult Open(const Locator& local, Receiver* receiver);
     InputChannelTicket Capture(const Locator& local) const;
+
+    // Nonallocating short admission against this exact core/entry incarnation.
+    // The returned lease increments the same real counters used by Close.
+    // Releasing/replacing it must happen outside higher-level coordination locks.
+    InputReceiverLease TryAcquireReceiver(const InputChannelTicket& ticket);
 
     // Bytes remain valid and unchanged until this synchronous call returns.
     // All core locks are released before the real OnDataReceived call.
@@ -107,7 +142,7 @@ private:
     };
     InputChannels(EndpointDirectory::Snapshot directory,
             std::size_t max_record_bytes, TestHooks hooks);
-    std::unique_ptr<detail::InputChannelsState> state_;
+    std::shared_ptr<detail::InputChannelsState> state_;
     TestHooks hooks_;
 };
 

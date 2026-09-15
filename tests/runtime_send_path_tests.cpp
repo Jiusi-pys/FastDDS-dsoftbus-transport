@@ -198,6 +198,10 @@ public:
 class RuntimeSendPathTestAccess
 {
 public:
+    static void Freeze(RuntimeSendPath& runtime) { runtime.FreezeAdmissions(); }
+    static std::uint64_t Producers(const RuntimeSendPath& runtime) { return runtime.ProducerCount(); }
+    static void Saturate(RuntimeSendPath& runtime) { runtime.producer_state_.store(runtime.closed_bit_ - 1); }
+    static void ResetSaturation(RuntimeSendPath& runtime) { runtime.producer_state_.store(0); }
     static std::shared_ptr<RuntimeSendPath> Make(EgressPlan::Snapshot plan, SendQueueLimits limits,
             std::shared_ptr<const ConnectionGenerationSource> source, std::unique_ptr<SendQueue> queue,
             std::function<SendQueue::Clock::time_point()> now = {}, std::function<void()> attach = {},
@@ -232,6 +236,50 @@ int RunRuntimeSendPathTests(int argc, char** argv)
         return !result.value && result.issue.code == EgressError::AllocationFailure && send_allocation_failures == 1 ? 0 : 1;
     }
     std::vector<std::pair<std::string, std::function<void()>>> cases;
+    cases.emplace_back("DSP-N3-producer-freeze-and-refund", [] {
+        SendTestEvent copying, resume;
+        auto source=std::make_shared<ControlledGenerationSource>();
+        auto limits=SendTestLimits();
+        auto runtime=RuntimeSendPathTestAccess::Make(SendTestPlan(),limits,source,
+            SendQueueTestAccess::Make(limits,{},[&]{copying.Signal();resume.Wait();}));
+        rtps::SendResourceList first,second;
+        auto& sender=AttachSendTest(first,runtime);auto& later=AttachSendTest(second,runtime);
+        const std::vector<Locator> targets{SendTestLocator(10)};
+        auto sending=std::async(std::launch::async,[&]{return SendTest(sender,targets);});copying.Wait();
+        CHECK(RuntimeSendPathTestAccess::Producers(*runtime)==1);
+        RuntimeSendPathTestAccess::Freeze(*runtime); // No queue Close or provider wait here.
+        const auto calls=source->calls.load();
+        CHECK(!SendTest(later,targets));
+        CHECK(later.last_report()->status==RuntimeSendStatus::RuntimeClosed);
+        CHECK(source->calls==calls);
+        runtime->Close();
+        CHECK(RuntimeSendPathTestAccess::Producers(*runtime)==1);
+        CHECK(runtime->SnapshotUsage().records==1); // Original copy still owns its charge.
+        resume.Signal();CHECK(!Finish(sending));
+        CHECK(RuntimeSendPathTestAccess::Producers(*runtime)==0);
+        CHECK(runtime->SnapshotUsage().records==0&&runtime->SnapshotUsage().bytes==0);
+    });
+    cases.emplace_back("DSP-N3-retained-record-not-producer", [] {
+        auto runtime=SendTestRuntime();rtps::SendResourceList list;auto& sender=AttachSendTest(list,runtime);
+        CHECK(SendTest(sender,{SendTestLocator(10)}));
+        auto retained=runtime->TryTake();CHECK(retained);
+        CHECK(RuntimeSendPathTestAccess::Producers(*runtime)==0);
+        RuntimeSendPathTestAccess::Freeze(*runtime);runtime->Close();
+        CHECK(RuntimeSendPathTestAccess::Producers(*runtime)==0&&runtime->SnapshotUsage().records==1);
+        retained.reset();CHECK(runtime->SnapshotUsage().records==0);
+    });
+    cases.emplace_back("DSP-N3-producer-overflow-rejected", [] {
+        auto source=std::make_shared<ControlledGenerationSource>();auto runtime=SendTestRuntime(SendTestPlan(),source);
+        rtps::SendResourceList list;auto& sender=AttachSendTest(list,runtime);
+        RuntimeSendPathTestAccess::Saturate(*runtime); // Test-only, no actual calls outstanding.
+        const bool accepted=SendTest(sender,{SendTestLocator(10)});
+        const auto report=sender.last_report();const auto count=RuntimeSendPathTestAccess::Producers(*runtime);
+        RuntimeSendPathTestAccess::ResetSaturation(*runtime);
+        CHECK(!accepted&&report->status==RuntimeSendStatus::PreparationFailed);
+        CHECK(count==(std::uint64_t{1}<<63)-1&&source->calls==0);
+        CHECK(SendTest(sender,{SendTestLocator(10)}));
+        CHECK(RuntimeSendPathTestAccess::Producers(*runtime)==0);
+    });
     cases.emplace_back("DSP-01-egress-auto-and-owned-snapshot", [] {
         auto config = SendTestConfig(); auto built = EgressPlan::Build(config, {});
         CHECK(built.value && built.issue.code == EgressError::None && built.value->size() == 2);

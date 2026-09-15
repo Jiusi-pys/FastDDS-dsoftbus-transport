@@ -474,6 +474,88 @@ int RunInputChannelsTests(int argc, char** argv)
         CHECK(receiver.calls == count);
     });
 
+    cases.emplace_back("IC-N3-01-permit-before-close-pins-original", [] {
+        InputTestEvent close_captured;
+        InputTestReceiver old_receiver, new_receiver;
+        auto core = InputChannelsTestAccess::Make(InputTestDirectory(), {},
+                [&](const Locator&) { close_captured.Signal(); });
+        const auto local = InputTestLocator(2), remote = InputTestLocator(4);
+        CHECK(core->Open(local, &old_receiver) == InputOpenResult::Opened);
+        auto ticket = core->Capture(local);
+        auto lease = core->TryAcquireReceiver(ticket);
+        CHECK(lease && core->SnapshotUsage().in_flight == 1);
+        auto closing = std::async(std::launch::async, [&] { core->Close(local); });
+        close_captured.Wait();
+        CHECK(closing.wait_for(0s) == std::future_status::timeout);
+        CHECK(!core->TryAcquireReceiver(ticket));
+        const std::uint8_t bytes[]{1, 2};
+        CHECK(lease.Deliver(remote, bytes, sizeof(bytes)) == InputDeliveryResult::Delivered);
+        CHECK(!lease);
+        Finish(closing);
+        CHECK(core->SnapshotUsage().in_flight == 0 && old_receiver.calls == 1);
+        CHECK(core->Open(local, &new_receiver) == InputOpenResult::Opened);
+        CHECK(!core->TryAcquireReceiver(ticket));
+        CHECK(lease.Deliver(remote, bytes, sizeof(bytes)) == InputDeliveryResult::InvalidTicket);
+        CHECK(new_receiver.calls == 0);
+    });
+    cases.emplace_back("IC-N3-02-abandon-move-and-no-allocation", [] {
+        static_assert(!std::is_copy_constructible_v<InputReceiverLease>);
+        static_assert(std::is_nothrow_move_constructible_v<InputReceiverLease>);
+        InputTestReceiver receiver;
+        InputChannels core(InputTestDirectory(), 8);
+        CHECK(core.Open(InputTestLocator(2), &receiver) == InputOpenResult::Opened);
+        const auto ticket = core.Capture(InputTestLocator(2));
+        count_input_allocations = true; input_allocations_observed = 0;
+        auto first = core.TryAcquireReceiver(ticket);
+        const auto acquired_allocations = input_allocations_observed;
+        count_input_allocations = false;
+        CHECK(first && acquired_allocations == 0);
+        auto second = core.TryAcquireReceiver(ticket);
+        CHECK(second && core.SnapshotUsage().in_flight == 2);
+        second = std::move(first);
+        CHECK(!first && second && core.SnapshotUsage().in_flight == 1);
+        second = {};
+        CHECK(core.SnapshotUsage().in_flight == 0 && receiver.calls == 0);
+        core.Close(InputTestLocator(2));
+    });
+    cases.emplace_back("IC-N3-03-permit-survives-core-destruction-entry", [] {
+        InputTestEvent disabled;
+        InputTestReceiver receiver;
+        auto core = InputChannelsTestAccess::Make(InputTestDirectory(), {}, {}, [&] { disabled.Signal(); });
+        CHECK(core->Open(InputTestLocator(2), &receiver) == InputOpenResult::Opened);
+        auto lease = core->TryAcquireReceiver(core->Capture(InputTestLocator(2)));
+        CHECK(lease);
+        auto destruction = std::async(std::launch::async, [&] { core.reset(); });
+        disabled.Wait();
+        CHECK(destruction.wait_for(0s) == std::future_status::timeout);
+        const std::uint8_t byte = 7;
+        CHECK(lease.Deliver(InputTestLocator(4), &byte, 1) == InputDeliveryResult::Delivered);
+        Finish(destruction);
+        CHECK(receiver.calls == 1 && !lease);
+    });
+    cases.emplace_back("IC-N3-04-failure-settles-real-lease", [] {
+        InputTestReceiver receiver;
+        InputChannels core(InputTestDirectory(), 8), foreign(InputTestDirectory(), 8);
+        const auto local = InputTestLocator(2), remote = InputTestLocator(4);
+        CHECK(core.Open(local, &receiver) == InputOpenResult::Opened);
+        auto ticket = core.Capture(local);
+        CHECK(!foreign.TryAcquireReceiver(ticket));
+        const std::uint8_t bytes[]{1, 2};
+        auto invalid = core.TryAcquireReceiver(ticket);
+        CHECK(invalid.Deliver(remote, nullptr, 1) == InputDeliveryResult::InvalidBuffer);
+        CHECK(core.SnapshotUsage().in_flight == 0);
+        auto oversized = core.TryAcquireReceiver(ticket);
+        CHECK(oversized.Deliver(remote, bytes, 9) == InputDeliveryResult::TooLarge);
+        auto bad_route = core.TryAcquireReceiver(ticket);
+        CHECK(bad_route.Deliver(InputTestLocator(8), bytes, 2) == InputDeliveryResult::InvalidRoute);
+        CHECK(core.SnapshotUsage().in_flight == 0 && receiver.calls == 0);
+        receiver.receive = [](const auto*, auto, const auto&, const auto&) { throw std::runtime_error("receiver fault"); };
+        auto throwing = core.TryAcquireReceiver(ticket);
+        CHECK(throwing.Deliver(remote, bytes, 2) == InputDeliveryResult::CallbackFailure);
+        CHECK(core.SnapshotUsage().in_flight == 0 && receiver.calls == 1);
+        CHECK(throwing.Deliver(remote, bytes, 2) == InputDeliveryResult::InvalidTicket);
+    });
+
     std::size_t run = 0;
     for (const auto& test : cases) {
         if (argc == 2 && test.first.find(argv[1]) == std::string::npos) continue;

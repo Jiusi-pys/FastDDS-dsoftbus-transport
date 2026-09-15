@@ -1,5 +1,6 @@
 #include <mdds/dsoftbus/NativeSendExecution.hpp>
 #include "NativeSendExecutionInternal.hpp"
+#include <algorithm>
 #include <new>
 #include <stdexcept>
 namespace mdds::dsoftbus {
@@ -11,6 +12,16 @@ EgressState::~EgressState() noexcept
 }
 bool NativeGenerationAdapter::TryResolve(const Route& r,SendConnectionSnapshot& out) const
 {return NativeEgressBridge::Resolve(*ceiling_,r,out);}
+NativeSendResources::~NativeSendResources() noexcept = default;
+NativeSendInvocationState::~NativeSendInvocationState() noexcept
+{
+    std::shared_ptr<NativeSendResources> cleanup;
+    NativeEgressBridge::CancelInvocation(*this,cleanup);
+    if(cleanup) {
+        cleanup.reset(); // Ticket/provider/record cleanup precedes terminal count.
+        NativeEgressBridge::SettleInvocation(*this);
+    }
+}
 }
 namespace {
 template<class T> NativeResult<T> Failure(NativeStatus s) noexcept {return {std::nullopt,{s}};}
@@ -29,37 +40,97 @@ NativeSendInvocation::NativeSendInvocation() noexcept = default;
 NativeSendInvocation::~NativeSendInvocation() = default;
 NativeSendInvocation::NativeSendInvocation(NativeSendInvocation&&) noexcept = default;
 NativeSendInvocation& NativeSendInvocation::operator=(NativeSendInvocation&&) noexcept = default;
-NativeSendInvocation::NativeSendInvocation(std::unique_ptr<detail::NativeSendInvocationState> s) noexcept : state_(std::move(s)) {}
+NativeSendInvocation::NativeSendInvocation(std::shared_ptr<detail::NativeSendInvocationState> s) noexcept : state_(std::move(s)) {}
 NativeSendRunResult NativeSendInvocation::Run() noexcept
 {
     if(!state_) return {NativeStatus::InvalidHandle};
     auto call=std::move(state_); // Once only; releases every borrow after actual return/unwind.
-    const auto& record=*call->work_->record_;
-    const auto entered=detail::NativeEgressBridge::Enter(call->ticket_,record.deadline());
-    if(entered!=NativeStatus::None) return {entered};
-    std::int32_t code;
-    try {
-        code=call->provider_->Send(call->socket_,record.route(),record.data(),record.size(),record.deadline(),record.priority());
-    } catch(...) {
-        const auto result=detail::NativeEgressBridge::Fault(call->ticket_,NativeProviderFault::ExceptionUnwind,std::nullopt);
-        return {result.status,NativeSendOutcome::ReturnedByException,std::nullopt};
+    std::shared_ptr<detail::NativeSendResources> resources;
+    const auto entered=detail::NativeEgressBridge::EnterInvocation(*call,resources);
+    NativeSendRunResult result{entered};
+    if(entered==NativeStatus::None) {
+        const auto& record=*resources->work_->record_;
+        try {
+            const auto code=resources->provider_->Send(resources->socket_,record.route(),record.data(),
+                    record.size(),record.deadline(),record.priority());
+            if(code>0) {
+                const auto fault=detail::NativeEgressBridge::Fault(resources->ticket_,NativeProviderFault::InvalidPositiveReturn,code);
+                result={fault.status,NativeSendOutcome::ReturnedInvalidCode,code};
+            } else {
+                const auto completed=resources->ticket_.Complete(code);
+                result={completed.status,NativeSendOutcome::ReturnedSdkCode,code};
+            }
+        } catch(...) {
+            const auto fault=detail::NativeEgressBridge::Fault(resources->ticket_,NativeProviderFault::ExceptionUnwind,std::nullopt);
+            result={fault.status,NativeSendOutcome::ReturnedByException,std::nullopt};
+        }
     }
-    if(code>0) {
-        const auto result=detail::NativeEgressBridge::Fault(call->ticket_,NativeProviderFault::InvalidPositiveReturn,code);
-        return {result.status,NativeSendOutcome::ReturnedInvalidCode,code};
+    if(resources) {
+        resources.reset();
+        detail::NativeEgressBridge::SettleInvocation(*call);
+    } // Otherwise the cancellation winner owns cleanup and terminal settlement.
+    return result;
+}
+NativeRevokeTicket::~NativeRevokeTicket() noexcept { Progress(); }
+NativeRevokeTicket::NativeRevokeTicket(NativeRevokeTicket&& other) noexcept
+    : registration_(std::move(other.registration_)),controls_(std::move(other.controls_)),resources_(std::move(other.resources_)) {}
+NativeRevokeTicket& NativeRevokeTicket::operator=(NativeRevokeTicket&& other) noexcept
+{
+    if(this!=&other) {
+        Progress();
+        registration_=std::move(other.registration_);
+        controls_=std::move(other.controls_);resources_=std::move(other.resources_);
     }
-    const auto result=call->ticket_.Complete(code);
-    return {result.status,NativeSendOutcome::ReturnedSdkCode,code};
+    return *this;
+}
+void NativeRevokeTicket::Progress() noexcept
+{
+    if(!registration_) return;
+    registration_->runtime_->Close();
+    for(std::size_t i=0;i<resources_.size();++i) {
+        if(resources_[i]) {
+            resources_[i].reset();
+            detail::NativeEgressBridge::SettleInvocation(*controls_[i]);
+        }
+    }
+    detail::NativeEgressBridge::QueueBarrier(*registration_);
 }
 NativeSendExecution::NativeSendExecution(NativeOwnerTable& table) noexcept : state_(detail::NativeEgressBridge::Bind(table)) {}
 NativeResult<EgressRegistration> NativeSendExecution::CreateRuntime(const NativeTableConfiguration& config,
         const std::vector<EgressSelection>& selections, SendQueueLimits limits) const noexcept
+{return CreateRuntimeImpl(config,nullptr,selections,limits);}
+NativeResult<EgressRegistration> NativeSendExecution::CreateRuntimeForLocals(const NativeTableConfiguration& config,
+        const std::vector<Locator>& locals,const std::vector<EgressSelection>& selections,SendQueueLimits limits) const noexcept
+{return CreateRuntimeImpl(config,&locals,selections,limits);}
+NativeResult<EgressRegistration> NativeSendExecution::CreateRuntimeImpl(const NativeTableConfiguration& config,
+        const std::vector<Locator>* locals,const std::vector<EgressSelection>& selections,SendQueueLimits limits) const noexcept
 {
     try {
         auto ceiling=std::shared_ptr<detail::RuntimeCeilingLease>(new detail::RuntimeCeilingLease(state_,limits));
         const auto reserved=detail::NativeEgressBridge::Reserve(*ceiling,config);
         if(reserved!=NativeStatus::None) return Failure<EgressRegistration>(reserved);
-        const auto plan=EgressPlan::Build(config.directory,selections);
+        std::unique_ptr<DirectoryConfiguration> projection;
+        if(locals) {
+            if(locals->empty()) return Failure<EgressRegistration>(NativeStatus::InvalidConfiguration);
+            // Throwing vector construction avoids Debug STL's noexcept default
+            // constructor allocation trap. All copying remains outside gates.
+            projection.reset(new DirectoryConfiguration{
+                std::vector<LocalBinding>(std::size_t{0}),std::vector<Route>(std::size_t{0})});
+            projection->locals.reserve(locals->size());
+            for(std::size_t i=0;i<locals->size();++i) {
+                const auto& local=(*locals)[i];
+                if(!LocatorCodec::IsValid(local)||std::find(locals->begin(),locals->begin()+i,local)!=locals->begin()+i)
+                    return Failure<EgressRegistration>(NativeStatus::InvalidConfiguration);
+                const auto found=std::find_if(config.directory.locals.begin(),config.directory.locals.end(),
+                        [&](const LocalBinding& binding){return binding.local_locator==local;});
+                if(found==config.directory.locals.end()) return Failure<EgressRegistration>(NativeStatus::InvalidConfiguration);
+                projection->locals.push_back(*found);
+            }
+            for(const auto& route:config.directory.routes)
+                if(std::find(locals->begin(),locals->end(),route.key.local_locator)!=locals->end())
+                    projection->routes.push_back(route);
+        }
+        const auto plan=EgressPlan::Build(projection?*projection:config.directory,selections);
         if(!plan.value) return Failure<EgressRegistration>(plan.issue.code==EgressError::AllocationFailure?
                 NativeStatus::AllocationFailure:NativeStatus::DirectoryRejected);
         auto source=std::shared_ptr<detail::NativeGenerationAdapter>(new detail::NativeGenerationAdapter(ceiling));
@@ -94,13 +165,20 @@ NativeResult<NativeSendInvocation> NativeSendExecution::TryAdmit(NativeSendWork&
 {
     if(!work||!provider) return Failure<NativeSendInvocation>(NativeStatus::InvalidHandle);
     try {
-        auto call=std::unique_ptr<detail::NativeSendInvocationState>(new detail::NativeSendInvocationState);
+        auto call=std::shared_ptr<detail::NativeSendInvocationState>(new detail::NativeSendInvocationState);
+        auto resources=std::shared_ptr<detail::NativeSendResources>(new detail::NativeSendResources);
         auto& reg=*work.state_->registration_;const auto& record=*work.state_->record_;
+        call->registration_=work.state_->registration_;call->deadline_=record.deadline();
+        resources->provider_=std::move(provider);resources->work_=std::move(work.state_);
+        call->resources_=std::move(resources);
         const auto status=detail::NativeEgressBridge::Admit(state_,reg,reg.identity_,record.route(),record.generation(),
-                record.deadline(),call->ticket_,call->socket_);
-        if(status!=NativeStatus::None) return Failure<NativeSendInvocation>(status);
-        // All fallible work precedes admission; these moves cannot allocate.
-        call->work_=std::move(work.state_);call->provider_=std::move(provider);
+                record.deadline(),call->resources_->ticket_,call->resources_->socket_,call);
+        if(status!=NativeStatus::None) {
+            work.state_=std::move(call->resources_->work_);
+            return Failure<NativeSendInvocation>(status);
+        }
+        // Published resources may already have been removed by strong revoke.
+        // No post-admission dereference of the record or resource package.
         return {NativeSendInvocation(std::move(call)),{}};
     } catch(const std::bad_alloc&) {return Failure<NativeSendInvocation>(NativeStatus::AllocationFailure);}
 }
@@ -111,5 +189,15 @@ NativeStatus NativeSendExecution::Revoke(EgressRegistration r) const noexcept
     if(status==NativeStatus::None) r.state_->runtime_->Close(); // EVERY caller crosses publication barrier.
     return status;
 }
+NativeResult<NativeRevokeTicket> NativeSendExecution::BeginRevoke(EgressRegistration r) const noexcept
+{
+    if(!r) return Failure<NativeRevokeTicket>(NativeStatus::InvalidHandle);
+    NativeRevokeTicket ticket;
+    const auto status=detail::NativeEgressBridge::BeginRevoke(state_,r.state_,ticket);
+    if(status!=NativeStatus::None) return Failure<NativeRevokeTicket>(status);
+    return {std::move(ticket),{}};
+}
+NativeEgressActivity NativeSendExecution::Observe(EgressRegistration r) const noexcept
+{return r?detail::NativeEgressBridge::Observe(state_,*r.state_):NativeEgressActivity{};}
 NativeEgressUsage NativeSendExecution::SnapshotUsage() const noexcept { return detail::NativeEgressBridge::Usage(state_); }
 }

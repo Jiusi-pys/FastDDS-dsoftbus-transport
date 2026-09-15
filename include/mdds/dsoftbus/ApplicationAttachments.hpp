@@ -2,6 +2,8 @@
 #define MDDS_DSOFTBUS_APPLICATION_ATTACHMENTS_HPP
 
 #include <mdds/dsoftbus/InputChannels.hpp>
+#include <mdds/dsoftbus/NativeOwnerTable.hpp>
+#include <mdds/dsoftbus/ProcessClock.hpp>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -12,6 +14,9 @@ namespace detail {
 struct AttachmentApplication;
 struct AttachmentsControl;
 struct AttachmentRecord;
+class ProcessReceiveBridge;
+class AttachmentReceiveCapture;
+struct ReceiveApplicationActivity;
 }
 class ApplicationAttachmentsTestAccess;
 
@@ -74,7 +79,8 @@ enum class ReceiverOpenResult { Opened, AlreadyOpen, InvalidHandle, InvalidLocal
     NullReceiver, Conflict, Busy, Detached, AllocationFailure, IncarnationExhausted };
 enum class AttachmentControlResult { Completed, Requested, AlreadyDetached, InvalidHandle };
 enum class ReceiveAdmissionResult { Accepted, InvalidLocal, InvalidRoute, NoReceiver,
-    InvalidBuffer, TooLarge, Capacity, Revoked, AllocationFailure, Stopped };
+    InvalidBuffer, TooLarge, Capacity, Revoked, AllocationFailure, Stopped, InvalidDeadline, Expired };
+enum class ReceiveProducerState { InvalidHandle, Open, Pending, Drained };
 struct ApplicationClaimOutcome { ApplicationClaimResult result; ApplicationClaim claim; };
 struct ReceiverOpenOutcome { ReceiverOpenResult result; ReceiverBinding binding; };
 
@@ -137,6 +143,25 @@ public:
     // threads and makes no SDK calls.
 private:
     friend class ApplicationAttachmentsTestAccess;
+    friend class detail::ProcessReceiveBridge;
+    friend class ProcessCoordinator;
+    // N3 nonblocking observation of the original app, not a full Detach result.
+    // Open never means drained; RequestDetach must close admission first. No
+    // cleanup, wait, local-slot release or current-application lookup here.
+    ReceiveProducerState PollReceiveProducers(const ApplicationClaim&) const;
+    std::size_t TestCopying(const ApplicationClaim&) const;
+    ReceiveAdmissionResult CaptureReceive(const ApplicationClaim&,const Locator&,const Locator&,
+            const NativeIdentityConstraint&,ProcessClock::Clock::time_point,std::size_t,
+            const ProcessClock&,detail::AttachmentReceiveCapture&);
+    ReceiveAdmissionResult CopyReceive(detail::AttachmentReceiveCapture&,const void*);
+    ReceiveAdmissionResult CommitReceive(detail::AttachmentReceiveCapture&,const ProcessClock&);
+    NativeIdentityConstraint ReceiveIdentity(const ReceiveWork&) const;
+    NativeStatus CheckPendingReceive(const ReceiveWork&,const ProcessClock&) const;
+    NativeStatus EnterReceive(ReceiveWork&,InputReceiverLease&,const ProcessClock&);
+    static InputDeliveryResult InvokeReceive(ReceiveWork&,InputReceiverLease&);
+    bool RequeueReceive(ReceiveWork&);
+    AttachmentControlResult FreezeApplication(const ApplicationClaim&);
+    detail::ReceiveApplicationActivity ReceiveActivity(const ApplicationClaim&) const;
     struct TestHooks
     {
         // Outside the global gate; synchronization hooks must not throw except

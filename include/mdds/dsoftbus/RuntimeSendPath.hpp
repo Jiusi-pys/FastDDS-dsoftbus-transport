@@ -9,7 +9,7 @@
 #include <mutex>
 
 namespace mdds::dsoftbus {
-namespace detail { struct RuntimeIdentity; }
+namespace detail { struct RuntimeIdentity; class NativeEgressBridge; }
 class DSoftBusSenderResource;
 class RuntimeSendPathTestAccess;
 
@@ -115,6 +115,13 @@ public:
 private:
     friend class DSoftBusSenderResource;
     friend class RuntimeSendPathTestAccess;
+    friend class detail::NativeEgressBridge;
+    // Single atomic arbitration: a producer either enters before Freeze or
+    // cannot enter. These narrow operations never drain or destroy records.
+    static constexpr std::uint64_t closed_bit_ = std::uint64_t{1} << 63;
+    void FreezeAdmissions() noexcept { producer_state_.fetch_or(closed_bit_); }
+    std::uint64_t ProducerCount() const noexcept { return producer_state_.load() & (closed_bit_ - 1); }
+    bool TryEnterProducer() noexcept;
     struct TestHooks
     {
         std::function<Clock::time_point()> now; // Nonthrowing and monotonic.
@@ -130,7 +137,7 @@ private:
     const std::size_t max_record_bytes_;
     std::unique_ptr<SendQueue> queue_;
     mutable std::mutex attachment_mutex_;
-    std::atomic<bool> stop_requested_{false};
+    std::atomic<std::uint64_t> producer_state_{0};
     TestHooks hooks_;
 };
 } // namespace mdds::dsoftbus

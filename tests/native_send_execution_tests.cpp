@@ -40,6 +40,9 @@ namespace mdds::dsoftbus {
 class NativeSendExecutionTestAccess
 {
 public:
+    static auto Scoped(NativeSendExecution& e,const NativeTableConfiguration& c,
+            const std::vector<Locator>& locals,const std::vector<EgressSelection>& selections,SendQueueLimits limits)
+    {return e.CreateRuntimeForLocals(c,locals,selections,limits);}
     static std::mutex& Gate(NativeSendExecution& e) {return detail::NativeEgressBridge::TestGate(e.state_);}
     static RuntimeSendPath& Runtime(EgressRegistration r) {return *r.state_->runtime_;}
     static NativeStatus Stale(NativeSendExecution& e,EgressRegistration r,const Route& route,std::uint64_t gen,
@@ -316,6 +319,169 @@ void LastReferencesAndShutdownFault()
     CHECK(facts.phase==NativeOwnerPhase::RetainedNotQuiescent);CHECK(facts.provider_fault==NativeProviderFault::InvalidPositiveReturn);
     CHECK(facts.invalid_provider_return==29&&facts.error_code==0);
 }
+void StrongRevokeBeforeRun()
+{
+    Fixture f;NativeSendExecution e(*f.table);auto r=Registration(e,f.config);
+    rtps::SendResourceList list;auto w=Work(e,r,list);auto p=std::make_shared<Provider>();
+    auto call=e.TryAdmit(w,p);CHECK(call);
+    CHECK(e.Observe(r).admitted_outstanding==1);
+    auto revoke=e.BeginRevoke(r);CHECK(revoke);
+    CHECK(e.Observe(r).admission_closed&&!e.Observe(r).drained);
+    CHECK(e.Observe(r).admitted_outstanding==1);CHECK(!Send(*list.front()));
+    revoke.value->Progress();
+    CHECK(e.Observe(r).drained&&e.Observe(r).admitted_outstanding==0);
+    CHECK(r.SnapshotUsage().records==0&&f.table->SnapshotUsage().send.reserved==0);
+    CHECK(call.value->Run().outcome==NativeSendOutcome::NotEntered);CHECK(p->calls==0);
+    revoke.value->Progress();CHECK(e.Observe(r).drained);
+}
+void StrongRevokeEntered()
+{
+    Fixture f;NativeSendExecution e(*f.table);auto r=Registration(e,f.config);
+    rtps::SendResourceList list;auto w=Work(e,r,list);auto p=std::make_shared<Provider>();
+    Event entered,release;p->action=[&](auto,const auto&,auto* bytes,auto n,auto,auto) {
+        entered.Signal();release.Wait();CHECK(n==5&&bytes[4]==5);return 0;
+    };
+    auto call=e.TryAdmit(w,p);CHECK(call);
+    auto running=std::async(std::launch::async,[&]{return call.value->Run();});entered.Wait();
+    auto revoke=e.BeginRevoke(r);CHECK(revoke);revoke.value->Progress();
+    CHECK(e.Observe(r).admitted_outstanding==1&&!e.Observe(r).drained);
+    CHECK(r.SnapshotUsage().records==1);release.Signal();CHECK(Finish(running).status==NativeStatus::None);
+    CHECK(e.Observe(r).drained&&r.SnapshotUsage().records==0);
+}
+struct CleanupProvider final : NativeSendProvider
+{
+    CleanupProvider(Event& a,Event& b) : entered(a),release(b) {}
+    ~CleanupProvider() override {entered.Signal();release.Wait();}
+    std::int32_t Send(NativeSocketId,const Route&,const std::uint8_t*,std::size_t,
+            SendQueue::Clock::time_point,std::int32_t) override {return 0;}
+    Event& entered;Event& release;
+};
+void StrongRevokeCleanup()
+{
+    // Both a ticket-owned cancellation and an expired weak control (the last
+    // shell is already destructing) remain outstanding through actual cleanup.
+    for(bool shell_destructor : {false,true}) {
+        Fixture f;NativeSendExecution e(*f.table);auto r=Registration(e,f.config);
+        rtps::SendResourceList list;auto w=Work(e,r,list);Event entered,release;
+        auto p=std::make_shared<CleanupProvider>(entered,release);
+        auto call=e.TryAdmit(w,p);CHECK(call);p.reset();
+        std::optional<NativeRevokeTicket> first;
+        if(!shell_destructor) {auto revoke=e.BeginRevoke(r);CHECK(revoke);first.emplace(std::move(*revoke.value));}
+        auto cleaning=std::async(std::launch::async,[&]{
+            if(shell_destructor) call.value.reset();else first->Progress();
+        });
+        entered.Wait(); // Actual provider destructor, not a pre-call timer.
+        CHECK(e.Observe(r).admitted_outstanding==1);
+        CHECK(f.table->SnapshotUsage().send.reserved==0);
+        auto second=e.BeginRevoke(r);CHECK(second);second.value->Progress();
+        CHECK(e.Observe(r).queue_barrier_crossed&&!e.Observe(r).drained);
+        CHECK(r.SnapshotUsage().records==1); // Record cleanup follows provider.
+        release.Signal();Finish(cleaning);
+        CHECK(e.Observe(r).drained&&r.SnapshotUsage().records==0);
+        if(call.value) CHECK(call.value->Run().outcome==NativeSendOutcome::NotEntered);
+    }
+}
+void StrongRevokeTickets()
+{
+    Fixture f;NativeSendExecution e(*f.table);auto r=Registration(e,f.config);
+    rtps::SendResourceList list;auto w=Work(e,r,list);auto p=std::make_shared<Provider>();
+    auto call=e.TryAdmit(w,p);CHECK(call);
+    Fixture other;NativeSendExecution foreign(*other.table);
+    CHECK(!foreign.BeginRevoke(r));CHECK(!r.SnapshotUsage().closed);
+    CHECK(foreign.Observe(r).status==NativeStatus::ForeignState);
+    {
+        auto a=e.BeginRevoke(r),b=e.BeginRevoke(r);CHECK(a&&b);
+        b.value->Progress();CHECK(!e.Observe(r).drained); // A still owns cleanup.
+        NativeRevokeTicket moved(std::move(*a.value));a.value->Progress();
+        CHECK(!e.Observe(r).drained);
+        // Move assignment settles B outside all gates then transfers A's work.
+        *b.value=std::move(moved);CHECK(!e.Observe(r).drained);
+    } // Dropping the owning ticket performs terminal cleanup, no Run required.
+    CHECK(e.Observe(r).drained);CHECK(call.value->Run().outcome==NativeSendOutcome::NotEntered);
+    CHECK(p->calls==0&&r.SnapshotUsage().records==0);
+}
+void StrongRevokeControlCapacity()
+{
+    Fixture f;NativeSendExecution e(*f.table);auto r=Registration(e,f.config);
+    rtps::SendResourceList list;auto p=std::make_shared<Provider>();
+    auto a=Work(e,r,list,10),b=Work(e,r,list,11),c=Work(e,r,list,12);
+    auto one=e.TryAdmit(a,p),two=e.TryAdmit(b,p);CHECK(one&&two);
+    CHECK(f.owners[0].RequestClose()==NativeStatus::None);
+    CHECK(f.owners[1].RequestClose()==NativeStatus::None);
+    CHECK(f.table->SnapshotUsage().send.reserved==0&&e.Observe(r).admitted_outstanding==2);
+    CHECK(e.TryAdmit(c,p).issue.code==NativeStatus::SendBusy);CHECK(c);
+    one.value.reset();CHECK(e.Observe(r).admitted_outstanding==1);
+    auto fresh=e.TryAdmit(c,p);CHECK(fresh);
+    two.value.reset(); // Old native token cannot cancel the reused send cell.
+    CHECK(f.table->SnapshotUsage().send.reserved==1);
+    CHECK(fresh.value->Run().status==NativeStatus::None);CHECK(p->calls==1);
+    CHECK(e.Observe(r).admitted_outstanding==0&&r.SnapshotUsage().records==0);
+}
+void StrongRevokeAdmissionAllocations()
+{
+    Fixture f;NativeSendExecution e(*f.table);auto r=Registration(e,f.config);
+    rtps::SendResourceList list;auto p=std::make_shared<Provider>();
+    auto w=Work(e,r,list);const auto start=allocation_count;
+    auto measured=e.TryAdmit(w,p);const auto count=allocation_count-start;CHECK(measured);measured.value.reset();
+    CHECK(count>0);
+    for(std::size_t i=0;i<count;++i) {
+        w=Work(e,r,list);fail_after=static_cast<long>(i);auto call=e.TryAdmit(w,p);fail_after=-1;
+        CHECK(!call&&call.issue.code==NativeStatus::AllocationFailure);CHECK(w);
+        CHECK(e.Observe(r).admitted_outstanding==0&&f.table->SnapshotUsage().send.reserved==0);
+        CHECK(r.SnapshotUsage().records==1);w={};CHECK(r.SnapshotUsage().records==0);
+    }
+    std::cout<<"N3 strong admission allocation_points="<<count<<'\n';
+}
+void ApplicationLocalProjection()
+{
+    auto config=Config();
+    config.directory.locals.push_back({L(3),"namespace-b","listen-b"});
+    config.directory.locals.push_back({L(4),"namespace-no-egress","listen-no-egress"});
+    for(auto remote : {10,20}) {
+        Route route;route.key={L(3),L(static_cast<std::uint8_t>(remote))};
+        route.fields={"network-b","remote-b","dial-b-"+std::to_string(remote),
+                {"initiator-b-"+std::to_string(remote)},RecordDataType::Bytes};
+        config.directory.routes.push_back(route);config.directions.push_back(RouteDirection::Dial);
+    }
+    auto table=NativeOwnerTable::Build(config);CHECK(table);NativeSendExecution e(**table.value);
+    const std::vector<EgressSelection> none;
+    // Full process configuration is still ambiguous; no legacy behavior change.
+    CHECK(!e.CreateRuntime(config,none,Limits()));
+    {
+        auto a=NativeSendExecutionTestAccess::Scoped(e,config,{L(2)},none,Limits());
+        auto b=NativeSendExecutionTestAccess::Scoped(e,config,{L(3)},none,Limits());CHECK(a&&b);
+        auto ap=NativeSendExecutionTestAccess::Runtime(*a.value).plan();
+        auto bp=NativeSendExecutionTestAccess::Runtime(*b.value).plan();
+        CHECK(ap->size()==3&&bp->size()==2);CHECK(!ap->Find(L(20))&&!bp->Find(L(11)));
+        CHECK(ap->Find(L(10))->key.local_locator==L(2)&&bp->Find(L(10))->key.local_locator==L(3));
+        CHECK(ap->selected_locals()==std::vector<Locator>{L(2)});
+        CHECK(bp->selected_locals()==std::vector<Locator>{L(3)});
+    }
+    for(const auto& locals : {std::vector<Locator>{},std::vector<Locator>{L(99)},
+            std::vector<Locator>{L(2),L(2)}})
+        CHECK(!NativeSendExecutionTestAccess::Scoped(e,config,locals,none,Limits()));
+    CHECK(!NativeSendExecutionTestAccess::Scoped(e,config,{L(2)},{{L(10),L(3),1}},Limits()));
+    CHECK(!NativeSendExecutionTestAccess::Scoped(e,config,{L(2),L(3)},none,Limits()));
+    {
+        auto empty=NativeSendExecutionTestAccess::Scoped(e,config,{L(4)},none,Limits());CHECK(empty);
+        CHECK(NativeSendExecutionTestAccess::Runtime(*empty.value).plan()->size()==0);
+        rtps::SendResourceList resources;CHECK(!e.Attach(*empty.value,resources).ok());CHECK(resources.empty());
+    }
+    auto changed=config;changed.directory.routes[0].fields.remote_network_id="changed";
+    CHECK(NativeSendExecutionTestAccess::Scoped(e,changed,{L(3)},none,Limits()).issue.code==NativeStatus::ConfigurationMismatch);
+    CHECK(e.SnapshotUsage().runtimes==0&&e.SnapshotUsage().bytes==0);
+    const std::vector<Locator> locals{L(2)};
+    const auto start=allocation_count;
+    {auto measured=NativeSendExecutionTestAccess::Scoped(e,config,locals,none,Limits());CHECK(measured);}
+    const auto count=allocation_count-start;CHECK(count>0);
+    for(std::size_t i=0;i<count;++i) {
+        fail_after=static_cast<long>(i);
+        auto r=NativeSendExecutionTestAccess::Scoped(e,config,locals,none,Limits());fail_after=-1;
+        CHECK(!r&&r.issue.code==NativeStatus::AllocationFailure);
+        CHECK(e.SnapshotUsage().runtimes==0&&e.SnapshotUsage().bytes==0);
+    }
+    std::cout<<"N3 scoped runtime allocation_points="<<count<<'\n';
+}
 }
 int main()
 {
@@ -333,7 +499,14 @@ int main()
         ConstructionFailures();std::cout<<"PASS N2-OOM\n";
         PublicationAndEntry();std::cout<<"PASS N2-PUBLICATION-ENTRY\n";
         RollbackAndCeilings();std::cout<<"PASS N2-ROLLBACK-CEILINGS\n";
-        LastReferencesAndShutdownFault();std::cout<<"PASS N2-LAST-REFERENCES\n";return 0;
+        LastReferencesAndShutdownFault();std::cout<<"PASS N2-LAST-REFERENCES\n";
+        StrongRevokeBeforeRun();std::cout<<"PASS N3-SEND-REVOKE-RESERVED\n";
+        StrongRevokeEntered();std::cout<<"PASS N3-SEND-REVOKE-ENTERED\n";
+        StrongRevokeCleanup();std::cout<<"PASS N3-SEND-CLEANUP-DRAIN\n";
+        StrongRevokeTickets();std::cout<<"PASS N3-SEND-REVOKE-TICKETS\n";
+        StrongRevokeControlCapacity();std::cout<<"PASS N3-SEND-CONTROL-CAPACITY\n";
+        StrongRevokeAdmissionAllocations();std::cout<<"PASS N3-SEND-ADMISSION-OOM\n";
+        ApplicationLocalProjection();std::cout<<"PASS N3-APPLICATION-LOCAL-PROJECTION\n";return 0;
     }
     catch(const std::exception& e) {std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}
 }

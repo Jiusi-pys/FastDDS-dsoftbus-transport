@@ -18,6 +18,7 @@ class ListenCallTicket;
 class BindCallTicket;
 class ShutdownCallTicket;
 namespace detail { struct NativeState; class NativeOperationToken; class NativeSendCallTicket; class NativeEgressBridge; }
+namespace detail { class NativeReceiveBridge; class NativeReceiveGuard; }
 
 using NativeSocketId = std::int32_t;
 enum class RouteDirection { Dial, Accept };
@@ -78,7 +79,7 @@ enum class NativeQuiescence { Unproven };
 struct NativeCallUsage { std::size_t reserved = 0, entered = 0, limit = 0; };
 struct NativeUsageSnapshot
 {
-    std::size_t namespaces = 0, owners = 0, owned_ids = 0, callbacks = 0;
+    std::size_t namespaces = 0, owners = 0, owned_ids = 0, callbacks = 0, receives = 0;
     std::size_t owner_high_water = 0;
     std::uint64_t generation_high_water = 0;
     std::array<std::size_t, static_cast<std::size_t>(NativeOwnerPhase::Count)> phases{};
@@ -100,11 +101,38 @@ struct NativeOwnerObservation
     bool shutdown_reserved = false, shutdown_entered = false, shutdown_returned = false;
     bool on_shutdown_seen = false, entered_context_lost = false;
     std::size_t callback_inflight = 0;
+    std::size_t receive_inflight = 0;
     std::int32_t error_code = 0;
     NativeStatus failure = NativeStatus::None;
     NativeQuiescence quiescence = NativeQuiescence::Unproven;
     NativeProviderFault provider_fault = NativeProviderFault::None;
     std::optional<std::int32_t> invalid_provider_return;
+};
+
+// Immutable-in-record native identity, not an executing callback or delivery.
+// Copies pin only original State metadata, never increment callback_inflight.
+// This cannot disambiguate an SDK callback whose reused id was misidentified
+// before capture. It is route ownership evidence, not peer authentication.
+class NativeIdentityConstraint final
+{
+public:
+    NativeIdentityConstraint() noexcept = default;
+    explicit operator bool() const noexcept { return bool(state_); }
+    const Locator& local() const noexcept { return local_; }
+    const Locator& remote() const noexcept { return remote_; }
+    // Diagnostic snapshot only, never an execution permission. Binding returns
+    // NotReady; revoked/foreign generations cannot be replaced with new values.
+    NativeOwnerObservation Observe() const noexcept;
+private:
+    friend class NativeCallbackLease;
+    friend class NativeOwnerTableTestAccess;
+    friend struct detail::NativeState;
+    friend class detail::NativeReceiveBridge;
+    friend class detail::NativeReceiveGuard;
+    std::shared_ptr<detail::NativeState> state_;
+    std::size_t slot_ = static_cast<std::size_t>(-1);
+    std::uint64_t incarnation_ = 0, generation_ = 0, route_version_ = 0;
+    Locator local_, remote_;
 };
 struct NativeCompletion
 {
@@ -288,6 +316,7 @@ public:
     ~NativeCallbackLease() noexcept;
     NativeStatus ObserveShutdown() noexcept;
     NativeOwnerObservation CapturedOwner() const noexcept;
+    NativeResult<NativeIdentityConstraint> CaptureIdentity() const noexcept;
 private:
     friend class NamespaceLease;
     friend struct detail::NativeState;
@@ -348,6 +377,7 @@ private:
     friend class NativeOwnerTableTestAccess;
     explicit NativeOwnerTable(std::shared_ptr<detail::NativeState>) noexcept;
     friend class detail::NativeEgressBridge;
+    friend class detail::NativeReceiveBridge;
     NativeResult<detail::NativeSendCallTicket> TestReserveSend(const NativeOwnerLease&,
             std::uint64_t route_version, std::uint64_t generation) noexcept;
     void TestSetNextIdentity(std::uint64_t) noexcept;

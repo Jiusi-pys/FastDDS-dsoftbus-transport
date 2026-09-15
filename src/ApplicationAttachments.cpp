@@ -1,4 +1,5 @@
 #include <mdds/dsoftbus/ApplicationAttachments.hpp>
+#include "ApplicationAttachmentsInternal.hpp"
 #include <algorithm>
 #include <condition_variable>
 #include <cstring>
@@ -53,6 +54,10 @@ struct AttachmentApplication final
     std::vector<AttachmentLocal> locals;
     ApplicationPhase phase = ApplicationPhase::Active;
     std::size_t controls = 0;
+    // Producer lifetime, not RecordPhase::Copying. Includes commit/refund until
+    // the admitting thread can no longer mutate this application's ledger.
+    std::size_t copying_activity = 0;
+    std::size_t dispatching_activity = 0;
     bool draining = false, charged = false;
 };
 void Refund(AttachmentBudget& b, std::size_t index, std::size_t size, RecordPhase phase)
@@ -70,14 +75,16 @@ struct AttachmentRecord final
 {
     AttachmentRecord(std::shared_ptr<AttachmentApplication> a, InputChannelTicket t,
             Locator r, std::size_t index, std::uint64_t incarnation_value,
-            std::size_t global_index, std::size_t size)
+            std::size_t global_index, std::size_t size,NativeIdentityConstraint pin = {},
+            ProcessClock::Clock::time_point expires=ProcessClock::Clock::time_point::max())
         : app(std::move(a)), ticket(std::move(t)), remote(r), local_index(index),
-          incarnation(incarnation_value), budget_index(global_index), bytes(size) {}
+          incarnation(incarnation_value), budget_index(global_index), bytes(size),native(std::move(pin)),expiry(expires) {}
     ~AttachmentRecord()
     {
         if (charged) {
             std::lock_guard<std::mutex> lock(app->budget->mutex);
             Refund(*app->budget, budget_index, bytes.size(), phase);
+            if(phase==RecordPhase::Delivering) --app->dispatching_activity;
         }
     }
     // No back-reference to the control object. Only queue ownership uses next.
@@ -88,6 +95,8 @@ struct AttachmentRecord final
     const std::uint64_t incarnation;
     const std::size_t budget_index;
     std::vector<std::uint8_t> bytes;
+    const NativeIdentityConstraint native;
+    const ProcessClock::Clock::time_point expiry;
     RecordPhase phase = RecordPhase::Copying;
     bool charged = false;
     std::unique_ptr<AttachmentRecord> next;
@@ -104,6 +113,16 @@ struct AttachmentsControl final
     AttachmentRecord* tail = nullptr;
     bool stopped = false;
 };
+AttachmentReceiveCapture::AttachmentReceiveCapture() noexcept = default;
+AttachmentReceiveCapture::~AttachmentReceiveCapture() noexcept
+{
+    record_.reset(); // Charged record refund must finish before activity reaches zero.
+    if(active_) {
+        std::lock_guard<std::mutex> lock(app_->budget->mutex);
+        if(reserved_) Refund(*app_->budget,global_index_,size_,RecordPhase::Copying);
+        --app_->copying_activity;app_->budget->changed.notify_all();
+    }
+}
 } // namespace detail
 
 namespace {
@@ -139,21 +158,6 @@ void ValidateLimits(const AttachmentLimits& n)
         throw std::invalid_argument("invalid attachment limits");
     }
 }
-class ReceiveReservation final
-{
-public:
-    ReceiveReservation(std::shared_ptr<AttachmentApplication> app, std::size_t index, std::size_t size)
-        : app_(std::move(app)), index_(index), size_(size) {}
-    ~ReceiveReservation() {
-        if (active_) { std::lock_guard<std::mutex> lock(app_->budget->mutex);
-            Refund(*app_->budget, index_, size_, RecordPhase::Copying); }
-    }
-    void Transfer() noexcept { active_ = false; }
-private:
-    const std::shared_ptr<AttachmentApplication> app_;
-    const std::size_t index_, size_;
-    bool active_ = true;
-};
 } // namespace
 
 ReceiveWork::ReceiveWork() noexcept = default;
@@ -166,10 +170,12 @@ InputDeliveryResult ReceiveWork::Deliver()
 {
     auto record = std::move(record_);
     if (!record) return InputDeliveryResult::InvalidTicket;
+    if (record->native) return InputDeliveryResult::Disabled; // No native-admission bypass.
     {
         std::lock_guard<std::mutex> lock(record->app->budget->mutex);
         --record->app->budget->usage.taken;
         ++record->app->budget->usage.delivering;
+        ++record->app->dispatching_activity;
         record->phase = detail::RecordPhase::Delivering;
     }
     return record->app->inputs->Deliver(record->ticket, record->remote,
@@ -381,45 +387,148 @@ ReceiveAdmissionResult ApplicationAttachments::AdmitReceive(const Locator& local
     if (size > budget.limits.max_record_bytes) return ReceiveAdmissionResult::TooLarge;
     const auto slot_index = FindSlot(control, local);
     if (slot_index == absent) return ReceiveAdmissionResult::InvalidLocal;
-    std::shared_ptr<detail::AttachmentApplication> app;
-    InputChannelTicket ticket; std::size_t index; std::uint64_t incarnation;
+    ApplicationClaim claim;
+    {
+        std::lock_guard<std::mutex> lock(budget.mutex);
+        if(control.stopped) return ReceiveAdmissionResult::Stopped;
+        claim.app_=control.slots[slot_index].app;
+    }
+    if(!claim) return ReceiveAdmissionResult::NoReceiver;
+    detail::AttachmentReceiveCapture capture;
+    const ProcessClock clock;
+    auto result=CaptureReceive(claim,local,remote,{},ProcessClock::Clock::time_point::max(),size,clock,capture);
+    if(result!=ReceiveAdmissionResult::Accepted) return result;
+    result=CopyReceive(capture,bytes);
+    if(result!=ReceiveAdmissionResult::Accepted) return result;
+    return CommitReceive(capture,clock);
+}
+ReceiveAdmissionResult ApplicationAttachments::CaptureReceive(const ApplicationClaim& claim,const Locator& local,
+        const Locator& remote,const NativeIdentityConstraint& pin,ProcessClock::Clock::time_point expiry,
+        std::size_t size,const ProcessClock& clock,detail::AttachmentReceiveCapture& capture)
+{
+    auto app=claim.app_;auto& budget=*control_->budget;
+    if(!app||app->budget!=control_->budget) return ReceiveAdmissionResult::Revoked;
+    if(!size) return ReceiveAdmissionResult::InvalidBuffer;
+    if(size>budget.limits.max_record_bytes) return ReceiveAdmissionResult::TooLarge;
+    const auto index=FindLocal(*app,local);
+    if(index==absent) return ReceiveAdmissionResult::InvalidLocal;
+    const auto slot_index=app->locals[index].budget_index;
     try {
         std::lock_guard<std::mutex> lock(budget.mutex);
-        if (control.stopped) return ReceiveAdmissionResult::Stopped;
-        app = control.slots[slot_index].app;
-        if (!app || app->phase != detail::ApplicationPhase::Active) return ReceiveAdmissionResult::NoReceiver;
-        index = FindLocal(*app, local);
+        if (control_->stopped) return ReceiveAdmissionResult::Stopped;
+        if (app->phase != detail::ApplicationPhase::Active) return ReceiveAdmissionResult::NoReceiver;
         const auto& entry = app->locals[index];
         if (entry.phase != detail::ReceiverPhase::Open) return ReceiveAdmissionResult::NoReceiver;
-        if (!app->directory->ResolveOutbound({local, remote}).value) return ReceiveAdmissionResult::InvalidRoute;
+        // Native caller already holds the original validated route/owner gate;
+        // only the legacy path needs the allocating directory lookup here.
+        if (!pin&&!app->directory->ResolveOutbound({local, remote}).value) return ReceiveAdmissionResult::InvalidRoute;
+        if(pin&&(pin.local()!=local||pin.remote()!=remote)) return ReceiveAdmissionResult::InvalidRoute;
+        if(expiry!=ProcessClock::Clock::time_point::max()&&clock.Now()>=expiry) return ReceiveAdmissionResult::Expired;
         const auto& n = budget.limits; const auto& l = budget.locals[slot_index];
         if (budget.usage.records == n.records || size > n.bytes - budget.usage.bytes ||
-                l.records == n.local_records || size > n.local_bytes - l.bytes || budget.usage.copying == n.copying)
+                l.records == n.local_records || size > n.local_bytes - l.bytes || budget.usage.copying == n.copying ||
+                app->copying_activity == std::numeric_limits<std::size_t>::max())
             return ReceiveAdmissionResult::Capacity;
-        ticket = entry.ticket; incarnation = entry.incarnation;
-        ++budget.usage.records; budget.usage.bytes += size; ++budget.usage.copying;
+        capture.app_=app;capture.ticket_=entry.ticket;capture.native_=pin;capture.remote_=remote;
+        capture.index_=index;capture.global_index_=slot_index;capture.incarnation_=entry.incarnation;
+        capture.expiry_=expiry;capture.size_=size;
+        ++budget.usage.records; budget.usage.bytes += size; ++budget.usage.copying; ++app->copying_activity;
+        capture.active_=true;capture.reserved_=true; // No fallible work after charging.
         ++budget.locals[slot_index].records; budget.locals[slot_index].bytes += size;
         budget.usage.high_records = std::max(budget.usage.high_records, budget.usage.records);
         budget.usage.high_bytes = std::max(budget.usage.high_bytes, budget.usage.bytes);
         budget.usage.high_copying = std::max(budget.usage.high_copying, budget.usage.copying);
     } catch (const std::bad_alloc&) { return ReceiveAdmissionResult::AllocationFailure; }
-    ReceiveReservation reservation(app, slot_index, size);
+    return ReceiveAdmissionResult::Accepted;
+}
+ReceiveAdmissionResult ApplicationAttachments::CopyReceive(detail::AttachmentReceiveCapture& capture,const void* bytes)
+{
+    if(!capture.active_||!capture.reserved_||capture.record_||!bytes) return ReceiveAdmissionResult::InvalidBuffer;
     try {
         if (hooks_.copy_reserved) hooks_.copy_reserved();
-        auto record = std::make_unique<detail::AttachmentRecord>(app, ticket, remote, index, incarnation, slot_index, size);
-        record->charged = true; reservation.Transfer();
-        std::memcpy(record->bytes.data(), bytes, size);
+        capture.record_=std::make_unique<detail::AttachmentRecord>(capture.app_,capture.ticket_,capture.remote_,
+                capture.index_,capture.incarnation_,capture.global_index_,capture.size_,capture.native_,capture.expiry_);
+        capture.record_->charged=true;capture.reserved_=false;
+        std::memcpy(capture.record_->bytes.data(),bytes,capture.size_);
         if (hooks_.receive_publish) hooks_.receive_publish();
-        std::lock_guard<std::mutex> lock(budget.mutex);
-        const auto& entry = app->locals[index];
-        if (app->phase != detail::ApplicationPhase::Active || entry.phase != detail::ReceiverPhase::Open ||
-                entry.incarnation != incarnation) return ReceiveAdmissionResult::Revoked;
-        --budget.usage.copying; ++budget.usage.queued; record->phase = detail::RecordPhase::Queued;
-        auto* tail = record.get();
-        if (control.tail) control.tail->next = std::move(record); else control.queue = std::move(record);
-        control.tail = tail;
         return ReceiveAdmissionResult::Accepted;
     } catch (const std::bad_alloc&) { return ReceiveAdmissionResult::AllocationFailure; }
+}
+ReceiveAdmissionResult ApplicationAttachments::CommitReceive(detail::AttachmentReceiveCapture& capture,const ProcessClock& clock)
+{
+    if(!capture.active_||!capture.record_||capture.app_->budget!=control_->budget) return ReceiveAdmissionResult::Revoked;
+    auto& control=*control_;auto& budget=*control.budget;
+    std::lock_guard<std::mutex> lock(budget.mutex);
+    const auto& entry=capture.app_->locals[capture.index_];
+    if(capture.app_->phase!=detail::ApplicationPhase::Active||entry.phase!=detail::ReceiverPhase::Open||
+            entry.incarnation!=capture.incarnation_) return ReceiveAdmissionResult::Revoked;
+    if(capture.expiry_!=ProcessClock::Clock::time_point::max()&&clock.Now()>=capture.expiry_) return ReceiveAdmissionResult::Expired;
+    --budget.usage.copying;++budget.usage.queued;capture.record_->phase=detail::RecordPhase::Queued;
+    auto* tail=capture.record_.get();
+    if(control.tail) control.tail->next=std::move(capture.record_);else control.queue=std::move(capture.record_);
+    control.tail=tail;
+    return ReceiveAdmissionResult::Accepted;
+}
+NativeIdentityConstraint ApplicationAttachments::ReceiveIdentity(const ReceiveWork& work) const
+{return work.record_&&work.record_->app->budget==control_->budget?work.record_->native:NativeIdentityConstraint{};}
+NativeStatus ApplicationAttachments::CheckPendingReceive(const ReceiveWork& work,const ProcessClock& clock) const
+{
+    if(!work.record_||work.record_->app->budget!=control_->budget||!work.record_->native) return NativeStatus::InvalidHandle;
+    const auto& record=*work.record_;const auto& app=*record.app;
+    std::lock_guard<std::mutex> lock(app.budget->mutex);const auto& entry=app.locals[record.local_index];
+    if(record.phase!=detail::RecordPhase::Taken||app.phase!=detail::ApplicationPhase::Active||
+            entry.phase!=detail::ReceiverPhase::Open||entry.incarnation!=record.incarnation) return NativeStatus::Revoked;
+    return record.expiry!=ProcessClock::Clock::time_point::max()&&clock.Now()>=record.expiry?
+            NativeStatus::DeadlineExpired:NativeStatus::None;
+}
+NativeStatus ApplicationAttachments::EnterReceive(ReceiveWork& work,InputReceiverLease& lease,const ProcessClock& clock)
+{
+    if(!work.record_||work.record_->app->budget!=control_->budget||!work.record_->native) return NativeStatus::InvalidHandle;
+    auto& record=*work.record_;auto& app=*record.app;auto& budget=*app.budget;
+    std::lock_guard<std::mutex> lock(budget.mutex);const auto& entry=app.locals[record.local_index];
+    if(record.phase!=detail::RecordPhase::Taken||app.phase!=detail::ApplicationPhase::Active||
+            entry.phase!=detail::ReceiverPhase::Open||entry.incarnation!=record.incarnation) return NativeStatus::Revoked;
+    if(record.expiry!=ProcessClock::Clock::time_point::max()&&clock.Now()>=record.expiry) return NativeStatus::DeadlineExpired;
+    if(app.dispatching_activity==std::numeric_limits<std::size_t>::max()) return NativeStatus::CounterExhausted;
+    lease=app.inputs->TryAcquireReceiver(record.ticket); // Required initially empty output.
+    if(!lease) return NativeStatus::Revoked;
+    --budget.usage.taken;++budget.usage.delivering;++app.dispatching_activity;record.phase=detail::RecordPhase::Delivering;
+    return NativeStatus::None;
+}
+InputDeliveryResult ApplicationAttachments::InvokeReceive(ReceiveWork& work,InputReceiverLease& lease)
+{
+    if(!work.record_) return InputDeliveryResult::InvalidTicket;
+    const auto& record=*work.record_;
+    return lease.Deliver(record.remote,record.bytes.data(),record.bytes.size());
+}
+bool ApplicationAttachments::RequeueReceive(ReceiveWork& work)
+{
+    if(!work.record_||work.record_->app->budget!=control_->budget) return false;
+    auto& record=*work.record_;auto& app=*record.app;auto& control=*control_;auto& budget=*control.budget;
+    std::lock_guard<std::mutex> lock(budget.mutex);const auto& entry=app.locals[record.local_index];
+    if(record.phase!=detail::RecordPhase::Taken||app.phase!=detail::ApplicationPhase::Active||
+            entry.phase!=detail::ReceiverPhase::Open||entry.incarnation!=record.incarnation) return false;
+    --budget.usage.taken;++budget.usage.queued;record.phase=detail::RecordPhase::Queued;
+    auto* tail=work.record_.get();
+    if(control.tail) control.tail->next=std::move(work.record_);else control.queue=std::move(work.record_);
+    control.tail=tail;return true;
+}
+AttachmentControlResult ApplicationAttachments::FreezeApplication(const ApplicationClaim& claim)
+{
+    auto app=claim.app_;if(!app||app->budget!=control_->budget) return AttachmentControlResult::InvalidHandle;
+    std::lock_guard<std::mutex> lock(app->budget->mutex);
+    if(app->phase==detail::ApplicationPhase::Detached) return AttachmentControlResult::AlreadyDetached;
+    if(app->phase==detail::ApplicationPhase::Active) {
+        app->phase=detail::ApplicationPhase::Detaching;
+        --app->budget->usage.active_applications;++app->budget->usage.detaching_applications;
+    }
+    return AttachmentControlResult::Requested; // No queue cleanup, wait or input close.
+}
+detail::ReceiveApplicationActivity ApplicationAttachments::ReceiveActivity(const ApplicationClaim& claim) const
+{
+    auto app=claim.app_;if(!app||app->budget!=control_->budget) return {};
+    std::lock_guard<std::mutex> lock(app->budget->mutex);
+    return {true,app->phase!=detail::ApplicationPhase::Active,app->controls,app->copying_activity,app->dispatching_activity};
 }
 ReceiveWork ApplicationAttachments::TryTake()
 {
@@ -433,6 +542,21 @@ ReceiveWork ApplicationAttachments::TryTake()
 }
 AttachmentUsage ApplicationAttachments::SnapshotUsage() const
 { std::lock_guard<std::mutex> lock(control_->budget->mutex); return control_->budget->usage; }
+ReceiveProducerState ApplicationAttachments::PollReceiveProducers(const ApplicationClaim& claim) const
+{
+    auto app = claim.app_;
+    if (!app || app->budget != control_->budget) return ReceiveProducerState::InvalidHandle;
+    std::lock_guard<std::mutex> lock(app->budget->mutex);
+    if (app->phase == detail::ApplicationPhase::Active) return ReceiveProducerState::Open;
+    // AlreadyDetached through the legacy API is not proof that producers left.
+    return app->copying_activity ? ReceiveProducerState::Pending : ReceiveProducerState::Drained;
+}
+std::size_t ApplicationAttachments::TestCopying(const ApplicationClaim& claim) const
+{
+    std::lock_guard<std::mutex> lock(control_->budget->mutex);
+    if (!claim.app_ || claim.app_->budget != control_->budget) throw std::logic_error("invalid test claim");
+    return claim.app_->copying_activity;
+}
 void ApplicationAttachments::TestSetIncarnation(const ApplicationClaim& claim, const Locator& local, std::uint64_t n)
 {
     std::lock_guard<std::mutex> lock(control_->budget->mutex);

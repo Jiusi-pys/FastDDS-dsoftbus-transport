@@ -44,6 +44,10 @@ public:
     { return std::unique_ptr<ApplicationAttachments>(new ApplicationAttachments(locals, limits,
             {std::move(opened),std::move(copy),std::move(publish),std::move(close),std::move(detach)})); }
     static std::weak_ptr<void> App(const ApplicationClaim& claim) { return claim.app_; }
+    static std::size_t Copying(ApplicationAttachments& a, const ApplicationClaim& c)
+    { return a.TestCopying(c); }
+    static auto PollProducers(ApplicationAttachments& a, const ApplicationClaim& c)
+    { return a.PollReceiveProducers(c); }
     static auto Core(ApplicationAttachments& a, const ApplicationClaim& c) { return a.TestCore(c); }
     static auto Budget(ApplicationAttachments& a) { return a.TestBudget(); }
     static void Incarnation(ApplicationAttachments& a, const ApplicationClaim& c, const Locator& l, std::uint64_t n)
@@ -350,6 +354,42 @@ void OwnershipAndException() {
     CHECK(!destroyed);release.Signal();CHECK(Finish(callback)==InputDeliveryResult::Delivered);Finish(destroy);CHECK(destroyed);
 }
 }
+void ApplicationCopyActivity() {
+    Event reserved, copy_resume, published, publish_resume;
+    Receiver receiver, other_receiver;
+    auto a=ApplicationAttachmentsTestAccess::Make(Locals(),{}, {},
+        [&]{reserved.Signal();copy_resume.Wait();},
+        [&]{published.Signal();publish_resume.Wait();});
+    auto c=Claim(*a);auto binding=Open(*a,c,receiver);
+    ApplicationAttachments foreign(Locals());
+    CHECK(ApplicationAttachmentsTestAccess::PollProducers(foreign,c)==ReceiveProducerState::InvalidHandle);
+    auto other=Claim(*a,{L(3)});auto other_binding=Open(*a,other,other_receiver,L(3));
+    auto work=std::async(std::launch::async,[&]{return Admit(*a);});reserved.Wait();
+    CHECK(ApplicationAttachmentsTestAccess::Copying(*a,c)==1);
+    CHECK(ApplicationAttachmentsTestAccess::Copying(*a,other)==0);
+    CHECK(ApplicationAttachmentsTestAccess::PollProducers(*a,c)==ReceiveProducerState::Open);
+    CHECK(ApplicationAttachmentsTestAccess::PollProducers(*a,{})==ReceiveProducerState::InvalidHandle);
+    CHECK(a->SnapshotUsage().queued==0);
+    copy_resume.Signal();published.Wait();
+    CHECK(ApplicationAttachmentsTestAccess::Copying(*a,c)==1); // memcpy done, ownership not settled.
+    a->RequestDetach(c);
+    CHECK(ApplicationAttachmentsTestAccess::PollProducers(*a,c)==ReceiveProducerState::Pending);
+    CHECK(ApplicationAttachmentsTestAccess::PollProducers(*a,other)==ReceiveProducerState::Open);
+    // The legacy drain deliberately does not wait for copying. N3 must not
+    // interpret its Detached phase as permission to skip this producer ledger.
+    Detach(*a,c);
+    CHECK(ApplicationAttachmentsTestAccess::PollProducers(*a,c)==ReceiveProducerState::Pending);
+    publish_resume.Signal();
+    CHECK(Finish(work)==ReceiveAdmissionResult::Revoked);
+    CHECK(ApplicationAttachmentsTestAccess::PollProducers(*a,c)==ReceiveProducerState::Drained);
+    CHECK(ApplicationAttachmentsTestAccess::Copying(*a,c)==0);Empty(*a);
+    Detach(*a,c);Detach(*a,other);
+    // Allocation/commit failure must refund before the per-app producer leaves.
+    auto failed=ApplicationAttachmentsTestAccess::Make(Locals(),{}, {},{},[]{throw std::bad_alloc();});
+    auto fc=Claim(*failed);auto fb=Open(*failed,fc,receiver);
+    CHECK(Admit(*failed)==ReceiveAdmissionResult::AllocationFailure);
+    CHECK(ApplicationAttachmentsTestAccess::Copying(*failed,fc)==0);Empty(*failed);Detach(*failed,fc);
+}
 int main(int argc,char** argv) {
     // Test-only diagnostic termination: a noexcept allocation failure must be
     // an explicit failed subprocess, never an interactive Windows crash dialog.
@@ -361,7 +401,8 @@ int main(int argc,char** argv) {
         {"AA-01-transactional-claims",Transactional},{"AA-02-real-callback-two-detach-waiters",ActualDrain},
         {"AA-03-old-copy-queue-taken",OldWork},{"AA-04-old-close-and-reopen",OldControl},
         {"AA-05-open-race-allocation-rollback",OpenRaceAndFaults},{"AA-06-invalid-and-capacity",InvalidAndCapacity},
-        {"AA-07-64-rebuilds-retained-quota",ReuseAndRetention},{"AA-08-ownership-throwing-callback",OwnershipAndException}};
+        {"AA-07-64-rebuilds-retained-quota",ReuseAndRetention},{"AA-08-ownership-throwing-callback",OwnershipAndException},
+        {"AA-N3-copy-activity",ApplicationCopyActivity}};
     unsigned run=0,failed=0;
     for(const auto& t:cases){if(argc==2&&std::string(t.first).find(argv[1])==std::string::npos)continue;++run;
         try{t.second();std::cout<<"PASS "<<t.first<<std::endl;}catch(const std::exception& e){attachment_fail_after=-1;++failed;std::cerr<<"FAIL "<<t.first<<": "<<e.what()<<std::endl;}}

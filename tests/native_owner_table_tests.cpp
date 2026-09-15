@@ -1,4 +1,5 @@
 #include <mdds/dsoftbus/NativeOwnerTable.hpp>
+#include "../src/NativeReceiveInternal.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -34,6 +35,32 @@ namespace mdds::dsoftbus {
 class NativeOwnerTableTestAccess
 {
 public:
+    static auto Receive(NativeOwnerTable& t, const NativeIdentityConstraint& c)
+    {
+        auto guard = detail::NativeReceiveBridge::Acquire(t, c);
+        return detail::NativeReceiveBridge::Enter(guard);
+    }
+    static auto ReceiveStatus(NativeOwnerTable& t, const NativeIdentityConstraint& c)
+    { auto guard = detail::NativeReceiveBridge::Acquire(t, c); return guard.status(); }
+    static void MovedReceive(NativeOwnerTable& t, const NativeIdentityConstraint& c)
+    {
+        // Lease cleanup must occur after the guard releases the original gate.
+        detail::NativeReceiveLease execution;
+        {
+            auto original = detail::NativeReceiveBridge::Acquire(t, c);
+            auto moved = std::move(original);
+            CHECK(original.status() == NativeStatus::InvalidHandle);
+            CHECK(!detail::NativeReceiveBridge::Enter(original));
+            execution = detail::NativeReceiveBridge::Enter(moved);
+            CHECK(execution);
+            CHECK(!detail::NativeReceiveBridge::Enter(moved));
+        }
+        CHECK(t.SnapshotUsage().receives == 1);
+        execution = {};
+        CHECK(t.SnapshotUsage().receives == 0);
+    }
+    static NativeIdentityConstraint WrongGeneration(NativeIdentityConstraint c) { ++c.generation_; return c; }
+    static NativeIdentityConstraint WrongVersion(NativeIdentityConstraint c) { ++c.route_version_; return c; }
     static auto Send(NativeOwnerTable& t,const NativeOwnerLease& o,std::uint64_t v,std::uint64_t g)
     { return t.TestReserveSend(o,v,g); }
     static std::weak_ptr<void> Weak(const NativeOwnerTable& t) { return t.state_; }
@@ -537,12 +564,67 @@ void N1Quota()
 }
 }
 
+void N3ReceiveIdentity()
+{
+    const auto c = Config(); auto t = Table(c); auto s = Space(*t, c);
+    auto owner = Ready(*t, s, c, 0, 700);
+    NativeIdentityConstraint pin;
+    {
+        auto callback = s.AdmitCallback(700); CHECK(callback);
+        auto captured = callback.value->CaptureIdentity(); CHECK(captured);
+        pin = *captured.value;
+        CHECK(t->SnapshotUsage().callbacks == 1);
+    }
+    CHECK(pin && t->SnapshotUsage().callbacks == 0);
+    CHECK(pin.local() == L(2) && pin.remote() == L(10));
+    CHECK(pin.Observe().generation == owner.Observe().generation);
+    CHECK(NativeOwnerTableTestAccess::ReceiveStatus(*t, pin) == NativeStatus::None);
+    NativeOwnerTableTestAccess::MovedReceive(*t, pin);
+    CHECK(NativeOwnerTableTestAccess::ReceiveStatus(*t,
+            NativeOwnerTableTestAccess::WrongGeneration(pin)) == NativeStatus::StaleGeneration);
+    CHECK(NativeOwnerTableTestAccess::ReceiveStatus(*t,
+            NativeOwnerTableTestAccess::WrongVersion(pin)) == NativeStatus::StaleVersion);
+    auto other = Table(c); auto os = Space(*other, c); auto other_owner = Ready(*other, os, c, 0, 700);
+    CHECK(other_owner.Observe().owned_id == owner.Observe().owned_id);
+    CHECK(NativeOwnerTableTestAccess::ReceiveStatus(*other, pin) == NativeStatus::ForeignState);
+    CHECK(owner.RequestClose() == NativeStatus::None);
+    CHECK(NativeOwnerTableTestAccess::ReceiveStatus(*t, pin) == NativeStatus::Revoked);
+    CHECK(!NativeOwnerTableTestAccess::Receive(*other, pin));
+    CHECK(other->SnapshotUsage().receives == 0);
+}
+
+void N3ReceiveBindingAndDrain()
+{
+    const auto c = Config(); auto t = Table(c); auto s = Space(*t, c);
+    auto owner = SocketKnown(*t, s, c, 0, 701);
+    auto bind = t->BeginBind(owner); CHECK(bind); CHECK(bind.value->CallEntered() == NativeStatus::None);
+    NativeIdentityConstraint pin;
+    {
+        auto callback = s.AdmitCallback(701); CHECK(callback);
+        auto captured = callback.value->CaptureIdentity(); CHECK(captured); pin = *captured.value;
+    }
+    CHECK(t->SnapshotUsage().callbacks == 0);
+    CHECK(NativeOwnerTableTestAccess::ReceiveStatus(*t, pin) == NativeStatus::NotReady);
+    CHECK(!NativeOwnerTableTestAccess::Receive(*t, pin));
+    CHECK(bind.value->Complete(SyncBindResult::Success()).status == NativeStatus::None);
+    auto execution = NativeOwnerTableTestAccess::Receive(*t, pin); CHECK(execution);
+    CHECK(t->SnapshotUsage().receives == 1 && owner.Observe().receive_inflight == 1);
+    CHECK(t->SnapshotUsage().callbacks == 0);
+    CHECK(owner.RequestClose() == NativeStatus::None);
+    CHECK(!NativeOwnerTableTestAccess::Receive(*t, pin));
+    CHECK(t->SnapshotUsage().receives == 1);
+    execution = {};
+    CHECK(t->SnapshotUsage().receives == 0 && owner.Observe().receive_inflight == 0);
+    CHECK(owner.Observe().quiescence == NativeQuiescence::Unproven);
+}
+
 int main(int argc,char** argv)
 {
     const std::pair<const char*,void(*)()> tests[]={
         {"N1-CFG",N1Configuration},{"N1-CACHE",N1Cache},{"N1-TICKET",N1Tickets},
         {"N1-CLOSE-SOCKET",N1CloseBeforeSocket},{"N1-CLOSE-POOL",N1ClosePool},
-        {"N1-LATE",N1LateShutdown},{"N1-INBOUND",N1Inbound},{"N1-LIFETIME",N1Lifetime},{"N1-QUOTA",N1Quota}};
+        {"N1-LATE",N1LateShutdown},{"N1-INBOUND",N1Inbound},{"N1-LIFETIME",N1Lifetime},{"N1-QUOTA",N1Quota},
+        {"N3-RX-IDENTITY",N3ReceiveIdentity},{"N3-RX-BINDING-DRAIN",N3ReceiveBindingAndDrain}};
     unsigned passed=0,run=0;
     for(const auto& test:tests) {
         if(argc>1&&std::string(argv[1])!=test.first) continue;
