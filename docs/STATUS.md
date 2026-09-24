@@ -1,6 +1,16 @@
 # Project status
 
-## 当前工作包：DDS bounded performance baseline（2026-09-24）
+## 当前工作包：SRT-1 共享 service-record 表（2026-09-24）
+
+`SRT_SHARED_SERVICE_RECORD_TABLE` 达到 **`IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）；DEVICE_TESTED = NO`**。本切片实现已批准共享表设计的**有界模型**（新组件 `include/mdds/dsoftbus/ServiceRecordTable.hpp`、`src/ServiceRecordTable.cpp`、`tests/service_record_table_tests.cpp`），SDK-free：不调用 SDK、不依赖 Fast DDS、不建线程，不接线生产 backend。
+
+已执行 host 证据：15 个契约 case 在 Release `15/15 PASS`、Debug `15/15 PASS`；standalone 配置全量 `43/43 PASS`；仓库标准 CONFIG host Release 全量 `258/258 PASS`（需要既有 `.artifacts/install/host/bin` 在 PATH，这是已记录的环境边界，不是本切片引入）；`/W4` 构建与 header 自包含编译无告警；多轮 case × 20–25 次重复运行（含并发 case）无失败。RED 为 stub 下 `15/15` 行为失败，且 RED/GREEN 绑定同一 test/header 字节。独立复核已跑三轮（`multi-review`：6 传感并行 + 独立证伪 + 裁决），三轮均无 blocking finding，gate 停在 `HUMAN_REQUIRED`（R2 承载路径要求人工 owner 批准合并，这是用户侧决定；其余理由均已修复）；全部候选的处置、文件哈希（取自暂存字节）、RED/GREEN 日志、测试预期更正与变异测试（三处变异在修复前存活、修复后被杀）见 [.artifacts/srt1/README.md](../.artifacts/srt1/README.md)。
+
+合同覆盖：同活表重复注册不增 slot；单 owner 退出不退休仍服务的表；跨 role 保活与空 role 保留固定入口；连续性未知不按名字/id 复用、也不覆盖可能仍活的表；真实销毁后同名新实例取得新 slot/incarnation/入口；slot 耗尽只在需要新 incarnation 时、暴露前拒绝，tombstone 永不回收；归属在单一线性化点捕获且旧归属不重新归属；adapter 内部门不包围 sink，sink 可重入、异常被吸收并计数；有界计数与分配失败拒绝后无部分状态。
+
+边界：`probes/softbus_ingress_contract.cpp` 的 11 个单 owner 用例保持不变，不被本切片替换或提升为共享表证据。真实 SDK record 创建/销毁观察、target 入口指针等价、SDK 内 ingress 前事件身份、callback 排空/静默、设备与双板、DDS SPDP/SEDP/样本、同名 Participant 热重建与 RMW 仍 `NOT_RUN`。生产 `init()` 继续 `NativeBackendUnavailable`；P0、PF-01/PF-02 仍 `BLOCKED / NOT QUALIFIED`，P4 未授权，无 QualificationProfile —— 本切片不改变这些结论。
+
+## 历史已关闭工作包：DDS bounded performance baseline（2026-09-24）
 
 `DDS_BOUNDED_PERFORMANCE_BASELINE` 已达到 **`BOUNDED_PERFORMANCE_BASELINE_MEASURED / CHECKPOINT_READY / NOT_COMMITTED`**。这是限定 `BYTES_NATIVE`、两块 RK3588A、6 个固定配置、3 个独立 MEASURE 重复的性能测量基线，不是生产资格或最大吞吐量声明。正式 RTT 共 3,300 次；固定负载 Reader delivery 共 6,120 次（RTT full-echo 的 Reader delivery 不计入该固定负载合计）。合并 p50/p99 为 RTT_1K `3.219125/4.435375 ms`、RTT_4K `3.226709/4.408250 ms`、RTT_256K `11.085668/14.135335 ms`。固定负载 Reader business goodput 为 1K `0.09765625 MiB/s`、4K `0.390625 MiB/s`、256K `1.00000000 MiB/s`。
 

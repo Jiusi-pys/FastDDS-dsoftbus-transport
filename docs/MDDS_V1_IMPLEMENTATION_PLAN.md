@@ -65,6 +65,8 @@ adapter 接收记录的线性化点仍是在归属门内一次性取得 **native
 
 **本轮状态为 CLOSED_WITH_PLATFORM_DEPENDENCIES；共享表设计为 DESIGN_APPROVED，生产共享表管理尚未实现、未资格化。** 现有 `softbus_ingress_contract` 的 11 个主机用例是单 owner fixture，仍覆盖已捕获 lease/no-app/tombstone 等合同；它的首次 Expose 操作不是 SDK 重复注册既有固定指针的模拟。其既有 PASS 不能提升为共享表、多 owner 或真实 record 生命周期 PASS。本轮不为测试设计而新建 registry/mock 框架，不修改这些仍有效的测试。未来实现的必要合同是：同活表重复注册不增 slot、多 owner 退出不误退休、跨 role 保活、真实销毁后同名新实例、连续性未知不误复用，以及旧 lease/no-app 不重新归属；当前均仅作为设计约束，未执行项标记 NOT_RUN。
 
+**状态更新（2026-09-24）：** 上述必要合同已有一个 SDK-free **有界实现**并通过限定 host 验证（`include/mdds/dsoftbus/ServiceRecordTable.hpp`、`src/ServiceRecordTable.cpp`，15 个契约 case × 独立进程；Release/Debug `15/15`、standalone `43/43`、CONFIG host Release `258/258`），冻结契约与执行状态见 [PLAN.md 第 18 节](../PLAN.md) 与 [.artifacts/srt1/README.md](../.artifacts/srt1/README.md)。`softbus_ingress_contract` 的 11 个单 owner 用例保持不变，其 PASS 仍不能提升为共享表 PASS。生产共享表管理仍未接入 native backend、未设备验证、未资格化；target record 连续性与 ingress 前事件身份仍是未闭合的平台前提（PF-02）。
+
 ## TDD 阶段与放行
 
 P0 先锁定 SDK/固件/库版本、权限、容量、取消/关闭、回调和资源契约；当前 P0 已因上述证据缺口 BLOCKED。以下 P1–P6 是保留的后续路线，不是本轮自动续跑授权：P1 descriptor/codec/配置，P2 listener/多 owner/共享表/热 attach，P3 池化收发与有界调度，P4 transport hooks/原生发现，P5 混合与故障，P6 性能与发布。只有出现具体新机制、平台契约、可判别 trace 或明确用户决策，才重新开启对应受影响调查；没有新证据时不重复全面探针。
@@ -81,7 +83,7 @@ QualificationProfile 至少绑定 SDK、固件、DSoftBus library 和构建 arti
 | --- | --- | --- |
 | P0 | SDK/API/权限/版本资格、容量、发送/关闭、迟到 callback 防护、资源预算；失败测试、双板 receipt、review 和 QualificationProfile | BLOCKED / NOT QUALIFIED |
 | P1 | descriptor、服务名、locator codec、设备目录、profile/容量/选项校验；编解码和冲突测试 | PLANNED |
-| P2 | 一个 Participant 一个 listener、outbound/accepted 所有权、incarnation tombstone、热 attach、并发关闭 | PLANNED |
+| P2 | 一个 Participant 一个 listener、outbound/accepted 所有权、incarnation tombstone、热 attach、并发关闭 | PLANNED；共享表有界模型 IMPLEMENTED / HOST_TESTED（限定范围）；listener/连接/热 attach 未实现 |
 | P3 | 有界 TX/RX、消息块所有权、多目标引用、native/inline 低复制资格 | PLANNED |
 | P4 | Transport hooks、SenderResource、receiver、checked-create、SPDP/SEDP 和原生 locator 共存 | PLANNED |
 | P5 | UDP/TCP/SHM 混合、重连、离线 route 失效、进程故障和资源隔离 | PLANNED |

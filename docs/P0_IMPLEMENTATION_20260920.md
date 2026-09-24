@@ -31,6 +31,8 @@
 
 adapter 可修正事项与平台依赖分开：共享表绑定粒度为 **DESIGN_APPROVED / NOT_IMPLEMENTED**；NEED_ACK 已知危险组合拒绝为已有 **HOST_TESTED**，SDK 状态 `NotCalled`、无 SDK rc，继续保留。后续 Fast DDS transport hooks、SPDP/SEDP、可靠性/History/分片、混合 transport、DDS Security、多 Participant/Reader/进程与性能集成均为 **NOT_RUN**；三板专项 **DEFERRED**。本轮不会以这些未完成项自动启动另一轮全面调查。
 
+> **2026-09-24 更新：** 共享表绑定粒度的**有界实现**已完成并通过限定 host 验证（见 [PLAN.md](../PLAN.md) 第 18 节与 [.artifacts/srt1/README.md](../.artifacts/srt1/README.md)）。本报告其余平台前提、`NOT_RUN` 项与资格结论不变；生产 backend 仍未接线。
+
 ## 前轮已保存的实现与测试证据
 
 前轮工作树变更为 A callback-table 四个新文件、D 交付窗口四个文件的最小修改，以及 V1 配置三个文件的 NEED_ACK 准入 guard；更早的 profile/identity、address/config、ingress/local/options/observer、契约测试、构建脚本及 CMake 接线也保留为历史证据。本次设计收口不修改这些代码，不重新宣称其已获平台资格。没有修改 DSoftBus 源码、使用 Session API 或修改 DDS/RTPS 语义。

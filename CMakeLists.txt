@@ -28,6 +28,11 @@ if(BUILD_DSOFTBUS_NATIVE_SEND_EXECUTION AND BUILD_DSOFTBUS_APPLICATION_ATTACHMEN
 endif()
 option(BUILD_DSOFTBUS_PROCESS "Build the SDK-free application/native coordination model" ${_mdds_process_default})
 unset(_mdds_process_default)
+# The option follows the directory model line like every sibling core, even
+# though this target itself needs only Threads. Its test target compiles against
+# the pinned DSoftBus public header for the callback-shape check, exactly like
+# the existing ingress contract test.
+option(BUILD_DSOFTBUS_SERVICE_RECORD_TABLE "Build the bounded shared service-record table model" ${BUILD_DSOFTBUS_DIRECTORY})
 option(BUILD_DSOFTBUS_TRANSPORT_FACADE "Build the opt-in facade against an actual Fast DDS CONFIG library" OFF)
 option(BUILD_FASTDDS_DSOFTBUS_EXPERIMENT "Build the explicitly unqualified real Fast DDS Socket experiment" OFF)
 option(BUILD_SOFTBUS_CAPABILITY_PROBE "Build the runtime Socket API capability probe" ON)
@@ -281,6 +286,31 @@ if(BUILD_DSOFTBUS_NATIVE_OWNER)
         target_link_libraries(native_owner_table_tests PRIVATE mdds_dsoftbus_native_owner)
         add_test(NAME dsoftbus.native_owner_model COMMAND native_owner_table_tests)
         set_tests_properties(dsoftbus.native_owner_model PROPERTIES TIMEOUT 20)
+    endif()
+endif()
+
+if(BUILD_DSOFTBUS_SERVICE_RECORD_TABLE)
+    find_package(Threads REQUIRED)
+    add_library(mdds_dsoftbus_service_record_table STATIC src/ServiceRecordTable.cpp)
+    target_include_directories(mdds_dsoftbus_service_record_table PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_link_libraries(mdds_dsoftbus_service_record_table PUBLIC Threads::Threads)
+    target_compile_features(mdds_dsoftbus_service_record_table PUBLIC cxx_std_17)
+    # The bounded-counter test hooks exist only in this library and its test
+    # target; a production consumer's header has no test declarations at all.
+    target_compile_definitions(mdds_dsoftbus_service_record_table PRIVATE MDDS_SERVICE_RECORD_TABLE_TEST_HOOKS)
+    if(BUILD_TESTING)
+        add_executable(service_record_table_tests tests/service_record_table_tests.cpp)
+        target_link_libraries(service_record_table_tests PRIVATE mdds_dsoftbus_service_record_table)
+        target_compile_definitions(service_record_table_tests PRIVATE MDDS_SERVICE_RECORD_TABLE_TEST_HOOKS)
+        target_include_directories(service_record_table_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+        foreach(_mdds_service_record_case unexposed shared-role sibling-release cross-role unanchored
+                destroy-replace still-anchored exhaustion failed-registration capacity handles reentrant
+                concurrent identity-boundary allocation-failure)
+            add_test(NAME dsoftbus.service_record.${_mdds_service_record_case}
+                COMMAND service_record_table_tests --case ${_mdds_service_record_case})
+            set_tests_properties(dsoftbus.service_record.${_mdds_service_record_case} PROPERTIES TIMEOUT 30)
+        endforeach()
     endif()
 endif()
 

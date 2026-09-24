@@ -629,3 +629,64 @@ N3 之后仍不得宣称：生产 Transport、真实 SendBytes、SDK callback �
 真实 backend 准入紧接 N3：实际 provider、callback 归属、固定线程、service 关闭及实际 DDS 热重建另取证。公开 callback 的 Socket ID 没有项目 generation；不能查当前 owner 后给迟到旧事件补新身份。必须以可验证 callback 收尾/无歧义复用或经批准的公开机制解决，不能把模型注入正确 generation 当解决方案。
 
 首版真实热重建硬门槛不变：同一测试进程持续存活，复用同一 Participant 名称与 Transport local 配置，真实创建/销毁 Participant/Writer/Reader，新代分别完成 SPDP、SEDP 和校验样本；正常释放时资源不按轮次无界增长，无需杀进程、重启板卡/服务或换名。禁止将已固定到 P0 的内部记录投给 P1，但不把 DDS 合法的可靠性/持久性历史交付误判为内部串代。
+
+## 18. SRT-1 共享 service-record 表管理冻结契约（2026-09-24 CST；IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED，限定范围）
+
+本节冻结 `docs/MDDS_V1_IMPLEMENTATION_PLAN.md` 已批准设计（DESIGN_APPROVED / NOT_IMPLEMENTED）的**有界实现**范围与验收合同。它不发布生产 backend，不改变 `NativeUnavailable`、P0 `BLOCKED / NOT QUALIFIED`、无 QualificationProfile 与设备未验证边界。
+
+### 18.1 设计单位与责任边界
+
+归属单位是**客户端 SDK 进程中的实际 service record 实例 + client/server role**，不是一个 numeric socket、也不是单独的 service-name 字符串（依据 `.artifacts/closure-20260921/incarnation/NOTES.md`）。本切片实现该单位的有界模型：
+
+- 一个 record 含两个 role 字段（`Client` = Bind/拨号侧注册的字段，`Server` = Listen 注册并服务 accepted socket 的字段）。它们**不是一个 Participant 两个 listener**；"一活动 Participant 一 listener"不变。
+- 每个存活 `(record, role)` 只有一个**固定 callback entrance**（进程内固定函数指针），该 role 下所有 socket 的注册都用同一指针；分派在 entrance 内按 socket 归属进行。
+- 每个 socket 仍保有独立 native owner、独立关闭责任与既有连接/内存/线程预算；本组件只做**表归属**，不复制 owner 生命周期。owner 调用生命周期仍属 `NativeOwnerTable`（本切片不修改它）。
+
+不新增 registry/mock 框架以外的机制：本组件自身即是必要的有界实现，`probes/softbus_ingress_contract.cpp` 的 11 个单 owner 用例保持不变，不被本切片替换或提升。
+
+### 18.2 交付物与构建范围
+
+- `include/mdds/dsoftbus/ServiceRecordTable.hpp`、`src/ServiceRecordTable.cpp`：SDK-free 有界模型，target 只依赖 Threads，不依赖 Fast DDS、不调用 SDK；测试目标为校对 callback 形状额外编译 pin 住的 DSoftBus 公共头文件（与既有 ingress 契约测试同做法）。
+- `tests/service_record_table_tests.cpp`：按 case 分进程执行的 host 契约测试；根 `CMakeLists.txt` 增加独立 option/target/test 接线，默认跟随 `BUILD_DSOFTBUS_DIRECTORY`。
+- 不交付安装包、QualificationProfile、设备包或权限操作。
+
+### 18.3 不可豁免的合同
+
+| 合同 | 固定行为 |
+| --- | --- |
+| slot 状态机 | `FREE → RESERVED_UNEXPOSED → EXPOSED → TOMBSTONED`；`UNANCHORED` 是 EXPOSED 内"零 anchor"子状态，仍不可回收、入口不可复用。首次可能把入口交给 SDK 前置 EXPOSED；注册失败也不回收该 slot。只有从未暴露的 reservation 可回到 FREE。 |
+| 同活表重复注册 | 同一存活 `(record, role)` 上的重复注册不消耗新 slot、不改变 incarnation、不更换固定入口；入口不得二次派生。 |
+| 多 owner 退出 | 释放一个 owner 不退休仍在服务其他 owner 的活表；已释放 socket 的**旧归属**不再重新归属：已捕获记录只以旧归属完成，释放后、重新注册前该 id 的迟到回调是终态丢弃。同一个 numeric id 之后可以由一个新 socket 重新注册为**新 membership**（新 incarnation），旧捕获永不改投它；numeric id 复用导致迟到旧事件被归属到新 membership 属已知平台前提（PF-02），不在 adapter 可修正范围内。 |
+| 跨 role 保活 | 一个 role 归零而另一 role 仍有 anchor 时，record 与两 role 的固定入口都保留；该 role 之后的新注册仍用原入口。全部 anchor 消失后进入 `UNANCHORED`。 |
+| 连续性未知 | `UNANCHORED` 下：同名 `ReserveRecord` 拒绝（`ContinuityUnproven`），新 owner 注册拒绝，该表的入口回调为终态丢弃。不得按名字、numeric id 或"通知已发送"补出连续性；其它 service name 不受影响。 |
+| 真实销毁与同名新实例 | `ConfirmDestroyed` 只能从 `UNANCHORED` 进入；它结束两 role incarnation、永久 tombstone 入口并解除同名封印。同名新 record 必须取得**新 slot、新 incarnation、新入口**，绝不重新绑定旧 slot。 |
+| slot 耗尽 | 只在需要新 incarnation 时、且在暴露前拒绝（`SlotExhausted`）；既有活表新增 owner 不受 slot 耗尽影响，仍受原 owner 容量约束。tombstone 永不回收。 |
+| 句柄所有权 | reservation 与 membership 句柄为 RAII：一个从未暴露的 reservation 被析构或被覆盖时其 slot 回到 FREE；membership 被析构或被覆盖时释放该 owner。已失效句柄不释放任何东西，也不改变任何已捕获归属。调用者因此为每个已注册 socket 保留一个 membership 句柄，且不得在持有表门时销毁句柄。 |
+| 归属线性化点 | 归属在归属门内一次性取得 `(record incarnation, role, membership incarnation, socket)`；已捕获旧归属只以旧归属完成，永不重新查表改投新 owner/role/record。无 anchor 记录当场终态丢弃。 |
+| 关闭安全 | adapter 内部门不得包围 sink 调用；sink 可在回调内重入表操作；回调异常与无效输入被边界吸收并计数，不写入 SDK 调用、不重试、不迟到改投。 |
+
+### 18.4 必测矩阵
+
+`unexposed`、`shared-role`、`sibling-release`、`cross-role`、`unanchored`、`destroy-replace`、`still-anchored`、`exhaustion`、`failed-registration`、`capacity`、`handles`、`reentrant`、`concurrent`、`identity-boundary`、`allocation-failure` 共 15 个 case，每 case 独立进程（进程生命周期入口池不可重置）。并发 case 只断言不变量（归属计数恒等式、归属身份不越界、无错投、异常被吸收、in-flight 归零、释放后为终态丢弃、无死锁），不以 sleep、轮次或"确实交错"断言代替交错证明；该 case 因此不断言也不声称释放与回调确实重叠（在合法调度下可能完全不重叠，此时它仍是有效的计数与状态不变量测试）。两个边界 case 通过仓库既有做法触发有界计数与分配失败（header 内声明的 test-only 计数注入、测试进程内分配拒绝），并断言拒绝后没有部分状态。
+
+### 18.5 声明边界
+
+本切片完成后只能声明 `IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）`。真实 SDK service record 创建/销毁观察、target 版本入口指针等价、SDK 内 ingress 前事件身份、callback 排空/静默、设备与双板、DDS SPDP/SEDP/样本、同名 Participant 热重建与 RMW 仍为 `NOT_RUN`；生产 `init()` 继续 `NativeBackendUnavailable`。PF-01/PF-02 不被本切片闭合。
+
+### 18.6 执行状态（2026-09-24 CST）
+
+上述合同已在有界模型内实现并通过限定 host 验证：`include/mdds/dsoftbus/ServiceRecordTable.hpp`、`src/ServiceRecordTable.cpp`、`tests/service_record_table_tests.cpp`，根 `CMakeLists.txt` 以 `BUILD_DSOFTBUS_SERVICE_RECORD_TABLE`（默认 ON、只链接 `Threads::Threads`）接线 15 个测试。
+
+| 检查 | 结果 |
+| --- | --- |
+| RED（stub，与 GREEN 同一 test/header 字节） | `0% tests passed, 15 tests failed out of 15`（行为失败；同轮的链接失败尝试作废、不计为 RED） |
+| GREEN Release / Debug | `15/15`、`15/15` |
+| standalone 全量（全部目标已构建） | `43/43` |
+| 仓库标准 CONFIG host Release 全量 | `258/258`（需 `.artifacts/install/host/bin` 在 PATH） |
+| `/W4` 构建与 header 自包含编译 | 无告警（`CMAKE_CXX_FLAGS:STRING=/W4` 已在 cache 核对；此前一次经 POSIX shell 传参被 MSYS 路径转换，未真正生效） |
+| 重复运行 | 多轮 2–7 个 case × 20–25 次（含并发 case），无失败；具体配置以收据记录的执行为准，不作为固定矩阵声明 |
+| 变异被杀 | 删除 reservation 暴露守卫 → `unexposed` 失败；reentrant 释放状态预期写错 → `reentrant` 失败；异常路径漏减 in-flight → `reentrant` 失败（三者在对应修复前均存活） |
+| 产品字节与复核绑定 | 第 3 轮验证的 header/impl 哈希（`c8c6d696…` / `9c7bfd57…`）与提交字节一致；该轮之后仅测试文件改动 |
+| 句柄所有权边界 | 新增断言覆盖 reservation 的两条方向（从未暴露→归还、已暴露→不回收）与覆盖赋值；删除 RAII 暴露守卫的变异会使 `unexposed` 失败 |
+
+收据、文件哈希、三处测试预期更正（`Expose` 检查顺序、`capacity` 未认领 exposure 仍是 anchor、`handles` 释放后为 `UNANCHORED`）与各状态可达性核对见 `.artifacts/srt1/README.md`。每个 `RecordStatus` 值都由已实现规则产出并被某个 case 断言，唯一例外是作为"未设置默认值"的 `NotImplemented`。§18.5 的声明边界不变：真实 SDK service record 生命周期、target 入口等价、ingress 前身份、callback 排空、设备/双板、DDS、热重建与 RMW 仍为 `NOT_RUN`。
