@@ -44,7 +44,8 @@ class ProcessCoordinator final
 public:
     static NativeResult<std::unique_ptr<ProcessCoordinator>> Build(const NativeTableConfiguration&,
             AttachmentLimits={},ProcessClock={},
-            ProcessClock::Clock::duration binding_hold=std::chrono::seconds(1));
+            ProcessClock::Clock::duration binding_hold=std::chrono::seconds(1),
+            std::shared_ptr<ProcessReceiveObserver> observer={});
     ~ProcessCoordinator();
     ProcessCoordinator(const ProcessCoordinator&)=delete;
     ProcessCoordinator& operator=(const ProcessCoordinator&)=delete;
@@ -56,8 +57,11 @@ public:
     SenderAttachResult AttachSender(const ProcessApplication&,eprosima::fastdds::rtps::SendResourceList&);
     NativeResult<NativeSendWork> TakeSend(const ProcessApplication&);
     NativeResult<NativeSendInvocation> TryAdmitSend(NativeSendWork&,std::shared_ptr<NativeSendProvider>);
+    // Pass a fresh caller-owned diagnostic per invocation. Pre-populated native
+    // identity observations from the callback facade are preserved.
     ReceiveAdmissionResult Receive(const NativeIdentityConstraint&,const void*,std::size_t,
-            ProcessClock::Clock::time_point bind_deadline=ProcessClock::Clock::time_point::max());
+            ProcessClock::Clock::time_point bind_deadline=ProcessClock::Clock::time_point::max(),
+            std::uint64_t correlation=0,ReceiveAdmissionDiagnostic* diagnostic=nullptr);
     NativeResult<ProcessReceiveInvocation> NextReceive();
     // Short freeze only; T_revoke is the LAST entrance frozen before return.
     // Safe to request from a callback. No ticket cleanup occurs in this call.
@@ -71,6 +75,9 @@ public:
     // Model event injection only. This cannot prove real SDK callback identity,
     // Socket quiescence, or service shutdown. App rebuild leaves N1 alive.
     NativeOwnerTable& ModelNative() noexcept;
+    NativeOwnerTable& Native() noexcept;
+    ApplicationIdentity ObserveApplication(const ProcessApplication&) const noexcept;
+    ReceiverIdentity ObserveReceiver(const ReceiverBinding&) const noexcept;
     NativeEgressUsage EgressUsage() const noexcept;
     AttachmentUsage ReceiveUsage() const;
 private:
@@ -84,7 +91,8 @@ private:
         std::function<void()> copy_reserved,receive_publish;
     };
     static NativeResult<std::unique_ptr<ProcessCoordinator>> BuildWithHooks(const NativeTableConfiguration&,
-            AttachmentLimits,ProcessClock,ProcessClock::Clock::duration,TestHooks);
+            AttachmentLimits,ProcessClock,ProcessClock::Clock::duration,TestHooks,
+            std::shared_ptr<ProcessReceiveObserver> observer={});
     explicit ProcessCoordinator(std::unique_ptr<State>) noexcept;
     NativeStatus FreezeLocked(detail::ProcessApplicationState&);
     void Rollback(const std::shared_ptr<detail::ProcessApplicationState>&);

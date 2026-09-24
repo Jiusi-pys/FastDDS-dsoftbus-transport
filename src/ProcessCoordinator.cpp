@@ -55,15 +55,17 @@ struct ProcessCoordinator::State
     const ProcessClock clock;
     const ProcessClock::Clock::duration binding_hold;
     TestHooks hooks;
+    std::shared_ptr<ProcessReceiveObserver> observer;
     bool stopping=false;
 };
 ProcessCoordinator::ProcessCoordinator(std::unique_ptr<State> state) noexcept:state_(std::move(state)) {}
 ProcessCoordinator::~ProcessCoordinator()=default;
 NativeResult<std::unique_ptr<ProcessCoordinator>> ProcessCoordinator::Build(const NativeTableConfiguration& config,
-        AttachmentLimits limits,ProcessClock clock,ProcessClock::Clock::duration hold)
-{return BuildWithHooks(config,limits,std::move(clock),hold,{});}
+        AttachmentLimits limits,ProcessClock clock,ProcessClock::Clock::duration hold,std::shared_ptr<ProcessReceiveObserver> observer)
+{return BuildWithHooks(config,limits,std::move(clock),hold,{},std::move(observer));}
 NativeResult<std::unique_ptr<ProcessCoordinator>> ProcessCoordinator::BuildWithHooks(const NativeTableConfiguration& config,
-        AttachmentLimits limits,ProcessClock clock,ProcessClock::Clock::duration hold,TestHooks hooks)
+        AttachmentLimits limits,ProcessClock clock,ProcessClock::Clock::duration hold,TestHooks hooks,
+        std::shared_ptr<ProcessReceiveObserver> observer)
 {
     try {
         if(hold<=ProcessClock::Clock::duration::zero()||hold==ProcessClock::Clock::duration::max())
@@ -74,6 +76,7 @@ NativeResult<std::unique_ptr<ProcessCoordinator>> ProcessCoordinator::BuildWithH
         auto state=std::make_unique<State>(config,std::move(*native.value),*directory.value,limits,std::move(clock),hold,std::move(hooks));
         state->attachments.hooks_.copy_reserved=state->hooks.copy_reserved;
         state->attachments.hooks_.receive_publish=state->hooks.receive_publish;
+        state->observer=std::move(observer);
         return {std::unique_ptr<ProcessCoordinator>(new ProcessCoordinator(std::move(state))),{}};
     } catch(const std::bad_alloc&) {return Failure<std::unique_ptr<ProcessCoordinator>>(NativeStatus::AllocationFailure);}
       catch(const std::invalid_argument&) {return Failure<std::unique_ptr<ProcessCoordinator>>(NativeStatus::InvalidLimits);}
@@ -166,21 +169,28 @@ NativeResult<NativeSendWork> ProcessCoordinator::TakeSend(const ProcessApplicati
 NativeResult<NativeSendInvocation> ProcessCoordinator::TryAdmitSend(NativeSendWork& work,std::shared_ptr<NativeSendProvider> provider)
 {return state_->sends.TryAdmit(work,std::move(provider));}
 ReceiveAdmissionResult ProcessCoordinator::Receive(const NativeIdentityConstraint& pin,const void* bytes,std::size_t size,
-        ProcessClock::Clock::time_point bind_deadline)
+        ProcessClock::Clock::time_point bind_deadline,std::uint64_t correlation,ReceiveAdmissionDiagnostic* diagnostic)
 {
-    if(!pin) return ReceiveAdmissionResult::Revoked;
+    if(diagnostic) diagnostic->size=size;
+    if(!pin) return diagnostic?diagnostic->Return(RxAdmissionStage::Coordinator,RxAdmissionReason::InvalidPin,
+            ReceiveAdmissionResult::Revoked):ReceiveAdmissionResult::Revoked;
     std::shared_ptr<detail::ProcessApplicationState> app;
     {
         std::lock_guard<std::mutex> lock(state_->gate);
         for(const auto& slot:state_->slots)
             if(slot.local==pin.local()&&slot.app&&slot.app->phase==ProcessApplicationPhase::Active) {app=slot.app;break;}
+        if(diagnostic) diagnostic->candidate_count=app?1:0;
     }
-    if(!app) return ReceiveAdmissionResult::NoReceiver;
+    if(!app) return diagnostic?diagnostic->Return(RxAdmissionStage::Coordinator,RxAdmissionReason::NoApplication,
+            ReceiveAdmissionResult::NoReceiver):ReceiveAdmissionResult::NoReceiver;
     if(state_->hooks.after_receive_selection) state_->hooks.after_receive_selection();
     const auto now=state_->clock.Now();
-    if(now>ProcessClock::Clock::time_point::max()-state_->binding_hold) return ReceiveAdmissionResult::Expired;
+    if(now>ProcessClock::Clock::time_point::max()-state_->binding_hold)
+        return diagnostic?diagnostic->Return(RxAdmissionStage::Coordinator,RxAdmissionReason::ClockOverflow,
+                ReceiveAdmissionResult::Expired):ReceiveAdmissionResult::Expired;
     const auto expiry=std::min(bind_deadline,now+state_->binding_hold);
-    return detail::ProcessReceiveBridge::Admit(state_->attachments,*state_->native,app->claim,pin,bytes,size,expiry,state_->clock);
+    return detail::ProcessReceiveBridge::Admit(state_->attachments,*state_->native,app->claim,pin,bytes,size,expiry,state_->clock,
+            correlation,state_->observer,diagnostic);
 }
 NativeResult<ProcessReceiveInvocation> ProcessCoordinator::NextReceive()
 {return detail::ProcessReceiveBridge::Next(state_->attachments,*state_->native,state_->clock);}
@@ -266,6 +276,14 @@ ProcessShutdownSnapshot ProcessCoordinator::PollShutdown() const
     return result;
 }
 NativeOwnerTable& ProcessCoordinator::ModelNative() noexcept {return *state_->native;}
+NativeOwnerTable& ProcessCoordinator::Native() noexcept {return *state_->native;}
+ApplicationIdentity ProcessCoordinator::ObserveApplication(const ProcessApplication& handle) const noexcept
+{
+    const auto& app=handle.state_;
+    return app&&app->service==state_->identity?state_->attachments.ObserveApplication(app->claim):ApplicationIdentity{};
+}
+ReceiverIdentity ProcessCoordinator::ObserveReceiver(const ReceiverBinding& binding) const noexcept
+{return state_->attachments.ObserveReceiver(binding);}
 NativeEgressUsage ProcessCoordinator::EgressUsage() const noexcept {return state_->sends.SnapshotUsage();}
 AttachmentUsage ProcessCoordinator::ReceiveUsage() const {return state_->attachments.SnapshotUsage();}
 }

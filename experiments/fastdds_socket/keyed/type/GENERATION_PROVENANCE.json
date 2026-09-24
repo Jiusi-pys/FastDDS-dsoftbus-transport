@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "scope": "GENERATED_TYPE_ONLY_NOT_DEVICE_VERIFIED",
+  "command": [
+    "E:\\DevEco Studio\\jbr\\bin\\java.exe",
+    "-jar",
+    "C:\\Program Files (x86)\\eProsima\\fastdds 3.6.1.0\\share\\fastddsgen\\java\\fastddsgen.jar",
+    "-ppDisable",
+    "-flat-output-dir",
+    "-d",
+    "C:\\Users\\17715\\Documents\\codes\\FastDDS-dsoftbus-Transport\\experiments\\fastdds_socket\\keyed\\type",
+    "C:\\Users\\17715\\Documents\\codes\\FastDDS-dsoftbus-Transport\\experiments\\fastdds_socket\\keyed\\type\\MddsKeyedSample.idl"
+  ],
+  "cwd": "C:\\Users\\17715\\Documents\\codes\\FastDDS-dsoftbus-Transport",
+  "exit_code": 0,
+  "generator_version": "4.3.0",
+  "generator": {
+    "path": "C:\\Program Files (x86)\\eProsima\\fastdds 3.6.1.0\\share\\fastddsgen\\java\\fastddsgen.jar",
+    "sha256": "beca210fa13c4261a7726018eaaa8f78d12a0244989539604d466915e633956b"
+  },
+  "java": {
+    "path": "E:\\DevEco Studio\\jbr\\bin\\java.exe",
+    "sha256": "18b30ac290b754f8e9922eab965c1d86a539f6e795f993f1d3d0f7eaa86a22cb",
+    "version": "OpenJDK 21.0.8 JBR 21.0.8+1-b1038.71"
+  },
+  "FastDDS_commit": "343f155c36b561db3d9f047a65d866ce0f3da300",
+  "FastDDS_runtime_version": "3.6.2.0",
+  "files": [
+    {
+      "path": "experiments/fastdds_socket/keyed/type/MddsKeyedSample.hpp",
+      "sha256": "25f944668904b2f59136e720b67ba3b1f622aa233e653051bf182726501d7e94",
+      "bytes": 8433
+    },
+    {
+      "path": "experiments/fastdds_socket/keyed/type/MddsKeyedSample.idl",
+      "sha256": "0df260a0df130419b31a5778242340fe31bc3e3c1769a70c28dbf2f05c9f2a4e",
+      "bytes": 316
+    },
+    {
+      "path": "experiments/fastdds_socket/keyed/type/MddsKeyedSampleCdrAux.hpp",
+      "sha256": "464ffeb6ebd72d8d025419d116c3b8d09a4dacf1a61dfd5f75f64f17b8be678f",
+      "bytes": 1435
+    },
+    {
+      "path": "experiments/fastdds_socket/keyed/type/MddsKeyedSampleCdrAux.ipp",
+      "sha256": "b857fef4871c5ae3b8a20e7ff0b774041812ce3924e2bc332353edc996f27359",
+      "bytes": 5647
+    },
+    {
+      "path": "experiments/fastdds_socket/keyed/type/MddsKeyedSamplePubSubTypes.cxx",
+      "sha256": "dca3f1afae32bcf888592362e5ffda66c783f2e100abdfd67222f18dbb9008e0",
+      "bytes": 7976
+    },
+    {
+      "path": "experiments/fastdds_socket/keyed/type/MddsKeyedSamplePubSubTypes.hpp",
+      "sha256": "ee25279f38c7cee9b06abc1924fc16da3328df1c132dfd798346786f722c7eee",
+      "bytes": 5629
+    },
+    {
+      "path": "experiments/fastdds_socket/keyed/type/MddsKeyedSampleTypeObjectSupport.cxx",
+      "sha256": "8b9298b4d9610281097b5180e82d188954a3f96436dcdf4aad5a569f1070a591",
+      "bytes": 16857
+    },
+    {
+      "path": "experiments/fastdds_socket/keyed/type/MddsKeyedSampleTypeObjectSupport.hpp",
+      "sha256": "4be85e31ddba2241925783054f9b4d827e49d35d43282366c3c9b4965dfb00c8",
+      "bytes": 2234
+    }
+  ]
+}

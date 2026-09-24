@@ -1,5 +1,98 @@
 # Project status
 
+## 当前工作包：DDS bounded performance baseline（2026-09-24）
+
+`DDS_BOUNDED_PERFORMANCE_BASELINE` 已达到 **`BOUNDED_PERFORMANCE_BASELINE_MEASURED / CHECKPOINT_READY / NOT_COMMITTED`**。这是限定 `BYTES_NATIVE`、两块 RK3588A、6 个固定配置、3 个独立 MEASURE 重复的性能测量基线，不是生产资格或最大吞吐量声明。正式 RTT 共 3,300 次；固定负载 Reader delivery 共 6,120 次（RTT full-echo 的 Reader delivery 不计入该固定负载合计）。合并 p50/p99 为 RTT_1K `3.219125/4.435375 ms`、RTT_4K `3.226709/4.408250 ms`、RTT_256K `11.085668/14.135335 ms`。固定负载 Reader business goodput 为 1K `0.09765625 MiB/s`、4K `0.390625 MiB/s`、256K `1.00000000 MiB/s`。
+
+最终 data review 为 PASS 且无未解决 blocker；独立 host post-review 为 OFF `243/243 PASS`、ON `245/245 PASS`；`49/49` 是 TRACE 修复前的历史 full-host stage，focused R3 的最终 analyzer 为 `58/58 PASS`。独立双板 receipt 为 `PASS_WITH_PRESERVED_TRACE_FAILURE`：query、失败 TRACE01、成功 TRACE02、M1/M2/M3 共 12/12 final board guards PASS；TRACE01 的失败、完整 charge 和 `RESERVED_UNKNOWN` ledger 保留，并排除正式统计。Native package 为 1,737 inputs、6 artifacts，focused R3 executor checks 为 PowerShell 4、Python 10、Node 14，package/input hashes 保持一致；native executable SHA-256 为 `5f98207268441debefcfaa57f0396a7be0d1cc2ed9d40e98e49f11211b30a440`。
+
+测量限制已保留：19,116 行 CSV 是 planned-identity rows，不是 deliveries；SDK internal settlement、exact queue HWM 为 `UNOBSERVED`。仅 M3/A 的两个累计 `NO_APPLICATION` rejected records（不是四个）保留 payload/Writer identity 与 control-versus-business classification 未观测状态；每侧 TX reject 为 2，RX prefix overflow 只说明诊断细节受限，不证明业务丢失。该状态支持 `IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED / REVIEWED` 的限定性能基线证据，不升级为生产 `VERIFIED`。P0/PF-01/PF-02 仍 `BLOCKED / NOT QUALIFIED`，生产默认 `NativeUnavailable`，P4 未发布，无 QualificationProfile；禁止 stage/stash/commit/amend/push。完整结果见 [RESULT_TABLES.md](../.artifacts/dds-bounded-performance-20260924/run-20260923T183702Z/analysis/RESULT_TABLES.md)、[FINAL_DATA_REVIEW.md](../.artifacts/dds-bounded-performance-20260924/run-20260923T183702Z/review/final-data/FINAL_DATA_REVIEW.md) 与 [device receipt](../.artifacts/dds-bounded-performance-20260924/run-20260923T183702Z/device/CANONICAL_INDEPENDENT_DEVICE_ALL_ATTEMPT_RECEIPT.json)。
+
+资源观察为单进程 single-core CPU 每 case `3.293%–12.126%`、Participant 生命周期跨度 `85.656–86.118 s`、采样 RSS 最大 `29.824 MiB`、observed VmHWM 最大 `30.133 MiB`；这些是边界观察，不是长期泄漏或 SDK internal settlement 证明。
+
+## 历史已关闭工作包：DDS multi-endpoint and late-joiner functional matrix（2026-09-23）
+
+`DDS_MULTI_ENDPOINT_AND_LATE_JOINER_FUNCTIONAL_MATRIX` 已达到 **`DDS_NORMAL_FUNCTIONAL_MATRIX_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`**，现作为历史已关闭工作包保留。13 个限定 `BYTES_NATIVE` 双板窗口全部通过独立复核：M1/M2/M3/M4 多端点与 Reader 删除、Q_BE_BE/Q_REL_BE/Q_REL_REL/Q_BE_REL、L1/L2/L3 晚加入以及 I1/I2 Topic/Domain 隔离。canonical matrix SHA-256 为 `3f51d3a4c5031e0b016d328497b1bae47b4d06082862b7229557fd3c6f4a8259`；结果为 102 次写入、132 条独立 Reader 交付/native 关联，详见 [matrix execution results](../.artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/analysis/MATRIX_EXECUTION_RESULTS.json) 与 [final review closure](../.artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/review-final/REVIEW_CLOSURE.md)。
+
+独立 host 最终为 OFF `175/175 PASS`、ON `177/177 PASS`。四个受影响回归（hot1、1 MiB fragment、RELIABLE controlled-loss、BEST_EFFORT controlled-loss）均通过；另有 1 个 Socket-free directory query，本轮共 13 个矩阵窗口 + 4 个 native 回归窗口 + 1 个 query 窗口 = 18 个注册窗口，其中 17 个为实际 DDS native 窗口，36/36 板端 full guards。选定 native OFF/ON 包分别由 [BUILD_SELECTION.json](../.artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/device-build/BUILD_SELECTION.json) 绑定，每包 1,693 inputs、6 artifacts。实际 QoS、匹配图和逐 Reader 账本见 [ACTUAL_QOS_MATCH_GRAPH_READER_LEDGERS.json](../.artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/analysis/ACTUAL_QOS_MATCH_GRAPH_READER_LEDGERS.json)。
+
+本状态仍不构成生产资格：P0、PF-01/PF-02 为 `BLOCKED / NOT QUALIFIED`，生产默认 `NativeUnavailable`，P4 未放行，无 QualificationProfile，SDK internal settlement 为 `UNOBSERVED`，禁止 commit/push。旧 [restored-package-device 交付线](../.artifacts/restored-package-device/run-20260923T075212Z/FINAL_GATE.json) 已正式关闭，本轮未重开。L2/L3 的晚加入证据未形成新的 no-application gap 或 PF-02 物理旧帧隔离证明；RAW、三板、mixed transport、ROS 2/RMW、性能及新的 100 轮资格均未执行。上一轮 RX closeout 以下内容保留为历史记录。
+
+## 历史已关闭工作包：DDS keyed history and resource boundaries（2026-09-23）
+
+`DDS_KEYED_HISTORY_AND_RESOURCE_BOUNDARIES` 已达到 **`FINAL_CODE_AND_DEVICE_REVIEW_CLOSED / CHECKPOINT_READY / NOT_COMMITTED`**。独立最终 review 报告 `FINAL_CODE_AND_DEVICE_REVIEW_CLOSED`，授权范围内无未解决 blocker。K1、K2、K3、K4_TRUE、K4_FALSE、H1、H2、H3、R2、R3 十个 keyed native cases 均 `PASS`；R1 为 `HOST_ONLY_PASS / DEVICE_NOT_APPLICABLE`。canonical totals 为 62 writes、128 API data/take observations、58 unique data identities、42 taken identities、3 instance-state records、58 native data joins 和 3 native state joins；58 data + 3 state native associations 是本轮证据支持的范围。
+
+最终 host receipt 为 OFF `205/205 PASS`、ON `207/207 PASS`，53/53 analyzer tests 与 12/12 post-R4 affected gates PASS；OFF/ON native packages 均 build PASS，每包 1,719 inputs、独立检查零 mismatch，设备仅执行 OFF package。14 registered windows（13 DDS attempts + 1 Socket-free directory query）对应 28 board windows，168 individual guard JSONs 全部 verified，28/28 board full guards PASS。K1-attempt-01 仅 outer launcher exit 为 `UNOBSERVED`，runner/remote exits 为 `0`，不计入 canonical totals；query 保留 82 per-command exit files all zero，但 aggregate launcher/runner exit 不推断为 PASS。Fresh small replay `87c0d1ef21b9257c` 和 fresh M2 `50ebee5e4a4e215a` 均通过其限定审计。
+
+本轮观察仅适用于 fixed Fast DDS 3.6.2.0、generated bounded keyed type、`BYTES_NATIVE`、两块现有板卡、有限 history/resources 和已执行 cases。H1 的 4 个 oldest-before-Reader evictions 是 Writer `KEEP_LAST` 预期行为；H2 repeated reads 不等于 network duplicates；`valid_data=false` 未解析 payload。Reader `get_key_value` 与 Writer `lookup_instance` unsupported，standalone registration propagation 未实现；WriterDataLifecycle broad documentation warning 与 true/false narrow observed behavior 存在冲突，不能宣称全策略合格。SDK internal settlement 仍 `UNOBSERVED`。
+
+资格边界保持不变：P0、PF-01/PF-02 为 `BLOCKED / NOT QUALIFIED`，生产默认 `NativeUnavailable`，P4 `NOT_RELEASED`，无 QualificationProfile；RAW、三板、mixed transport、ROS 2/RMW、性能、100 cycles 及全拓扑均未执行。本轮没有 Transport/core/FastDDS/SDK implementation changes；Git state 为 `NONE / NOT_COMMITTED`。完整证据、文件哈希和 checkpoint-ready 范围见 [keyed docs receipt](../.artifacts/dds-keyed-history-20260923/run-20260923T140748Z/docs/DOCS_SYNC.md)。
+
+## Historical — RX accounting closeout（2026-09-22）
+
+`HOT_REBUILD_BASELINE_CLOSEOUT_AND_RX_REJECTION_ACCOUNTING` 当前为 **DONE_WITH_HISTORICAL_LIMITATION / NOT_COMMITTED**。本轮证据与分析已完成；源码封存/恢复及最终 checkpoint 结论以本轮 `FINAL_REPORT.md` / `FINAL_GATE.json` 为准，本状态页不独立宣称恢复验证 PASS。
+
+上一工作包的限定功能证据仍唯一定位为 `.artifacts/hot-rebuild-production-integration-20260921/run-20260921T152404Z/`：focused `23/23 PASS`，fresh OFF `132/132 PASS`（实验 93），ON `134/134 PASS`（实验 95），native build `0/0/0`，各 manifest 1,655 inputs、6 artifacts，20/20 final guards；其失败 attempt 与 1/10/100 结果均保持历史归属。本轮新证据统一定位为 `.artifacts/hot-rebuild-closeout-rx-20260922/run-20260922T012640Z/`：最终 host OFF `148/148`、ON `150/150`、analyzer `31/31`，post-review native OFF/ON build `0/0/0`，每包 1,657 inputs、6 artifacts，主程序 SHA-256 为 `6352b28f6b7f3d033bb8ecd58f5319eb4479cfe76d5d0ece461ed21487f1c0fc` / `dedfad61e0c26da6e9d7a5e26b60c21ab8db9130a573d4513a5223a8ce8f3a19`。
+
+实现接线是 Participant facade → application/receiver/logical-token attachment → shared ProcessRuntime/ProcessCoordinator/ApplicationAttachments/InputChannels；每个 endpoint 具有独立 native State/listener/table/owner/worker。P1 detach 仅排空自身旧 lease、TX、RX 和 last-payload，保留 live native table；Q 不受影响；全部 application detach 后才 Finalize native stop/join/tombstone。TX 仍是原有有界 owned-vector 队列与 application 联合 drain，RX 是一次 copy 加原 lease；默认 setup=1，双 endpoint 显式 setup=2，预算为 `2/2/1`（setup/send/close）。
+
+本 checkpoint 的资格边界未改变：P0、PF-01/PF-02 为 `BLOCKED / NOT QUALIFIED`；生产默认 `NativeUnavailable`，P4 未放行，无 QualificationProfile，commit/push 为 `USER_PROHIBITED`。OLD2 物理旧帧隔离、SDK internal settlement、RAW/三板/mixed/self-route/压力故障 close 未验证；full-native destroy/rebuild 是保留的历史 RED。1 MiB functional coverage PASS 但原 all-send predicate 明确 `FAIL`，16 条 active pre-Captured ingress 的具体接收前拒绝原因 `UNOBSERVED`；旧 listener terminal map 不保证数值为零，不能写成旧 current-map 日志必为零。
+
+本轮 RX closeout 将历史 16 条限定为 217 条 native ingress 中的 16 条 ingress-only 记录：没有 Captured、owned-copy、长度/hash、Writer GUID/SN 或拒绝结果，具体原因 `HISTORICAL_CAUSE_UNRESOLVED`。新诊断记录在决定点捕获原始 adapter 状态和原因，固定容量为每 State 1,024 条、最大保留 8 个 service incarnation；未知字段、overflow 或 incomplete snapshot 不得被分析器归类为 harmless。新 1 MiB 窗口 `5923cd595106e8a6` 为 203 admissions / 0 rejects（`NOT_REPRODUCED`），hot-smoke `98e4d1228566a0a4` 为 144 decisions、141 accepted、3 `NO_APPLICATION`（严格 hot gap 2、final cleanup 1）。这些新窗口不倒填历史 16 条，也不证明 SDK 内部结算。
+
+本轮诊断为 `DIAGNOSTIC_ONLY`；未发现需要修复的 Transport admission/lifecycle 缺陷。PF-01/PF-02 的外部契约材料见 [.artifacts/hot-rebuild-closeout-rx-20260922/run-20260922T012640Z/PLATFORM_CONTRACT_REQUEST.md](../.artifacts/hot-rebuild-closeout-rx-20260922/run-20260922T012640Z/PLATFORM_CONTRACT_REQUEST.md)。源码封存/恢复及最终 checkpoint 结论由本轮 `FINAL_REPORT.md` / `FINAL_GATE.json` 统一记录；不生成 QualificationProfile，不启用生产 Native backend，不执行 stage/commit/amend/push。
+
+## Historical — same-name hot-reattach admission: blocked at STOP 0 (2026-09-21)
+
+The requested same-process, same-display-name Participant hot-reattach pilot is `BLOCKED / NOT_COMMITTED`, not a completed pilot. The corrected admission treats OLD1 as a detach/drain barrier; OLD2/PF-02 and the full-native-record RED are nonblocking for a normal pilot. The actual first gate is `PHASE0_EXISTING_REAL_DDS_LIVE_INPUTCHANNEL_REATTACH_PATH`: real Participant deletion reaches `ExperimentalTransport::shutdown` and terminally stops that State, while the experiment has no existing bridge attaching a new Participant facade to a surviving live native InputChannel/table. This is a present-code integration/lifetime-binding gap, not a platform impossibility or a same-display-name/all-channel claim.
+
+The earlier same-native-service reproducer remains a separate, nonblocking RED artifact and is not the admission premise. No new build, test, device, SDK or permission operation occurred in this packet. Prior host suites remain historical; current native build, device pilot, single cycle and repetition are `NOT_RUN`.
+
+P0 remains `BLOCKED / NOT QUALIFIED`; PF-01/PF-02, production `NativeUnavailable`, P4 unauthorized, no QualificationProfile and no commit/push remain unchanged. The prior dual package’s OFF/ON `55/57`, five device windows and `DONE` bounded status remain historical evidence of that prior package only. See [hot final report](../.artifacts/experiment-hot-rebuild-20260921/run-20260921T141304Z/FINAL_REPORT.md).
+
+## Historical — 双实例验证器修正后的最终有限实验（2026-09-21）
+
+独立 tester receipt [FINAL_RESULT.md](../.artifacts/experiment-dual-20260921-second-instance-fix/run-20260921T121708Z/tester/FINAL_RESULT.md) 记录五个新鲜 `BYTES_NATIVE` 双板窗口全部通过：双 Participant/P1 删除后 P2 存活与继续写入、默认小消息、256 KiB 分片、RELIABLE 单次 whole-message drop→NACK_FRAG 关联恢复、BEST_EFFORT 目标 sample 缺失。每个窗口均 wrapper/两板 remote exit `0`、无 host timeout/watchdog；两板均有 pre-grant Granted、最终 Revoked、byte/metadata/ownership/snapshot/process guards。
+
+验证器修正后的 host 结果为 OFF `55/55 PASS`、ON `57/57 PASS`，review 后 native OFF/ON bridge/configure/build 为 `0/0/0`；两个 manifest 各 93 个输入，主程序 SHA-256 分别为 `09b16d92…f23c`、`5096447d…6f55`。双实例 raw 复核确认 P1/P2 两组各 6/10 个正常样本、P2 身份/状态/租约/回调槽连续性、P1 完成标记后的写入顺序，以及所有 32 条正常 native chain 的 opposite-side SDK 发送配对。B 侧额外的 closing/no-receiver ingress 已单独计入，不被静默丢弃；SDK 内部 settlement 仍 `UNOBSERVED`。
+
+这只是 default-OFF 的受限实验结果，不是生产资格或发布结论。`P0=BLOCKED / NOT QUALIFIED`、`NativeUnavailable`、PF-01–04、生产 P4 未授权、`no QualificationProfile`、`COMMIT_GATE=PROHIBITED` 和未提交状态保持不变。RAW、热重建、多 Participant、强压力/故障 close、混合 transport、native self-route、1 MiB 本轮未重跑且三板测试继续 DEFERRED；旧 dual-r2 的 predicate 失败、window 启动/abort 缺口及其后 post-abort 重跑均保留历史边界。详见 [实验报告](FASTDDS_DSOFTBUS_EXPERIMENT_20260921.md) 与 [最终报告](../.artifacts/experiment-dual-20260921-second-instance-fix/run-20260921T121708Z/FINAL_REPORT.md)。
+
+## 当前证据：独立有限例外与历史收口（2026-09-21）
+
+### 独立有限例外：真实 Fast DDS × DSoftBus R4（2026-09-21）
+
+经用户明确授权的 default-OFF 实验已在两块 RK3588A 上完成限定 BYTES 场景；详见 [实验报告](FASTDDS_DSOFTBUS_EXPERIMENT_20260921.md) 及其 [R4 receipt](../.artifacts/integration-experiment-20260921/tester/device-reader-r4/RESULT.md)。OHOS bridge/configure/build 为 `0/0/0`，Windows CONFIG/Release 为 `7/7 PASS`，A/B 的真实 SPDP/SEDP、Writer/Reader、10 个样本、RELIABLE acknowledgement 和正常 close 均有原始命令、日志、哈希与权限撤销证据；限定场景 `SCENARIO_GATE=PASS`。
+
+生命周期/observer hardening 由独立 host `16/16 PASS`、review 和新包 `448663…` 的双板复测闭合；后续 fragments host `17/17 PASS`、OHOS `0/0/0`，256 KiB 与 1 MiB 各三样本 DATA_FRAG 均完成数据/ACK/Reader/close/no-watchdog 观察。1 MiB 79 条 DATA_FRAG 观察中每序列 18 个唯一范围，重复范围不解释为 NACK 或具体重试原因；小/256 KiB 的完整 guard 在撤权边界 `NOT_OBSERVED_AT_BOUNDARY`，1 MiB 即时撤权 guard 恢复 baseline。细节、GUID/SN/range/sample-size/native hash 记录和 package 绑定见 [实验报告](FASTDDS_DSOFTBUS_EXPERIMENT_20260921.md)。
+
+Controlled-loss 独立验证也已完成：最终 OFF/ON host `21/21`、`23/23 PASS`，OHOS `0/0/0`。RELIABLE v2 记录实际单次 whole-message drop、NACK_FRAG 缺失范围请求、重发后的 ReaderSampleInfo/ACK 因果链；BEST_EFFORT 记录目标 sample 缺失、后续 mask `006` 和 `ACK=NotCalled`。两种运行均有正常 observable cleanup 与 fresh full guard 恢复；SDK internal settlement 仍 `UNOBSERVED`。详见实验报告及 `.artifacts/experiment-loss-20260921/tester/analysis-v2-checks.json`。
+
+该结果是独立工作包的有限例外，不是生产 P4 放行或 P0 资格化：`P0=BLOCKED / NOT QUALIFIED`、`NativeUnavailable`、`COMMIT_GATE=PROHIBITED` 保持不变，SDK internal settlement 仍 `UNOBSERVED`。RAW 两种、热重建、多 Participant、强压力/故障 close、混合 transport 和 native self-route 均保留 `NOT COVERED`。
+
+### 前一工作包：可行性收敛（历史）
+
+该工作包状态为 `CLOSED_WITH_PLATFORM_DEPENDENCIES`（前一可行性收敛工作包已关闭，平台问题未解除）；平台资格仍为 `P0 BLOCKED / NOT QUALIFIED`；生产入口保持 `NativeUnavailable`，该工作包不生成 QualificationProfile、不进入 P4 native backend、不 commit/push。该工作包 build/host/device 均 `NOT_RERUN`；历史 D 交付窗口 `64/64` 与 V4 `1/64` 不拼接为压力资格，`NEED_ACK` 的 `NotCalled` 保留。只有具体新机制、平台契约、可判别 trace 或明确用户决策才重开对应问题；同一阻塞不会自动启动新一轮全面探针。详见 [该工作包 review](../.artifacts/closure-20260921/review/REVIEW.md) 与 [只读核查](../.artifacts/closure-20260921/verification/RESULT.md)。
+
+平台问题的版本/profile/config、缺失证据和解除条件统一维护于 [P0 实施与验证报告](P0_IMPLEMENTATION_20260920.md) 的“平台问题清单与解除条件（本轮收口）”。callback incarnation slot 按已批准的实际 service record 实例 + role 及 process-lifetime tombstone 规则处理；它不是 Participant 配额，也不解决 numeric ID、SDK 内部事件归属或 native 阻塞。P1/P2/P3 主机诊断历史结果保留，本轮关闭后不自动续跑。
+
+历史 final guard 保留 `Passed=false / NON_PROJECT_CHANGED`。前轮核查确认 device-exit 授权前与 V4 撤权后的 A/B 快照逐字节一致；前轮 A/D 的独立权限窗口也各有恢复收据，当时 owned DATASYNC 为空、manager 为 `DENIED`。该次只读收口没有操作或重新查询设备权限，不把历史 readback 写成新的设备观测；范围记录见 P0 报告。本次 R4 使用独立权限窗口，其授权、撤销和恢复证据见上方实验报告。
+
+# 历史证据快照（2026-09-20）
+
+本轮最终独立 tester 的 canonical receipt 为 [`.artifacts/implementation-20260920/p0-cancel-schedule-final-device/RESULT.md`](../.artifacts/implementation-20260920/p0-cancel-schedule-final-device/RESULT.md)，详细记录见 [P0_IMPLEMENTATION_20260920.md](P0_IMPLEMENTATION_20260920.md)。诊断探针源码和构建脚本存在，最终 Host Debug/Release 各 18/18 CTest PASS，取消探针内部 CANCEL-01..19 均 PASS；这不等于生产 Transport 或 Fast DDS 集成通过。
+
+| 范围 | 当前状态 | 证据边界 |
+| --- | --- | --- |
+| Profile/identity 诊断探针 | IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED（限定） | 三种 profile、身份可用性、32/255/4096/16384/60000 B 精确记录在双板 B→A→B 通过；不证明 DDS 或加密效果 |
+| Cancellation 诊断探针 | IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED（结果受限） | BYTES 的 1 秒诊断配置 FAIL；RAW 与 RAW_ENCRYPTED 未观察到选定取消区间，标记 NOT_EXERCISED；不证明所有有限时限均不可能 |
+| P0 平台资格 | BLOCKED / NOT QUALIFIED | SDK 发送/关闭总时限、短返回、迟到 callback tombstone/代际防护、adapter I/O/worker/receiver 排空、资源容量和完整权限/拓扑资格尚无充分证据 |
+| Fast DDS DSoftBus production backend | NOT IMPLEMENTED / NativeUnavailable | 当前改动是 probes/helpers/build wiring，不是生产 Transport；SPDP/SEDP、Writer/Reader、可靠性、分片和 RMW 未运行 |
+| P1-P6、三板测试 | PLANNED / DEFERRED | 依照冻结方案推进；三板 A→B/C 及故障隔离明确留待后续 |
+| PRE_COMMIT | FAIL | P0 未资格化，Ready for commit = NO；不允许据此提交或发布 |
+
+该段所指的 2026-09-20 权限快照属于历史记录；2026-09-21 final guard 现记录为 `Passed=false / NON_PROJECT_CHANGED`，因此不能继续称为完整 guard PASS。当前只确认 owned DATASYNC 已撤销、同 token manager readback 为 `DENIED`；完整 baseline 差异仍按 P0 报告记录。未修改 DSoftBus、UDP/TCP/SHM 或 Fast DDS DDS/RTPS 语义。历史状态记录从下一节开始保留，不得覆盖本快照。
+
 ## 最新证据同步（2026-09-14 UTC）
 
 Fast DDS 主机库已完成当前准备构建：`.artifacts/build/fastdds-logs/HOST_BUILD_RESULT_20260914.md` 记录实际 237/237 编译和 install exit 0；该构建使用已记录的 UTF-8/兼容性编译选项，失败日志仍保留。此证据只支持 `BUILDS`，不支持 Fast DDS Transport、DDS 集成或上游测试通过。

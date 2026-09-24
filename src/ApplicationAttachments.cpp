@@ -23,6 +23,7 @@ struct AttachmentBudget final
     std::mutex mutex;
     std::condition_variable changed;
     AttachmentUsage usage;
+    std::uint64_t next_identity=1;
     std::vector<AttachmentLocalBudget> locals;
 };
 struct AttachmentLocal final
@@ -30,6 +31,7 @@ struct AttachmentLocal final
     Locator locator;
     std::size_t budget_index = 0;
     std::uint64_t incarnation = 0;
+    std::uint64_t observed_incarnation = 0;
     ReceiverPhase phase = ReceiverPhase::Empty;
     InputChannels::Receiver* receiver = nullptr;
     InputChannelTicket ticket;
@@ -52,6 +54,7 @@ struct AttachmentApplication final
     const EndpointDirectory::Snapshot directory;
     const std::shared_ptr<InputChannels> inputs;
     std::vector<AttachmentLocal> locals;
+    ApplicationIdentity identity;
     ApplicationPhase phase = ApplicationPhase::Active;
     std::size_t controls = 0;
     // Producer lifetime, not RecordPhase::Copying. Includes commit/refund until
@@ -86,6 +89,10 @@ struct AttachmentRecord final
             Refund(*app->budget, budget_index, bytes.size(), phase);
             if(phase==RecordPhase::Delivering) --app->dispatching_activity;
         }
+        // Payload storage is gone before reporting its actual release. This is
+        // deliberately separate from invocation settlement and ledger counters.
+        std::vector<std::uint8_t>().swap(bytes);
+        if(observer) observer->OnReceive(ReceiveStage::RecordReleased,diagnostic,nullptr,0);
     }
     // No back-reference to the control object. Only queue ownership uses next.
     const std::shared_ptr<AttachmentApplication> app;
@@ -97,6 +104,8 @@ struct AttachmentRecord final
     std::vector<std::uint8_t> bytes;
     const NativeIdentityConstraint native;
     const ProcessClock::Clock::time_point expiry;
+    ReceiveDiagnostic diagnostic;
+    std::shared_ptr<ProcessReceiveObserver> observer;
     RecordPhase phase = RecordPhase::Copying;
     bool charged = false;
     std::unique_ptr<AttachmentRecord> next;
@@ -230,9 +239,11 @@ ApplicationClaimOutcome ApplicationAttachments::ClaimApplication(const std::vect
         }
         if (budget.usage.retained_applications == budget.limits.retained_applications)
             return {ApplicationClaimResult::Capacity, {}};
+        if(budget.next_identity>UINT64_MAX-2) return {ApplicationClaimResult::Capacity,{}};
         // Preparation may allocate but cannot publish a receiver. No slot is
         // mutated until the complete application and all local entries exist.
         auto app = std::make_shared<detail::AttachmentApplication>(control.budget, directory, locals.size());
+        app->identity={budget.next_identity++,budget.next_identity++};
         for (std::size_t i = 0; i < locals.size(); ++i) {
             app->locals[i].locator = locals[i]; app->locals[i].budget_index = indices[i];
         }
@@ -259,10 +270,11 @@ ReceiverOpenOutcome ApplicationAttachments::OpenReceiver(const ApplicationClaim&
         if (entry.phase == detail::ReceiverPhase::Open) {
             if (entry.receiver != receiver) return {ReceiverOpenResult::Conflict, {}};
             ReceiverBinding b; b.app_ = app; b.local_index_ = index; b.incarnation_ = entry.incarnation;
+            b.observed_incarnation_=entry.observed_incarnation;
             return {ReceiverOpenResult::AlreadyOpen, std::move(b)};
         }
         if (entry.phase != detail::ReceiverPhase::Empty) return {ReceiverOpenResult::Busy, {}};
-        if (entry.incarnation == UINT64_MAX) return {ReceiverOpenResult::IncarnationExhausted, {}};
+        if (entry.incarnation == UINT64_MAX||budget.next_identity==UINT64_MAX) return {ReceiverOpenResult::IncarnationExhausted, {}};
         entry.phase = detail::ReceiverPhase::Opening; ++app->controls;
     }
     InputChannelTicket ticket;
@@ -275,10 +287,12 @@ ReceiverOpenOutcome ApplicationAttachments::OpenReceiver(const ApplicationClaim&
             ticket = app->inputs->Capture(local);
             if (hooks_.open_registered) hooks_.open_registered();
             std::lock_guard<std::mutex> lock(budget.mutex);
-            if (app->phase == detail::ApplicationPhase::Active) {
+            if (app->phase == detail::ApplicationPhase::Active&&budget.next_identity!=UINT64_MAX) {
                 ++entry.incarnation; entry.ticket = std::move(ticket); entry.receiver = receiver;
+                entry.observed_incarnation=budget.next_identity++;
                 entry.phase = detail::ReceiverPhase::Open; --app->controls; budget.changed.notify_all();
                 ReceiverBinding b; b.app_ = app; b.local_index_ = index; b.incarnation_ = entry.incarnation;
+                b.observed_incarnation_=entry.observed_incarnation;
                 return {ReceiverOpenResult::Opened, std::move(b)};
             }
             result = ReceiverOpenResult::Detached;
@@ -380,97 +394,203 @@ AttachmentControlResult ApplicationAttachments::AwaitDetached(const ApplicationC
     return AttachmentControlResult::Completed;
 }
 ReceiveAdmissionResult ApplicationAttachments::AdmitReceive(const Locator& local, const Locator& remote,
-        const void* bytes, std::size_t size)
+        const void* bytes, std::size_t size,ReceiveAdmissionDiagnostic* diagnostic)
 {
     auto& control = *control_; auto& budget = *control.budget;
-    if (!bytes || !size) return ReceiveAdmissionResult::InvalidBuffer;
-    if (size > budget.limits.max_record_bytes) return ReceiveAdmissionResult::TooLarge;
+    if(diagnostic) diagnostic->size=size;
+    if (!bytes || !size) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+            !bytes?RxAdmissionReason::NullBuffer:RxAdmissionReason::ZeroSize,
+            ReceiveAdmissionResult::InvalidBuffer):ReceiveAdmissionResult::InvalidBuffer;
+    if(diagnostic) {diagnostic->record_limit_known=true;diagnostic->record_limit=budget.limits.max_record_bytes;}
+    if (size > budget.limits.max_record_bytes) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+            RxAdmissionReason::TooLarge,ReceiveAdmissionResult::TooLarge):ReceiveAdmissionResult::TooLarge;
     const auto slot_index = FindSlot(control, local);
-    if (slot_index == absent) return ReceiveAdmissionResult::InvalidLocal;
+    if (slot_index == absent) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+            RxAdmissionReason::InvalidLocal,ReceiveAdmissionResult::InvalidLocal):ReceiveAdmissionResult::InvalidLocal;
     ApplicationClaim claim;
     {
         std::lock_guard<std::mutex> lock(budget.mutex);
-        if(control.stopped) return ReceiveAdmissionResult::Stopped;
+        if(diagnostic) {diagnostic->lifecycle_known=true;diagnostic->stopped=control.stopped;}
+        if(control.stopped) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+                RxAdmissionReason::Stopped,ReceiveAdmissionResult::Stopped):ReceiveAdmissionResult::Stopped;
         claim.app_=control.slots[slot_index].app;
+        if(diagnostic) diagnostic->candidate_count=claim?1:0;
     }
-    if(!claim) return ReceiveAdmissionResult::NoReceiver;
+    if(!claim) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+            RxAdmissionReason::NoApplication,ReceiveAdmissionResult::NoReceiver):ReceiveAdmissionResult::NoReceiver;
     detail::AttachmentReceiveCapture capture;
     const ProcessClock clock;
-    auto result=CaptureReceive(claim,local,remote,{},ProcessClock::Clock::time_point::max(),size,clock,capture);
+    auto result=CaptureReceive(claim,local,remote,{},ProcessClock::Clock::time_point::max(),size,clock,capture,diagnostic);
     if(result!=ReceiveAdmissionResult::Accepted) return result;
-    result=CopyReceive(capture,bytes);
+    result=CopyReceive(capture,bytes,diagnostic);
     if(result!=ReceiveAdmissionResult::Accepted) return result;
-    return CommitReceive(capture,clock);
+    return CommitReceive(capture,clock,diagnostic);
 }
 ReceiveAdmissionResult ApplicationAttachments::CaptureReceive(const ApplicationClaim& claim,const Locator& local,
         const Locator& remote,const NativeIdentityConstraint& pin,ProcessClock::Clock::time_point expiry,
-        std::size_t size,const ProcessClock& clock,detail::AttachmentReceiveCapture& capture)
+        std::size_t size,const ProcessClock& clock,detail::AttachmentReceiveCapture& capture,ReceiveAdmissionDiagnostic* diagnostic)
 {
     auto app=claim.app_;auto& budget=*control_->budget;
-    if(!app||app->budget!=control_->budget) return ReceiveAdmissionResult::Revoked;
-    if(!size) return ReceiveAdmissionResult::InvalidBuffer;
-    if(size>budget.limits.max_record_bytes) return ReceiveAdmissionResult::TooLarge;
+    if(diagnostic) diagnostic->size=size;
+    if(!app||app->budget!=control_->budget) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+            RxAdmissionReason::InvalidClaim,ReceiveAdmissionResult::Revoked):ReceiveAdmissionResult::Revoked;
+    if(!size) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+            RxAdmissionReason::ZeroSize,ReceiveAdmissionResult::InvalidBuffer):ReceiveAdmissionResult::InvalidBuffer;
+    if(diagnostic) {diagnostic->record_limit_known=true;diagnostic->record_limit=budget.limits.max_record_bytes;}
+    if(size>budget.limits.max_record_bytes) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+            RxAdmissionReason::TooLarge,ReceiveAdmissionResult::TooLarge):ReceiveAdmissionResult::TooLarge;
     const auto index=FindLocal(*app,local);
-    if(index==absent) return ReceiveAdmissionResult::InvalidLocal;
+    if(index==absent) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+            RxAdmissionReason::InvalidLocal,ReceiveAdmissionResult::InvalidLocal):ReceiveAdmissionResult::InvalidLocal;
     const auto slot_index=app->locals[index].budget_index;
     try {
         std::lock_guard<std::mutex> lock(budget.mutex);
-        if (control_->stopped) return ReceiveAdmissionResult::Stopped;
-        if (app->phase != detail::ApplicationPhase::Active) return ReceiveAdmissionResult::NoReceiver;
+        if(diagnostic) {
+            diagnostic->application_known=true;
+            diagnostic->application_incarnation=app->identity.application_incarnation;
+            diagnostic->logical_token=app->identity.logical_token;
+            diagnostic->lifecycle_known=true;diagnostic->stopped=control_->stopped;
+            diagnostic->application_phase=static_cast<int>(app->phase);
+            const auto& observed=app->locals[index];
+            diagnostic->receiver_known=observed.observed_incarnation!=0;
+            diagnostic->receiver_incarnation=observed.observed_incarnation;
+            diagnostic->receiver_phase=static_cast<int>(observed.phase);
+        }
+        if (control_->stopped) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+                RxAdmissionReason::Stopped,ReceiveAdmissionResult::Stopped):ReceiveAdmissionResult::Stopped;
+        if (app->phase != detail::ApplicationPhase::Active) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+                RxAdmissionReason::ApplicationInactive,ReceiveAdmissionResult::NoReceiver):ReceiveAdmissionResult::NoReceiver;
         const auto& entry = app->locals[index];
-        if (entry.phase != detail::ReceiverPhase::Open) return ReceiveAdmissionResult::NoReceiver;
+        if (entry.phase != detail::ReceiverPhase::Open) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+                RxAdmissionReason::ReceiverNotOpen,ReceiveAdmissionResult::NoReceiver):ReceiveAdmissionResult::NoReceiver;
         // Native caller already holds the original validated route/owner gate;
         // only the legacy path needs the allocating directory lookup here.
-        if (!pin&&!app->directory->ResolveOutbound({local, remote}).value) return ReceiveAdmissionResult::InvalidRoute;
-        if(pin&&(pin.local()!=local||pin.remote()!=remote)) return ReceiveAdmissionResult::InvalidRoute;
-        if(expiry!=ProcessClock::Clock::time_point::max()&&clock.Now()>=expiry) return ReceiveAdmissionResult::Expired;
+        if (!pin&&!app->directory->ResolveOutbound({local, remote}).value) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+                RxAdmissionReason::InvalidRoute,ReceiveAdmissionResult::InvalidRoute):ReceiveAdmissionResult::InvalidRoute;
+        if(pin&&(pin.local()!=local||pin.remote()!=remote)) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+                RxAdmissionReason::InvalidRoute,ReceiveAdmissionResult::InvalidRoute):ReceiveAdmissionResult::InvalidRoute;
+        if(expiry!=ProcessClock::Clock::time_point::max()&&clock.Now()>=expiry) return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+                RxAdmissionReason::Expired,ReceiveAdmissionResult::Expired):ReceiveAdmissionResult::Expired;
         const auto& n = budget.limits; const auto& l = budget.locals[slot_index];
         if (budget.usage.records == n.records || size > n.bytes - budget.usage.bytes ||
                 l.records == n.local_records || size > n.local_bytes - l.bytes || budget.usage.copying == n.copying ||
-                app->copying_activity == std::numeric_limits<std::size_t>::max())
+                app->copying_activity == std::numeric_limits<std::size_t>::max()) {
+            if(diagnostic) {
+                // Observe all capacity predicates only after the original
+                // short-circuit expression has rejected, under its same gate.
+                diagnostic->capacity_known=true;
+                diagnostic->capacity_mask=(budget.usage.records==n.records?1u:0u)|
+                        (size>n.bytes-budget.usage.bytes?2u:0u)|(l.records==n.local_records?4u:0u)|
+                        (size>n.local_bytes-l.bytes?8u:0u)|(budget.usage.copying==n.copying?16u:0u)|
+                        (app->copying_activity==std::numeric_limits<std::size_t>::max()?32u:0u);
+                diagnostic->records_used=budget.usage.records;diagnostic->records_limit=n.records;
+                diagnostic->bytes_used=budget.usage.bytes;diagnostic->bytes_limit=n.bytes;
+                diagnostic->local_records_used=l.records;diagnostic->local_records_limit=n.local_records;
+                diagnostic->local_bytes_used=l.bytes;diagnostic->local_bytes_limit=n.local_bytes;
+                diagnostic->copying_used=budget.usage.copying;diagnostic->copying_limit=n.copying;
+                diagnostic->application_copying=app->copying_activity;
+                diagnostic->application_copying_limit=std::numeric_limits<std::size_t>::max();
+                const auto mask=diagnostic->capacity_mask;
+                const auto reason=mask&1u?RxAdmissionReason::GlobalRecords:mask&2u?RxAdmissionReason::GlobalBytes:
+                        mask&4u?RxAdmissionReason::LocalRecords:mask&8u?RxAdmissionReason::LocalBytes:
+                        mask&16u?RxAdmissionReason::CopyingLimit:RxAdmissionReason::ApplicationCopyingExhausted;
+                return diagnostic->Return(RxAdmissionStage::Capture,reason,ReceiveAdmissionResult::Capacity);
+            }
             return ReceiveAdmissionResult::Capacity;
+        }
         capture.app_=app;capture.ticket_=entry.ticket;capture.native_=pin;capture.remote_=remote;
         capture.index_=index;capture.global_index_=slot_index;capture.incarnation_=entry.incarnation;
         capture.expiry_=expiry;capture.size_=size;
+        capture.diagnostic_.identity={app->identity.application_incarnation,entry.observed_incarnation,app->identity.logical_token};
+        capture.diagnostic_.native=pin;capture.diagnostic_.size=size;
         ++budget.usage.records; budget.usage.bytes += size; ++budget.usage.copying; ++app->copying_activity;
         capture.active_=true;capture.reserved_=true; // No fallible work after charging.
         ++budget.locals[slot_index].records; budget.locals[slot_index].bytes += size;
         budget.usage.high_records = std::max(budget.usage.high_records, budget.usage.records);
         budget.usage.high_bytes = std::max(budget.usage.high_bytes, budget.usage.bytes);
         budget.usage.high_copying = std::max(budget.usage.high_copying, budget.usage.copying);
-    } catch (const std::bad_alloc&) { return ReceiveAdmissionResult::AllocationFailure; }
+    } catch (const std::bad_alloc&) { return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
+            RxAdmissionReason::CaptureAllocation,ReceiveAdmissionResult::AllocationFailure):ReceiveAdmissionResult::AllocationFailure; }
     return ReceiveAdmissionResult::Accepted;
 }
-ReceiveAdmissionResult ApplicationAttachments::CopyReceive(detail::AttachmentReceiveCapture& capture,const void* bytes)
+ReceiveAdmissionResult ApplicationAttachments::CopyReceive(detail::AttachmentReceiveCapture& capture,const void* bytes,
+        ReceiveAdmissionDiagnostic* diagnostic)
 {
-    if(!capture.active_||!capture.reserved_||capture.record_||!bytes) return ReceiveAdmissionResult::InvalidBuffer;
+    if(!capture.active_||!capture.reserved_||capture.record_||!bytes) return diagnostic?diagnostic->Return(RxAdmissionStage::Copy,
+            RxAdmissionReason::InvalidCopy,ReceiveAdmissionResult::InvalidBuffer):ReceiveAdmissionResult::InvalidBuffer;
     try {
         if (hooks_.copy_reserved) hooks_.copy_reserved();
         capture.record_=std::make_unique<detail::AttachmentRecord>(capture.app_,capture.ticket_,capture.remote_,
                 capture.index_,capture.incarnation_,capture.global_index_,capture.size_,capture.native_,capture.expiry_);
         capture.record_->charged=true;capture.reserved_=false;
+        capture.record_->diagnostic=capture.diagnostic_;capture.record_->observer=capture.observer_;
         std::memcpy(capture.record_->bytes.data(),bytes,capture.size_);
         if (hooks_.receive_publish) hooks_.receive_publish();
         return ReceiveAdmissionResult::Accepted;
-    } catch (const std::bad_alloc&) { return ReceiveAdmissionResult::AllocationFailure; }
+    } catch (const std::bad_alloc&) { return diagnostic?diagnostic->Return(RxAdmissionStage::Copy,
+            RxAdmissionReason::CopyAllocation,ReceiveAdmissionResult::AllocationFailure):ReceiveAdmissionResult::AllocationFailure; }
 }
-ReceiveAdmissionResult ApplicationAttachments::CommitReceive(detail::AttachmentReceiveCapture& capture,const ProcessClock& clock)
+ReceiveAdmissionResult ApplicationAttachments::CommitReceive(detail::AttachmentReceiveCapture& capture,const ProcessClock& clock,
+        ReceiveAdmissionDiagnostic* diagnostic)
 {
-    if(!capture.active_||!capture.record_||capture.app_->budget!=control_->budget) return ReceiveAdmissionResult::Revoked;
+    if(!capture.active_||!capture.record_||capture.app_->budget!=control_->budget) return diagnostic?diagnostic->Return(RxAdmissionStage::Commit,
+            RxAdmissionReason::InvalidCommit,ReceiveAdmissionResult::Revoked):ReceiveAdmissionResult::Revoked;
     auto& control=*control_;auto& budget=*control.budget;
     std::lock_guard<std::mutex> lock(budget.mutex);
     const auto& entry=capture.app_->locals[capture.index_];
+    if(diagnostic) {
+        // Identity remains the original captured receiver even if this slot
+        // now contains a replacement. Only lifecycle phases are current here.
+        diagnostic->application_known=true;diagnostic->receiver_known=true;diagnostic->lifecycle_known=true;
+        diagnostic->application_incarnation=capture.diagnostic_.identity.application_incarnation;
+        diagnostic->logical_token=capture.diagnostic_.identity.logical_token;
+        diagnostic->receiver_incarnation=capture.diagnostic_.identity.receiver_incarnation;
+        diagnostic->application_phase=static_cast<int>(capture.app_->phase);
+        diagnostic->receiver_phase=static_cast<int>(entry.phase);diagnostic->stopped=control.stopped;
+    }
     if(capture.app_->phase!=detail::ApplicationPhase::Active||entry.phase!=detail::ReceiverPhase::Open||
-            entry.incarnation!=capture.incarnation_) return ReceiveAdmissionResult::Revoked;
-    if(capture.expiry_!=ProcessClock::Clock::time_point::max()&&clock.Now()>=capture.expiry_) return ReceiveAdmissionResult::Expired;
+            entry.incarnation!=capture.incarnation_) {
+        if(diagnostic) {
+            const auto reason=capture.app_->phase!=detail::ApplicationPhase::Active?RxAdmissionReason::CommitApplicationInactive:
+                    entry.phase!=detail::ReceiverPhase::Open?RxAdmissionReason::CommitReceiverNotOpen:RxAdmissionReason::CommitReceiverChanged;
+            return diagnostic->Return(RxAdmissionStage::Commit,reason,ReceiveAdmissionResult::Revoked);
+        }
+        return ReceiveAdmissionResult::Revoked;
+    }
+    if(capture.expiry_!=ProcessClock::Clock::time_point::max()&&clock.Now()>=capture.expiry_)
+        return diagnostic?diagnostic->Return(RxAdmissionStage::Commit,RxAdmissionReason::Expired,
+                ReceiveAdmissionResult::Expired):ReceiveAdmissionResult::Expired;
     --budget.usage.copying;++budget.usage.queued;capture.record_->phase=detail::RecordPhase::Queued;
     auto* tail=capture.record_.get();
     if(control.tail) control.tail->next=std::move(capture.record_);else control.queue=std::move(capture.record_);
     control.tail=tail;
-    return ReceiveAdmissionResult::Accepted;
+    return diagnostic?diagnostic->Return(RxAdmissionStage::Commit,RxAdmissionReason::AcceptedQueue,
+            ReceiveAdmissionResult::Accepted):ReceiveAdmissionResult::Accepted;
 }
 NativeIdentityConstraint ApplicationAttachments::ReceiveIdentity(const ReceiveWork& work) const
 {return work.record_&&work.record_->app->budget==control_->budget?work.record_->native:NativeIdentityConstraint{};}
+ReceiveDiagnostic ApplicationAttachments::ReceiveObservation(const ReceiveWork& work) const
+{return work.record_&&work.record_->app->budget==control_->budget?work.record_->diagnostic:ReceiveDiagnostic{};}
+void ApplicationAttachments::ObserveReceive(const ReceiveWork& work,ReceiveStage stage) noexcept
+{
+    if(work.record_&&work.record_->observer) {
+        const auto& r=*work.record_;
+        r.observer->OnReceive(stage,r.diagnostic,r.bytes.data(),r.bytes.size());
+    }
+}
+void ApplicationAttachments::ObserveOwnedCopy(const detail::AttachmentReceiveCapture& capture) noexcept
+{
+    if(capture.observer_&&capture.record_) capture.observer_->OnReceive(ReceiveStage::OwnedCopy,
+            capture.diagnostic_,capture.record_->bytes.data(),capture.record_->bytes.size());
+}
+ApplicationIdentity ApplicationAttachments::ObserveApplication(const ApplicationClaim& claim) const noexcept
+{return claim.app_&&claim.app_->budget==control_->budget?claim.app_->identity:ApplicationIdentity{};}
+ReceiverIdentity ApplicationAttachments::ObserveReceiver(const ReceiverBinding& binding) const noexcept
+{
+    if(!binding.app_||binding.app_->budget!=control_->budget||!binding.incarnation_) return {};
+    const auto id=binding.app_->identity;
+    return {id.application_incarnation,binding.observed_incarnation_,id.logical_token};
+}
 NativeStatus ApplicationAttachments::CheckPendingReceive(const ReceiveWork& work,const ProcessClock& clock) const
 {
     if(!work.record_||work.record_->app->budget!=control_->budget||!work.record_->native) return NativeStatus::InvalidHandle;
@@ -556,6 +676,12 @@ std::size_t ApplicationAttachments::TestCopying(const ApplicationClaim& claim) c
     std::lock_guard<std::mutex> lock(control_->budget->mutex);
     if (!claim.app_ || claim.app_->budget != control_->budget) throw std::logic_error("invalid test claim");
     return claim.app_->copying_activity;
+}
+void ApplicationAttachments::TestSetCopyingActivity(const ApplicationClaim& claim,std::size_t value)
+{
+    std::lock_guard<std::mutex> lock(control_->budget->mutex);
+    if(!claim.app_||claim.app_->budget!=control_->budget) throw std::logic_error("invalid test claim");
+    claim.app_->copying_activity=value;
 }
 void ApplicationAttachments::TestSetIncarnation(const ApplicationClaim& claim, const Locator& local, std::uint64_t n)
 {

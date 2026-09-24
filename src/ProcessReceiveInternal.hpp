@@ -11,6 +11,7 @@ struct ProcessReceiveExecution final
     ReceiveWork work;
     NativeReceiveLease native;
     InputReceiverLease receiver;
+    ReceiveDiagnostic diagnostic;
 };
 class ProcessReceiveBridge final
 {
@@ -19,7 +20,8 @@ class ProcessReceiveBridge final
     friend class ::mdds::dsoftbus::ProcessReceiveInvocation;
     static ReceiveAdmissionResult Admit(ApplicationAttachments&,NativeOwnerTable&,const ApplicationClaim&,
             const NativeIdentityConstraint&,const void*,std::size_t,ProcessClock::Clock::time_point,
-            const ProcessClock&);
+            const ProcessClock&,std::uint64_t correlation=0,
+            std::shared_ptr<ProcessReceiveObserver> observer={},ReceiveAdmissionDiagnostic* diagnostic=nullptr);
     static NativeResult<ProcessReceiveInvocation> TryEnter(ApplicationAttachments&,NativeOwnerTable&,
             ReceiveWork&,const ProcessClock&);
     static NativeResult<ProcessReceiveInvocation> Next(ApplicationAttachments&,NativeOwnerTable&,const ProcessClock&);

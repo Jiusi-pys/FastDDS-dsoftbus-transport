@@ -18,6 +18,8 @@ private:
     std::shared_ptr<AttachmentApplication> app_;
     InputChannelTicket ticket_;
     NativeIdentityConstraint native_;
+    ReceiveDiagnostic diagnostic_;
+    std::shared_ptr<ProcessReceiveObserver> observer_;
     Locator remote_;
     ProcessClock::Clock::time_point expiry_=ProcessClock::Clock::time_point::max();
     std::size_t index_=0,global_index_=0,size_=0;

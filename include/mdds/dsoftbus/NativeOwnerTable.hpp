@@ -21,9 +21,12 @@ namespace detail { struct NativeState; class NativeOperationToken; class NativeS
 namespace detail { class NativeReceiveBridge; class NativeReceiveGuard; }
 
 using NativeSocketId = std::int32_t;
-enum class RouteDirection { Dial, Accept };
+enum class RouteDirection { Dial, Accept, Both };
 struct NativeLimits
 {
+    // Socket/Listen/Bind share this finite pool. Default remains the original
+    // single setup call; two declared endpoints may explicitly reserve two.
+    static constexpr std::size_t setup_call_capacity = 2;
     std::size_t namespaces = 8, total_owners = 12;
     std::size_t setup_calls = 1, send_calls = 2, close_calls = 1;
 };
@@ -34,6 +37,9 @@ struct NativeTableConfiguration
     // Ordinary native-name mode only: 1..64 bytes, no embedded NUL.
     std::string service_pkg_name;
     NativeLimits limits;
+    // Explicit reconnect policy; only Both routes. Retained old owners/IDs
+    // remain charged and never retarget old callbacks to the replacement.
+    bool allow_closed_dial_retry=false;
 };
 enum class NativeStatus
 {

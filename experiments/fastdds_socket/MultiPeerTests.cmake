@@ -1,0 +1,12 @@
+if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
+    add_executable(experiment_multi_peer_tests multi_peer_tests.cpp)
+    target_link_libraries(experiment_multi_peer_tests PRIVATE experimental_dsoftbus_transport)
+    foreach(_case IN ITEMS hooks selection send target-failure rx-source lifetime capacity publish-rollback configuration)
+        add_test(NAME experiment.multi_peer_${_case} COMMAND experiment_multi_peer_tests ${_case})
+        set_tests_properties(experiment.multi_peer_${_case} PROPERTIES TIMEOUT 30)
+    endforeach()
+    if(WIN32)
+        add_custom_command(TARGET experiment_multi_peer_tests POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:fastdds>" "$<TARGET_FILE:fastcdr>" "$<TARGET_FILE:foonathan_memory>" "$<TARGET_FILE_DIR:experiment_multi_peer_tests>")
+    endif()
+endif()

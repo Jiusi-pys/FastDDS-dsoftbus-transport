@@ -7,29 +7,51 @@ template<class T> NativeResult<T> Failure(NativeStatus status) {return {std::nul
 namespace detail {
 ProcessReceiveExecution::~ProcessReceiveExecution()
 {
-    receiver={};native={};work={}; // Receiver/native leases before dispatch ledger refund.
+    receiver={};native={};
+    ApplicationAttachments::ObserveReceive(work,ReceiveStage::Settled);
+    work={}; // Receiver/native leases before dispatch ledger refund.
 }
 ReceiveAdmissionResult ProcessReceiveBridge::Admit(ApplicationAttachments& a,NativeOwnerTable& table,
         const ApplicationClaim& claim,const NativeIdentityConstraint& pin,const void* bytes,std::size_t size,
-        ProcessClock::Clock::time_point expiry,const ProcessClock& clock)
+        ProcessClock::Clock::time_point expiry,const ProcessClock& clock,std::uint64_t correlation,
+        std::shared_ptr<ProcessReceiveObserver> observer,ReceiveAdmissionDiagnostic* diagnostic)
 {
-    if(!bytes||!size) return ReceiveAdmissionResult::InvalidBuffer;
+    if(diagnostic) diagnostic->size=size;
+    if(!bytes||!size) return diagnostic?diagnostic->Return(RxAdmissionStage::CaptureGate,
+            !bytes?RxAdmissionReason::NullBuffer:RxAdmissionReason::ZeroSize,
+            ReceiveAdmissionResult::InvalidBuffer):ReceiveAdmissionResult::InvalidBuffer;
     AttachmentReceiveCapture capture; // Must die AFTER both native guard scopes.
+    capture.diagnostic_.correlation=correlation;capture.observer_=std::move(observer);
     {
         auto guard=NativeReceiveBridge::Acquire(table,pin);
-        if(guard.status()!=NativeStatus::None&&guard.status()!=NativeStatus::NotReady) return ReceiveAdmissionResult::Revoked;
-        if(guard.status()==NativeStatus::NotReady&&expiry==ProcessClock::Clock::time_point::max()) return ReceiveAdmissionResult::InvalidDeadline;
+        if(diagnostic) {diagnostic->native_status_known=true;diagnostic->native_status=guard.status();}
+        if(guard.status()!=NativeStatus::None&&guard.status()!=NativeStatus::NotReady)
+            return diagnostic?diagnostic->Return(RxAdmissionStage::CaptureGate,RxAdmissionReason::NativeCaptureRejected,
+                    ReceiveAdmissionResult::Revoked):ReceiveAdmissionResult::Revoked;
+        if(guard.status()==NativeStatus::NotReady&&expiry==ProcessClock::Clock::time_point::max())
+            return diagnostic?diagnostic->Return(RxAdmissionStage::CaptureGate,RxAdmissionReason::InvalidDeadline,
+                    ReceiveAdmissionResult::InvalidDeadline):ReceiveAdmissionResult::InvalidDeadline;
         if(guard.status()==NativeStatus::None) expiry=ProcessClock::Clock::time_point::max();
-        const auto result=a.CaptureReceive(claim,pin.local(),pin.remote(),pin,expiry,size,clock,capture);
+        const auto result=a.CaptureReceive(claim,pin.local(),pin.remote(),pin,expiry,size,clock,capture,diagnostic);
         if(result!=ReceiveAdmissionResult::Accepted) return result;
     }
-    const auto copied=a.CopyReceive(capture,bytes);
+    if(capture.observer_) capture.observer_->OnReceive(ReceiveStage::Captured,capture.diagnostic_,
+            static_cast<const std::uint8_t*>(bytes),size);
+    const auto copied=a.CopyReceive(capture,bytes,diagnostic);
     if(copied!=ReceiveAdmissionResult::Accepted) return copied;
+    ApplicationAttachments::ObserveOwnedCopy(capture);
+    ReceiveAdmissionResult result;
     {
         auto guard=NativeReceiveBridge::Acquire(table,capture.native_);
-        if(guard.status()!=NativeStatus::None&&guard.status()!=NativeStatus::NotReady) return ReceiveAdmissionResult::Revoked;
-        return a.CommitReceive(capture,clock);
+        if(diagnostic) {diagnostic->native_status_known=true;diagnostic->native_status=guard.status();}
+        if(guard.status()!=NativeStatus::None&&guard.status()!=NativeStatus::NotReady)
+            return diagnostic?diagnostic->Return(RxAdmissionStage::CommitGate,RxAdmissionReason::NativeCommitRejected,
+                    ReceiveAdmissionResult::Revoked):ReceiveAdmissionResult::Revoked;
+        result=a.CommitReceive(capture,clock,diagnostic);
     }
+    if(result==ReceiveAdmissionResult::Accepted&&capture.observer_)
+        capture.observer_->OnReceive(ReceiveStage::Queued,capture.diagnostic_,nullptr,0);
+    return result;
 }
 NativeResult<ProcessReceiveInvocation> ProcessReceiveBridge::TryEnter(ApplicationAttachments& a,NativeOwnerTable& table,
         ReceiveWork& work,const ProcessClock& clock)
@@ -62,7 +84,9 @@ NativeResult<ProcessReceiveInvocation> ProcessReceiveBridge::TryEnter(Applicatio
             const auto result=a.EnterReceive(work,execution->receiver,clock);
             if(result!=NativeStatus::None) return Failure<ProcessReceiveInvocation>(result);
             execution->work=std::move(work);
+            execution->diagnostic=a.ReceiveObservation(execution->work);
         }
+        ApplicationAttachments::ObserveReceive(execution->work,ReceiveStage::Admitted);
         return {ProcessReceiveInvocation(std::move(execution)),{}};
     } catch(const std::bad_alloc&) {return Failure<ProcessReceiveInvocation>(NativeStatus::AllocationFailure);}
 }
@@ -81,7 +105,10 @@ NativeResult<ProcessReceiveInvocation> ProcessReceiveBridge::Next(ApplicationAtt
     return Failure<ProcessReceiveInvocation>(NativeStatus::NotFound);
 }
 InputDeliveryResult ProcessReceiveBridge::Invoke(ProcessReceiveExecution& execution)
-{return ApplicationAttachments::InvokeReceive(execution.work,execution.receiver);}
+{
+    ApplicationAttachments::ObserveReceive(execution.work,ReceiveStage::Running);
+    return ApplicationAttachments::InvokeReceive(execution.work,execution.receiver);
+}
 }
 ProcessReceiveInvocation::ProcessReceiveInvocation() noexcept=default;
 ProcessReceiveInvocation::~ProcessReceiveInvocation()=default;
@@ -93,4 +120,6 @@ InputDeliveryResult ProcessReceiveInvocation::Run()
     auto execution=std::move(state_);if(!execution) return InputDeliveryResult::InvalidTicket;
     return detail::ProcessReceiveBridge::Invoke(*execution);
 }
+ReceiveDiagnostic ProcessReceiveInvocation::Observation() const noexcept
+{return state_?state_->diagnostic:ReceiveDiagnostic{};}
 }

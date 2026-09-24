@@ -4,6 +4,7 @@
 #include <mdds/dsoftbus/InputChannels.hpp>
 #include <mdds/dsoftbus/NativeOwnerTable.hpp>
 #include <mdds/dsoftbus/ProcessClock.hpp>
+#include <mdds/dsoftbus/ReceiveAdmissionDiagnostic.hpp>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -17,8 +18,38 @@ struct AttachmentRecord;
 class ProcessReceiveBridge;
 class AttachmentReceiveCapture;
 struct ReceiveApplicationActivity;
+struct ProcessReceiveExecution;
 }
 class ApplicationAttachmentsTestAccess;
+
+// Diagnostic views of identities minted by real claim/open publication. They
+// never authorize a lookup, delivery, native operation, or SDK generation.
+struct ApplicationIdentity
+{
+    std::uint64_t application_incarnation=0,logical_token=0;
+};
+struct ReceiverIdentity
+{
+    std::uint64_t application_incarnation=0,receiver_incarnation=0,logical_token=0;
+    bool operator==(const ReceiverIdentity& r) const noexcept
+    {return application_incarnation==r.application_incarnation&&receiver_incarnation==r.receiver_incarnation&&logical_token==r.logical_token;}
+};
+struct ReceiveDiagnostic
+{
+    std::uint64_t correlation=0;
+    ReceiverIdentity identity;
+    NativeIdentityConstraint native;
+    std::size_t size=0;
+};
+enum class ReceiveStage {Captured,OwnedCopy,Queued,Admitted,Running,Settled,RecordReleased};
+class ProcessReceiveObserver
+{
+public:
+    virtual ~ProcessReceiveObserver()=default;
+    // Always outside ownership gates. Bytes are borrowed only for this call;
+    // diagnostic IDs are not callback identity supplied by DSoftBus.
+    virtual void OnReceive(ReceiveStage,const ReceiveDiagnostic&,const std::uint8_t*,std::size_t) noexcept=0;
+};
 
 // Strong, opaque application identity. Copies retain one charged application,
 // not a native Socket or permission identity. Empty handles are never admitted.
@@ -48,6 +79,7 @@ private:
     std::shared_ptr<detail::AttachmentApplication> app_;
     std::size_t local_index_ = 0;
     std::uint64_t incarnation_ = 0;
+    std::uint64_t observed_incarnation_ = 0;
 };
 
 struct AttachmentLimits
@@ -129,10 +161,14 @@ public:
     // Immediate bounded admission, no queue-space wait. Input bytes must remain
     // valid and unchanged throughout the entire call. A successful admission is
     // queued, not delivered/authenticated. No-app bytes are never saved for P1.
+    // Optional diagnostic is caller-owned and fresh for each invocation; nested
+    // gates append scalar observations without retaining its address.
     ReceiveAdmissionResult AdmitReceive(const Locator& local, const Locator& remote,
-            const void* bytes, std::size_t size);
+            const void* bytes, std::size_t size,ReceiveAdmissionDiagnostic* diagnostic=nullptr);
     ReceiveWork TryTake();
     AttachmentUsage SnapshotUsage() const;
+    ApplicationIdentity ObserveApplication(const ApplicationClaim&) const noexcept;
+    ReceiverIdentity ObserveReceiver(const ReceiverBinding&) const noexcept;
 
     // Raw receivers belong to the caller and remain alive through the entire
     // Open operation and successful registration's Close/Detach drain. All
@@ -144,6 +180,7 @@ public:
 private:
     friend class ApplicationAttachmentsTestAccess;
     friend class detail::ProcessReceiveBridge;
+    friend struct detail::ProcessReceiveExecution;
     friend class ProcessCoordinator;
     // N3 nonblocking observation of the original app, not a full Detach result.
     // Open never means drained; RequestDetach must close admission first. No
@@ -152,10 +189,13 @@ private:
     std::size_t TestCopying(const ApplicationClaim&) const;
     ReceiveAdmissionResult CaptureReceive(const ApplicationClaim&,const Locator&,const Locator&,
             const NativeIdentityConstraint&,ProcessClock::Clock::time_point,std::size_t,
-            const ProcessClock&,detail::AttachmentReceiveCapture&);
-    ReceiveAdmissionResult CopyReceive(detail::AttachmentReceiveCapture&,const void*);
-    ReceiveAdmissionResult CommitReceive(detail::AttachmentReceiveCapture&,const ProcessClock&);
+            const ProcessClock&,detail::AttachmentReceiveCapture&,ReceiveAdmissionDiagnostic* diagnostic=nullptr);
+    ReceiveAdmissionResult CopyReceive(detail::AttachmentReceiveCapture&,const void*,ReceiveAdmissionDiagnostic* diagnostic=nullptr);
+    ReceiveAdmissionResult CommitReceive(detail::AttachmentReceiveCapture&,const ProcessClock&,ReceiveAdmissionDiagnostic* diagnostic=nullptr);
     NativeIdentityConstraint ReceiveIdentity(const ReceiveWork&) const;
+    ReceiveDiagnostic ReceiveObservation(const ReceiveWork&) const;
+    static void ObserveReceive(const ReceiveWork&,ReceiveStage) noexcept;
+    static void ObserveOwnedCopy(const detail::AttachmentReceiveCapture&) noexcept;
     NativeStatus CheckPendingReceive(const ReceiveWork&,const ProcessClock&) const;
     NativeStatus EnterReceive(ReceiveWork&,InputReceiverLease&,const ProcessClock&);
     static InputDeliveryResult InvokeReceive(ReceiveWork&,InputReceiverLease&);
@@ -174,6 +214,7 @@ private:
     };
     ApplicationAttachments(const std::vector<Locator>&, AttachmentLimits, TestHooks);
     void TestSetIncarnation(const ApplicationClaim&, const Locator&, std::uint64_t);
+    void TestSetCopyingActivity(const ApplicationClaim&,std::size_t);
     std::weak_ptr<InputChannels> TestCore(const ApplicationClaim&) const;
     std::weak_ptr<void> TestBudget() const;
     std::unique_ptr<detail::AttachmentsControl> control_;

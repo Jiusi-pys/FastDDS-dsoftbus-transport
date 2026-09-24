@@ -1,0 +1,11 @@
+// DDS_KEYED_HISTORY_AND_RESOURCE_BOUNDARIES: the key is independent of the
+// run, Writer label, ordinal and payload. These fields are all bounded.
+@final
+struct MddsKeyedSample
+{
+    @key unsigned long key;
+    unsigned long long run;
+    unsigned long writer;
+    unsigned long ordinal;
+    octet payload[32];
+};

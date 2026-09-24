@@ -1,6 +1,6 @@
 #ifndef MDDS_DSOFTBUS_PROCESS_RECEIVE_INVOCATION_HPP
 #define MDDS_DSOFTBUS_PROCESS_RECEIVE_INVOCATION_HPP
-#include <mdds/dsoftbus/InputChannels.hpp>
+#include <mdds/dsoftbus/ApplicationAttachments.hpp>
 namespace mdds::dsoftbus {
 namespace detail {class ProcessReceiveBridge;struct ProcessReceiveExecution;}
 // One already-admitted original receiver/native execution. External dispatch
@@ -16,6 +16,7 @@ public:
     ProcessReceiveInvocation(const ProcessReceiveInvocation&)=delete;
     ProcessReceiveInvocation& operator=(const ProcessReceiveInvocation&)=delete;
     InputDeliveryResult Run();
+    ReceiveDiagnostic Observation() const noexcept;
 private:
     friend class detail::ProcessReceiveBridge;
     explicit ProcessReceiveInvocation(std::unique_ptr<detail::ProcessReceiveExecution>) noexcept;

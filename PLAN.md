@@ -1,5 +1,9 @@
 # Fast DDS / OpenHarmony DSoftBus Transport 实施计划
 
+> **历史计划归档说明（实验基线整理）**：下列带日期的状态均为当时快照，包括旧的 INVESTIGATING 和 PRE_COMMIT 记录；不作为当前提交许可。当前限定实验范围、外部依赖和证据边界以 [EXPERIMENT_BASELINE](docs/EXPERIMENT_BASELINE.md) 为准。P0/PF 仍 BLOCKED，生产默认 NativeUnavailable；准备候选不等于授权提交。
+
+> **当前状态更正（2026-09-21）**：工程任务恢复为 `INVESTIGATING / BREAKTHROUGH_ANALYSIS`，平台资格仍为 P0 `BLOCKED / NOT QUALIFIED`，生产 Transport 仍为 `NativeUnavailable`。当前 Host Debug/Release CTest 各 35/35；BYTES 1 秒候选预算 FAIL，RAW/RAW_ENCRYPTED native 压力已观测但各仅 1/64 接收且取消未触发；六项 RAW 边界逐字节通过但不形成生产容量资格。P1 纯逻辑和必要 P2/P3 主机诊断可继续，P4 native backend 未进入，三板测试 `DEFERRED`，PRE_COMMIT `FAIL`。详见 [docs/P0_IMPLEMENTATION_20260920.md](docs/P0_IMPLEMENTATION_20260920.md)；其余内容保留为历史计划，不能当作完成证据。
+
 > 当前规划裁量（2026-09-15）：N3 范围和七条硬契约已由用户冻结，见 §17。N2 已提交为 `def10ea376cb3bf9921c1c7ea74c92b1da9e04e8`；下文 N2 “未提交”等文字保留为原提交前快照。N3 仍为 PLANNED，不包含本项目 install/export package，也没有新增真实 backend、DDS 或同名 Participant 热重建通过证据。
 
 > LC pure-validator 当前证据（2026-09-14）：实现已存在；独立 final host tester、code review 与 review 后复测均 PASS。已记录的那次实验结束时两板权限已撤销，但身份记录保留；这不等于设备启动或 Transport 验证。LC observation runner 四文件的独立 final tester 已通过 harness 80/80、runner 42/42 及相关 validator/diagnostic；full log overlap、SDK quiescence 和设备 Transport 仍未验证，整体仍 NOT VERIFIED。N1 tester 的 scoped gate 已 PASS；Main 必须在提交前独立完成文档、最终图与 Git 门槛。
