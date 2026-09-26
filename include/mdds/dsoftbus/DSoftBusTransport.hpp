@@ -4,6 +4,9 @@
 #include <mdds/dsoftbus/DSoftBusTransportDescriptor.hpp>
 #include <mdds/dsoftbus/DSoftBusSenderResource.hpp>
 #include <mdds/dsoftbus/InputChannels.hpp>
+#ifdef MDDS_HOST_BACKEND_TESTING
+#include <mdds/dsoftbus/HostFacadeBackend.hpp>
+#endif
 
 namespace mdds::dsoftbus {
 enum class FacadeMode { NativeUnavailable, HostModel };
@@ -13,6 +16,9 @@ enum class FacadeError {
     UnsupportedNoFragmentRequest, NativeBackendUnavailable, AllocationFailure,
     InvalidState, InvalidLocator, InsufficientReceiverCapacity, InputConflict,
     InputClosing, SenderAttachRejected
+#ifdef MDDS_HOST_BACKEND_TESTING
+    , UnsupportedHostOperation
+#endif
 };
 struct FacadeDiagnostic {
     FacadeError error = FacadeError::None;
@@ -79,6 +85,11 @@ public:
     void shutdown() override;
 private:
     friend class DSoftBusTransportTestAccess;
+#ifdef MDDS_HOST_BACKEND_TESTING
+    friend class HostFacadeTestAccess;
+    struct HostBackendTag {};
+    DSoftBusTransport(const DSoftBusTransportDescriptor&, HostBackendTag, std::shared_ptr<HostFacadeBackend>);
+#endif
     struct HostModelTag {};
     struct LocalSlot {
         explicit LocalSlot(const Locator& value) : local(value) {}
@@ -89,6 +100,12 @@ private:
     struct Ready {
         Ready(EgressPlan::Snapshot, const DSoftBusTransportDescriptor&,
                 std::shared_ptr<const ConnectionGenerationSource>);
+#ifdef MDDS_HOST_BACKEND_TESTING
+        Ready(EgressPlan::Snapshot, const DSoftBusTransportDescriptor&, std::shared_ptr<HostFacadeBackend>);
+        ~Ready();
+        std::shared_ptr<HostFacadeBackend> host_backend;
+        bool host_shutdown_owned = false;
+#endif
         const EgressPlan::Snapshot plan;
         std::unique_ptr<InputChannels> inputs;
         std::shared_ptr<RuntimeSendPath> runtime;
@@ -116,6 +133,9 @@ private:
     mutable FacadeDiagnostic diagnostic_;
     std::shared_ptr<Ready> ready_; // Retained across EVERY shutdown until destruction.
     TestHooks hooks_;
+#ifdef MDDS_HOST_BACKEND_TESTING
+    const std::shared_ptr<HostFacadeBackend> host_backend_;
+#endif
 };
 } // namespace mdds::dsoftbus
 #endif

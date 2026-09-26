@@ -136,6 +136,11 @@ public:
     explicit operator bool() const noexcept { return state_ != nullptr && slot_ != invalid_record_slot; }
 private:
     friend class ServiceRecordTable;
+    // The composition layer keys its record-scoped dispatch state by the record
+    // slot. A slot that was ever exposed never returns to FREE and its entrance
+    // is never reissued, so the key is stable for the record's whole life; the
+    // slot is not otherwise part of the public identity of a handle.
+    friend class ServiceRecordBinding;
     RecordReservation(detail::ServiceRecordState*, std::size_t, std::uint64_t) noexcept;
     void Reclaim() noexcept;
     detail::ServiceRecordState* state_ = nullptr;
@@ -159,6 +164,9 @@ public:
     bool operator!=(const RecordEntrance& o) const noexcept { return !(*this == o); }
 private:
     friend class ServiceRecordTable;
+    // Slot access for the composition layer's record-scoped dispatch key; see
+    // RecordReservation.
+    friend class ServiceRecordBinding;
     RecordEntrance(RecordBytesCallback, std::uint64_t, std::size_t, RecordRole) noexcept;
     RecordBytesCallback function_ = nullptr;
     std::uint64_t record_incarnation_ = 0;
@@ -288,6 +296,17 @@ public:
     // reclaimed; if it was the record's last anchor the record becomes
     // UNANCHORED, because the SDK may hold the entrance without a known owner.
     RecordStatus AbandonExposure(const RecordEntrance&) noexcept;
+    // Ends the caller's sink binding for this record without retiring the record
+    // and without reclaiming a slot. Refused as StillAnchored while the record
+    // still has any anchor, so it cannot withdraw the sink from a live record and
+    // it cannot be undone: a record that reaches UNANCHORED never accepts a new
+    // owner, so there is no re-registration to make. After it returns None no new
+    // callback can be captured for this record, so a later attribution never
+    // reaches that sink again; a callback already captured under the gate is never
+    // retracted, and the caller must therefore still keep its sink object alive
+    // until the in-flight count Observe() reports has reached zero. The sink
+    // object itself may outlive the record: this call only ends its registration.
+    RecordStatus ReleaseSink(const RecordEntrance&, RecordIngressSink& sink) noexcept;
 
     // Registers one socket under the live role of this entrance. Repeated
     // registration on a confirmed live table consumes no new slot and never

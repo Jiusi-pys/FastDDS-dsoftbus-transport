@@ -295,6 +295,30 @@ RecordStatus ServiceRecordTable::AbandonExposure(const RecordEntrance& entrance)
     return RecordStatus::None;
 }
 
+RecordStatus ServiceRecordTable::ReleaseSink(const RecordEntrance& entrance,
+        RecordIngressSink& sink) noexcept
+{
+    if (!RoleValid(entrance.role_)) return RecordStatus::InvalidConfiguration;
+    if (entrance.slot_ >= state_->slots.size()) return RecordStatus::NotFound;
+    std::lock_guard<std::mutex> lock(state_->gate);
+    const auto status = CheckEntrance(*state_, entrance.slot_, entrance.function_,
+            entrance.record_incarnation_, entrance.role_, EntranceFor(entrance.slot_, entrance.role_));
+    if (status != RecordStatus::None) return status;
+    auto& cell = state_->slots[entrance.slot_];
+    if (cell.sink == nullptr) return RecordStatus::ExposureSettled;
+    if (cell.sink != &sink) return RecordStatus::SinkMismatch;
+    // Only a record with no anchor left has no user of its sink. Anything else
+    // is refused, exactly like retirement: a still-live record is never
+    // unregistered by assumption, and it cannot be registered again afterwards.
+    if (cell.phase != RecordPhase::Unanchored) return RecordStatus::StillAnchored;
+    // Capturing the sink under this gate is what makes this final: Dispatch
+    // takes this same gate to capture it and to charge sink_calls_in_flight, so
+    // a callback captured before this line is already counted and a callback
+    // captured after it can no longer see this sink at all.
+    cell.sink = nullptr;
+    return RecordStatus::None;
+}
+
 RecordResult<RecordMembership> ServiceRecordTable::RegisterOwner(const RecordEntrance& entrance,
         std::int32_t socket) noexcept
 {

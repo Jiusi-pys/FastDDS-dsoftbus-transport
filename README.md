@@ -1,6 +1,52 @@
 # FastDDS dsoftbus Transport
 
-> **当前开发工作包（2026-09-24）：SRT-1 共享 service-record 表 = `IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）`。** 已批准的共享表设计（record 实例 + client/server role、每个存活 `(record, role)` 一个固定 callback entrance、各 socket 独立 native owner）现有一个 SDK-free 有界实现：`include/mdds/dsoftbus/ServiceRecordTable.hpp` / `src/ServiceRecordTable.cpp`，15 个契约 case 每 case 独立进程。host 证据为 Release `15/15`、Debug `15/15`、standalone 全量 `43/43`、仓库标准 CONFIG host Release 全量 `258/258`，`/W4` 无告警；三轮独立复核（`multi-review`）均无 blocking finding，gate 停在 R2 策略要求的 `HUMAN_REQUIRED`；收据见 [.artifacts/srt1/README.md](.artifacts/srt1/README.md)。这不是生产 backend：真实 SDK record 生命周期、target 入口等价、ingress 前事件身份、callback 排空、设备与 DDS 证据均 `NOT_RUN`，生产 `init()` 仍 `NativeBackendUnavailable`，P0/PF-01/PF-02、P4 与 QualificationProfile 状态不变。
+Current versioned Host capability, build dependencies and external evidence: [Host DDS baseline](docs/HOST_DDS_BASELINE.md). Host validation does not enable the SDK backend or release P0/PF/P4.
+
+> **最新工作包（2026-09-26；artifact run 20260926T093712Z）：**
+> `REAL_FASTDDS_PARTICIPANT_OVER_HOST_NATIVE_BACKEND` 达到 `REAL_FASTDDS_PARTICIPANT_HOST_INTEGRATION_VERIFIED /
+> CHECKPOINT_READY / NOT_COMMITTED`。限定为真实公开 Fast DDS factory ->
+> test-only descriptor -> 现有 Host facade -> SenderResource/
+> NativeSendExecution/ProviderAdapter/Binding -> ReceiverResource -> Reader 的
+> one-local、one-dial、双 Participant 单进程 Host 链路。独立 focused `9/9 PASS`，
+> full Release CTest `346/346 PASS`、exit 0；ASan 新 `9/9`、既有 close `14/14`、
+> loop `15/15` 通过。D1+D2+D3/D4 正常链路共有 25 次实际 DataReader take，D5 的
+> 真实结果是 non-null Participant 但 input Bind rejected，不能写成 null。mock
+> provider、非设备、非 SDK；真实 SDK/device/native qualification、P0/PF/P4 和
+> QualificationProfile 仍未完成；P0/PF-01/PF-02 保持 `BLOCKED / NOT QUALIFIED`，生产 P4 未放行，默认保持 `NativeBackendUnavailable`。详见 [Real Participant Host](docs/REAL_PARTICIPANT_HOST.md)。
+
+> **最新工作包（2026-09-26；artifact run 20260925T213718Z）：**
+> `HOST_INPUT_CHANNEL_CLOSE_REOPEN` 达到
+> `HOST_INPUT_CHANNEL_CLOSE_REOPEN_HOST_VERIFIED / CHECKPOINT_READY /
+> NOT_COMMITTED`，限定为冻结 R3 源码上的 one-local、one-dial Host facade。独立
+> corrected-environment receipt 为 `32/32 PASS`；随后独立全目标 Release 构建
+> exit 0，标准环境完整 CTest 为 `337/337 PASS`、exit 0（canonical receipt：
+> [`tester/canonical-full-r3/RECEIPT.json`](.artifacts/host-input-close-reopen/run-20260925T213718Z/tester/canonical-full-r3/RECEIPT.json)，原始日志
+> [`ctest.stdout.raw.log`](.artifacts/host-input-close-reopen/run-20260925T213718Z/tester/canonical-full-r3/ctest.stdout.raw.log)，119.84 秒）。首轮
+> uninterrupted full Release run 的 `335/337`、exit 8 及其环境失败保留为历史
+> 原始证据。Release
+> ASan input-close `14/14`、provider-loop `15/15` 通过，variants `1/1` 为
+> 构建/default gate。独立 Close、gap drop、TX/native 保留及同 locator reopen 已
+> 通过；callback Close 死锁修复经 RED/复测及 m10 deletion evidence 闭合。Debug
+> 受 Release-only ABI guard 阻断，TSan 未执行；真实 ReceiverResource、Participant/
+> SDK、完整 TransportInterface、native/device/cross-device 仍未验证。详见
+> [Host input close/reopen contract](docs/HOST_INPUT_CLOSE_CONTRACT.md)。
+
+> **最新工作包（2026-09-26；artifact run 20260925T202407Z）：**
+> `HOST_FACADE_PROVIDER_LOOP` 达到 `HOST_FACADE_PROVIDER_LOOP_HOST_VERIFIED /
+> CHECKPOINT_READY / NOT_COMMITTED`。限定 Host 注入 facade 已通过 focused `16/16`
+> 与 full CONFIG `323/323`，并保持默认 OFF；真实 Participant、SDK provider、native/device
+> 和完整 TransportInterface 仍未执行。详见 [Host facade/provider loop](docs/HOST_FACADE_PROVIDER_LOOP.md)。
+> `NativeBackendUnavailable`、P0/PF-01/PF-02、生产 P4 与 QualificationProfile 状态不变。
+
+> **最新工作包（2026-09-26；artifact run 20260925T190646Z）：** `NATIVE_PROVIDER_ADAPTER_DESIGN_PHASE0` 达到
+> `NATIVE_PROVIDER_ADAPTER_BOUNDARY_DESIGNED / CHECKPOINT_READY / NOT_COMMITTED`。
+> SDK-free `NativeBackend`/`NullBackend` 与 Host-only `ProviderAdapter` 已实现并经
+> focused `16/16`、full CONFIG `307/307` 验证；真实 provider、SDK、设备和 DDS 接线
+> 仍未执行。详见 [Phase 0 adapter boundary](docs/NATIVE_PROVIDER_ADAPTER_PHASE0.md)。
+> 默认 `NativeBackendUnavailable`、P0/PF-01/PF-02、生产 P4 和 QualificationProfile
+> 状态不变。
+
+> **当前开发工作包（2026-09-25）：CALLBACK_CONTEXT_DESTROY_CONTRACT = `CALLBACK_DESTROY_CONTRACT_HOST_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`。** 本轮关闭组合层最后一项未闭合寿命合同：**在回调执行上下文内销毁 binding 会自等待**（释放必须等本帧持有的 receiver in-flight 许可）。采用方案 A —— 禁止回调内同步销毁，并提供不等候的关闭请求：`CloseRequest()` 是唯一合法于 ingress/投递回调内的控制入口，只记录关闭意图（相位转 `Closing`）并立即返回，从不 drain、释放或等待；`DeferredClose()` 由所有者在其后的控制上下文完成关闭，走与 `Abandon()` 完全相同的 drain+释放路径；`BeginClose()`/`Abandon()`/`DeferredClose()` 在回调内一律以 `WrongState` 明确拒绝而非等待；从回调内**销毁**则 fail-fast（带指向 `CloseRequest()` 的诊断后 abort），不再死锁。sink/receiver/owner/claim 四条寿命前提与 drain-before-free 语义不变。新增 11 个 case（CLOSE-C1…C7、C2b 完成守卫、无关 binding 与非末位 sibling 两个合法形状、禁止形状的跨进程 case），组合 case 共 32 个；Release/Debug/ASan 32/32、本配置 86/86、仓库标准 CONFIG host Release 290/290；本轮 11 个变异体全部被杀死。合同与执行状态见 [PLAN.md 第 20 节](PLAN.md)，收据与 RED 证据见 [.artifacts/srtc-close/](.artifacts/srtc-close/)；上一轮（SRT-MEM 寿命/并发/上下文与测试判据修复）见 [PLAN.md 第 19 节](PLAN.md) 与 [.artifacts/srtc-repair/](.artifacts/srtc-repair/)。本轮未提交；真实 SDK provider、设备与 DDS 证据仍 `NOT_RUN`。
 
 > 累计实验源码的构建、生成来源、外部证据及资格范围见 [实验基线说明](docs/EXPERIMENT_BASELINE.md)。原始 `.artifacts`、SDK 和设备运行库不随 Git 提交提供。
 

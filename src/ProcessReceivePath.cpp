@@ -85,6 +85,7 @@ NativeResult<ProcessReceiveInvocation> ProcessReceiveBridge::TryEnter(Applicatio
             if(result!=NativeStatus::None) return Failure<ProcessReceiveInvocation>(result);
             execution->work=std::move(work);
             execution->diagnostic=a.ReceiveObservation(execution->work);
+            execution->owner=&a;
         }
         ApplicationAttachments::ObserveReceive(execution->work,ReceiveStage::Admitted);
         return {ProcessReceiveInvocation(std::move(execution)),{}};
@@ -109,6 +110,12 @@ InputDeliveryResult ProcessReceiveBridge::Invoke(ProcessReceiveExecution& execut
     ApplicationAttachments::ObserveReceive(execution.work,ReceiveStage::Running);
     return ApplicationAttachments::InvokeReceive(execution.work,execution.receiver);
 }
+void ProcessReceiveBridge::ArmDeliveryContext(ProcessReceiveInvocation& invocation,
+        void (*enter)(void*) noexcept,void (*exit)(void*) noexcept) noexcept
+{
+    if(!invocation.state_) return;
+    invocation.state_->enter_context=enter;invocation.state_->exit_context=exit;
+}
 }
 ProcessReceiveInvocation::ProcessReceiveInvocation() noexcept=default;
 ProcessReceiveInvocation::~ProcessReceiveInvocation()=default;
@@ -118,6 +125,14 @@ ProcessReceiveInvocation::ProcessReceiveInvocation(std::unique_ptr<detail::Proce
 InputDeliveryResult ProcessReceiveInvocation::Run()
 {
     auto execution=std::move(state_);if(!execution) return InputDeliveryResult::InvalidTicket;
+    // The delivery context belongs to the execution, not to RunAdmitted: a caller
+    // that runs the invocation directly enters exactly the same context.
+    if(execution->enter_context) execution->enter_context(execution.get());
+    struct ExitGuard
+    {
+        detail::ProcessReceiveExecution* execution;
+        ~ExitGuard() {if(execution->exit_context) execution->exit_context(execution);}
+    } guard{execution.get()};
     return detail::ProcessReceiveBridge::Invoke(*execution);
 }
 ReceiveDiagnostic ProcessReceiveInvocation::Observation() const noexcept

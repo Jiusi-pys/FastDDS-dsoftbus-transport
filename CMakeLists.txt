@@ -33,6 +33,7 @@ unset(_mdds_process_default)
 # the pinned DSoftBus public header for the callback-shape check, exactly like
 # the existing ingress contract test.
 option(BUILD_DSOFTBUS_SERVICE_RECORD_TABLE "Build the bounded shared service-record table model" ${BUILD_DSOFTBUS_DIRECTORY})
+option(BUILD_DSOFTBUS_SERVICE_RECORD_BINDING "Build the record/native-owner/attachments composition layer" ${BUILD_DSOFTBUS_DIRECTORY})
 option(BUILD_DSOFTBUS_TRANSPORT_FACADE "Build the opt-in facade against an actual Fast DDS CONFIG library" OFF)
 option(BUILD_FASTDDS_DSOFTBUS_EXPERIMENT "Build the explicitly unqualified real Fast DDS Socket experiment" OFF)
 option(BUILD_SOFTBUS_CAPABILITY_PROBE "Build the runtime Socket API capability probe" ON)
@@ -59,6 +60,12 @@ if(BUILD_DSOFTBUS_APPLICATION_ATTACHMENTS AND NOT BUILD_DSOFTBUS_INPUT_CHANNELS)
 endif()
 if(BUILD_DSOFTBUS_RUNTIME_SEND_PATH AND NOT BUILD_DSOFTBUS_SEND_QUEUE)
     message(FATAL_ERROR "BUILD_DSOFTBUS_RUNTIME_SEND_PATH requires BUILD_DSOFTBUS_SEND_QUEUE")
+endif()
+if(BUILD_DSOFTBUS_SERVICE_RECORD_BINDING AND NOT BUILD_DSOFTBUS_SERVICE_RECORD_TABLE)
+    message(FATAL_ERROR "BUILD_DSOFTBUS_SERVICE_RECORD_BINDING requires BUILD_DSOFTBUS_SERVICE_RECORD_TABLE")
+endif()
+if(BUILD_DSOFTBUS_SERVICE_RECORD_BINDING AND NOT BUILD_DSOFTBUS_PROCESS)
+    message(FATAL_ERROR "BUILD_DSOFTBUS_SERVICE_RECORD_BINDING requires BUILD_DSOFTBUS_PROCESS")
 endif()
 if(BUILD_DSOFTBUS_NATIVE_SEND_EXECUTION AND NOT BUILD_DSOFTBUS_NATIVE_OWNER)
     message(FATAL_ERROR "BUILD_DSOFTBUS_NATIVE_SEND_EXECUTION requires BUILD_DSOFTBUS_NATIVE_OWNER")
@@ -289,6 +296,84 @@ if(BUILD_DSOFTBUS_NATIVE_OWNER)
     endif()
 endif()
 
+if(BUILD_DSOFTBUS_SERVICE_RECORD_BINDING)
+    find_package(Threads REQUIRED)
+    add_library(mdds_dsoftbus_service_record_binding STATIC src/ServiceRecordBinding.cpp)
+    target_link_libraries(mdds_dsoftbus_service_record_binding PUBLIC
+        mdds_dsoftbus_service_record_table mdds_dsoftbus_process Threads::Threads)
+    target_compile_features(mdds_dsoftbus_service_record_binding PUBLIC cxx_std_17)
+    # The composition's delivery handle must expose no execution entry of its own,
+    # so a delivery cannot be entered around the context the composition arms on
+    # the admitted execution. Both controls compile one translation unit with the
+    # same include path, compiler and flags, compile-only so nothing links: the
+    # legal call site must build, the bypassing one must not, and it must fail on
+    # the missing member rather than on a missing header or a link error.
+    # The composition header reaches Fast DDS through the directory model, so both
+    # controls compile against the include closure the composition itself uses.
+    set(_mdds_binding_check_includes "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    if(TARGET fastdds)
+        get_target_property(_mdds_binding_imported_includes fastdds INTERFACE_INCLUDE_DIRECTORIES)
+        if(_mdds_binding_imported_includes)
+            list(APPEND _mdds_binding_check_includes ${_mdds_binding_imported_includes})
+        endif()
+    endif()
+    if(TARGET mdds_fastdds_binding)
+        get_target_property(_mdds_binding_probe_includes mdds_fastdds_binding INTERFACE_INCLUDE_DIRECTORIES)
+        if(_mdds_binding_probe_includes)
+            list(APPEND _mdds_binding_check_includes ${_mdds_binding_probe_includes})
+        endif()
+    endif()
+    # Compile-only: neither control may be required to link, so a result can only
+    # come from the type and never from a missing symbol.
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+    try_compile(_mdds_binding_legal_compiled
+        SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/delivery_context_legal.cpp"
+        CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${_mdds_binding_check_includes}"
+        OUTPUT_VARIABLE _mdds_binding_legal_output)
+    if(NOT _mdds_binding_legal_compiled)
+        message(FATAL_ERROR
+            "the composition's legal delivery call site must compile:\n${_mdds_binding_legal_output}")
+    endif()
+    try_compile(_mdds_binding_bypass_compiled
+        SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/delivery_context_bypass.cpp"
+        CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${_mdds_binding_check_includes}"
+        OUTPUT_VARIABLE _mdds_binding_bypass_output)
+    unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
+    if(_mdds_binding_bypass_compiled)
+        message(FATAL_ERROR
+            "the composition's delivery handle exposed an execution entry: a direct Run() compiled")
+    endif()
+    if(NOT _mdds_binding_bypass_output MATCHES "C2039|has no member|no member named")
+        message(FATAL_ERROR
+            "the bypassing call site failed for an unrelated reason:\n${_mdds_binding_bypass_output}")
+    endif()
+    if(BUILD_TESTING)
+        # delivery_context_legal.cpp is compiled into the target, so the
+        # delivery handle's encapsulation is a build-time fact with a real header
+        # dependency and cannot be skipped by an incremental build.
+        add_executable(service_record_binding_tests tests/service_record_binding_tests.cpp
+            tests/delivery_context_legal.cpp)
+        target_link_libraries(service_record_binding_tests PRIVATE mdds_dsoftbus_service_record_binding)
+        target_include_directories(service_record_binding_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+        foreach(_mdds_service_record_binding_case two-owners cross-role partial-failure
+                close-vs-capture admitted-not-run running-receiver unique-close reentrant-boundary
+                exceptional-admission old-entry-new-incarnation repeated-lifecycles slot-exhaustion
+                resource-release fail-closed creator-exits-joiner-lives delivery-context-bypass
+                shared-group-release-race join-during-settle joiner-failure-keeps-creator
+                registration-allocation-failure accepted-topology
+                close-request-from-callback close-sync-refused-in-callback
+                close-completion-guard-in-callback close-completes-outside-callback close-after-callback-exception
+                many-close-requests-one-close no-admission-after-close-request
+                close-request-releases-resources callback-destroy-fails-fast
+                destroy-unrelated-in-callback destroy-shared-sibling-in-callback)
+            add_test(NAME dsoftbus.service_record_binding.${_mdds_service_record_binding_case}
+                COMMAND service_record_binding_tests --case ${_mdds_service_record_binding_case})
+            set_tests_properties(dsoftbus.service_record_binding.${_mdds_service_record_binding_case}
+                PROPERTIES TIMEOUT 60)
+        endforeach()
+    endif()
+endif()
+
 if(BUILD_DSOFTBUS_SERVICE_RECORD_TABLE)
     find_package(Threads REQUIRED)
     add_library(mdds_dsoftbus_service_record_table STATIC src/ServiceRecordTable.cpp)
@@ -401,11 +486,60 @@ if(BUILD_DSOFTBUS_TRANSPORT_FACADE)
     target_link_libraries(mdds_dsoftbus_transport_facade PUBLIC
         mdds_dsoftbus_runtime_send_path mdds_dsoftbus_input_channels)
     target_compile_features(mdds_dsoftbus_transport_facade PUBLIC cxx_std_17)
+    set_property(TARGET mdds_dsoftbus_transport_facade PROPERTY INTERFACE_MDDS_FACADE_VARIANT production)
+    set_property(TARGET mdds_dsoftbus_transport_facade APPEND PROPERTY COMPATIBLE_INTERFACE_STRING MDDS_FACADE_VARIANT)
     if(BUILD_TESTING)
         add_executable(transport_facade_tests tests/transport_facade_tests.cpp)
         target_link_libraries(transport_facade_tests PRIVATE mdds_dsoftbus_transport_facade)
         add_test(NAME dsoftbus.transport_facade COMMAND transport_facade_tests)
         set_tests_properties(dsoftbus.transport_facade PROPERTIES TIMEOUT 15)
+    endif()
+endif()
+
+# An isolated manually driven Host consumer; never link both facade variants.
+option(BUILD_DSOFTBUS_HOST_PROVIDER_LOOP "Build the explicit Host facade/provider loop" OFF)
+if(BUILD_DSOFTBUS_HOST_PROVIDER_LOOP)
+    if(NOT MDDS_FASTDDS_MODE STREQUAL "CONFIG" OR NOT BUILD_DSOFTBUS_PROVIDER_ADAPTER_PHASE0)
+        message(FATAL_ERROR "Host provider loop requires CONFIG and ProviderAdapter Phase0")
+    endif()
+    add_library(mdds_host_injected_facade STATIC src/DSoftBusTransportDescriptor.cpp src/DSoftBusTransport.cpp)
+    target_link_libraries(mdds_host_injected_facade PUBLIC mdds_dsoftbus_runtime_send_path mdds_dsoftbus_input_channels)
+    target_compile_definitions(mdds_host_injected_facade PUBLIC MDDS_HOST_BACKEND_TESTING=1)
+    set_property(TARGET mdds_host_injected_facade PROPERTY INTERFACE_MDDS_FACADE_VARIANT host_injected)
+    set_property(TARGET mdds_host_injected_facade APPEND PROPERTY COMPATIBLE_INTERFACE_STRING MDDS_FACADE_VARIANT)
+    add_library(mdds_host_provider_loop STATIC src/HostProviderLoop.cpp)
+    target_link_libraries(mdds_host_provider_loop PUBLIC mdds_host_injected_facade mdds_provider_adapter_phase0)
+    if(BUILD_TESTING)
+        add_executable(host_provider_loop_tests tests/host_provider_loop_tests.cpp)
+        target_link_libraries(host_provider_loop_tests PRIVATE mdds_host_provider_loop)
+        add_executable(host_participant_tests tests/host_participant_tests.cpp)
+        # Reuse the existing bounded generated type, without the old Transport/fixture.
+        target_sources(host_participant_tests PRIVATE
+            experiments/fastdds_socket/keyed/type/MddsKeyedSamplePubSubTypes.cxx
+            experiments/fastdds_socket/keyed/type/MddsKeyedSampleTypeObjectSupport.cxx)
+        target_include_directories(host_participant_tests PRIVATE experiments/fastdds_socket/keyed/type)
+        target_link_libraries(host_participant_tests PRIVATE mdds_host_provider_loop fastcdr)
+        foreach(_dds_case factory default normal-b-first normal-a-first disabled-link failure oracle pump-fault late-extra)
+            add_test(NAME dsoftbus.host_participant.${_dds_case} COMMAND host_participant_tests ${_dds_case})
+            set_tests_properties(dsoftbus.host_participant.${_dds_case} PROPERTIES TIMEOUT 45)
+        endforeach()
+        add_executable(host_input_close_tests tests/host_input_close_tests.cpp)
+        target_link_libraries(host_input_close_tests PRIVATE mdds_host_provider_loop)
+        foreach(_close_case basic destroy queued copy running sending gap same-address reopen-failure locators fault allocation-sweep callback-control callback-during-close)
+            add_test(NAME dsoftbus.host_input_close.${_close_case} COMMAND host_input_close_tests ${_close_case})
+            set_tests_properties(dsoftbus.host_input_close.${_close_case} PROPERTIES TIMEOUT 20)
+        endforeach()
+        foreach(_loop_case default loop preopen input-close queued paused-send paused-receiver late error
+                open-exception open-allocation shared-init startup-allocation setup-cleanup-failure receive-limit)
+            add_test(NAME dsoftbus.host_provider_loop.${_loop_case} COMMAND host_provider_loop_tests ${_loop_case})
+            set_tests_properties(dsoftbus.host_provider_loop.${_loop_case} PROPERTIES TIMEOUT 20)
+        endforeach()
+        add_test(NAME dsoftbus.host_provider_loop.variants COMMAND "${CMAKE_COMMAND}"
+            "-DROOT_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}" "-DOUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/variants"
+            "-DGENERATOR=${CMAKE_GENERATOR}" "-DFASTDDS_DIR=${fastdds_DIR}"
+            "-DFASTCDR_DIR=${fastcdr_DIR}" "-DFOONATHAN_DIR=${foonathan_memory_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_host_facade_variants.cmake")
+        set_tests_properties(dsoftbus.host_provider_loop.variants PROPERTIES TIMEOUT 180)
     endif()
 endif()
 
@@ -466,4 +600,27 @@ endif()
 # This isolated gate never changes the production descriptor/factory.
 if(BUILD_FASTDDS_DSOFTBUS_EXPERIMENT)
     add_subdirectory(experiments/fastdds_socket)
+endif()
+
+# Phase-0 boundary prototype: explicit opt-in, no production registration.
+option(BUILD_DSOFTBUS_PROVIDER_ADAPTER_PHASE0 "Build the SDK-free Host provider boundary prototype" OFF)
+if(BUILD_DSOFTBUS_PROVIDER_ADAPTER_PHASE0)
+    if(NOT BUILD_DSOFTBUS_SERVICE_RECORD_BINDING)
+        message(FATAL_ERROR "Provider phase0 requires the existing service-record binding")
+    endif()
+    add_library(mdds_provider_adapter_phase0 STATIC src/ProviderAdapter.cpp)
+    target_link_libraries(mdds_provider_adapter_phase0 PUBLIC mdds_dsoftbus_service_record_binding)
+    target_compile_features(mdds_provider_adapter_phase0 PUBLIC cxx_std_17)
+    if(BUILD_TESTING)
+        if(NOT BUILD_DSOFTBUS_TRANSPORT_FACADE)
+            message(FATAL_ERROR "Phase0 P0 test requires the real default facade (CONFIG)")
+        endif()
+        add_executable(provider_adapter_tests tests/provider_adapter_tests.cpp)
+        target_link_libraries(provider_adapter_tests PRIVATE mdds_provider_adapter_phase0 mdds_dsoftbus_transport_facade)
+        foreach(_provider_case P0 P1 P2 P3 P4 P5 P6 P7 early-stop provider-throw listen
+                create-stop create-foreign create-conflict shutdown-failure ingress-allocation)
+            add_test(NAME dsoftbus.provider_phase0.${_provider_case} COMMAND provider_adapter_tests ${_provider_case})
+            set_tests_properties(dsoftbus.provider_phase0.${_provider_case} PROPERTIES TIMEOUT 15)
+        endforeach()
+    endif()
 endif()

@@ -83,7 +83,7 @@ QualificationProfile 至少绑定 SDK、固件、DSoftBus library 和构建 arti
 | --- | --- | --- |
 | P0 | SDK/API/权限/版本资格、容量、发送/关闭、迟到 callback 防护、资源预算；失败测试、双板 receipt、review 和 QualificationProfile | BLOCKED / NOT QUALIFIED |
 | P1 | descriptor、服务名、locator codec、设备目录、profile/容量/选项校验；编解码和冲突测试 | PLANNED |
-| P2 | 一个 Participant 一个 listener、outbound/accepted 所有权、incarnation tombstone、热 attach、并发关闭 | PLANNED；共享表有界模型 IMPLEMENTED / HOST_TESTED（限定范围）；listener/连接/热 attach 未实现 |
+| P2 | 一个 Participant 一个 listener、outbound/accepted 所有权、incarnation tombstone、热 attach、并发关闭 | PLANNED；共享表有界模型与共享表×native owner 组合层均已 IMPLEMENTED / HOST_TESTED（限定范围，见 [PLAN.md 第 18、19 节](../PLAN.md)）；真实 listener/连接与热 attach、设备证据未实现 |
 | P3 | 有界 TX/RX、消息块所有权、多目标引用、native/inline 低复制资格 | PLANNED |
 | P4 | Transport hooks、SenderResource、receiver、checked-create、SPDP/SEDP 和原生 locator 共存 | PLANNED |
 | P5 | UDP/TCP/SHM 混合、重连、离线 route 失效、进程故障和资源隔离 | PLANNED |
