@@ -5,6 +5,7 @@
 // results here are model inputs. One case per process unless the case itself
 // loops in-process (C11), which is reported separately from the per-case runs.
 #include <mdds/dsoftbus/ServiceRecordBinding.hpp>
+#include "../probes/PublicSocketDecisionStore.hpp"
 #include "socket.h" // Current source header, for the callback-shape assertion only.
 
 #include <atomic>
@@ -16,6 +17,7 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -140,7 +142,8 @@ struct Provider final : ServiceRecordProvider
     NativeSocketResult CreateSocket() noexcept override { ++created; return socket; }
     SyncListenResult Listen(NativeSocketId) noexcept override { ++listened; return listen; }
     SyncBindResult Bind(NativeSocketId) noexcept override { ++bound; return bind; }
-    void Shutdown(NativeSocketId) noexcept override { ++shutdown; }
+    std::function<void(NativeSocketId)> shutdown_hook;
+    void Shutdown(NativeSocketId id) noexcept override { ++shutdown; if(shutdown_hook)shutdown_hook(id); }
 };
 
 struct Receiver final : InputChannels::Receiver
@@ -384,7 +387,7 @@ void Dump(const ServiceRecordBinding& binding, const char* label)
               << " copying=" << view.receive.copying << " records=" << view.receive.records << "\n";
 }
 // Defined with the forbidden-shape cases below; declared here for the ones that use it.
-void RequireChildStops(const char* child_case, const char* reason);
+void RequireChildStops(const char* child_case, const char* reason,const char* detail=nullptr);
 
 void RequireDrained(const ServiceRecordBinding& binding, const char* reason)
 {
@@ -771,6 +774,45 @@ void CloseWaitsForRunningReceiver()
             "and it retained no record");
     Require(!static_cast<bool>(binding->NextAdmitted()),
             "and there is no admitted work to run for it");
+}
+
+// Saturate the unchanged table-wide single close credit behind a provider barrier.
+void CloseCredit(bool separate_record)
+{
+    Fixture f;
+    auto a=f.Deploy(f.CreateRequest("pkg.credit.a",RecordRole::Client,false),81);
+    ApplicationAttachments other({f.local});
+    std::mutex gate;std::condition_variable cv;bool first_entered=false,release=false,second_ready=false;
+    ServiceRecordBindingTestAccess::Hooks hooks;
+    hooks.before_group_settle=[&]{std::lock_guard<std::mutex> l(gate);second_ready=true;cv.notify_all();};
+    auto request=separate_record?f.CreateRequest("pkg.credit.b",RecordRole::Client,true):f.JoinRequest(*a,RecordRole::Client,true);
+    f.Arm(82);
+    auto built=ServiceRecordBindingTestAccess::BuildWithHooks(ServiceRecordTable::Process(),*f.native,separate_record?other:*f.attachments,f.provider,request,std::move(hooks));
+    Require(built.issue.code==NativeStatus::None,"build close credit sibling");auto b=std::move(*built.value);
+    RequireStatus(b->Prepare(),NativeStatus::None,"prepare close credit");RequireStatus(b->Connect(),NativeStatus::None,"connect close credit");RequireStatus(b->Publish(),NativeStatus::None,"publish close credit");
+    f.provider.shutdown_hook=[&](NativeSocketId id){if(id==81){std::unique_lock<std::mutex> l(gate);first_entered=true;cv.notify_all();cv.wait(l,[&]{return release;});}};
+    auto first=std::async(std::launch::async,[&]{auto status=a->BeginClose();return status==NativeStatus::None?a->Abandon():status;});
+    bool entered=false;{std::unique_lock<std::mutex> l(gate);entered=cv.wait_for(l,std::chrono::seconds(2),[&]{return first_entered;});}
+    auto second=std::async(std::launch::async,[&]{auto status=b->BeginClose();return status==NativeStatus::None?b->Abandon():status;});
+    bool reached=false;{std::unique_lock<std::mutex> l(gate);reached=cv.wait_for(l,std::chrono::seconds(2),[&]{return second_ready;});}
+    const bool premature=second.wait_for(std::chrono::milliseconds(100))==std::future_status::ready;
+    {std::lock_guard<std::mutex> l(gate);release=true;}cv.notify_all();auto x=first.get(),y=second.get();f.provider.shutdown_hook={};
+    Require(entered&&reached,"both deterministic release boundaries reached");
+    Require(!premature,"busy close credit must not be silently abandoned");
+    RequireStatus(x,NativeStatus::None,"first close complete");RequireStatus(y,NativeStatus::None,"second close complete");
+    RequireEqual(f.provider.shutdown,2,"two original owners closed after capacity released");
+}
+void CloseCreditSameRecord(){CloseCredit(false);}
+void CloseCreditDifferentRecord(){CloseCredit(true);}
+void ShutdownReentrantSibling()
+{
+    Fixture f;auto a=f.Deploy(f.CreateRequest("pkg.credit.reenter",RecordRole::Client,false),81);auto b=f.Deploy(f.JoinRequest(*a,RecordRole::Client,true),82);
+    NativeStatus request=NativeStatus::WrongState,begin=NativeStatus::None,abandon=NativeStatus::None,deferred=NativeStatus::None;
+    f.provider.shutdown_hook=[&](NativeSocketId id){if(id==81){(void)b->Observe();request=b->CloseRequest();begin=b->BeginClose();abandon=b->Abandon();deferred=b->DeferredClose();}};
+    RequireStatus(a->BeginClose(),NativeStatus::None,"outer request");RequireStatus(a->Abandon(),NativeStatus::None,"outer close");f.provider.shutdown_hook={};
+    RequireStatus(request,NativeStatus::None,"nonwaiting reentrant close request remains legal");
+    RequireStatus(begin,NativeStatus::WrongState,"provider reentrant begin refused");RequireStatus(abandon,NativeStatus::WrongState,"provider reentrant abandon refused");RequireStatus(deferred,NativeStatus::WrongState,"provider reentrant deferred refused");
+    RequireStatus(b->DeferredClose(),NativeStatus::None,"external sibling completes");RequireEqual(f.provider.shutdown,2,"no recursive close stolen");
 }
 
 // C7: each owner's close responsibility is claimed exactly once, including when
@@ -1908,7 +1950,7 @@ void DestroyUnrelatedBindingInCallback()
 // marker only if its destructive callback returns, so a child that merely fails, or
 // never starts, cannot satisfy this. The wait is bounded by the suite's per-case
 // timeout and by the runner's.
-void RequireChildStops(const char* child_case, const char* reason)
+void RequireChildStops(const char* child_case, const char* reason,const char* detail)
 {
     Require(!executable_path.empty(), "the case knows the executable it is running as");
     const std::string output_path = "srtc_close_child_output.txt";
@@ -1928,10 +1970,31 @@ void RequireChildStops(const char* child_case, const char* reason)
     Require(captured_existed, "the child's output was captured, so it ran with a working shell");
     (void)std::remove(output_path.c_str());
     Require(child != 0, reason);
+    if(detail)Require(captured.find(detail)!=std::string::npos,"specific child contract diagnostic");
     Require(captured.find("destroyed from inside a callback") != std::string::npos,
             "and it stopped with the contract diagnostic");
     Require(captured.find("MDDS_SRT_CLOSE_CHILD_SURVIVED") == std::string::npos,
             "and not by returning from the destructive callback");
+}
+
+void ShutdownDestroySameTableChild()
+{
+    (void)_set_abort_behavior(0,_WRITE_ABORT_MSG|_CALL_REPORTFAULT);
+    Fixture f;auto a=f.Deploy(f.CreateRequest("pkg.credit.destroy",RecordRole::Client,false),81);auto b=f.Deploy(f.JoinRequest(*a,RecordRole::Client,true),82);
+    f.provider.shutdown_hook=[&](NativeSocketId id){if(id==81)b.reset();};
+    RequireStatus(a->BeginClose(),NativeStatus::None,"outer begin");(void)a->Abandon();
+    std::printf("MDDS_SRT_CLOSE_CHILD_SURVIVED\n");std::fflush(stdout);
+}
+void ShutdownDestroySameTable()
+{
+    RequireChildStops("shutdown-destroy-child","destructor must diagnose its own shared close credit","native close credit held by this stack");
+}
+void ShutdownDestroyOtherTable()
+{
+    Fixture a_fixture,b_fixture;auto a=a_fixture.Deploy(a_fixture.CreateRequest("pkg.credit.outer",RecordRole::Client,false),81);auto b=b_fixture.Deploy(b_fixture.CreateRequest("pkg.credit.unrelated",RecordRole::Client,false),82);
+    a_fixture.provider.shutdown_hook=[&](NativeSocketId id){if(id==81)b.reset();};
+    RequireStatus(a->BeginClose(),NativeStatus::None,"outer begin");RequireStatus(a->Abandon(),NativeStatus::None,"outer completes");a_fixture.provider.shutdown_hook={};
+    Require(!b,"unrelated native table binding really destroyed");RequireEqual(a_fixture.provider.shutdown,1,"outer exactly once");RequireEqual(b_fixture.provider.shutdown,1,"unrelated exactly once");
 }
 
 // CLOSE-C10: a release that is not the last one settles nothing and waits for
@@ -1970,6 +2033,134 @@ void DestroyNonLastSiblingInCallback()
     Fixture::RequireAttachmentsEmpty(*fixture.attachments, "the registration ends with its last user");
 }
 
+struct DecisionObserver final : ProcessReceiveObserver
+{
+    std::array<ReceiveDecision, 64> decisions{};
+    std::size_t count=0,overflow=0;
+    ServiceRecordBinding* binding=nullptr;
+    bool reentrant_safe=true;
+    void OnReceive(ReceiveStage,const ReceiveDiagnostic&,const std::uint8_t*,std::size_t) noexcept override {}
+    void OnDecision(const ReceiveDecision& d) noexcept override {
+        if(count<decisions.size())decisions[count]=d;else ++overflow;
+        ++count;
+        if(binding){(void)binding->Observe();reentrant_safe &= binding->BeginClose()==NativeStatus::WrongState;}
+    }
+};
+void DecisionAccounting()
+{
+    Fixture f;auto observer=std::make_shared<DecisionObserver>();
+    auto request=f.CreateRequest("pkg.decision.accounting",RecordRole::Client,false);
+    request.receive_observer=observer;
+    auto binding=f.Deploy(request,271);observer->binding=binding.get();
+    const auto entry=binding->Entrance();
+    f.Emit(*binding,271,PayloadBytes());
+    RequireEqual(observer->count,1,"actual admission emits one decision");
+    auto d=observer->decisions[0];
+    Require(d.branch==ReceiveDecisionBranch::BridgeAccepted && d.bridge_called && !d.refused_receive,
+            "accepted bridge is not rejection");
+    Require(d.bridge.result_known && d.bridge.reason==RxAdmissionReason::AcceptedQueue,
+            "actual bridge result retained");
+    Require(d.bridge.application_known && d.bridge.receiver_known,"captured receiver identity known");
+    const auto oversized=PayloadBytes(60001);
+    entry(271,oversized.data(),static_cast<std::uint32_t>(oversized.size()));
+    RequireEqual(observer->count,2,"oversized buffer decision once");
+    d=observer->decisions[1];
+    Require(d.branch==ReceiveDecisionBranch::BridgeRefused && d.bridge_called && d.refused_receive,
+            "bridge refusal separate");
+    Require(d.bridge.reason==RxAdmissionReason::TooLarge,"actual short circuit reason");
+    RequireStatus(binding->CloseInput(),NativeStatus::None,"queued admission cancels without pump");
+    RequireEqual(binding->Observe().admitted,1,"cancellation does not become admission refusal");
+    f.Emit(*binding,271,PayloadBytes());
+    RequireEqual(observer->count,3,"gap decision once");d=observer->decisions[2];
+    Require(d.branch==ReceiveDecisionBranch::NoRegistration && !d.bridge_called && !d.bridge.result_known,
+            "no registration must not fabricate bridge call or result");
+    Require(d.refused_receive,"same original counter unit");
+    RequireEqual(binding->Observe().refused_receive,2,"original counter unchanged");
+    Require(observer->decisions[0].sequence<observer->decisions[1].sequence &&
+            observer->decisions[1].sequence<d.sequence,"decision sequences distinct");
+    Require(observer->reentrant_safe,"observer outside locks within callback context");
+    observer->binding=nullptr;
+    RequireStatus(binding->CloseRequest(),NativeStatus::None,"request close");
+    f.Emit(*binding,271,PayloadBytes());
+    Require(observer->decisions[3].branch==ReceiveDecisionBranch::BindingPhase &&
+            !observer->decisions[3].refused_receive && !observer->decisions[3].bridge_called,
+            "closing phase is a distinct counter and no bridge");
+}
+void DecisionBudget()
+{
+    Fixture f;auto observer=std::make_shared<DecisionObserver>();
+    auto request=f.CreateRequest("pkg.decision.budget",RecordRole::Client,false);request.receive_observer=observer;
+    auto binding=f.Deploy(request,272);
+    for(unsigned i=0;i<33;++i)f.Emit(*binding,272,PayloadBytes());
+    RequireEqual(observer->count,33,"each original admission observed once");
+    const auto& d=observer->decisions[32];
+    Require(d.branch==ReceiveDecisionBranch::BridgeRefused && d.bridge.reason==RxAdmissionReason::LocalRecords &&
+            d.bridge.capacity_known && d.bridge.local_records_used==32 && d.bridge.local_records_limit==32,
+            "actual local record budget captured at decision");
+    RequireEqual(binding->Observe().admitted,32,"budget unchanged");
+    RequireEqual(binding->Observe().refused_receive,1,"one rejection not multiple predicates");
+    RequireStatus(binding->CloseInput(),NativeStatus::None,"cancel all queued without pump");
+    f.RequireReceiveBudgetZero("no queued bytes or leases retained");
+}
+void DecisionStoreBound()
+{
+    dds_experiment::DecisionStore<2> store;
+    ReceiveDecision d;d.branch=ReceiveDecisionBranch::NoRegistration;d.refused_receive=true;
+    store.Record(d,1);store.Record(d,2);store.Record(d,3);
+    const auto a=store.Capture(),b=store.Capture();
+    RequireEqual(a.count,2,"fixed detail bound");RequireEqual(a.total,3,"aggregate retains overflow");
+    RequireEqual(a.overflow,1,"overflow visible");
+    RequireEqual(a.branch_totals[static_cast<std::size_t>(d.branch)],3,"reason retained after full");
+    RequireEqual(a.total,b.total,"snapshot read does not recount");
+    d.branch=static_cast<ReceiveDecisionBranch>(999);store.Record(d,4);
+    RequireEqual(store.Capture().unknown,1,"unknown enumeration visible");
+    RequireEqual(store.At(0).ingress,1,"published prefix immutable");
+}
+void DecisionCloseRequest()
+{
+    struct Observer final:ProcessReceiveObserver {
+        ServiceRecordBinding* binding=nullptr;NativeStatus requested=NativeStatus::NotImplemented,synchronous=NativeStatus::NotImplemented;
+        void OnReceive(ReceiveStage,const ReceiveDiagnostic&,const std::uint8_t*,std::size_t) noexcept override {}
+        void OnDecision(const ReceiveDecision&) noexcept override {
+            (void)binding->Observe();requested=binding->CloseRequest();synchronous=binding->DeferredClose();
+        }
+    };
+    Fixture f;auto observer=std::make_shared<Observer>();auto request=f.CreateRequest("pkg.decision.close",RecordRole::Client,false);request.receive_observer=observer;
+    auto binding=f.Deploy(request,273);observer->binding=binding.get();f.Emit(*binding,273,PayloadBytes());
+    RequireStatus(observer->requested,NativeStatus::None,"decision callback may request close");
+    RequireStatus(observer->synchronous,NativeStatus::WrongState,"decision callback cannot synchronously finish close");
+    RequireStatus(binding->DeferredClose(),NativeStatus::None,"external close settles original admission");
+    f.RequireReceiveBudgetZero("requested close cancels queued admission");
+    RequireEqual(f.provider.shutdown,1,"one close responsibility");
+}
+void DecisionPausedDrain()
+{
+    struct Observer final:ProcessReceiveObserver {
+        std::promise<void> entered;std::mutex gate;std::condition_variable changed;bool release=false;
+        void OnReceive(ReceiveStage,const ReceiveDiagnostic&,const std::uint8_t*,std::size_t) noexcept override {}
+        void OnDecision(const ReceiveDecision&) noexcept override {
+            entered.set_value();std::unique_lock<std::mutex> lock(gate);changed.wait(lock,[&]{return release;});
+        }
+    };
+    Fixture f;auto observer=std::make_shared<Observer>();auto ready=observer->entered.get_future();
+    auto request=f.CreateRequest("pkg.decision.pause",RecordRole::Client,false);request.receive_observer=observer;
+    auto binding=f.Deploy(request,274);
+    auto ingress=std::async(std::launch::async,[&]{f.Emit(*binding,274,PayloadBytes());});ready.wait();
+    auto close=std::async(std::launch::async,[&]{return binding->CloseInput();});
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+    bool sealed=false;
+    while(std::chrono::steady_clock::now()<deadline){
+        if(binding->Observe().input_closing){sealed=true;break;}
+        if(close.wait_for(std::chrono::milliseconds(0))==std::future_status::ready)break;
+        std::this_thread::yield();
+    }
+    const bool pending=close.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready;
+    {std::lock_guard<std::mutex> lock(observer->gate);observer->release=true;}observer->changed.notify_all();
+    ingress.get();const auto status=close.get();
+    Require(sealed&&pending,"actual close gate sealed while original decision activity remains held");
+    RequireStatus(status,NativeStatus::None,"release permits close completion without pump");
+    f.RequireReceiveBudgetZero("queued record settles once");
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -1977,9 +2168,13 @@ int main(int argc, char** argv)
     static_assert(std::is_same_v<RecordBytesCallback, decltype(ISocketListener::OnBytes)>,
             "the composition entrance must be the public Socket byte-callback type");
     const std::map<std::string, void (*)()> cases{
+        {"decision-accounting",DecisionAccounting},
+        {"decision-store-bound",DecisionStoreBound},
+        {"decision-budget",DecisionBudget},
+        {"decision-close-request",DecisionCloseRequest},{"decision-paused-drain",DecisionPausedDrain},
         {"two-owners", TwoOwnersSameRecord}, {"cross-role", CrossRole}, {"partial-failure", PartialFailure},
         {"close-vs-capture", CloseVersusCapture}, {"admitted-not-run", AdmittedButNotRun},
-        {"running-receiver", CloseWaitsForRunningReceiver}, {"unique-close", UniqueCloseResponsibility},
+        {"running-receiver", CloseWaitsForRunningReceiver}, {"unique-close", UniqueCloseResponsibility}, {"close-credit-same",CloseCreditSameRecord}, {"close-credit-different",CloseCreditDifferentRecord}, {"shutdown-reentrant-sibling",ShutdownReentrantSibling}, {"shutdown-destroy-child",ShutdownDestroySameTableChild}, {"shutdown-destroy-same-table",ShutdownDestroySameTable}, {"shutdown-destroy-other-table",ShutdownDestroyOtherTable},
         {"reentrant-boundary", ReentrantBoundary}, {"exceptional-admission", ExceptionalAdmission},
         {"old-entry-new-incarnation", OldEntryNewIncarnation}, {"repeated-lifecycles", RepeatedLifecycles},
         {"slot-exhaustion", SlotExhaustion}, {"resource-release", ResourceRelease},

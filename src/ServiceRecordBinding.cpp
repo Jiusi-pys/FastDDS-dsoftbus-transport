@@ -26,6 +26,7 @@
 #include <mutex>
 #include <new>
 #include <utility>
+#include <thread>
 
 namespace mdds::dsoftbus {
 namespace {
@@ -37,6 +38,22 @@ thread_local int ingress_depth = 0;
 // layer arms these on the admitted execution rather than around its own dispatch
 // entry, so no entry point can run a delivery without marking the context.
 thread_local int delivery_depth = 0;
+
+// Provider shutdown owns the table's single close credit until it returns.
+// Track only this synchronous execution stack; this is not a runtime registry.
+struct ProviderShutdownFrame;
+thread_local ProviderShutdownFrame* provider_shutdown_frame=nullptr;
+struct ProviderShutdownFrame {
+    const NativeOwnerTable* table;ProviderShutdownFrame* previous;
+    explicit ProviderShutdownFrame(const NativeOwnerTable* t) noexcept:table(t),previous(provider_shutdown_frame){provider_shutdown_frame=this;++ingress_depth;}
+    ~ProviderShutdownFrame(){--ingress_depth;provider_shutdown_frame=previous;}
+    ProviderShutdownFrame(const ProviderShutdownFrame&)=delete;
+    ProviderShutdownFrame& operator=(const ProviderShutdownFrame&)=delete;
+};
+bool HoldsCloseCredit(const NativeOwnerTable* table) noexcept {
+    for(auto* p=provider_shutdown_frame;p;p=p->previous)if(p->table==table)return true;
+    return false;
+}
 
 // Which applications this thread is currently delivering inside, innermost last, as
 // the application identity the running delivery itself carries. That identity is the
@@ -490,6 +507,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
     bool provider_terminal = false;
     NativeSocketId socket = -1;
     NativeStatus last_status = NativeStatus::None;
+    NativeStatus cleanup_status = NativeStatus::None;
     ReceiveAdmissionDiagnostic last_diagnostic;
     std::size_t admitted = 0, refused_phase = 0, refused_native = 0, refused_receive = 0;
     std::uint64_t ingress_seen = 0, correlation = 0;
@@ -524,24 +542,43 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
     void Admit(NativeSocketId socket_id, const void* data, std::size_t size) noexcept
     {
         ReceiveActivity activity{*this, false, false};
+        struct DecisionEmission {
+            std::shared_ptr<ProcessReceiveObserver> observer;
+            ReceiveDecision value;
+            ~DecisionEmission(){if(observer)observer->OnDecision(value);}
+        } decision;
         NamespaceLease namespace_lease;
         std::shared_ptr<ApplicationGroup> registration;
         std::uint64_t correlation_value = 0;
         {
             std::lock_guard<std::mutex> lock(gate);
             ++ingress_seen;
+            decision.observer=request.receive_observer;
+            decision.value.sequence=ingress_seen;
+            decision.value.record_incarnation=entrance.record_incarnation_;
+            decision.value.role=static_cast<int>(request.role);
+            decision.value.socket=socket_id;
+            decision.value.size=size;
+            decision.value.phase=static_cast<int>(phase);
             if (phase != BindingPhase::Published) {
                 ++refused_phase;
+                decision.value.branch=ReceiveDecisionBranch::BindingPhase;
                 return;
             }
             registration = group;
             if (!registration) {
                 ++refused_receive;
                 last_status = NativeStatus::NotReady;
+                decision.value.branch=ReceiveDecisionBranch::NoRegistration;
+                decision.value.refused_receive=true;
+                decision.value.refused_receive_total=refused_receive;
+                decision.value.status_known=true;
+                decision.value.status=static_cast<int>(last_status);
                 return;
             }
             namespace_lease = ns;
             correlation_value = ++correlation;
+            decision.value.correlation=correlation_value;
             ++receive_admissions;
             activity.armed = true;
         }
@@ -553,6 +590,9 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             std::lock_guard<std::mutex> lock(gate);
             ++refused_native;
             last_status = lease.issue.code;
+            decision.value.branch=ReceiveDecisionBranch::NativeAdmission;
+            decision.value.status_known=true;
+            decision.value.status=static_cast<int>(last_status);
             return;
         }
         auto pin = lease.value->CaptureIdentity();
@@ -560,6 +600,9 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             std::lock_guard<std::mutex> lock(gate);
             ++refused_native;
             last_status = pin.issue.code;
+            decision.value.branch=ReceiveDecisionBranch::NativeIdentity;
+            decision.value.status_known=true;
+            decision.value.status=static_cast<int>(last_status);
             return;
         }
         // The record-side membership and the native owner must describe the same
@@ -569,17 +612,27 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             std::lock_guard<std::mutex> lock(gate);
             ++refused_native;
             last_status = NativeStatus::InvalidHandle;
+            decision.value.branch=ReceiveDecisionBranch::LocalMismatch;
+            decision.value.status_known=true;
+            decision.value.status=static_cast<int>(last_status);
             return;
         }
         ReceiveAdmissionDiagnostic diagnostic;
+        decision.value.bridge_called=true;
         const auto result = detail::ProcessReceiveBridge::Admit(registration->attachments, native,
                 registration->claim, *pin.value, data, size, ProcessClock::Clock::time_point::max(),
                 clock, correlation_value, request.receive_observer, &diagnostic);
         std::lock_guard<std::mutex> lock(gate);
         last_diagnostic = diagnostic;
         last_status = FromReceiveResult(result);
+        decision.value.bridge=diagnostic;
+        decision.value.status_known=true;
+        decision.value.status=static_cast<int>(last_status);
+        decision.value.refused_receive=result!=ReceiveAdmissionResult::Accepted;
+        decision.value.branch=result==ReceiveAdmissionResult::Accepted?
+                ReceiveDecisionBranch::BridgeAccepted:ReceiveDecisionBranch::BridgeRefused;
         if (result == ReceiveAdmissionResult::Accepted) ++admitted;
-        else ++refused_receive;
+        else {++refused_receive;decision.value.refused_receive_total=refused_receive;}
     }
 
     RecordEntrance EntranceFor(RecordRole role) const noexcept
@@ -990,13 +1043,46 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
         // The socket close responsibility is claimed exactly once, and the
         // provider's shutdown is an external call, so it runs here, outside the
         // gate.
+        NativeStatus close_failure=NativeStatus::None;
         if (owned) {
             (void)owned.RequestClose();
-            auto ticket = owned.TryClaimShutdown();
+            // Close credit belongs to the native table, not this record. A
+            // concurrent control close may hold its sole credit. Keep this
+            // original owner/namespace until it can claim responsibility.
+            // No component lock is held while waiting or calling the provider;
+            // this is not an SDK timeout or a cancellation guarantee.
+            auto claim=[&]() -> NativeResult<ShutdownCallTicket> {
+                for(;;){
+                    auto candidate=owned.TryClaimShutdown();
+                    if(candidate||candidate.issue.code!=NativeStatus::CloseBusy)return candidate;
+                    // NativeValidateConfiguration requires close_calls==1.
+                    // In this precise reentrant destructor shape, only returning
+                    // from this same provider stack could make progress.
+                    if(HoldsCloseCredit(&native)){
+                        std::fputs("MDDS ServiceRecordBinding: destroyed from inside a callback; native close credit held by this stack; call CloseRequest() and destroy outside the callback\n",stderr);
+                        std::fflush(stderr);std::abort();
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            };
+            auto ticket=claim();
             if (ticket && released_socket >= 0) {
-                (void)ticket.value->CallEntered();
-                provider.Shutdown(released_socket);
-                (void)ticket.value->CompleteShutdownReturned();
+                const auto entered=ticket.value->CallEntered();
+                if(entered==NativeStatus::None){
+                    // A synchronous provider callback cannot close a sibling
+                    // and wait for the credit held by this very call stack.
+                    ProviderShutdownFrame context(&native);
+                    provider.Shutdown(released_socket);
+                    const auto completed=ticket.value->CompleteShutdownReturned();
+                    if(completed!=NativeStatus::None)close_failure=completed;
+                }else{
+                    const auto facts=owned.Observe();
+                    if(!facts.on_shutdown_seen&&!facts.shutdown_returned)close_failure=entered;
+                }
+            }else if(!ticket){
+                const auto facts=owned.Observe();
+                if(facts.owned_id&&!facts.on_shutdown_seen&&!facts.shutdown_returned)
+                    close_failure=ticket.issue.code;
             }
         }
         pending_socket.reset();
@@ -1032,6 +1118,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
         // The caller still holds the gate it handed in; the steps that could wait
         // for another admission ran with it released.
         gate.lock();
+        if(cleanup_status==NativeStatus::None)cleanup_status=close_failure;
     }
 
     NativeStatus Abandon() noexcept
@@ -1044,7 +1131,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
         if (hooks.before_rollback) hooks.before_rollback();
         ReleaseLocalLocked();
         phase = BindingPhase::Closed;
-        return NativeStatus::None;
+        return cleanup_status;
     }
 };
 
@@ -1216,7 +1303,7 @@ NativeStatus ServiceRecordBinding::DeferredClose() noexcept
     if (state_->phase != BindingPhase::Closing) return NativeStatus::WrongState;  // nothing was requested
     state_->ReleaseLocalLocked();
     state_->phase = BindingPhase::Closed;
-    return NativeStatus::None;
+    return state_->cleanup_status;
 }
 RecordBytesCallback ServiceRecordBinding::Entrance() const noexcept
 {

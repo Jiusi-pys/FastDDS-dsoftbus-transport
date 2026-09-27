@@ -61,6 +61,7 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
     std::optional<std::int32_t> pending_stop;
     std::int32_t socket = -1;
     std::size_t active = 0, rejected = 0, exceptions = 0;
+    std::uint64_t bytes_observed = 0; // local diagnostic sequence, not SDK identity
     std::size_t dispatching = 0;
     struct DispatchActivity {
         ProviderAdapterState& state; bool armed=false;
@@ -295,19 +296,36 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
         return BackendStatus::None;
     }
     BackendStatus Bytes(RecordRole role,std::int32_t id, const void* data, std::uint32_t size) noexcept {
+        struct DecisionEmission {
+            std::shared_ptr<ProcessReceiveObserver> observer;
+            ReceiveDecision value;
+            ~DecisionEmission(){if(observer)observer->OnDecision(value);}
+        } decision;
         ServiceRecordBinding* original = nullptr;
         {
             std::lock_guard<std::mutex> lock(gate);
-            auto reject = [&](BackendStatus s) { ++rejected; return s; };
-            if (stopped) return reject(BackendStatus::ProviderStopped);
-            if (phase != AdapterPhase::Published) return reject(BackendStatus::InvalidState);
-            if (!input_open) return reject(BackendStatus::ChannelClosed);
+            decision.observer=request.receive_observer;
+            decision.value.layer=ReceiveDecisionLayer::Adapter;
+            decision.value.sequence=++bytes_observed;
+            decision.value.socket=id;decision.value.role=static_cast<int>(role);
+            decision.value.phase=static_cast<int>(phase);decision.value.size=size;
+            // The backend declaration is NOT the ServiceRecordTable incarnation.
+            // No record field is filled using that different identity domain.
+            auto reject = [&](BackendStatus s,ReceiveDecisionBranch branch) {
+                ++rejected;decision.value.branch=branch;decision.value.status_known=true;
+                decision.value.status=static_cast<int>(s);return s;
+            };
+            if (stopped) return reject(BackendStatus::ProviderStopped,ReceiveDecisionBranch::AdapterStopped);
+            if (phase != AdapterPhase::Published) return reject(BackendStatus::InvalidState,ReceiveDecisionBranch::AdapterPhase);
+            if (!input_open) return reject(BackendStatus::ChannelClosed,ReceiveDecisionBranch::ChannelClosed);
             if(dual) {
-                if(role!=RecordRole::Server||accepted_phase!=AcceptedPhase::Active||accepted_closing||accepted_id!=id)return reject(BackendStatus::ForeignSocket);
-            }else if(role!=request.role||id!=socket)return reject(BackendStatus::ForeignSocket);
-            if (!data || !size) return reject(BackendStatus::InvalidBuffer);
-            if (active == std::numeric_limits<std::size_t>::max()) return reject(BackendStatus::Capacity);
+                if(role!=RecordRole::Server||accepted_phase!=AcceptedPhase::Active||accepted_closing||accepted_id!=id)return reject(BackendStatus::ForeignSocket,ReceiveDecisionBranch::ForeignSocket);
+            }else if(role!=request.role||id!=socket)return reject(BackendStatus::ForeignSocket,ReceiveDecisionBranch::ForeignSocket);
+            if (!data || !size) return reject(BackendStatus::InvalidBuffer,ReceiveDecisionBranch::InvalidBuffer);
+            if (active == std::numeric_limits<std::size_t>::max()) return reject(BackendStatus::Capacity,ReceiveDecisionBranch::AdapterCapacity);
             original = dual?accepted.get():binding.get();
+            decision.value.branch=ReceiveDecisionBranch::Forwarded;
+            decision.value.status_known=true;decision.value.status=static_cast<int>(BackendStatus::None);
             ++active;
         }
         // The callback's shared State pin and Close's ingress barrier retain

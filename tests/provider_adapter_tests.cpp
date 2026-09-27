@@ -204,11 +204,40 @@ void SetupObserve() {
     f.provider->during_setup=[&]{std::cerr<<"PROVIDER_SETUP_REENTER_OBSERVE\n"<<std::flush;auto v=a->Observe();observed=v.phase==AdapterPhase::Deploying;};
     f.Ready(*a);Check(observed,"provider call is outside binding gate");Check(a->Close().adapter_drained,"close");
 }
+struct Decisions final:ProcessReceiveObserver {
+    ReceiveDecision last{};std::size_t adapter_count=0,binding_count=0;
+    void OnReceive(ReceiveStage,const ReceiveDiagnostic&,const std::uint8_t*,std::size_t) noexcept override {}
+    void OnDecision(const ReceiveDecision& d) noexcept override {
+        if(d.layer==ReceiveDecisionLayer::Adapter){last=d;++adapter_count;}else ++binding_count;
+    }
+};
+void DecisionBranches() {
+    Fixture f;auto observer=std::make_shared<Decisions>();f.request.receive_observer=observer;
+    f.provider->inline_bytes=true;auto a=f.Make();f.Ready(*a);
+    Check(observer->adapter_count==1 && observer->binding_count==0,"early adapter only decision");
+    Check(observer->last.branch==ReceiveDecisionBranch::AdapterPhase && observer->last.status_known &&
+          observer->last.status==static_cast<int>(BackendStatus::InvalidState) && !observer->last.bridge_called,
+          "actual early InvalidState branch without invented bridge");
+    const std::uint8_t byte=3;
+    Check(f.provider->callbacks.OnBytes(999,&byte,1)==BackendStatus::ForeignSocket,"foreign rejects");
+    Check(observer->last.branch==ReceiveDecisionBranch::ForeignSocket && observer->binding_count==0,"no binding on foreign");
+    Check(f.provider->callbacks.OnBytes(11,nullptr,1)==BackendStatus::InvalidBuffer,"invalid buffer rejects");
+    Check(observer->last.branch==ReceiveDecisionBranch::InvalidBuffer,"before parsing");
+    Check(f.provider->callbacks.OnBytes(11,&byte,1)==BackendStatus::None,"forward");
+    Check(observer->last.branch==ReceiveDecisionBranch::Forwarded && observer->binding_count==1,"layers distinct");
+    Check(a->CloseInput()==BackendStatus::None,"input close");
+    Check(f.provider->callbacks.OnBytes(11,&byte,1)==BackendStatus::ChannelClosed,"gap rejects");
+    Check(observer->last.branch==ReceiveDecisionBranch::ChannelClosed,"gap branch");
+    Check(a->Close().adapter_drained,"close");
+    Check(f.provider->callbacks.OnBytes(11,&byte,1)==BackendStatus::InvalidState,"closed phase rejects");
+    Check(observer->last.branch==ReceiveDecisionBranch::AdapterPhase,"closed phase branch");
+}
 }
 int main(int argc,char** argv) {
     try {
         Check(argc==2,"one case required");std::string s=argv[1];
         const std::pair<const char*,void(*)()> cases[]={{"P0",P0},{"P1",P1},{"P2",P2},{"P3",P3},{"P4",P4},{"P5",P5},{"P6",P6},{"P7",P7},{"early-stop",EarlyStop},{"provider-throw",ProviderThrow},{"listen",Listen},{"create-stop",CreateStop},{"create-foreign",CreateForeign},{"create-conflict",CreateConflict},{"shutdown-failure",ShutdownFailure},{"ingress-allocation",IngressAllocation},{"setup-observe",SetupObserve}};
+        if(s=="decision-branches"){DecisionBranches();std::cout<<"PASS "<<s<<'\n';return 0;}
         for(const auto& c:cases)if(s==c.first){c.second();std::cout<<"PASS "<<s<<'\n';return 0;}
         throw std::runtime_error("unknown case");
     }catch(const std::exception& e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}

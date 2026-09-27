@@ -179,7 +179,10 @@ private:
 // diagnostic naming CloseRequest(), because its release would have to wait for the
 // receiver permit the running frame holds. Destroying an *unrelated* binding from a
 // callback is not that shape and is allowed: its release waits on nothing this
-// thread holds.
+// thread holds. A synchronous provider Shutdown callback also holds the native
+// table's sole close credit: destruction needing that same unavailable credit
+// fails fast with the same CloseRequest guidance. Destruction on another native
+// table remains legal when it does not wait for this frame's receiver permit.
 //
 // A binding is released before it is destroyed, and it does not have to outlive the
 // record or its joiners: the record's own dispatch and registrations are what keep
@@ -222,6 +225,10 @@ public:
     // Whole-deployment rollback in reverse order. A created socket's close
     // responsibility is claimed once and the provider is shut down; a record slot
     // that was exposed is never reclaimed and its entrance is never rebound.
+    // External control close also waits for a shared native close credit while
+    // retaining its original owner; no SDK deadline/cancellation is implied.
+    // Synchronous provider.Shutdown reentry is callback context: blocking control
+    // is refused, while Observe and nonwaiting CloseRequest remain legal.
     NativeStatus Abandon() noexcept;
 
     // Callback-context close request. Legal from any context, including an ingress

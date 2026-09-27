@@ -23,8 +23,8 @@ struct Invocation {Config config;std::string control;std::uint64_t token=0;};
 bool Parse(int argc,char** argv,Invocation& v){
     std::map<std::string,std::string> args;
     for(int i=1;i<argc;i+=2){if(i+1==argc||!args.emplace(argv[i],argv[i+1]).second)return false;}
-    for(auto& e:args)if(e.first!="--delete-first"&&e.first!="--run"&&e.first!="--side"&&e.first!="--control"&&e.first!="--peer"&&e.first!="--token")return false;
-    v.config.run=args["--run"];v.control=args["--control"];
+    for(auto& e:args)if(e.first!="--scenario"&&e.first!="--delete-first"&&e.first!="--run"&&e.first!="--side"&&e.first!="--control"&&e.first!="--peer"&&e.first!="--token")return false;
+    if(args.count("--scenario"))v.config.scenario=args["--scenario"];v.config.run=args["--run"];v.control=args["--control"];
     if(args["--delete-first"]!="A"&&args["--delete-first"]!="B")return false;v.config.delete_first=args["--delete-first"]=="A"?0:1;
     if(args["--side"]!="A"&&args["--side"]!="B")return false;v.config.side=args["--side"]=="A"?0:1;
     if(v.control.rfind("/data/local/tmp/",0)||v.control.find("..")!=std::string::npos)return false;

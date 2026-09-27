@@ -1,0 +1,106 @@
+{
+  "scope": "Historical evidence stays bound to original source/package/run, not a later commit",
+  "current_checkpoint": {
+    "run": ".artifacts/bounded-dds-stabilization-checkpoint/run-20260927T103431Z",
+    "tester_result": {
+      "path": ".artifacts/bounded-dds-stabilization-checkpoint/run-20260927T103431Z/tester-r2/TEST_RESULT.json",
+      "sha256": "b44735d37a4bcad5a81518457692bbb0a826c53f0d2fb47539aa09ad292b39b1",
+      "result": "445/445 PASS; host build PASS; device SKIPPED; new ASan NOT RUN"
+    },
+    "full_receipt": {
+      "path": ".artifacts/bounded-dds-stabilization-checkpoint/run-20260927T103431Z/tester-r2/full.receipt.json",
+      "sha256": "07c7fc5ba4db1f0765cadee8beca900443be8b4eaf5fa24cadca370c8a1e91ed"
+    },
+    "declared_dependencies": {
+      "path": ".artifacts/bounded-dds-stabilization-checkpoint/run-20260927T103431Z/DECLARED_DEPENDENCIES.json",
+      "sha256": "21aa10087035b45c4aea209e76f79ae0c4483532f14a1850d2a508a488f27f4a"
+    }
+  },
+  "entries": [
+    {
+      "package": "A",
+      "path": ".artifacts/new-public-socket-bounded-dds/run-20260927T014310Z/FINAL_REPORT.md",
+      "sha256": "88227f4c94dacc7e371ac02128dca59c0a96f73b865dbb26bb9377a332ab01af",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "A",
+      "path": ".artifacts/new-public-socket-bounded-dds/run-20260927T014310Z/FINAL_GATE.json",
+      "sha256": "6a7e3c07cea7af31fb95ef4bf7a01789942dd08bdca2a3a650c59d69647a9729",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "A",
+      "path": ".artifacts/new-public-socket-bounded-dds/run-20260927T014310Z/FINAL_REVIEW.json",
+      "sha256": "a02235afe297d407bb64bb2a8881105f5c1dd409218ef322863cd69ac1c78771",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "A",
+      "path": ".artifacts/new-public-socket-bounded-dds/run-20260927T014310Z/freeze-r4/SOURCE.json",
+      "sha256": "5919183eb491d76b0ad8058e10bce3275bbe88c8f09b327335991c428db89999",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "A",
+      "path": ".artifacts/new-public-socket-bounded-dds/run-20260927T014310Z/SOURCE_DIFF.json",
+      "sha256": "8ce3b901f9f3425a0770a5809e0c204d87cfec1a3f0bcb7d7dce3267f5396e84",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "B",
+      "path": ".artifacts/public-socket-decision-close/run-20260927T083510Z/FINAL_REPORT.md",
+      "sha256": "f8c14643ade78f0a0183575895e3bcbac6ff0a923fc8849aecf3d0014a513ec7",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "B",
+      "path": ".artifacts/public-socket-decision-close/run-20260927T083510Z/FINAL_GATE.json",
+      "sha256": "cb1d5d29a1cd896510ca9f9f1367ac0d9b69a45dba7aa344545cfd829cc97a85",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "B",
+      "path": ".artifacts/public-socket-decision-close/run-20260927T083510Z/FINAL_REVIEW.json",
+      "sha256": "b8b6ebd10f233314b7ee3752ae7d1f2ca15e93a22c11b8b7e3471b964ba314c9",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "B",
+      "path": ".artifacts/public-socket-decision-close/run-20260927T083510Z/freeze-r3/SOURCE.json",
+      "sha256": "698a06787e5c33380e4bc5b93c0a076a6c9eca84f8853046248de5a2137e4240",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "B",
+      "path": ".artifacts/public-socket-decision-close/run-20260927T083510Z/CLOSURE_INDEX.json",
+      "sha256": "eaeec57056271daf7a5c850ce14bc2a59f3628898f2605806db3094202d8b358",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "B",
+      "path": ".artifacts/public-socket-decision-close/run-20260927T083510Z/analysis-small-profile/PROVENANCE.json",
+      "sha256": "913f1d7b345d639a9d77e03694185d007f2826fa227cec33e4601699a2300c25",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "B",
+      "path": ".artifacts/public-socket-decision-close/run-20260927T083510Z/analysis-small-profile/profile_analyze.py",
+      "sha256": "fa03a146e215523d362f84100ee0da2601bac28f160bfb2bacac13e630ae8dbb",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "B",
+      "path": ".artifacts/public-socket-decision-close/run-20260927T083510Z/analysis-small-profile/core_dds_bounded_profile.py",
+      "sha256": "55af33f95ba2ad4da4b67913e808ca85fc69d8cd48f3dbb24a6192468a8efd50",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    },
+    {
+      "package": "B",
+      "path": ".artifacts/public-socket-decision-close/run-20260927T083510Z/ANALYSIS_PROFILE_REVIEW.json",
+      "sha256": "b148443113f8f8bb7140e170520712269b20f8275a6dfbf7a98ac4e2a97bc984",
+      "availability": "EXTERNAL_LOCAL_IGNORED_ARTIFACT_NOT_IN_GIT"
+    }
+  ],
+  "commit_mapping": "See external current checkpoint execution receipt after commit; no self commit hash embedded"
+}

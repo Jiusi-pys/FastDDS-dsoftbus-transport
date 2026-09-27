@@ -1,5 +1,74 @@
 # FastDDS dsoftbus Transport
 
+> **累计实验基线（2026-09-27）**：A 的七场景与真实 CloseBusy 责任修复，加上 B 的 opt-in 决策诊断及稳定化验证。旧 111/6 未知与新 107/2 已观察原因分别保留。
+> 范围、容量单位、依赖与证据见 [bounded DDS stabilization baseline](docs/BOUNDED_DDS_STABILIZATION_BASELINE.md)。本 checkpoint 的当前 isolated Host CONFIG suite 为 `445/445 PASS`；设备未运行，未进行新的 ASan。下列工作包状态是历史快照，不代表当前 Git 提交状态或生产放行。
+
+> **当前 checkpoint（2026-09-27；artifact run `20260927T103431Z`）**：独立 tester 在冻结候选树上完成 Release/CONFIG Host build 与完整 CTest，`445/445 PASS`、exit 0、commit gate `PASS`。配置显式开启 bounded regression 与 decision diagnostics；生产默认仍为 `NativeBackendUnavailable`，诊断默认 OFF。没有 HDC/SDK/device execution，也没有新的 ASan；B 的 `72/72` ASan 结果仍是历史、预构建 Fast DDS 未完整插桩的 source-equivalent evidence。此状态是 checkpoint evidence，不声明已提交、SDK qualification、release 或 production readiness。
+
+> **当前文档同步状态（2026-09-27；artifact run `20260927T083510Z`）：**
+> 本次 public Socket binding decision / close stabilization 工作包为
+> `CLOSED_WITH_HISTORICAL_LIMITATION / CHECKPOINT_READY / NOT_COMMITTED`。
+> scoped functional gate 与 independent review 为 PASS；该结论只覆盖本包的
+> bounded source/test/runtime review，不构成 commit、SDK qualification、release
+> 或 production-readiness approval。三次 guarded query 与 F1M、D1、D2 三个双
+> RK3588A 数据窗口均 PASS；F1M 为每个 1 MiB 样本 131 fragments，D1/D2 各为
+> 每方向 5 个 Reader samples。23 个 Reader rows、5 个 DDS wait API operations
+> 与 0 次 data retry 均为独立计数，不能解释为 packet-loss 或 SDK settlement。
+> 新 F1M 的 A 侧有 107 次直接记录的 `CAPTURE/LOCAL_RECORDS`；F1M 与 D2 的 B 侧
+> 各有一次直接记录的 Deploying/`ADAPTER_PHASE` 拒绝。D1 无拒绝，D2 无 Binding 拒绝。
+> 另行保留：旧 F1M 的 111 次是没有逐次原因的 Binding 聚合拒绝；旧六条 adapter
+> `InvalidState` 的直接原因未观察。两组历史计数不能相加为 117 条唯一丢失，
+> 新 107/2 也不回填旧原因。
+>
+> 新增的是 SDK-free value-only `ReceiveDecision`，由现有 process receive observer
+> 在真实决策点捕获值；受锁保护的状态在对应 gate 内取得快照。现有 observer 在解锁后
+> 接收该快照，不重新查询当前 map；diagnostic 默认 OFF，
+> 每进程容量 16384 rows（reported storage 5243440 bytes），带 reason aggregates
+> 与 overflow counters。该 instrumentation 有实际开销，并非 zero-overhead，且不
+> 构成 SDK drain 证明。CloseBusy algorithm 未改变；继承的 original owner/namespace
+> 与 single close credit retention 已由 Host deterministic tests 验证，设备未声称
+> hit CloseBusy。QualificationProfile 未生成；local raw artifacts 与 package-specific
+> profile helper 不会因 Git clone 自动进入仓库。
+>
+> Final Host canonical `443/443`、affected Host `72/72`、affected ASan `72/72`、
+> analyzer `20/20`、bounded profile `27/27` 以及 independent target build/static
+> audit 均有 PASS 记录；最终 discovery 为 445，但没有宣称完整 445 run。ASan
+> 使用的预构建 Fast DDS 未完整插桩，TSan 未执行。目标包构建和静态审计 PASS，
+> target execution 与 device validation 在该 scoped audit 中 SKIPPED；设备窗口
+> 使用已构建包的独立 HDC evidence。CloseBusy 分支在设备上未证明实际命中，SDK
+> cancellation/quiescence/settlement、full Transport qualification、性能、完整
+> firmware ABI 与 QualificationProfile 仍未验证。P0/PF-01/PF-02 仍为
+> `BLOCKED / NOT QUALIFIED`，P4 未放行，生产默认仍为
+> `NativeBackendUnavailable`。详见 [public Socket binding decision and close stabilization](docs/NEW_PUBLIC_SOCKET_BINDING_DECISION_AND_CLOSE_STABILIZATION.md)。
+
+> **当前工作包（2026-09-27；artifact run `20260927T014310Z`）：**
+> `NEW_PUBLIC_SOCKET_BOUNDED_DDS_REGRESSION_VERIFIED / CHECKPOINT_READY /
+> NOT_COMMITTED`。七个独立 fresh-process、双 RK3588A A→B DDS 数据窗口和七个
+> fresh guarded query 均完成：七个数据窗口、七次查询、28 个 board-window guards、
+> 26 个正式 Reader rows，0 次数据重试。用例结果为 F256 `3/3`（每个样本 33
+> fragments）、F1M `3/3`（每个样本 131 fragments）、REL_LOSS `3/3`（一次精确
+> drop 后 NACK_FRAG admitted repair）、BE_LOSS `2/3`（完整 post-drop 窗口中
+> sample 1 absent，2/3 complete）、VOL_LATE `3/3`（仅新 4/5/6）、TL_LATE
+> `6/6`（保留 1/2/3 后接收新 4/5/6）和 KEYED_LAST `6/6`（每个 key 保留
+> 3/4 后接收 5）。最终 Host `438/438 PASS`，affected ASan `169/169 PASS`。
+> Fragment size `8016`、native record bound `8192` 未改变；实际链路为
+> public DDS factory → 当前 DSoftBusTransport façade → NativeSendExecution →
+> PublicSocketBackend/public Socket API → remote accepted/Binding →
+> ReceiverResource/DataReader。
+>
+> 该结果只关闭上述七个 bounded functional profiles。F1M 的 A 侧 Binding
+> `refused_receive` 在 MATCH→DATA_DONE 增加 `111`，个别原因和 record ID 为
+> `UNOBSERVED`；另有六个 B 侧 setup `OnBytesRejected`，均为本地
+> `BackendStatus::InvalidState`，不能改写为 SDK 错误、容量结论、无害事件或
+> all-ingress loss-free。DDS wait API 不是 ACK packet 计数，void `Shutdown`
+> 没有 SDK rc0；SDK internal settlement、cancel/quiescence、旧物理事件身份和
+> full TransportInterface 仍未证明。共享 close-credit 修复保留原 owner 并在
+> gate 外等待单一 close credit；provider callback reentry 拒绝阻塞控制，精确
+> self-wait destructor 受控，其他 native table 的合法销毁保留。默认
+> `NativeBackendUnavailable`、P0/PF-01/PF-02 `BLOCKED / NOT QUALIFIED`、P4 未
+> 放行、无 QualificationProfile；无性能/生产资格结论。详见
+> [New Public Socket bounded DDS regression](docs/NEW_PUBLIC_SOCKET_BOUNDED_DDS_REGRESSION.md)。
+
 > **当前 PRE-COMMIT SNAPSHOT（2026-09-27；artifact run 20260927T005155Z）：**
 > `LOCAL_NATIVE_DDS_BASELINE_HOST_VERIFIED / CHECKPOINT_READY`。
 > 用户授权范围为当前分支一次本地 commit；不包含 merge/push/device/SDK/release，且

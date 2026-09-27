@@ -366,8 +366,8 @@ if(BUILD_DSOFTBUS_SERVICE_RECORD_BINDING)
             tests/delivery_context_legal.cpp)
         target_link_libraries(service_record_binding_tests PRIVATE mdds_dsoftbus_service_record_binding)
         target_include_directories(service_record_binding_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
-        foreach(_mdds_service_record_binding_case two-owners cross-role partial-failure
-                close-vs-capture admitted-not-run running-receiver unique-close reentrant-boundary
+        foreach(_mdds_service_record_binding_case decision-accounting decision-store-bound decision-budget decision-close-request decision-paused-drain two-owners cross-role partial-failure
+                close-vs-capture admitted-not-run running-receiver unique-close close-credit-same close-credit-different shutdown-reentrant-sibling shutdown-destroy-same-table shutdown-destroy-other-table reentrant-boundary
                 exceptional-admission old-entry-new-incarnation repeated-lifecycles slot-exhaustion
                 resource-release fail-closed creator-exits-joiner-lives delivery-context-bypass
                 shared-group-release-race join-during-settle joiner-failure-keeps-creator
@@ -630,7 +630,7 @@ if(BUILD_DSOFTBUS_PROVIDER_ADAPTER_PHASE0)
         endif()
         add_executable(provider_adapter_tests tests/provider_adapter_tests.cpp)
         target_link_libraries(provider_adapter_tests PRIVATE mdds_provider_adapter_phase0 mdds_dsoftbus_transport_facade)
-        foreach(_provider_case P0 P1 P2 P3 P4 P5 P6 P7 early-stop provider-throw listen
+        foreach(_provider_case decision-branches P0 P1 P2 P3 P4 P5 P6 P7 early-stop provider-throw listen
                 create-stop create-foreign create-conflict shutdown-failure ingress-allocation setup-observe)
             add_test(NAME dsoftbus.provider_phase0.${_provider_case} COMMAND provider_adapter_tests ${_provider_case})
             set_tests_properties(dsoftbus.provider_phase0.${_provider_case} PROPERTIES TIMEOUT 15)
@@ -727,4 +727,9 @@ if(BUILD_TESTING)
         add_test(NAME dsoftbus.public_socket_analysis.${_public_analysis}
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/public_socket_${_public_analysis}_analysis_tests.py")
     endforeach()
+endif()
+
+if(BUILD_TESTING AND BUILD_PUBLIC_SOCKET_BOUNDED_REGRESSION)
+    add_test(NAME dsoftbus.public_socket_analysis.regression COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/public_socket_regression_analysis_tests.py")
+    add_test(NAME dsoftbus.public_socket_analysis.decisions COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/public_socket_decision_analysis_tests.py")
 endif()

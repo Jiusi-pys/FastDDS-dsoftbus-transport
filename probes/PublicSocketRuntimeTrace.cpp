@@ -7,8 +7,13 @@
 #include <new>
 namespace mdds::dsoftbus::runtime_probe {
 namespace {
+#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+constexpr std::size_t trace_limit=16384;
+#else
+constexpr std::size_t trace_limit=1024;
+#endif
 struct Event {const char* name=nullptr;std::uint64_t tick=0,slot=0,length=0;std::int64_t value=0;std::int32_t socket=0,role=0;char text[256]{};};
-struct Store {std::mutex gate;std::array<Event,1024> events{};std::size_t count=0,overflow=0;};
+struct Store {std::mutex gate;std::array<Event,trace_limit> events{};std::size_t count=0,overflow=0;};
 Store& Storage(){alignas(Store) static unsigned char backing[sizeof(Store)];static Store* s=::new(backing) Store;return *s;} // process-lifetime, never reused/destroyed
 }
 void TraceEvent(const char* name,std::uint64_t slot,int role,std::int32_t socket,std::int64_t value,std::uint64_t length) noexcept {
@@ -23,9 +28,9 @@ void TraceText(const char* name,const char* value)noexcept{
 std::size_t TraceOverflow()noexcept{auto& s=Storage();std::lock_guard<std::mutex> lock(s.gate);return s.overflow;}
 bool TraceHas(const char* name)noexcept{auto& s=Storage();std::lock_guard<std::mutex> lock(s.gate);for(std::size_t i=0;i<s.count;++i)if(!std::strcmp(s.events[i].name,name))return true;return false;}
 void DumpTrace()noexcept{
-    std::array<Event,1024> events;std::size_t count=0,overflow=0;
-    {auto& s=Storage();std::lock_guard<std::mutex> lock(s.gate);events=s.events;count=s.count;overflow=s.overflow;}
-    for(std::size_t i=0;i<count;++i){const auto&e=events[i];std::printf("PROBE_API event=%zu ticks=%llu name=%s entry=%llu role=%d socket=%d value=%lld length=%llu text_hex=",i+1,(unsigned long long)e.tick,e.name,(unsigned long long)e.slot,e.role,e.socket,(long long)e.value,(unsigned long long)e.length);for(std::size_t j=0;j<sizeof(e.text)&&e.text[j];++j)std::printf("%02x",static_cast<unsigned char>(e.text[j]));std::putchar('\n');}
-    std::printf("PROBE_TRACE count=%zu capacity=1024 overflow=%zu storage_bytes=%zu\n",count,overflow,sizeof(Store));std::fflush(stdout);
+    std::size_t count=0,overflow=0;
+    {auto& s=Storage();std::lock_guard<std::mutex> lock(s.gate);count=s.count;overflow=s.overflow;}
+    for(std::size_t i=0;i<count;++i){Event e;{auto& s=Storage();std::lock_guard<std::mutex> lock(s.gate);e=s.events[i];}std::printf("PROBE_API event=%zu ticks=%llu name=%s entry=%llu role=%d socket=%d value=%lld length=%llu text_hex=",i+1,(unsigned long long)e.tick,e.name,(unsigned long long)e.slot,e.role,e.socket,(long long)e.value,(unsigned long long)e.length);for(std::size_t j=0;j<sizeof(e.text)&&e.text[j];++j)std::printf("%02x",static_cast<unsigned char>(e.text[j]));std::putchar('\n');}
+    std::printf("PROBE_TRACE count=%zu capacity=%zu overflow=%zu storage_bytes=%zu\n",count,trace_limit,overflow,sizeof(Store));std::fflush(stdout);
 }
 }

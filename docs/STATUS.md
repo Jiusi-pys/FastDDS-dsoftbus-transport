@@ -1,5 +1,69 @@
 # Project status
 
+> **累计实验基线（2026-09-27）**：A 的七场景与真实 CloseBusy 责任修复，加上 B 的 opt-in 决策诊断及稳定化验证。旧 111/6 未知与新 107/2 已观察原因分别保留。
+> 范围、容量单位、依赖与证据见 [bounded DDS stabilization baseline](BOUNDED_DDS_STABILIZATION_BASELINE.md)。本 checkpoint 的当前 isolated Host CONFIG suite 为 `445/445 PASS`；设备未运行，未进行新的 ASan。下列工作包状态是历史快照，不代表当前 Git 提交状态或生产放行。
+
+## 当前 checkpoint：BOUNDED_DDS_STABILIZATION（2026-09-27；artifact run `20260927T103431Z`）
+
+独立 tester 在冻结候选树上完成 Release/CONFIG Host build 与完整 CTest：`445/445 PASS`、exit 0，commit gate `PASS`。配置显式开启 bounded regression 与 decision diagnostics；生产默认仍为 `NativeBackendUnavailable`，诊断默认 OFF。没有 HDC/SDK/device execution，也没有新的 ASan；B 的 `72/72` ASan 结果仍是历史、预构建 Fast DDS 未完整插桩的 source-equivalent evidence。该状态仅记录 checkpoint evidence，不声明已提交、SDK qualification、release 或 production readiness。
+
+## 当前工作包：PUBLIC_SOCKET_BINDING_DECISION_AND_CLOSE_STABILIZATION（2026-09-27；artifact run `20260927T083510Z`）
+
+本工作包达到 **`CLOSED_WITH_HISTORICAL_LIMITATION / CHECKPOINT_READY / NOT_COMMITTED`**。
+最终独立 review 的 scoped functional gate 与 code gate 为 `PASS`，无未解决的 scoped actionable blocker；这不是 HumanRelease、commit、SDK qualification、production readiness 或 full Transport qualification approval。当前源冻结 SHA-256 为 `698a06787e5c33380e4bc5b93c0a076a6c9eca84f8853046248de5a2137e4240`，独立目标包主程序 SHA-256 为 `db1b6ef915aa820bbcf4392fe0840751da30dbffa6b9cb187f0379fd982aa65d`。
+
+三次 guarded query 与三次双板数据窗口均 PASS：F1M（每个 1 MiB sample 131 fragments，delete B then A）、D1（每方向 5 samples，delete B then A）和 D2（每方向 5 samples，delete A then B）。F1M A 侧实际观察到 107 个 `CAPTURE/LOCAL_RECORDS` binding refusals，B 侧有 1 个 `ADAPTER_PHASE` rejection；D1 无 refusal/rejection，D2 B 有 1 个 `ADAPTER_PHASE` rejection。所有六个 board decision scopes 均为 `COMPLETE_DECISION_ACCOUNTING`、overflow 0；23 个 Reader rows、5 个 DDS wait API operations 和 0 次 data retry 是分离计数。没有 107+2 physical-drop、harmless 或 delivery inference。另行保留的历史限制是：A 工作包旧 F1M 的 111 次是 Binding 接纳拒绝的聚合计数，逐次原因未记录；旧六条 adapter `InvalidState` 的直接原因也未观察。两组历史计数不能相加为 117 条唯一丢失，亦不由本轮 107/2 的原因回填。
+
+新增的是 SDK-free value-only `ReceiveDecision`。在真实决策点捕获值；受锁保护的状态在对应 gate 内取得快照。现有 observer 在解锁后接收该快照，不重新查询当前 map。diagnostic 默认 OFF，每进程容量 16384 rows（reported storage 5243440 bytes），带 reason aggregates 与 overflow counters。该 instrumentation 有实际开销，并非 zero-overhead，且不构成 SDK drain 证明。CloseBusy algorithm 未改变；继承的 original owner/namespace 与 single close credit retention 已由 Host deterministic tests 验证，设备未声称 hit CloseBusy。QualificationProfile 未生成；local raw artifacts 与 package-specific profile helper 不会因 Git clone 自动进入仓库。
+
+验证记录：canonical Host `443/443 PASS`，affected Host `72/72 PASS`，affected ASan retry `72/72 PASS`，analyzer `20/20 PASS`，bounded profile `27/27 PASS`，目标包 build 与 static audit `PASS`。最终发现测试数为 445，但未执行完整 445 suite；ASan 所用预构建 Fast DDS 未插桩，TSan 未执行。初始 ASan loader failure、错误 route preparation、错误旧 analyzer capacity profile、projection/audit failures、无必要的 full rerun 与 false yield cutoff alarm 均保留为历史过程证据。设备普通 deletion/close 通过，但没有证明设备实际命中 CloseBusy 分支；SDK settlement/cancellation/quiescence、full Transport qualification、性能、完整 firmware ABI 与 QualificationProfile 仍未验证。P0/PF-01/PF-02 为 `BLOCKED / NOT QUALIFIED`，P4 未放行，生产默认仍为 `NativeBackendUnavailable`。详见 [decision and close stabilization record](NEW_PUBLIC_SOCKET_BINDING_DECISION_AND_CLOSE_STABILIZATION.md)。
+
+## 当前工作包：NEW_PUBLIC_SOCKET_BOUNDED_DDS_REGRESSION（2026-09-27；artifact run 20260927T014310Z）
+
+本工作包达到 **`NEW_PUBLIC_SOCKET_BOUNDED_DDS_REGRESSION_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`**。七个独立 fresh-process、双 RK3588A A→B DDS 数据窗口和七个 fresh guarded query 均通过；合计 14 个完成窗口、28 个 board-window guards、26 个正式 Reader rows，数据重试为 0。最终 Host `438/438 PASS`，affected ASan `169/169 PASS`；ASan 依赖中的预构建 Fast DDS 并非全部 instrumented，TSan 未执行。初始 ASan 环境 timeout 已保留；清洁 PATH/module 配置后受影响套件通过。
+
+| Case | 实际写入 / Reader takes | 结果与边界 |
+| --- | ---: | --- |
+| F256 | 3 / 3 | 3×256 KiB；每样本 33 fragments |
+| F1M | 3 / 3 | 3×1 MiB；每样本 131 fragments |
+| REL_LOSS | 3 / 3 | 一次精确 drop；NACK_FRAG admitted repair |
+| BE_LOSS | 3 / 2 | 完整 post-drop 观察中 sample 1 absent；2/3 complete |
+| VOL_LATE | 6 / 3 | 仅 late Reader 之后的新 4/5/6 |
+| TL_LATE | 6 / 6 | 保留 1/2/3 后接收新 4/5/6 |
+| KEYED_LAST | 10 / 6 | 每个 key 的历史 3/4 后接收新 5 |
+
+实际链路为 public DDS factory → 当前 DSoftBusTransport isolated façade → 原有
+`NativeSendExecution` → `PublicSocketBackend` public Socket API → remote accepted
+callback → `ProviderAdapter`/`ServiceRecordBinding` → 原有 owned-copy、receiver
+lease 和实际 `DataReader`。Fast DDS 使用现有 fragmentation；fragment size 为
+`8016`，native record bound 为 `8192`，均未改变。REL repair 的记录是同一运行内
+分开的本地逻辑观察（drop → NACK_FRAG → repair → later ingress/owned/running），
+不是跨板时钟或唯一物理 packet identity。
+
+F1M A 侧 `Binding refused_receive` 在 MATCH→DATA_DONE 增加 `111`；这是 Binding
+aggregate，不是 111 个 SDK error，个体原因和 record identity 为 `UNOBSERVED`。
+另有六个 B 侧 setup `OnBytesRejected`，值为本地 `BackendStatus::InvalidState`，
+phase 为 `UNOBSERVED`。这些事实不能被改写为 SDK 错误、假定容量拒绝、无害事件或
+all-ingress loss-free；26 条正式 Reader chains 仍按各自 case 成功完成。DDS wait
+API 是 DDS 操作而非网络 ACK packet 计数；DSoftBus `Shutdown` 为 void，不能记录为
+SDK rc0。没有 SDK drain/cancel/quiescence 证据。
+
+本轮实际修复了 shared close-credit race：Binding 保留原 owner/namespace，在 gate
+外等待未改变的单一 close credit（credit 未增加）；provider callback reentry 拒绝
+阻塞控制，精确 destructor self-wait 诊断同一 table credit，其他 table 的合法销毁
+仍可进行。该修复不构成 SDK cancellation 或 physical drain 保证。
+
+状态边界保持不变：P0/PF-01/PF-02 为 `BLOCKED / NOT QUALIFIED`，生产默认仍为
+`NativeBackendUnavailable`，P4 未放行，无 QualificationProfile；未覆盖任意
+QoS/topology、same-process hot rebuild、RAW/mixed/ROS2、性能/耐久、full
+`TransportInterface`、完整 firmware ABI、SDK settlement/cancellation/quiescence，
+也未建立生产资格。Final independent review 已关闭七个 tested profiles 的阻塞发现，
+但它不是 pre-commit、生产或更广 Transport qualification gate。
+
+详见 [New Public Socket bounded DDS regression](NEW_PUBLIC_SOCKET_BOUNDED_DDS_REGRESSION.md)
+及 artifact `.artifacts/new-public-socket-bounded-dds/run-20260927T014310Z/`；本节
+不改写后续历史工作包记录。
+
 ## 当前 PRE-COMMIT SNAPSHOT：LOCAL_NATIVE_DDS_BASELINE_COMMIT（2026-09-27；artifact run 20260927T005155Z）
 
 本 pre-commit snapshot 达到 **`LOCAL_NATIVE_DDS_BASELINE_HOST_VERIFIED / CHECKPOINT_READY`**，范围是用户明确授权的当前分支一次本地 commit。没有写入未来 commit hash；merge、push、device、SDK、release 和 QualificationProfile 仍未授权。候选冻结 345 个文件前后 SHA-256 一致；最终 CONFIG Release 全量 CTest 为 `420/420 PASS`、exit 0、144.58 秒。首轮 `418/420` 的两个 `Get-FileHash` PowerShell module-path 环境失败保留，恢复模块路径后完整重跑通过；`LastTest.log` 后被 discovery 覆盖，未宣称重建 raw transcript。final affected helper gate 为 `3/3 PASS`。

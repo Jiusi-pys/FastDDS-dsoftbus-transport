@@ -109,14 +109,26 @@ struct PublicSocketState {
     }
     void Bytes(RecordRole role,std::int32_t id,const void* data,std::uint32_t size){
         ProviderCallbacks cb;
+#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+        bool experiment_accepted=false;
+#endif
         {std::lock_guard<std::mutex> lock(gate);++observation.callback_entries;
             if(observation.stopped||observation.closed||!data||!size||size>config.max_message_size){++observation.rejected_callbacks;return;}
             if(dual&&role==RecordRole::Server){if(listener_socket<0){++observation.rejected_callbacks;return;}cb=listener_callbacks;}
             else {if(role!=config.role||primary_closed||primary_observed||primary_failed||socket<0||id!=socket){++observation.rejected_callbacks;return;}cb=callbacks;}
         }
+#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+        {std::lock_guard<std::mutex> lock(gate);experiment_accepted=dual&&role==RecordRole::Server&&observation.accepted_socket==id&&!accepted_closed&&!accepted_observed&&!accepted_failed;}
+#endif
+#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+        const auto ingress_observation=::mdds::dsoftbus::dds_experiment::SocketFrame("SDK_INGRESS",id,static_cast<const std::uint8_t*>(data),size);
+        ::mdds::dsoftbus::dds_experiment::IngressObservationScope scope(ingress_observation);
+        if(experiment_accepted&&::mdds::dsoftbus::dds_experiment::DropRegressionRecord(id,static_cast<const std::uint8_t*>(data),size))return;
+#else
         MDDS_DDS_FRAME("SDK_INGRESS",id,static_cast<const std::uint8_t*>(data),size);
+#endif
         const auto result=cb.OnBytes(id,data,size);
-        if(result!=BackendStatus::None){std::lock_guard<std::mutex> lock(gate);++observation.rejected_callbacks;}
+        if(result!=BackendStatus::None){MDDS_PROBE_EVENT("OnBytesRejected",0,int(role),id,int(result),size);std::lock_guard<std::mutex> lock(gate);++observation.rejected_callbacks;}
     }
     void Stop(RecordRole role,std::int32_t id,std::int32_t value,bool error){
         ProviderCallbacks cb;bool known=false,is_accepted=false;

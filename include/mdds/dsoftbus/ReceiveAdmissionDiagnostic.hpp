@@ -58,4 +58,27 @@ struct ReceiveAdmissionDiagnostic {
     }
 };
 static_assert(std::is_trivially_copyable<ReceiveAdmissionDiagnostic>::value,"diagnostic must be value-only");
+// Local observations, never SDK identities or authority to resolve a receiver.
+// Each branch names the check actually executed; a skipped bridge has no result.
+enum class ReceiveDecisionLayer { Binding, Adapter };
+enum class ReceiveDecisionBranch {
+    Unknown, BindingPhase, NoRegistration, NativeAdmission, NativeIdentity,
+    LocalMismatch, BridgeAccepted, BridgeRefused,
+    AdapterStopped, AdapterPhase, ChannelClosed, ForeignSocket, InvalidBuffer,
+    AdapterCapacity, Forwarded, Count
+};
+struct ReceiveDecision {
+    ReceiveDecisionLayer layer=ReceiveDecisionLayer::Binding;
+    ReceiveDecisionBranch branch=ReceiveDecisionBranch::Unknown;
+    std::uint64_t sequence=0,record_incarnation=0,correlation=0;
+    std::int32_t socket=-1;
+    int role=-1,phase=-1;
+    std::size_t size=0;
+    bool bridge_called=false,refused_receive=false;
+    std::size_t refused_receive_total=0; // captured only on the incrementing branch
+    bool status_known=false;
+    int status=-1; // NativeStatus for Binding; BackendStatus for Adapter, never SDK rc.
+    ReceiveAdmissionDiagnostic bridge;
+};
+static_assert(std::is_trivially_copyable<ReceiveDecision>::value,"decision must be value-only");
 }

@@ -49,6 +49,9 @@ public:
     // Always outside ownership gates. Bytes are borrowed only for this call;
     // diagnostic IDs are not callback identity supplied by DSoftBus.
     virtual void OnReceive(ReceiveStage,const ReceiveDiagnostic&,const std::uint8_t*,std::size_t) noexcept=0;
+    // Optional diagnostics, outside gates but still on the original callback
+    // stack. Must be bounded/nonblocking; never synchronously close here.
+    virtual void OnDecision(const ReceiveDecision&) noexcept {}
 };
 
 // Strong, opaque application identity. Copies retain one charged application,
