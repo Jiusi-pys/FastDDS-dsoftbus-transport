@@ -50,6 +50,13 @@ public:
     { return a.PollReceiveProducers(c); }
     static auto Core(ApplicationAttachments& a, const ApplicationClaim& c) { return a.TestCore(c); }
     static auto Budget(ApplicationAttachments& a) { return a.TestBudget(); }
+    // The explicitly shared claim entry. It is private to the composition on
+    // purpose: the shared receive path resolves an explicit claim and never looks a
+    // current application up by local, so this entry is reachable in production only
+    // through ServiceRecordBinding::AttachSharedInput.
+    static ApplicationClaimOutcome ClaimShared(ApplicationAttachments& a, const std::vector<Locator>& locals,
+            EndpointDirectory::Snapshot directory)
+    { return a.ClaimSharedApplication(locals, std::move(directory)); }
     static void Incarnation(ApplicationAttachments& a, const ApplicationClaim& c, const Locator& l, std::uint64_t n)
     { a.TestSetIncarnation(c,l,n); }
 };
@@ -390,6 +397,107 @@ void ApplicationCopyActivity() {
     CHECK(Admit(*failed)==ReceiveAdmissionResult::AllocationFailure);
     CHECK(ApplicationAttachmentsTestAccess::Copying(*failed,fc)==0);Empty(*failed);Detach(*failed,fc);
 }
+// AA-09: an explicitly shared claim and an exclusive claim must never hold one local
+// at the same time. The shared path is reachable in production only through
+// ServiceRecordBinding::AttachSharedInput on an already-shared runtime, so a mixed
+// pair cannot be built through HostProviderLoop; this drives the real composition
+// entry instead, which is the only place the rule can be reached at all.
+bool Same(const ApplicationIdentity& a,const ApplicationIdentity& b) {
+    return a.application_incarnation==b.application_incarnation&&a.logical_token==b.logical_token;
+}
+void MixedClaims() {
+    const auto locals=Locals();
+    // 1/3/4: a live shared claim on L(2) refuses a later exclusive claim on L(2); the
+    // refusal must not touch the shared holder's identity, budget or lifetime, and the
+    // shared holder must still complete its own receiver open/observe/close cycle.
+    {
+        Receiver r;ApplicationAttachments a(locals);
+        auto shared=ApplicationAttachmentsTestAccess::ClaimShared(a,{L(2)},Directory());
+        CHECK(shared.result==ApplicationClaimResult::Claimed&&shared.claim);
+        const auto identity=a.ObserveApplication(shared.claim);
+        const auto before=a.SnapshotUsage();
+        auto exclusive=a.ClaimApplication({L(2)},Directory());
+        CHECK(exclusive.result==ApplicationClaimResult::InUse);
+        CHECK(!exclusive.claim);
+        CHECK(Same(a.ObserveApplication(shared.claim),identity));
+        const auto after=a.SnapshotUsage();
+        CHECK(before.active_applications==after.active_applications&&
+              before.retained_applications==after.retained_applications&&
+              before.records==after.records&&before.bytes==after.bytes);
+        auto opened=a.OpenReceiver(shared.claim,L(2),&r);
+        CHECK(opened.result==ReceiverOpenResult::Opened&&opened.binding);
+        CHECK(!(a.ObserveReceiver(opened.binding)==ReceiverIdentity{}));
+        CHECK(a.CloseReceiver(opened.binding)==AttachmentControlResult::Completed);
+        Detach(a,shared.claim);
+        Empty(a);
+    }
+    // 2/3/4: a live exclusive claim on L(3) refuses a later shared claim on L(3), and
+    // the exclusive holder still completes a real model receive and settle.
+    {
+        Receiver r;ApplicationAttachments a(locals);
+        auto exclusive=Claim(a,{L(3)});
+        auto opened=Open(a,exclusive,r,L(3));
+        const auto identity=a.ObserveApplication(exclusive);
+        const auto before=a.SnapshotUsage();
+        auto shared=ApplicationAttachmentsTestAccess::ClaimShared(a,{L(3)},Directory());
+        CHECK(shared.result==ApplicationClaimResult::InUse);
+        CHECK(!shared.claim);
+        CHECK(Same(a.ObserveApplication(exclusive),identity));
+        const auto after=a.SnapshotUsage();
+        CHECK(before.active_applications==after.active_applications&&
+              before.retained_applications==after.retained_applications&&
+              before.records==after.records&&before.bytes==after.bytes);
+        CHECK(Admit(a,L(3))==ReceiveAdmissionResult::Accepted);
+        CHECK(a.CloseReceiver(opened)==AttachmentControlResult::Completed);
+        Detach(a,exclusive);
+        Empty(a);
+    }
+    // 6: a shared claim on L(2) must not over-refuse a legal exclusive claim on a
+    // different local, in either direction.
+    {
+        Receiver r;ApplicationAttachments a(locals);
+        auto shared=ApplicationAttachmentsTestAccess::ClaimShared(a,{L(2)},Directory());
+        CHECK(shared.result==ApplicationClaimResult::Claimed);
+        auto other=Claim(a,{L(5)});
+        auto opened=Open(a,other,r,L(5));
+        CHECK(Admit(a,L(5))==ReceiveAdmissionResult::Accepted);
+        CHECK(a.CloseReceiver(opened)==AttachmentControlResult::Completed);
+        Detach(a,other);
+        Detach(a,shared.claim);
+        Empty(a);
+    }
+    // 7: with two legal shared members on one local, an exclusive claim is still refused.
+    {
+        ApplicationAttachments a(locals);
+        auto one=ApplicationAttachmentsTestAccess::ClaimShared(a,{L(2)},Directory());
+        auto two=ApplicationAttachmentsTestAccess::ClaimShared(a,{L(2)},Directory());
+        CHECK(one.result==ApplicationClaimResult::Claimed&&two.result==ApplicationClaimResult::Claimed);
+        CHECK(!Same(a.ObserveApplication(one.claim),a.ObserveApplication(two.claim)));
+        auto exclusive=a.ClaimApplication({L(2)},Directory());
+        CHECK(exclusive.result==ApplicationClaimResult::InUse);
+        CHECK(a.SnapshotUsage().active_applications==2&&a.SnapshotUsage().records==0);
+        Detach(a,one.claim);Detach(a,two.claim);
+        Empty(a);
+    }
+    // 5: after a legal release the same manager object and local can be claimed again,
+    // as either kind.
+    {
+        Receiver r;ApplicationAttachments a(locals);
+        auto shared=ApplicationAttachmentsTestAccess::ClaimShared(a,{L(2)},Directory());
+        CHECK(shared.result==ApplicationClaimResult::Claimed);
+        auto opened=a.OpenReceiver(shared.claim,L(2),&r);
+        CHECK(opened.result==ReceiverOpenResult::Opened);
+        CHECK(a.CloseReceiver(opened.binding)==AttachmentControlResult::Completed);
+        Detach(a,shared.claim);
+        auto exclusive=Claim(a,{L(2)});
+        Detach(a,exclusive);
+        auto again=ApplicationAttachmentsTestAccess::ClaimShared(a,{L(2)},Directory());
+        CHECK(again.result==ApplicationClaimResult::Claimed);
+        Detach(a,again.claim);
+        CHECK(a.ClaimApplication({L(2)},Directory()).result==ApplicationClaimResult::Claimed);
+        Empty(a);
+    }
+}
 int main(int argc,char** argv) {
     // Test-only diagnostic termination: a noexcept allocation failure must be
     // an explicit failed subprocess, never an interactive Windows crash dialog.
@@ -402,7 +510,8 @@ int main(int argc,char** argv) {
         {"AA-03-old-copy-queue-taken",OldWork},{"AA-04-old-close-and-reopen",OldControl},
         {"AA-05-open-race-allocation-rollback",OpenRaceAndFaults},{"AA-06-invalid-and-capacity",InvalidAndCapacity},
         {"AA-07-64-rebuilds-retained-quota",ReuseAndRetention},{"AA-08-ownership-throwing-callback",OwnershipAndException},
-        {"AA-N3-copy-activity",ApplicationCopyActivity}};
+        {"AA-N3-copy-activity",ApplicationCopyActivity},
+        {"AA-09-mixed-shared-exclusive-claims",MixedClaims}};
     unsigned run=0,failed=0;
     for(const auto& t:cases){if(argc==2&&std::string(t.first).find(argv[1])==std::string::npos)continue;++run;
         try{t.second();std::cout<<"PASS "<<t.first<<std::endl;}catch(const std::exception& e){attachment_fail_after=-1;++failed;std::cerr<<"FAIL "<<t.first<<": "<<e.what()<<std::endl;}}

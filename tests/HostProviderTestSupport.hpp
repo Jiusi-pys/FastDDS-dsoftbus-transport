@@ -25,7 +25,7 @@ using namespace mdds::dsoftbus::host_test;
 using namespace std::chrono_literals;
 namespace rtps=eprosima::fastdds::rtps;
 namespace {
-void Check(bool x,const char* why){if(!x)throw std::runtime_error(why);}
+void Check(bool x,const char* why){if(!x){std::cerr<<"ASSERTION_FAILURE "<<why<<'\n';throw std::runtime_error(why);}}
 struct Event {
     std::mutex mutex;std::condition_variable cv;bool ready=false;
     void Signal(){std::lock_guard<std::mutex> l(mutex);ready=true;cv.notify_all();}
@@ -40,11 +40,11 @@ DSoftBusTransportDescriptor Config(){
 }
 struct Mock final:NativeBackend {
     ProviderCallbacks callbacks;std::atomic<int> sends{0},closes{0},creates{0};
-    std::function<void()> during_send;bool throw_send=false,throw_close=false,throw_identity=false,deny_after_kind=false,reject_bind=false;
+    std::function<void()> during_send,during_create;bool throw_send=false,throw_close=false,throw_identity=false,deny_after_kind=false,reject_bind=false;
     std::vector<std::uint8_t> sent;
     BackendKind Kind()const noexcept override{if(deny_after_kind)loop_deny_allocations=true;return BackendKind::HostMock;}
     BackendIdentity Identity()const override{if(throw_identity)throw std::runtime_error("mock identity exception");return {"host.facade.loop",{51},{61}};}
-    BackendSocketResult Create(ProviderCallbacks c)override{callbacks=c;++creates;return {BackendStatus::None,42};}
+    BackendSocketResult Create(ProviderCallbacks c)override{callbacks=c;++creates;if(during_create)during_create();return {BackendStatus::None,42};}
     BackendCallResult Listen(std::int32_t)override{return BackendStatus::None;}
     BackendCallResult Bind(std::int32_t)override{return reject_bind?BackendStatus::BindingRejected:BackendStatus::None;}
     BackendSendResult Send(std::int32_t id,const std::uint8_t* p,std::size_t n,std::chrono::steady_clock::time_point)override{

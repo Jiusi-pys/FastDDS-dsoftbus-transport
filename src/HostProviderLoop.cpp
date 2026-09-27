@@ -3,9 +3,38 @@
 #include <mdds/dsoftbus/RuntimeProbeAccess.hpp>
 #endif
 #include <condition_variable>
+#include <cstdio>
+#include <cstdlib>
 #include <mutex>
 namespace mdds::dsoftbus::host_test {
 using namespace phase0;
+namespace {
+// The same contract the shared input release enforces, for the path that has no input to
+// refuse on: a member view released from a context that cannot close an input never gives
+// its membership back, so the surviving views would compute a non-last departure, report
+// success and leave the runtime unsealed with this view's egress registration unrevoked.
+[[noreturn]] void RefuseSharedRuntimeRelease() noexcept
+{
+    std::fprintf(stderr,"MDDS DSoftBus shared runtime: a member view was destroyed from a context that "
+            "cannot close an input; close every facade from an external control context (CloseRequest) "
+            "before releasing it");
+    std::fputc('\n',stderr);std::fflush(stderr);std::abort();
+}
+}
+
+struct HostProviderLoop::View {
+    bool attempted=false,started=false,member=false,closing=false,closed=false,input_closing=false;
+    std::size_t active_tx=0,controls=0;
+    EgressRegistration registration;
+    BindingInput input;
+    InputChannels::Receiver* receiver=nullptr;
+    // The active receiver identity, and the identity this view retired when it
+    // closed its input. Keeping them apart is what lets an observation report a
+    // closed view without presenting its retired identity as a live one.
+    ReceiverIdentity identity{};
+    ReceiverIdentity retired_identity{};
+    std::function<void()> before_publish,after_seal;
+};
 struct HostProviderLoop::State {
     State(std::shared_ptr<NativeBackend> p,std::shared_ptr<ProcessReceiveObserver> o):backend(std::move(p)),observer(std::move(o)){}
     const std::shared_ptr<NativeBackend> backend;
@@ -29,19 +58,181 @@ struct HostProviderLoop::State {
     InputChannels::Receiver* receiver=nullptr;
     BackendCloseResult close;
     std::optional<BackendCloseResult> failed_open_cleanup;
+    bool shared=false,opening=false;
+    std::size_t live_views=0,next_tx=0;
+    std::array<std::weak_ptr<View>,2> views;
+    SendQueueLimits shared_limits;
     struct PumpGuard {
         State& state;bool receive=false;
         ~PumpGuard(){std::lock_guard<std::mutex> lock(state.gate);--state.active;if(receive)--state.active_rx;state.changed.notify_all();}
     };
 };
-HostProviderLoop::HostProviderLoop(std::shared_ptr<NativeBackend> p, std::shared_ptr<ProcessReceiveObserver> o) : state_(new State(std::move(p),std::move(o))) {}
-HostProviderLoop::~HostProviderLoop() {Shutdown();}
+HostProviderLoop::HostProviderLoop(std::shared_ptr<NativeBackend> p, std::shared_ptr<ProcessReceiveObserver> o) : state_(new State(std::move(p),std::move(o))),view_(std::make_shared<View>()) {}
+HostProviderLoop::HostProviderLoop(std::shared_ptr<State> s,std::shared_ptr<View> v):state_(std::move(s)),view_(std::move(v)){}
+HostProviderLoop::~HostProviderLoop() {
+    if(Shutdown())return;
+    // A refused shutdown leaves this view a runtime member. Failing loudly here is what
+    // keeps the two release paths consistent: with an open input the release already
+    // aborts, and without one it used to leak the runtime silently.
+    bool member=false;
+    {std::lock_guard<std::mutex> lock(state_->gate);member=view_->member;}
+    if(member)RefuseSharedRuntimeRelease();
+}
+std::shared_ptr<HostProviderLoop> HostProviderLoop::CreateShared(std::shared_ptr<NativeBackend> backend,
+        std::shared_ptr<ProcessReceiveObserver> observer) {
+    auto loop=std::make_shared<HostProviderLoop>(std::move(backend),std::move(observer));
+    loop->state_->shared=true;return loop;
+}
+std::shared_ptr<HostProviderLoop> HostProviderLoop::Join() noexcept {
+    auto& s=*state_;
+    try {
+        auto v=std::make_shared<View>();
+        auto result=std::shared_ptr<HostProviderLoop>(new HostProviderLoop(state_,v));
+        std::lock_guard<std::mutex> lock(s.gate);
+        if(!s.shared||!s.started||s.stopping||s.closed||!s.live_views||s.live_views==s.views.size())return {};
+        for(auto& slot:s.views){auto old=slot.lock();if(!old||!old->member){slot=v;v->member=true;++s.live_views;return result;}}
+    }catch(...){return {};}
+    return {};
+}
+bool HostProviderLoop::StartShared(const DSoftBusTransportDescriptor& d) noexcept {
+    auto& s=*state_;bool joining=false;
+    {std::lock_guard<std::mutex> lock(s.gate);
+        if(view_->attempted||view_->closed||s.stopping||s.closed)return false;
+        view_->attempted=true;joining=view_->member;
+    }
+    if(!joining){
+        if(!StartRuntime(d))return false;
+        std::lock_guard<std::mutex> lock(s.gate);
+        view_->registration=std::move(s.registration);view_->member=true;view_->started=true;
+        s.views[0]=view_;s.live_views=1;s.shared_limits=d.send_limits;return true;
+    }
+    try {
+        const auto& expected=s.shared_limits;const auto& given=d.send_limits;
+        if(d.maxMessageSize!=expected.max_record_bytes||given.max_record_bytes!=expected.max_record_bytes||
+                given.peer_records!=expected.peer_records||given.peer_bytes!=expected.peer_bytes||
+                given.global_records!=expected.global_records||given.global_bytes!=expected.global_bytes)
+            {ShutdownShared();return false;}
+        auto exact=s.config;exact.directory=d.directory;
+        auto checked=s.native->AcquireNamespace(s.config.directory.locals[0].local_locator,exact);
+        if(!checked){ShutdownShared();return false;}
+        auto reg=s.execution->CreateRuntime(exact,d.egress_selections,d.send_limits);
+        if(!reg){ShutdownShared();return false;}
+        std::lock_guard<std::mutex> lock(s.gate);
+        view_->registration=std::move(*reg.value);view_->started=true;return true;
+    }catch(...){ShutdownShared();return false;}
+}
+InputOpenResult HostProviderLoop::OpenShared(const Locator& local,InputChannels::Receiver* receiver) noexcept {
+    auto& s=*state_;
+    {std::lock_guard<std::mutex> lock(s.gate);
+        if(!view_->started||view_->closing||view_->closed||s.stopping)return InputOpenResult::Disabled;
+        if(local!=s.config.directory.locals[0].local_locator)return InputOpenResult::InvalidLocal;
+        if(!receiver)return InputOpenResult::NullReceiver;
+        if(view_->input_closing)return InputOpenResult::Closing;
+        if(view_->receiver)return view_->receiver==receiver?InputOpenResult::AlreadyOpen:InputOpenResult::Conflict;
+        ++view_->controls;
+    }
+    struct ControlPin {State& s;View& v;~ControlPin(){std::lock_guard<std::mutex> lock(s.gate);--v.controls;s.changed.notify_all();}} pin{s,*view_};
+    bool initialize=false;
+    {std::unique_lock<std::mutex> lock(s.gate);
+        s.changed.wait(lock,[&]{return !s.opening||view_->closing;});
+        if(view_->closing||s.stopping)return InputOpenResult::Closing;
+        if(!s.adapter){s.opening=true;initialize=true;}
+    }
+    if(initialize){
+        const auto opened=OpenRuntime(local,nullptr);
+        {std::lock_guard<std::mutex> lock(s.gate);s.opening=false;s.changed.notify_all();}
+        if(opened!=InputOpenResult::Opened)return opened;
+    }
+    auto input=s.adapter->AttachSharedInput(receiver);
+    if(!input)return input.issue.code==NativeStatus::AllocationFailure?InputOpenResult::AllocationFailure:InputOpenResult::Conflict;
+    try{if(view_->before_publish)view_->before_publish();}catch(...){return InputOpenResult::AllocationFailure;}
+    const auto identity=input.value->Identity();
+    std::lock_guard<std::mutex> lock(s.gate);
+    if(view_->closing||view_->closed||s.stopping)return InputOpenResult::Closing;
+    // A concurrent control can publish a receiver between the entry check and here. The
+    // pending registration is dropped outside this gate rather than closing a live one
+    // inside it: moving into a non-empty view_->input would run that close here, waiting
+    // on receiver detach while holding the runtime gate. The local input is destroyed
+    // after this guard is released.
+    if(view_->receiver)return view_->receiver==receiver?InputOpenResult::AlreadyOpen:InputOpenResult::Conflict;
+    view_->input=std::move(*input.value);view_->identity=identity;view_->receiver=receiver;return InputOpenResult::Opened;
+}
+bool HostProviderLoop::CloseSharedInput(const Locator& local) noexcept {
+    if(!InputCloseAllowedOnThisThread())return false;
+    auto& s=*state_;
+    {std::unique_lock<std::mutex> lock(s.gate);
+        if(!s.started||local!=s.config.directory.locals[0].local_locator)return false;
+        ++s.close_calls;if(!s.first_close_order)s.first_close_order=++s.control_order;
+        if(view_->input_closing){s.changed.wait(lock,[&]{return !view_->input_closing;});return view_->receiver==nullptr;}
+        if(!view_->receiver)return true;
+        view_->input_closing=true;++view_->controls;s.changed.notify_all();
+    }
+    const auto result=view_->input.Close();
+    std::lock_guard<std::mutex> lock(s.gate);
+    if(result==NativeStatus::None){
+        // The receiver is gone, so its identity is no longer active. It is retained
+        // as a retired identity rather than left in the active field, so that a
+        // closed view can never be observed as still holding a live receiver.
+        view_->retired_identity=view_->identity;view_->identity=ReceiverIdentity{};view_->receiver=nullptr;}
+    view_->input_closing=false;--view_->controls;s.changed.notify_all();return result==NativeStatus::None;
+}
+bool HostProviderLoop::ShutdownShared() noexcept {
+    if(!InputCloseAllowedOnThisThread())return false;
+    auto& s=*state_;
+    {std::unique_lock<std::mutex> lock(s.gate);
+        if(view_->closed)return !s.closed||s.close.status==BackendStatus::None;
+        if(view_->closing){
+            // Wait for a definite state, not only for success. The owner either
+            // publishes Closed, or publishes that it retained this view's receiver;
+            // a waiter is never left on a latch that only the success path clears.
+            s.changed.wait(lock,[&]{return view_->closed||!view_->closing;});
+            if(!view_->closing)return false;
+            return !s.closed||s.close.status==BackendStatus::None;
+        }
+        if(!view_->member){view_->closed=true;s.changed.notify_all();return true;}
+        view_->closing=true;
+        s.changed.notify_all();
+    }
+    if(view_->after_seal)view_->after_seal();
+    {std::unique_lock<std::mutex> lock(s.gate);s.changed.wait(lock,[&]{return view_->controls==0;});}
+    EgressRegistration registration;
+    {std::lock_guard<std::mutex> lock(s.gate);registration=view_->registration;}
+    if(registration){auto revoke=s.execution->BeginRevoke(registration);if(revoke)revoke.value->Progress();}
+    if(!CloseSharedInput(s.config.directory.locals[0].local_locator)) {
+        // This view keeps its receiver, its claim and its membership. Publish that
+        // decision and wake every waiter, then report failure, so a legal close
+        // failure retains responsibility and a later Shutdown() may retry. Nothing
+        // is presented as Closed, and no receiver, claim or membership is given up here.
+        // This view's own egress registration was already revoked above and is not
+        // restored, so a retained view is receive-capable but no longer send-capable; a
+        // retry re-runs the revocation, which is idempotent.
+        std::lock_guard<std::mutex> lock(s.gate);
+        view_->closing=false;
+        s.changed.notify_all();
+        return false;
+    }
+    bool last=false;
+    {std::unique_lock<std::mutex> lock(s.gate);
+        s.changed.wait(lock,[&]{return view_->active_tx==0;});
+        view_->member=false;last=--s.live_views==0;
+        if(last)s.stopping=true; // same gate as Join: no resurrection window
+    }
+    const bool result=!last||ShutdownRuntime(true);
+    {std::lock_guard<std::mutex> lock(s.gate);view_->closed=true;s.changed.notify_all();}
+    return result;
+}
+void HostProviderLoop::SetSharedControlHooks(std::function<void()> before_publish,std::function<void()> after_seal){
+    view_->before_publish=std::move(before_publish);view_->after_seal=std::move(after_seal);
+}
 bool HostProviderLoop::Start(const DSoftBusTransportDescriptor& d) noexcept {
+    return state_->shared?StartShared(d):StartRuntime(d);
+}
+bool HostProviderLoop::StartRuntime(const DSoftBusTransportDescriptor& d) noexcept {
     auto& s=*state_;
     {std::lock_guard<std::mutex> lock(s.gate);if(s.attempted||s.closed)return false;s.attempted=true;}
     // Only the attempt that changed attempted owns failure cleanup. A second
     // facade rejected above must never stop the first facade's live backend.
-    struct Rollback {HostProviderLoop& loop;bool done=false;~Rollback(){if(!done)loop.Shutdown();}} rollback{*this};
+    struct Rollback {HostProviderLoop& loop;bool done=false;~Rollback(){if(!done)loop.ShutdownRuntime();}} rollback{*this};
     try {
 #ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
     constexpr auto admitted_kind=BackendKind::DSoftBusProvider;
@@ -65,6 +256,9 @@ bool HostProviderLoop::Start(const DSoftBusTransportDescriptor& d) noexcept {
     } catch (...) {return false;}
 }
 InputOpenResult HostProviderLoop::Open(const Locator& local, InputChannels::Receiver* receiver) noexcept {
+    return state_->shared?OpenShared(local,receiver):OpenRuntime(local,receiver);
+}
+InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannels::Receiver* receiver) noexcept {
     auto& s=*state_;
     {std::lock_guard<std::mutex> lock(s.gate);
         ++s.open_calls;
@@ -72,7 +266,7 @@ InputOpenResult HostProviderLoop::Open(const Locator& local, InputChannels::Rece
         if(s.input_closing)return InputOpenResult::Closing;
         if(s.failed_open_cleanup)return InputOpenResult::Disabled;
         if(local!=s.config.directory.locals[0].local_locator)return InputOpenResult::InvalidLocal;
-        if(!receiver)return InputOpenResult::NullReceiver;
+        if(!receiver&&!s.shared)return InputOpenResult::NullReceiver;
         if(s.input_open)return s.receiver==receiver?InputOpenResult::AlreadyOpen:InputOpenResult::Conflict;
     }
     if(s.adapter) {
@@ -95,6 +289,7 @@ InputOpenResult HostProviderLoop::Open(const Locator& local, InputChannels::Rece
     if(!directory.value)return InputOpenResult::InvalidLocal;
     request.directory=*directory.value;request.receiver=receiver;
     request.receive_observer=s.observer;
+    request.shared_input_channel=s.shared;
 #ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
     auto result=RuntimeProbeAccess::Build(s.domain,ServiceRecordTable::Process(),*s.native,*s.attachments,s.backend,request);
 #else
@@ -119,6 +314,7 @@ InputOpenResult HostProviderLoop::Open(const Locator& local, InputChannels::Rece
       catch(...) {settle_pending();return InputOpenResult::Disabled;}
 }
 bool HostProviderLoop::CloseInput(const Locator& local) noexcept {
+    if(state_->shared)return CloseSharedInput(local);
     auto& s=*state_;
     {
         std::lock_guard<std::mutex> lock(s.gate);
@@ -135,11 +331,42 @@ bool HostProviderLoop::CloseInput(const Locator& local) noexcept {
 }
 SenderAttachResult HostProviderLoop::Attach(eprosima::fastdds::rtps::SendResourceList& list) {
     auto& s=*state_;
+    if(s.shared){
+        EgressRegistration registration;
+        {std::lock_guard<std::mutex> lock(s.gate);if(!view_->started||view_->closing||view_->closed||s.stopping)return {SenderAttachStatus::RuntimeClosed};registration=view_->registration;}
+        return s.execution->Attach(registration,list);
+    }
     {std::lock_guard<std::mutex> lock(s.gate);if(!s.started||s.stopping)return {SenderAttachStatus::RuntimeClosed};}
     return s.execution->Attach(s.registration,list);
 }
 NativeSendRunResult HostProviderLoop::PumpSend() noexcept {
     auto& s=*state_;
+    if(s.shared){
+        std::array<std::shared_ptr<View>,2> eligible;std::size_t count=0;
+        {std::lock_guard<std::mutex> lock(s.gate);
+            // The runtime owns the send queue, so driving it is a runtime-level
+            // capability. Who may drive it is one rule shared with PumpReceive: a view
+            // that actually started belongs to this runtime and may keep advancing it
+            // even after it closes, because the retained controller is the only
+            // progress owner during the final drain; a view whose Start never
+            // succeeded is not a member here and must not drive this runtime's work on
+            // another view's behalf.
+            if(!view_->started)return {NativeStatus::WrongState};
+            if(!s.send_provider||s.stopping)return {NativeStatus::ServiceClosing};
+            for(std::size_t i=0;i<s.views.size();++i){auto v=s.views[(s.next_tx+i)%s.views.size()].lock();if(v&&v->started&&!v->closing&&!v->closed)eligible[count++]=std::move(v);}
+            s.next_tx=(s.next_tx+1)%s.views.size();++s.active;
+        }
+        State::PumpGuard pump{s};
+        for(const auto& v:eligible)if(v){
+            {std::lock_guard<std::mutex> lock(s.gate);if(v->closing||v->closed)continue;++v->active_tx;}
+            struct Pin {State& s;View& v;~Pin(){std::lock_guard<std::mutex> lock(s.gate);--v.active_tx;s.changed.notify_all();}} pin{s,*v};
+            auto work=s.execution->Take(v->registration);if(!work)continue;
+            auto invocation=s.execution->TryAdmit(*work.value,s.send_provider);
+            if(!invocation)return {invocation.issue.code};
+            return invocation.value->Run();
+        }
+        return {NativeStatus::NotFound};
+    }
     {
         std::lock_guard<std::mutex> lock(s.gate);
         if(!s.send_provider||s.stopping)return {NativeStatus::ServiceClosing};
@@ -155,18 +382,37 @@ NativeSendRunResult HostProviderLoop::PumpSend() noexcept {
 }
 BackendStatus HostProviderLoop::PumpReceive() noexcept {
     auto& s=*state_;
-    {std::lock_guard<std::mutex> lock(s.gate);if(!s.input_open||s.stopping)return BackendStatus::InvalidState;++s.active;++s.active_rx;}
+    if(s.shared)
+    {
+        // The record and the accepted socket belong to the runtime, so this stays a
+        // runtime-level pump, gated by the same rule as PumpSend: a view that
+        // actually started may drive it (including after it closes, so Q and the
+        // final drain never lose their only progress owner), while a view whose
+        // Start never succeeded may not drive this runtime's record at all.
+        std::lock_guard<std::mutex> lock(s.gate);
+        if(!view_->started||!s.input_open||s.stopping)return BackendStatus::InvalidState;
+        ++s.active;++s.active_rx;
+    }
+    else
+    {
+        std::lock_guard<std::mutex> lock(s.gate);
+        if(!s.input_open||s.stopping)return BackendStatus::InvalidState;
+        ++s.active;++s.active_rx;
+    }
     State::PumpGuard guard{s,true};
     return s.adapter->DispatchOne();
 }
 bool HostProviderLoop::Shutdown() noexcept {
+    return state_->shared?ShutdownShared():ShutdownRuntime();
+}
+bool HostProviderLoop::ShutdownRuntime(bool owns_stop) noexcept {
     if(!InputCloseAllowedOnThisThread())return false;
     auto& s=*state_;
     {
         std::unique_lock<std::mutex> lock(s.gate);
         ++s.shutdown_calls;if(!s.first_shutdown_order)s.first_shutdown_order=++s.control_order;
         if(s.closed)return s.close.status==BackendStatus::None;
-        if(s.stopping){s.changed.wait(lock,[&]{return s.closed;});return s.close.status==BackendStatus::None;}
+        if(s.stopping&&!owns_stop){s.changed.wait(lock,[&]{return s.closed;});return s.close.status==BackendStatus::None;}
         s.stopping=true;
     }
     if(s.execution&&s.registration) {
@@ -194,10 +440,21 @@ HostLoopObservation HostProviderLoop::Observe() const noexcept {
     auto& s=*state_;HostLoopObservation v;
     {std::lock_guard<std::mutex> lock(s.gate);v.started=s.started;v.input_open=s.input_open;v.input_closing=s.input_closing;v.sealed=s.sealed;v.closed=s.closed;v.active_pumps=s.active;v.close=s.close;v.failed_open_cleanup=s.failed_open_cleanup;
         v.open_calls=s.open_calls;v.close_calls=s.close_calls;v.shutdown_calls=s.shutdown_calls;v.first_close_order=s.first_close_order;v.first_shutdown_order=s.first_shutdown_order;}
-    if(s.registration){v.tx=s.registration.SnapshotUsage();v.send=s.execution->Observe(s.registration);}
+    // A shared runtime moves its original registration into the first view, so this
+    // state-level handle is deliberately empty there: it must never be published as
+    // a per-view zero. Each shared view reports its own registration below.
+    if(s.registration&&!s.shared){v.tx=s.registration.SnapshotUsage();v.send=s.execution->Observe(s.registration);}
     if(s.attachments)v.receive=s.attachments->SnapshotUsage();
     if(s.native)v.native=s.native->SnapshotUsage();
-    if(s.adapter)v.adapter=s.adapter->Observe();return v;
+    if(s.adapter)v.adapter=s.adapter->Observe();
+    if(s.shared){
+        EgressRegistration registration;
+        std::array<EgressRegistration,2> all;
+        {std::lock_guard<std::mutex> lock(s.gate);v.shared_runtime=true;v.live_views=s.live_views;v.receiver_identity=view_->identity;v.retired_receiver_identity=view_->retired_identity;v.input_open=view_->receiver!=nullptr;v.input_closing=view_->input_closing;v.view_controls=view_->controls;v.view_closing=view_->closing;registration=view_->registration;for(std::size_t i=0;i<s.views.size();++i)if(auto live=s.views[i].lock())all[i]=live->registration;}
+        if(registration){v.tx=registration.SnapshotUsage();v.send=s.execution->Observe(registration);}
+        for(const auto& r:all)if(r)v.runtime_admitted_outstanding+=s.execution->Observe(r).admitted_outstanding;
+    }
+    return v;
 }
 bool HostProviderLoop::WaitSealed(std::chrono::steady_clock::time_point deadline) const {
     std::unique_lock<std::mutex> lock(state_->gate);
@@ -205,7 +462,7 @@ bool HostProviderLoop::WaitSealed(std::chrono::steady_clock::time_point deadline
 }
 bool HostProviderLoop::WaitInputClosing(std::chrono::steady_clock::time_point deadline) const {
     std::unique_lock<std::mutex> lock(state_->gate);
-    return state_->changed.wait_until(lock,deadline,[&]{return state_->input_closing;});
+    return state_->changed.wait_until(lock,deadline,[&]{return state_->shared?view_->input_closing:state_->input_closing;});
 }
 }
 namespace mdds::dsoftbus {

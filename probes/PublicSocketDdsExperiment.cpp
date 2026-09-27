@@ -35,6 +35,7 @@ thread_local const Control* control=nullptr;
 thread_local bool setup_control_failed=false;
 #ifdef MDDS_DDS_EXPERIMENT_TESTING
 thread_local std::function<void(dds::DataWriter*)> after_wait_hook;
+thread_local bool shared_delete_failure_once=false;
 #endif
 thread_local HostProviderLoop* inspecting=nullptr;
 thread_local std::uint64_t current_ingress=0;
@@ -59,7 +60,7 @@ std::uint64_t FrameBytes(const char* stage,std::int32_t socket,const std::uint8_
     const auto seen=mdds::experiment::ObserveRtps(p,n);if(!seen.valid)return 0;
     Frame base;base.stage=stage;base.socket=socket;base.length=n;base.hash=14695981039346656037ull;for(std::size_t i=0;i<n;++i){base.hash^=p[i];base.hash*=1099511628211ull;}
     if(diagnostic){auto native=diagnostic->native.Observe();base.correlation=diagnostic->correlation;base.app=diagnostic->identity.application_incarnation;base.receiver=diagnostic->identity.receiver_incarnation;base.owner=native.incarnation;}
-    else if(inspecting){auto view=inspecting->Observe();base.owner=view.adapter.binding.owner_incarnation;base.admitted=view.send.admitted_outstanding;base.entered=view.native.send.entered;}
+    else if(inspecting){auto view=inspecting->Observe();base.owner=view.adapter.binding.owner_incarnation;base.admitted=view.shared_runtime?view.runtime_admitted_outstanding:view.send.admitted_outstanding;base.entered=view.native.send.entered;}
     auto& store=Store();std::lock_guard<std::mutex> l(store.gate);base.packet=++store.packets;base.ingress=std::strcmp(stage,"SDK_INGRESS")==0?base.packet:current_ingress;
     auto save=[&](const Frame& f){if(store.count==store.rows.size())++store.overflow;else store.rows[store.count++]=f;};
     for(const auto& x:seen.data){auto f=base;f.writer=x.writer_guid;const auto e=std::array<std::uint8_t,4>{f.writer[12],f.writer[13],f.writer[14],f.writer[15]};f.kind=e==std::array<std::uint8_t,4>{0,1,0,0xc2}?"SPDP":(e==std::array<std::uint8_t,4>{0,0,3,0xc2}||e==std::array<std::uint8_t,4>{0,0,4,0xc2})?"SEDP":"DATA";f.sn=(std::uint64_t(std::uint32_t(x.sequence_hi))<<32)|x.sequence_lo;f.offset=x.submessage_offset;save(f);}
@@ -195,9 +196,11 @@ struct Endpoint {
     }
     ~Endpoint(){if(!deleted)Cleanup();}
 };
+#include "PublicSocketSharedDds.inc"
 }
 #ifdef MDDS_DDS_EXPERIMENT_TESTING
 void SetAfterWaitHook(std::function<void(dds::DataWriter*)> h){after_wait_hook=std::move(h);}
+void SetSharedDeleteFailureForTest(bool enabled){shared_delete_failure_once=enabled;}
 bool DropIsolationObserved() noexcept {
     auto& s=Store();std::lock_guard<std::mutex> l(s.gate);std::uint64_t occurrence=0;bool observed=false;
     for(std::size_t i=0;i<s.count;++i)if(std::strcmp(s.rows[i].stage,"EXPERIMENT_DROP")==0){if(occurrence&&occurrence!=s.rows[i].ingress)return false;occurrence=s.rows[i].ingress;}
@@ -211,7 +214,11 @@ bool Valid(const Config& c) noexcept {
 #ifndef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
 if(c.scenario!="SMALL")return false;
 #endif
-if(c.scenario!="SMALL"&&c.scenario!="F256"&&c.scenario!="F1M"&&c.scenario!="REL_LOSS"&&c.scenario!="BE_LOSS"&&c.scenario!="VOL_LATE"&&c.scenario!="TL_LATE"&&c.scenario!="KEYED_LAST")return false;if(c.side>1||c.delete_first>1||c.run.size()!=16||c.peer_network.empty()||c.peer_network.size()>64)return false;for(char v:c.run)if(!((v>='0'&&v<='9')||(v>='a'&&v<='f')))return false;return c.service_prefix=="com.kaihong.mdds.p"||c.service_prefix=="host.public";}
+bool shared=false;
+#ifdef MDDS_PUBLIC_SOCKET_SHARED_REATTACH
+shared=c.scenario=="SHARED_W1"||c.scenario=="SHARED_W2";
+#endif
+if(!shared&&c.scenario!="SMALL"&&c.scenario!="F256"&&c.scenario!="F1M"&&c.scenario!="REL_LOSS"&&c.scenario!="BE_LOSS"&&c.scenario!="VOL_LATE"&&c.scenario!="TL_LATE"&&c.scenario!="KEYED_LAST")return false;if(c.side>1||c.delete_first>1||c.run.size()!=16||c.peer_network.empty()||c.peer_network.size()>64)return false;for(char v:c.run)if(!((v>='0'&&v<='9')||(v>='a'&&v<='f')))return false;return c.service_prefix=="com.kaihong.mdds.p"||c.service_prefix=="host.public";}
 bool IsolateProcess() noexcept {try{for(const char* p:{"FASTDDS_DEFAULT_PROFILES_FILE","FASTRTPS_DEFAULT_PROFILES_FILE","FASTDDS_ENVIRONMENT_FILE","ROS_DISCOVERY_SERVER","ROS_SUPER_CLIENT","FASTDDS_BUILTIN_TRANSPORTS","FASTDDS_STATISTICS"}){
 #ifdef _WIN32
     if(_putenv_s(p,""))return false;
@@ -226,7 +233,11 @@ bool IsolateProcess() noexcept {try{for(const char* p:{"FASTDDS_DEFAULT_PROFILES
 #endif
     eprosima::fastdds::LibrarySettings settings;settings.intraprocess_delivery=eprosima::fastdds::INTRAPROCESS_OFF;auto f=dds::DomainParticipantFactory::get_instance();return f->set_library_settings(settings)==dds::RETCODE_OK&&f->get_library_settings(settings)==dds::RETCODE_OK&&settings.intraprocess_delivery==eprosima::fastdds::INTRAPROCESS_OFF;
 }catch(...){return false;}}
-Result Run(const Config& c,const Control& b) noexcept {Result failed;if(!Valid(c)){failed.first_failure="CONFIG";failed.drained=true;return failed;}control=&b;setup_control_failed=false;try{Endpoint endpoint(c,b);try{endpoint.Create();if(c.scenario=="SMALL")endpoint.Data();else endpoint.RegressionData();endpoint.Stage("DELETE");if(c.scenario=="SMALL")endpoint.RejectExtras("PRE_DELETE_EXTRA");else endpoint.RegressionExtras();Require(endpoint.Cleanup(),"DDS_CLEANUP");endpoint.Stage("DDS_DELETED");Require(!endpoint.pump_fault,"PUMP_FAULT");Require(FrameOverflow()==0,"FRAME_OVERFLOW");endpoint.result.success=true;}catch(const std::exception& e){endpoint.Failure(setup_control_failed?"CONTROL_LISTENER_READY":e.what());if(!endpoint.deleted)endpoint.Cleanup();}catch(...){endpoint.Failure("UNKNOWN_EXCEPTION");if(!endpoint.deleted)endpoint.Cleanup();}control=nullptr;std::printf("DDS_RESULT side=%u success=%d writes=%u takes=%u drained=%d first_failure=%s\n",c.side,endpoint.result.success,endpoint.result.writes,endpoint.result.takes,endpoint.result.drained,endpoint.result.first_failure.c_str());std::fflush(stdout);return endpoint.result;}catch(...){control=nullptr;failed.first_failure="CONSTRUCTION_EXCEPTION";return failed;}}
+Result Run(const Config& c,const Control& b) noexcept {Result failed;if(!Valid(c)){failed.first_failure="CONFIG";failed.drained=true;return failed;}
+#ifdef MDDS_PUBLIC_SOCKET_SHARED_REATTACH
+if(c.scenario=="SHARED_W1"||c.scenario=="SHARED_W2")return RunShared(c,b);
+#endif
+control=&b;setup_control_failed=false;try{Endpoint endpoint(c,b);try{endpoint.Create();if(c.scenario=="SMALL")endpoint.Data();else endpoint.RegressionData();endpoint.Stage("DELETE");if(c.scenario=="SMALL")endpoint.RejectExtras("PRE_DELETE_EXTRA");else endpoint.RegressionExtras();Require(endpoint.Cleanup(),"DDS_CLEANUP");endpoint.Stage("DDS_DELETED");Require(!endpoint.pump_fault,"PUMP_FAULT");Require(FrameOverflow()==0,"FRAME_OVERFLOW");endpoint.result.success=true;}catch(const std::exception& e){endpoint.Failure(setup_control_failed?"CONTROL_LISTENER_READY":e.what());if(!endpoint.deleted)endpoint.Cleanup();}catch(...){endpoint.Failure("UNKNOWN_EXCEPTION");if(!endpoint.deleted)endpoint.Cleanup();}control=nullptr;std::printf("DDS_RESULT side=%u success=%d writes=%u takes=%u drained=%d first_failure=%s\n",c.side,endpoint.result.success,endpoint.result.writes,endpoint.result.takes,endpoint.result.drained,endpoint.result.first_failure.c_str());std::fflush(stdout);return endpoint.result;}catch(...){control=nullptr;failed.first_failure="CONSTRUCTION_EXCEPTION";return failed;}}
 IngressObservationScope::IngressObservationScope(std::uint64_t id) noexcept:previous_(current_ingress){current_ingress=id;}
 IngressObservationScope::~IngressObservationScope(){current_ingress=previous_;}
 std::uint64_t SocketFrame(const char* stage,std::int32_t id,const std::uint8_t* p,std::size_t n) noexcept {return FrameBytes(stage,id,p,n);}

@@ -540,6 +540,13 @@ BackendStatus ProviderAdapter::DispatchOne() noexcept {
     if (result == InputDeliveryResult::CallbackFailure) return BackendStatus::CallbackFailure;
     return result == InputDeliveryResult::Delivered ? BackendStatus::None : BackendStatus::BindingRejected;
 }
+NativeResult<BindingInput> ProviderAdapter::AttachSharedInput(InputChannels::Receiver* receiver) noexcept {
+    {std::lock_guard<std::mutex> lock(state_->gate);
+        if(!state_->request.shared_input_channel||state_->phase!=AdapterPhase::Published||state_->stopped)
+            return {std::nullopt,{NativeStatus::WrongState}};
+    }
+    return (state_->dual?state_->listener.get():state_->binding.get())->AttachSharedInput(receiver);
+}
 BackendStatus ProviderAdapter::CloseAccepted() noexcept {return state_->CloseAccepted();}
 bool ProviderAdapter::IsProviderCallbackContext() noexcept {return detail::provider_callback_depth!=0;}
 BackendStatus ProviderAdapter::CloseInput() noexcept {

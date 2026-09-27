@@ -182,6 +182,11 @@ public:
     // threads and makes no SDK calls.
 private:
     friend class ApplicationAttachmentsTestAccess;
+    friend class ServiceRecordBinding;
+    ApplicationClaimOutcome ClaimSharedApplication(const std::vector<Locator>&,
+            EndpointDirectory::Snapshot);
+    ApplicationClaimOutcome ClaimApplicationImpl(const std::vector<Locator>&,
+            EndpointDirectory::Snapshot, bool shared);
     friend class detail::ProcessReceiveBridge;
     friend struct detail::ProcessReceiveExecution;
     friend class ProcessCoordinator;

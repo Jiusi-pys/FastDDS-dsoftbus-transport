@@ -72,6 +72,7 @@ public:
     static bool IsProviderCallbackContext() noexcept;
     BackendStatus CloseInput() noexcept;
     BackendStatus ReopenInput(InputChannels::Receiver*) noexcept;
+    NativeResult<BindingInput> AttachSharedInput(InputChannels::Receiver*) noexcept;
     BackendCloseResult Close() noexcept;
     AdapterObservation Observe() const noexcept;
 private:

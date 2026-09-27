@@ -15,6 +15,24 @@ namespace mdds::dsoftbus {
 namespace phase0::detail {struct ProviderAdapterState;}
 class ServiceRecordBinding;
 class ServiceRecordBindingTestAccess;
+struct ApplicationGroup;
+// Original application/receiver responsibility on an explicitly shared native
+// channel. Close only from external control context, before receiver destruction.
+class BindingInput final {
+public:
+    BindingInput() noexcept;
+    ~BindingInput();
+    BindingInput(BindingInput&&) noexcept;
+    BindingInput& operator=(BindingInput&&) noexcept;
+    BindingInput(const BindingInput&)=delete;
+    BindingInput& operator=(const BindingInput&)=delete;
+    explicit operator bool() const noexcept;
+    NativeStatus Close() noexcept;
+    ReceiverIdentity Identity() const noexcept;
+private:
+    friend class ServiceRecordBinding;
+    std::shared_ptr<ApplicationGroup> group_;
+};
 
 // The adapter's own deployment state. It names no SDK fact: Published means this
 // binding finished its own steps and will now admit ingress, never that the SDK
@@ -78,6 +96,9 @@ struct BindingRequest
     // Host diagnostic seam, called by the existing receive path outside gates.
     // Contains real capture identity; it is not SDK callback metadata.
     std::shared_ptr<ProcessReceiveObserver> receive_observer;
+    // Explicit assembly only: native binding owns no surrogate receiver. Real
+    // receiver registrations join this live record's physical channel below.
+    bool shared_input_channel = false;
 };
 
 // Read-only view. It reports state and identity, never a callable entrance: the
@@ -222,6 +243,7 @@ public:
     // owner/record/route/TX remain live. Queued RX is canceled without a pump.
     NativeStatus CloseInput() noexcept;
     NativeStatus ReopenInput(InputChannels::Receiver*) noexcept;
+    NativeResult<BindingInput> AttachSharedInput(InputChannels::Receiver*) noexcept;
     // Whole-deployment rollback in reverse order. A created socket's close
     // responsibility is claimed once and the provider is shut down; a record slot
     // that was exposed is never reclaimed and its entrance is never rebound.

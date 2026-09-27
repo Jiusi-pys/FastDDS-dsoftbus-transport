@@ -114,10 +114,14 @@ struct AttachmentSlot { Locator local; std::shared_ptr<AttachmentApplication> ap
 struct AttachmentsControl final
 {
     AttachmentsControl(const std::vector<Locator>& locals, AttachmentLimits limits)
-        : budget(std::make_shared<AttachmentBudget>(limits, locals.size())), slots(locals.size())
+        : budget(std::make_shared<AttachmentBudget>(limits, locals.size())), slots(locals.size()),
+          shared_apps(limits.retained_applications)
     { for (std::size_t i = 0; i < locals.size(); ++i) slots[i].local = locals[i]; }
     const std::shared_ptr<AttachmentBudget> budget;
     std::vector<AttachmentSlot> slots;
+    // Explicit same-channel claims; they share the original local/global budget
+    // and queue. Exclusive legacy claims never resolve one of these by locator.
+    std::vector<std::shared_ptr<AttachmentApplication>> shared_apps;
     std::unique_ptr<AttachmentRecord> queue;
     AttachmentRecord* tail = nullptr;
     bool stopped = false;
@@ -216,9 +220,20 @@ ApplicationAttachments::~ApplicationAttachments()
         if (claim) AwaitDetached(claim);
     }
     // Outstanding work retains only app/core/budget, never this or hook closures.
+    for (auto& entry : control.shared_apps) {
+        ApplicationClaim claim;
+        { std::lock_guard<std::mutex> lock(control.budget->mutex); claim.app_=entry; }
+        if (claim) AwaitDetached(claim);
+    }
 }
 ApplicationClaimOutcome ApplicationAttachments::ClaimApplication(const std::vector<Locator>& locals,
         EndpointDirectory::Snapshot directory)
+{ return ClaimApplicationImpl(locals,std::move(directory),false); }
+ApplicationClaimOutcome ApplicationAttachments::ClaimSharedApplication(const std::vector<Locator>& locals,
+        EndpointDirectory::Snapshot directory)
+{ return ClaimApplicationImpl(locals,std::move(directory),true); }
+ApplicationClaimOutcome ApplicationAttachments::ClaimApplicationImpl(const std::vector<Locator>& locals,
+        EndpointDirectory::Snapshot directory,bool shared)
 {
     auto& control = *control_; auto& budget = *control.budget;
     if (!directory) return {ApplicationClaimResult::InvalidDirectory, {}};
@@ -237,6 +252,16 @@ ApplicationClaimOutcome ApplicationAttachments::ClaimApplication(const std::vect
             return {control.slots[i].app->phase == detail::ApplicationPhase::Active ?
                     ApplicationClaimResult::InUse : ApplicationClaimResult::Detaching, {}};
         }
+        if (!shared) for (const auto& existing : control.shared_apps) if (existing) {
+            for (const auto& local : locals) if (FindLocal(*existing,local)!=absent)
+                return {existing->phase==detail::ApplicationPhase::Active?
+                        ApplicationClaimResult::InUse:ApplicationClaimResult::Detaching,{}};
+        }
+        auto shared_slot=control.shared_apps.end();
+        if (shared) {
+            shared_slot=std::find(control.shared_apps.begin(),control.shared_apps.end(),nullptr);
+            if(shared_slot==control.shared_apps.end())return {ApplicationClaimResult::Capacity,{}};
+        }
         if (budget.usage.retained_applications == budget.limits.retained_applications)
             return {ApplicationClaimResult::Capacity, {}};
         if(budget.next_identity>UINT64_MAX-2) return {ApplicationClaimResult::Capacity,{}};
@@ -250,7 +275,8 @@ ApplicationClaimOutcome ApplicationAttachments::ClaimApplication(const std::vect
         ++budget.usage.retained_applications; ++budget.usage.active_applications;
         budget.usage.high_applications = std::max(budget.usage.high_applications, budget.usage.retained_applications);
         app->charged = true;
-        for (auto i : indices) control.slots[i].app = app;
+        if(shared)*shared_slot=app;
+        else for (auto i : indices) control.slots[i].app = app;
         ApplicationClaim claim; claim.app_ = std::move(app);
         return {ApplicationClaimResult::Claimed, std::move(claim)};
     } catch (const std::bad_alloc&) { return {ApplicationClaimResult::AllocationFailure, {}}; }
@@ -389,6 +415,7 @@ AttachmentControlResult ApplicationAttachments::AwaitDetached(const ApplicationC
         // Release by identity; never rediscover a current application by name.
         if (slot.app == app) slot.app.reset();
     }
+    for(auto& shared : control.shared_apps)if(shared==app)shared.reset();
     app->phase = detail::ApplicationPhase::Detached; --budget.usage.detaching_applications;
     budget.changed.notify_all();
     return AttachmentControlResult::Completed;

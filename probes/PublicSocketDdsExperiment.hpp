@@ -6,6 +6,7 @@
 #include <mdds/dsoftbus/PublicSocketBackend.hpp>
 #include <functional>
 #include <string>
+#include <array>
 namespace eprosima::fastdds::dds {class DataWriter;}
 namespace mdds::dsoftbus::dds_experiment {
 struct Config {
@@ -19,6 +20,7 @@ struct Result {
     unsigned factories=0,writes=0,takes=0;
     std::uint64_t absence_after_drop_us=0;
     std::string first_failure,participant,writer,reader,remote_writer,remote_reader;
+    std::array<std::string,3> shared_writers,shared_readers,shared_remote_writers,shared_remote_readers;
 };
 using Control=std::function<bool(const char*)>;
 bool IsolateProcess() noexcept; // Call once, after token selection, before factory threads.
@@ -32,6 +34,7 @@ bool DropRegressionRecord(std::int32_t,const std::uint8_t*,std::size_t) noexcept
 bool ExpectedTerminal(const NativeSendRunResult&,const host_test::HostLoopObservation&,bool) noexcept;
 #ifdef MDDS_DDS_EXPERIMENT_TESTING
 void SetAfterWaitHook(std::function<void(eprosima::fastdds::dds::DataWriter*)>);
+void SetSharedDeleteFailureForTest(bool);
 bool DropIsolationObserved() noexcept;
 #endif
 }

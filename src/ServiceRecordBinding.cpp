@@ -208,8 +208,8 @@ NativeStatus FromReceiveResult(ReceiveAdmissionResult result) noexcept
 struct ApplicationGroup final
 {
     ApplicationGroup(ApplicationAttachments& a, const Locator& l, ApplicationClaim c, ReceiverBinding r,
-            InputChannels::Receiver* p) noexcept
-        : attachments(a), local(l), claim(std::move(c)), receiver(std::move(r)), receiver_pointer(p) {}
+            InputChannels::Receiver* p,bool shared=false) noexcept
+        : attachments(a), local(l), claim(std::move(c)), receiver(std::move(r)), receiver_pointer(p),independent(shared) {}
     ~ApplicationGroup() { Settle(); }
     ApplicationGroup(const ApplicationGroup&) = delete;
     ApplicationGroup& operator=(const ApplicationGroup&) = delete;
@@ -278,6 +278,13 @@ struct ApplicationGroup final
             closed = true;
             settled = true;
         }
+        if(independent) {
+            // No current-map lookup. Cancel this original claim's queue before
+            // waiting for captured producers; no pump is needed to make progress.
+            (void)attachments.RequestDetach(claim);
+            std::unique_lock<std::mutex> lock(gate);
+            changed.wait(lock,[&]{return snapshots==0;});
+        }
         if (receiver) (void)attachments.CloseReceiver(receiver);
         if (claim) {
             (void)attachments.RequestDetach(claim);
@@ -290,6 +297,53 @@ struct ApplicationGroup final
     const ApplicationClaim claim;
     const ReceiverBinding receiver;
     InputChannels::Receiver* const receiver_pointer;
+    // One admission pin on this registration. Non-copyable and move-only, so a
+    // capture is released exactly once, by the destructor of the object that took
+    // it: the release cannot be omitted, doubled or separated from its capture,
+    // and no caller has to pair them by hand. Exactly one counting path exists.
+    class Pin final
+    {
+    public:
+        Pin() noexcept = default;
+        ~Pin() { Reset(); }
+        Pin(Pin&& other) noexcept : group_(std::move(other.group_)) {}
+        Pin& operator=(Pin&& other) noexcept
+        { if (this != &other) { Reset(); group_ = std::move(other.group_); } return *this; }
+        Pin(const Pin&) = delete;
+        Pin& operator=(const Pin&) = delete;
+        explicit operator bool() const noexcept { return bool(group_); }
+    private:
+        friend struct ApplicationGroup;
+        void Reset() noexcept
+        {
+            if (!group_) return;
+            {
+                std::lock_guard<std::mutex> lock(group_->gate);
+                --group_->snapshots;
+                group_->changed.notify_all();
+            }
+            group_.reset();
+        }
+        std::shared_ptr<ApplicationGroup> group_;
+    };
+    // Takes this registration's admission pin, or reports that it has already
+    // decided to close. A settled registration is never pinned again, so nothing
+    // can enter it after its last member released it. The check and the increment
+    // share the gate with the last-member decision in Settle, so a pin can never
+    // slip between that decision and the wait that follows it.
+    static Pin TryPin(const std::shared_ptr<ApplicationGroup>& group) noexcept
+    {
+        Pin pin;
+        if (!group) return pin;
+        std::lock_guard<std::mutex> lock(group->gate);
+        if (group->settled) return pin;
+        ++group->snapshots;
+        pin.group_ = group;
+        return pin;
+    }
+    const bool independent;
+    std::condition_variable changed;
+    std::size_t snapshots=0;
     std::mutex gate;
     std::size_t members = 0;
     // Latched when the last member decides to settle: no join may succeed after
@@ -298,6 +352,38 @@ struct ApplicationGroup final
     // Latched when that closing work has been started, so it runs exactly once.
     bool closed = false;
 };
+
+namespace {
+// The one shape that can refuse a shared input close: this thread is currently
+// executing inside a delivery callback, so closing here would have to wait for this
+// very frame. A destructor cannot refuse, so the contract is enforced by failing
+// fast -- with the legal alternative named, and without allocating, blocking or
+// starting any reclaim work. Releasing an unrelated registration, or a legal
+// non-last sibling, never reaches this path.
+[[noreturn]] void RefuseSharedInputRelease() noexcept
+{
+    std::fprintf(stderr, "MDDS DSoftBus shared input: released from inside a delivery callback; "
+            "close the facade from an external control context (CloseRequest)");
+    std::fputc('\n', stderr);
+    std::fflush(stderr);
+    std::abort();
+}
+}
+BindingInput::BindingInput() noexcept=default;
+BindingInput::~BindingInput(){if(group_&&Close()!=NativeStatus::None)RefuseSharedInputRelease();}
+BindingInput::BindingInput(BindingInput&&) noexcept=default;
+BindingInput& BindingInput::operator=(BindingInput&& other) noexcept {
+    if(this!=&other){if(group_&&Close()!=NativeStatus::None)RefuseSharedInputRelease();group_=std::move(other.group_);}return *this;
+}
+BindingInput::operator bool() const noexcept{return bool(group_);}
+NativeStatus BindingInput::Close() noexcept {
+    if(!group_)return NativeStatus::None;
+    if(ingress_depth||delivery_depth)return NativeStatus::WrongState;
+    group_->Settle();group_.reset();return NativeStatus::None;
+}
+ReceiverIdentity BindingInput::Identity() const noexcept {
+    return group_?group_->attachments.ObserveReceiver(group_->receiver):ReceiverIdentity{};
+}
 
 // The record's own ingress dispatch: one sink and one route table per record,
 // owned by the record rather than by the binding that created it. It lives in
@@ -369,7 +455,7 @@ struct RecordControl final : RecordIngressSink
         std::lock_guard<std::mutex> lock(gate);
         for (auto& slot : groups) {
             auto live = slot.lock();
-            if (!live || live->local != local) continue;
+            if (!live || live->independent || live->local != local) continue;
             if (!live->TryJoin()) {
                 slot.reset();
                 return Adopt::Fresh;
@@ -388,6 +474,29 @@ struct RecordControl final : RecordIngressSink
         std::lock_guard<std::mutex> lock(gate);
         for (auto& slot : groups) {
             if (slot.expired()) { slot = group; return; }
+        }
+    }
+    bool RegisterSharedGroup(const std::shared_ptr<ApplicationGroup>& group) noexcept {
+        std::lock_guard<std::mutex> lock(gate);
+        for(auto& slot:groups)if(slot.expired()){slot=group;return true;}
+        return false;
+    }
+    // The candidate set fixed at native admission: the original registrations of
+    // this record on this local, in registration order. Fixing the set here is what
+    // makes the receiving set an admission-time fact, and holding each candidate
+    // weakly is what keeps a close from having to wait for a target this record has
+    // not reached yet. The set carries no admission pin and no raw receiver: it can
+    // only be used to find the original registration again, never to call one.
+    struct CandidateSet {
+        std::array<std::weak_ptr<ApplicationGroup>,record_owner_capacity> values{};
+    };
+    void FixCandidates(const Locator& local,CandidateSet& candidates) noexcept {
+        std::lock_guard<std::mutex> lock(gate);
+        std::size_t n=0;
+        for(const auto& slot:groups) {
+            auto group=slot.lock();
+            if(group&&group->independent&&group->local==local)
+                candidates.values[n++]=std::move(group);
         }
     }
     std::size_t RefusedNoRoute() noexcept
@@ -541,6 +650,35 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
     // for the whole admission even if the binding is released meanwhile.
     void Admit(NativeSocketId socket_id, const void* data, std::size_t size) noexcept
     {
+        if(!request.shared_input_channel){AdmitOne(socket_id,data,size,{});return;}
+        // A: the candidate set is fixed here, at native admission, under the record's
+        //    own gate, from the registrations qualified at this moment. A
+        //    registration created after this point is not in it and cannot join it.
+        RecordControl::CandidateSet candidates;
+        control->FixCandidates(request.local,candidates);
+        bool any=false;
+        for(const auto& candidate:candidates.values) {
+            // B/C: reach each original target under its own identity. A target that
+            //      is already gone, or that has decided to close, ends as that
+            //      original target: it is neither replaced by a current-application
+            //      lookup nor pinned on behalf of a target reached later.
+            auto original=candidate.lock();
+            if(!original)continue;
+            // D: exactly this target's own admission pin, taken immediately before
+            //    its own admission and released when that admission ends. This is
+            //    the target's own activity lease, so its observer, copy, queue and
+            //    execution keep the original drain contract, while no other
+            //    target's close waits on work this record has not started yet.
+            auto pin=ApplicationGroup::TryPin(original);
+            if(!pin)continue;
+            any=true;
+            AdmitOne(socket_id,data,size,std::move(original));
+        }
+        if(!any)AdmitOne(socket_id,data,size,{});
+    }
+    void AdmitOne(NativeSocketId socket_id,const void* data,std::size_t size,
+            std::shared_ptr<ApplicationGroup> original) noexcept
+    {
         ReceiveActivity activity{*this, false, false};
         struct DecisionEmission {
             std::shared_ptr<ProcessReceiveObserver> observer;
@@ -565,7 +703,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
                 decision.value.branch=ReceiveDecisionBranch::BindingPhase;
                 return;
             }
-            registration = group;
+            registration = request.shared_input_channel?std::move(original):group;
             if (!registration) {
                 ++refused_receive;
                 last_status = NativeStatus::NotReady;
@@ -826,6 +964,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             //    adoption is decided by the record control under its own gate, so
             //    a registration whose last member is already settling it is never
             //    adopted: it is finished, and this binding claims a fresh one.
+            if(!request.shared_input_channel) {
             if (hooks.before_receiver) hooks.before_receiver();
             std::shared_ptr<ApplicationGroup> adopted;
             switch (control->AdoptGroup(request.local, request.receiver, adopted)) {
@@ -884,6 +1023,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
                 application_owner = &group->attachments;
                 owns_application = true;
                 control->RegisterGroup(created);
+            }
             }
             // 3) Route this socket to this binding in the record's own control,
             //    then the single publication point. A joiner registers in the
@@ -1242,6 +1382,27 @@ NativeResult<std::unique_ptr<ServiceRecordBinding>> ServiceRecordBinding::BuildW
 }
 NativeStatus ServiceRecordBinding::Prepare() noexcept
 { return state_ ? state_->Prepare() : NativeStatus::InvalidHandle; }
+NativeResult<BindingInput> ServiceRecordBinding::AttachSharedInput(InputChannels::Receiver* receiver) noexcept {
+    if(!state_||!receiver||IsCallbackContext())return {std::nullopt,{NativeStatus::WrongState}};
+    auto& s=*state_;
+    {std::lock_guard<std::mutex> lock(s.gate);
+        if(!s.request.shared_input_channel||s.phase!=BindingPhase::Published||s.provider_terminal)
+            return {std::nullopt,{NativeStatus::WrongState}};
+    }
+    ApplicationClaim claim;
+    const auto rollback=[&]() noexcept {if(claim){s.attachments.RequestDetach(claim);s.attachments.AwaitDetached(claim);}};
+    try {
+        auto result=s.attachments.ClaimSharedApplication({s.request.local},s.request.directory);
+        if(result.result!=ApplicationClaimResult::Claimed)return {std::nullopt,{FromClaimResult(result.result)}};
+        claim=std::move(result.claim);
+        auto opened=s.attachments.OpenReceiver(claim,s.request.local,receiver);
+        if(opened.result!=ReceiverOpenResult::Opened){rollback();return {std::nullopt,{FromReceiverResult(opened.result)}};}
+        BindingInput input;
+        input.group_=std::make_shared<ApplicationGroup>(s.attachments,s.request.local,claim,std::move(opened.binding),receiver,true);
+        if(!s.control->RegisterSharedGroup(input.group_))return {std::nullopt,{NativeStatus::AdmissionSaturated}};
+        return {std::move(input),{}};
+    }catch(const std::bad_alloc&){rollback();return {std::nullopt,{NativeStatus::AllocationFailure}};}
+}
 NativeOwnerLease ServiceRecordBinding::OriginalOwner() const noexcept
 { if(!state_)return {};std::lock_guard<std::mutex> lock(state_->gate);return state_->owner; }
 NativeStatus ServiceRecordBinding::CommitAccepted(NativeSocketId id) noexcept
@@ -1327,8 +1488,8 @@ NativeResult<BindingDelivery> ServiceRecordBinding::NextAdmitted() noexcept
         if (state_->phase != BindingPhase::Published && state_->phase != BindingPhase::Closing) {
             return {std::nullopt, {NativeStatus::WrongState}};
         }
-        if (!state_->group) return {std::nullopt, {NativeStatus::NotReady}};
-        owner = &state_->group->attachments;
+        if (!state_->group&&!state_->request.shared_input_channel) return {std::nullopt, {NativeStatus::NotReady}};
+        owner = state_->request.shared_input_channel?&state_->attachments:&state_->group->attachments;
         clock = state_->clock;
         ++state_->receive_dispatches;
     }
