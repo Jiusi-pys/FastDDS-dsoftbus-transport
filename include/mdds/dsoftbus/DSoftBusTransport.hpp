@@ -4,19 +4,19 @@
 #include <mdds/dsoftbus/DSoftBusTransportDescriptor.hpp>
 #include <mdds/dsoftbus/DSoftBusSenderResource.hpp>
 #include <mdds/dsoftbus/InputChannels.hpp>
-#ifdef MDDS_HOST_BACKEND_TESTING
+#if defined(MDDS_HOST_BACKEND_TESTING) || defined(MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT)
 #include <mdds/dsoftbus/HostFacadeBackend.hpp>
 #endif
 
 namespace mdds::dsoftbus {
-enum class FacadeMode { NativeUnavailable, HostModel };
+enum class FacadeMode { NativeUnavailable, HostModel, IsolatedExperiment };
 enum class FacadeState { Constructed, Initializing, ModelReady, Failed, Closing, Closed };
 enum class FacadeError {
     None, InvalidLimits, DirectoryRejected, EgressRejected, InvalidDefaultLocal,
     UnsupportedNoFragmentRequest, NativeBackendUnavailable, AllocationFailure,
     InvalidState, InvalidLocator, InsufficientReceiverCapacity, InputConflict,
     InputClosing, SenderAttachRejected
-#ifdef MDDS_HOST_BACKEND_TESTING
+#if defined(MDDS_HOST_BACKEND_TESTING) || defined(MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT)
     , UnsupportedHostOperation
 #endif
 };
@@ -85,7 +85,7 @@ public:
     void shutdown() override;
 private:
     friend class DSoftBusTransportTestAccess;
-#ifdef MDDS_HOST_BACKEND_TESTING
+#if defined(MDDS_HOST_BACKEND_TESTING) || defined(MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT)
     friend class HostFacadeTestAccess;
     struct HostBackendTag {};
     DSoftBusTransport(const DSoftBusTransportDescriptor&, HostBackendTag, std::shared_ptr<HostFacadeBackend>);
@@ -100,7 +100,7 @@ private:
     struct Ready {
         Ready(EgressPlan::Snapshot, const DSoftBusTransportDescriptor&,
                 std::shared_ptr<const ConnectionGenerationSource>);
-#ifdef MDDS_HOST_BACKEND_TESTING
+#if defined(MDDS_HOST_BACKEND_TESTING) || defined(MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT)
         Ready(EgressPlan::Snapshot, const DSoftBusTransportDescriptor&, std::shared_ptr<HostFacadeBackend>);
         ~Ready();
         std::shared_ptr<HostFacadeBackend> host_backend;
@@ -133,7 +133,7 @@ private:
     mutable FacadeDiagnostic diagnostic_;
     std::shared_ptr<Ready> ready_; // Retained across EVERY shutdown until destruction.
     TestHooks hooks_;
-#ifdef MDDS_HOST_BACKEND_TESTING
+#if defined(MDDS_HOST_BACKEND_TESTING) || defined(MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT)
     const std::shared_ptr<HostFacadeBackend> host_backend_;
 #endif
 };

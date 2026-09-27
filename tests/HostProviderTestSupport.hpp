@@ -45,8 +45,8 @@ struct Mock final:NativeBackend {
     BackendKind Kind()const noexcept override{if(deny_after_kind)loop_deny_allocations=true;return BackendKind::HostMock;}
     BackendIdentity Identity()const override{if(throw_identity)throw std::runtime_error("mock identity exception");return {"host.facade.loop",{51},{61}};}
     BackendSocketResult Create(ProviderCallbacks c)override{callbacks=c;++creates;return {BackendStatus::None,42};}
-    BackendStatus Listen(std::int32_t)override{return BackendStatus::None;}
-    BackendStatus Bind(std::int32_t)override{return reject_bind?BackendStatus::BindingRejected:BackendStatus::None;}
+    BackendCallResult Listen(std::int32_t)override{return BackendStatus::None;}
+    BackendCallResult Bind(std::int32_t)override{return reject_bind?BackendStatus::BindingRejected:BackendStatus::None;}
     BackendSendResult Send(std::int32_t id,const std::uint8_t* p,std::size_t n,std::chrono::steady_clock::time_point)override{
         Check(id==42,"same owned socket");++sends;if(during_send)during_send();
         if(throw_send)throw std::runtime_error("mock send exception");
@@ -54,7 +54,7 @@ struct Mock final:NativeBackend {
         callbacks.OnBytes(id,temporary.data(),static_cast<std::uint32_t>(n));
         std::fill(temporary.begin(),temporary.end(),0xEE);return {BackendStatus::None,0};
     }
-    BackendStatus Shutdown(std::int32_t id)override{Check(id==42,"close owned socket");++closes;if(throw_close)throw std::runtime_error("mock close exception");return BackendStatus::None;}
+    BackendCallResult Shutdown(std::int32_t id)override{Check(id==42,"close owned socket");++closes;if(throw_close)throw std::runtime_error("mock close exception");return BackendStatus::None;}
 };
 struct Receiver final:InputChannels::Receiver {
     std::atomic<int> calls{0};std::vector<std::uint8_t> bytes;Locator local,remote;std::function<void()> pause;

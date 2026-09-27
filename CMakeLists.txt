@@ -9,6 +9,17 @@ if(MSVC)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
 endif()
 
+
+
+# Public Socket binding is inert until explicitly selected; never production registration.
+option(BUILD_DSOFTBUS_PUBLIC_SOCKET_SHIM "Compile/link the public Socket shim for target audit only" OFF)
+option(BUILD_DSOFTBUS_PUBLIC_SOCKET_FAKE_TESTS "Host tests of the same shim against Fake SDK symbols" OFF)
+option(BUILD_PUBLIC_SOCKET_RUNTIME_PROBE "Build isolated opt-in target runtime probe, not a default provider" OFF)
+option(BUILD_PUBLIC_SOCKET_RUNTIME_HOST_TESTS "Test isolated runtime assembly against Fake public C functions" OFF)
+if(BUILD_DSOFTBUS_PUBLIC_SOCKET_SHIM AND BUILD_DSOFTBUS_PUBLIC_SOCKET_FAKE_TESTS)
+    message(FATAL_ERROR "PUBLIC_SOCKET_VARIANTS_EXCLUSIVE: Fake SDK and public target cannot mix")
+endif()
+
 option(BUILD_INTERFACE_PROBE "Build the current Fast DDS interface probe using the selected binding" ON)
 option(BUILD_DSOFTBUS_DIRECTORY "Build the DSoftBus logical address and route model" ON)
 option(BUILD_DSOFTBUS_NATIVE_OWNER "Build the SDK-free stable native owner model" ${BUILD_DSOFTBUS_DIRECTORY})
@@ -360,7 +371,7 @@ if(BUILD_DSOFTBUS_SERVICE_RECORD_BINDING)
                 exceptional-admission old-entry-new-incarnation repeated-lifecycles slot-exhaustion
                 resource-release fail-closed creator-exits-joiner-lives delivery-context-bypass
                 shared-group-release-race join-during-settle joiner-failure-keeps-creator
-                registration-allocation-failure accepted-topology
+                registration-allocation-failure accepted-topology prepared-accepted
                 close-request-from-callback close-sync-refused-in-callback
                 close-completion-guard-in-callback close-completes-outside-callback close-after-callback-exception
                 many-close-requests-one-close no-admission-after-close-request
@@ -609,6 +620,8 @@ if(BUILD_DSOFTBUS_PROVIDER_ADAPTER_PHASE0)
         message(FATAL_ERROR "Provider phase0 requires the existing service-record binding")
     endif()
     add_library(mdds_provider_adapter_phase0 STATIC src/ProviderAdapter.cpp)
+    set_property(TARGET mdds_provider_adapter_phase0 PROPERTY INTERFACE_MDDS_PROVIDER_ADAPTER_VARIANT default)
+    set_property(TARGET mdds_provider_adapter_phase0 APPEND PROPERTY COMPATIBLE_INTERFACE_STRING MDDS_PROVIDER_ADAPTER_VARIANT)
     target_link_libraries(mdds_provider_adapter_phase0 PUBLIC mdds_dsoftbus_service_record_binding)
     target_compile_features(mdds_provider_adapter_phase0 PUBLIC cxx_std_17)
     if(BUILD_TESTING)
@@ -618,9 +631,100 @@ if(BUILD_DSOFTBUS_PROVIDER_ADAPTER_PHASE0)
         add_executable(provider_adapter_tests tests/provider_adapter_tests.cpp)
         target_link_libraries(provider_adapter_tests PRIVATE mdds_provider_adapter_phase0 mdds_dsoftbus_transport_facade)
         foreach(_provider_case P0 P1 P2 P3 P4 P5 P6 P7 early-stop provider-throw listen
-                create-stop create-foreign create-conflict shutdown-failure ingress-allocation)
+                create-stop create-foreign create-conflict shutdown-failure ingress-allocation setup-observe)
             add_test(NAME dsoftbus.provider_phase0.${_provider_case} COMMAND provider_adapter_tests ${_provider_case})
             set_tests_properties(dsoftbus.provider_phase0.${_provider_case} PROPERTIES TIMEOUT 15)
         endforeach()
     endif()
+endif()
+
+if(BUILD_DSOFTBUS_PUBLIC_SOCKET_FAKE_TESTS)
+    if(NOT BUILD_TESTING OR CMAKE_CROSSCOMPILING OR NOT BUILD_DSOFTBUS_HOST_PROVIDER_LOOP)
+        message(FATAL_ERROR "Public Socket Fake SDK tests require the explicit Host loop")
+    endif()
+    add_library(mdds_public_socket_shim_fake STATIC src/PublicSocketBackend.cpp)
+    target_compile_definitions(mdds_public_socket_shim_fake PUBLIC MDDS_PUBLIC_SOCKET_FAKE_SDK=1)
+    if(MSVC)
+        # The Fake SDK deliberately throws from extern-C test symbols. /EHsc
+        # assumes such calls cannot throw, unlike this explicit Host fault model.
+        target_compile_options(mdds_public_socket_shim_fake PRIVATE /EHsc-)
+    endif()
+    target_include_directories(mdds_public_socket_shim_fake PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+    target_link_libraries(mdds_public_socket_shim_fake PUBLIC mdds_provider_adapter_phase0)
+    set_property(TARGET mdds_public_socket_shim_fake PROPERTY INTERFACE_MDDS_PUBLIC_SOCKET_VARIANT fake)
+    set_property(TARGET mdds_public_socket_shim_fake APPEND PROPERTY COMPATIBLE_INTERFACE_STRING MDDS_PUBLIC_SOCKET_VARIANT)
+    add_executable(public_socket_shim_tests tests/public_socket_shim_tests.cpp)
+    add_executable(public_socket_accepted_tests tests/public_socket_accepted_tests.cpp)
+    target_include_directories(public_socket_accepted_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+    target_link_libraries(public_socket_accepted_tests PRIVATE mdds_public_socket_shim_fake mdds_host_provider_loop)
+    add_executable(public_socket_dds_tests tests/public_socket_dds_tests.cpp tests/FakePublicSocketLink.cpp
+        experiments/fastdds_socket/keyed/type/MddsKeyedSamplePubSubTypes.cxx
+        experiments/fastdds_socket/keyed/type/MddsKeyedSampleTypeObjectSupport.cxx)
+    target_include_directories(public_socket_dds_tests PRIVATE experiments/fastdds_socket/keyed/type "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+    target_link_libraries(public_socket_dds_tests PRIVATE mdds_public_socket_shim_fake mdds_host_provider_loop fastcdr)
+    add_executable(public_socket_pair_contract_tests tests/public_socket_pair_contract_tests.cpp tests/FakePublicSocketLink.cpp)
+    target_include_directories(public_socket_pair_contract_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+    target_link_libraries(public_socket_pair_contract_tests PRIVATE mdds_public_socket_shim_fake mdds_host_provider_loop)
+    add_test(NAME dsoftbus.public_socket_pair.half-close COMMAND public_socket_pair_contract_tests)
+    set_tests_properties(dsoftbus.public_socket_pair.half-close PROPERTIES TIMEOUT 20)
+    foreach(_public_dds_case normal-b-first normal-a-first disabled-link accepted-reject default)
+        add_test(NAME dsoftbus.public_socket_dds.${_public_dds_case} COMMAND public_socket_dds_tests ${_public_dds_case})
+        set_tests_properties(dsoftbus.public_socket_dds.${_public_dds_case} PROPERTIES TIMEOUT 45)
+    endforeach()
+    foreach(_accepted_case connected-window split-bind-window normal reject duplicate early-late stop-before-commit local-close borrow copy running repeat unknown negotiation2 callback-error first-error commit-window observed-all no-allocation-drain)
+        add_test(NAME dsoftbus.public_socket_accepted.${_accepted_case} COMMAND public_socket_accepted_tests ${_accepted_case})
+        set_tests_properties(dsoftbus.public_socket_accepted.${_accepted_case} PROPERTIES TIMEOUT 30)
+    endforeach()
+    target_include_directories(public_socket_shim_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+    target_link_libraries(public_socket_shim_tests PRIVATE mdds_public_socket_shim_fake mdds_host_provider_loop)
+    if(MSVC)
+        # These test executables define the intentionally throwing Fake C API.
+        # Preserve C++ unwind and remove only the C-nothrow assumption.
+        foreach(_fake_consumer public_socket_shim_tests public_socket_accepted_tests public_socket_dds_tests public_socket_pair_contract_tests)
+            target_compile_options(${_fake_consumer} PRIVATE /EHsc-)
+        endforeach()
+    endif()
+
+    foreach(_shim_case parameters lifetime receive early-bytes early-stop early-error foreign socket-error bind-error zero-handle send send-error send-positive send-throw send-reject send-paused repeat-close invalid entrance-identity default rollback-other observe-setup listen listen-error listen-stop)
+        add_test(NAME dsoftbus.public_socket_shim.${_shim_case} COMMAND public_socket_shim_tests ${_shim_case})
+        set_tests_properties(dsoftbus.public_socket_shim.${_shim_case} PROPERTIES TIMEOUT 20)
+    endforeach()
+endif()
+
+if(BUILD_DSOFTBUS_PUBLIC_SOCKET_SHIM)
+    if(NOT CMAKE_CROSSCOMPILING OR NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS")
+        message(FATAL_ERROR "PUBLIC_SOCKET_TARGET_ONLY: use the declared OHOS toolchain")
+    endif()
+    if(NOT TARGET mdds_provider_adapter_phase0)
+        message(FATAL_ERROR "Public Socket shim requires the existing ProviderAdapter")
+    endif()
+    set(MDDS_PUBLIC_SOCKET_LIBRARY "" CACHE FILEPATH "Declared target libsoftbus_client.z.so (compile/link audit only)")
+    if(NOT IS_ABSOLUTE "${MDDS_PUBLIC_SOCKET_LIBRARY}" OR NOT EXISTS "${MDDS_PUBLIC_SOCKET_LIBRARY}")
+        message(FATAL_ERROR "Declare an existing absolute MDDS_PUBLIC_SOCKET_LIBRARY")
+    endif()
+    add_library(mdds_public_socket_api SHARED IMPORTED)
+    set_target_properties(mdds_public_socket_api PROPERTIES IMPORTED_LOCATION "${MDDS_PUBLIC_SOCKET_LIBRARY}")
+    add_library(mdds_public_socket_shim STATIC src/PublicSocketBackend.cpp)
+    target_include_directories(mdds_public_socket_shim PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+    target_link_libraries(mdds_public_socket_shim PUBLIC mdds_provider_adapter_phase0 PRIVATE mdds_public_socket_api)
+    set_property(TARGET mdds_public_socket_shim PROPERTY INTERFACE_MDDS_PUBLIC_SOCKET_VARIANT real)
+    set_property(TARGET mdds_public_socket_shim APPEND PROPERTY COMPATIBLE_INTERFACE_STRING MDDS_PUBLIC_SOCKET_VARIANT)
+    add_executable(public_socket_link_audit probes/public_socket_link_audit.cpp)
+    target_link_libraries(public_socket_link_audit PRIVATE mdds_public_socket_shim)
+    # Own undefined calls must resolve. The declared platform DSO's transitive
+    # platform dependencies are not available to this app toolchain link audit.
+    # This does not establish loader/runtime compatibility and is never executed.
+    target_link_options(public_socket_link_audit PRIVATE "-Wl,--no-undefined" "-Wl,--allow-shlib-undefined" "-Wl,-Map=${CMAKE_CURRENT_BINARY_DIR}/public_socket_link_audit.map")
+endif()
+include(cmake/PublicSocketRuntimeProbe.cmake)
+
+include(cmake/PublicSocketDdsExperiment.cmake)
+
+# Repository-local offline analyzers; no device operations are registered here.
+if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    foreach(_public_analysis dds probe load_origin)
+        add_test(NAME dsoftbus.public_socket_analysis.${_public_analysis}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/public_socket_${_public_analysis}_analysis_tests.py")
+    endforeach()
 endif()

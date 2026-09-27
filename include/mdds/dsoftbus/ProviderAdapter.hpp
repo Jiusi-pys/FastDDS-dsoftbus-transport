@@ -10,20 +10,32 @@ namespace mdds::dsoftbus::phase0 {
 namespace detail { struct ProviderDomainState; }
 enum class AdapterPhase { Constructed, Deploying, Connected, Published, Closing, Closed, Failed };
 enum class SdkDrain { Unproven };
+enum class AcceptedPhase { Empty, Preparing, Prepared, Committing, Active, Stopping, Closed, Failed };
 struct BackendCloseResult {
     BackendStatus status = BackendStatus::InvalidState;
     bool adapter_drained = false;
     SdkDrain sdk_drain = SdkDrain::Unproven;
+    BackendStatus cleanup_status = BackendStatus::None; // separate from the first work failure
 };
 struct AdapterObservation {
     AdapterPhase phase = AdapterPhase::Constructed;
     bool provider_stopped = false;
+    bool outgoing_stopped=false,listener_stopped=false;
     bool input_open = false;
     std::size_t ingress_active = 0, ingress_rejected = 0, provider_exceptions = 0;
     BackendStatus provider_status = BackendStatus::None;
+    std::optional<std::int32_t> first_callback_error;
     std::size_t send_calls = 0;
     std::int32_t last_priority = 0;
     BindingObservation binding;
+    BindingObservation listener,accepted;
+    AcceptedPhase accepted_phase=AcceptedPhase::Empty;
+    std::size_t accepted_rejected=0;
+    std::size_t accepted_activation_count=0; // historical outer-admission publications, not current count
+    std::optional<std::int32_t> accepted_id;
+    bool accepted_closing=false;
+    BackendStatus accepted_last_rejection=BackendStatus::None;
+    NativeStatus accepted_last_native_rejection=NativeStatus::None;
 };
 // Explicit bounded Host registration domain (8 live declarations), no singleton,
 // SDK object or future-application queue. Outlives no native resource by itself.
@@ -56,12 +68,18 @@ public:
     BackendStatus Initialize() noexcept;
     BackendStatus Publish() noexcept;
     BackendStatus DispatchOne() noexcept;
+    BackendStatus CloseAccepted() noexcept;
+    static bool IsProviderCallbackContext() noexcept;
     BackendStatus CloseInput() noexcept;
     BackendStatus ReopenInput(InputChannels::Receiver*) noexcept;
     BackendCloseResult Close() noexcept;
     AdapterObservation Observe() const noexcept;
 private:
     friend class ::mdds::dsoftbus::host_test::HostProviderLoop;
+    friend class RuntimeProbeAccess;
+    static AdapterBuildResult BuildImpl(ProviderAdapterDomain&, ServiceRecordTable&,
+            NativeOwnerTable&, ApplicationAttachments&, std::shared_ptr<NativeBackend>,
+            const BindingRequest&, bool);
     std::shared_ptr<NativeSendProvider> BindSendProvider(NativeOwnerTable&) const noexcept;
     void SealIngress() noexcept;
     explicit ProviderAdapter(std::shared_ptr<detail::ProviderAdapterState>) noexcept;

@@ -40,6 +40,9 @@ struct NativeTableConfiguration
     // Explicit reconnect policy; only Both routes. Retained old owners/IDs
     // remain charged and never retarget old callbacks to the replacement.
     bool allow_closed_dial_retry=false;
+    // Fixed directed-lane profile: accepted may receive but cannot be selected
+    // as a replacement TX owner. Default Both fallback behavior is unchanged.
+    bool dial_only_egress=false;
 };
 enum class NativeStatus
 {
@@ -376,6 +379,11 @@ public:
     NativeResult<ListenCallTicket> BeginListen(const NativeOwnerLease&) noexcept;
     NativeResult<BindCallTicket> BeginBind(const NativeOwnerLease&) noexcept;
     NativeInboundResult ObserveInbound(const NamespaceLease&, NativeSocketId, const ObservedPeerKey&) noexcept;
+    // Negotiation reserves the existing owner budget, NOT a socket/close right.
+    // RequestClose cancels an uncommitted reservation without an SDK operation.
+    NativeResult<NativeOwnerLease> PrepareInbound(const NamespaceLease&, NativeSocketId,
+            const ObservedPeerKey&) noexcept;
+    NativeStatus CommitInbound(const NativeOwnerLease&, NativeSocketId) noexcept;
     NativeResult<SendConnectionSnapshot> TryResolve(const RouteKey&, std::uint64_t expected_route_version) const noexcept;
     void RequestServiceClose() noexcept;
     NativeUsageSnapshot SnapshotUsage() const noexcept;

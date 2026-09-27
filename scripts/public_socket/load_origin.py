@@ -1,0 +1,111 @@
+"""Read-only validation of one live /proc capture. Static ELF is not substituted."""
+import argparse
+import hashlib
+import json
+import re
+from pathlib import Path, PurePosixPath
+
+
+def analyze(directory, config, side):
+    directory = Path(directory)
+    errors = []
+    evidence = {}
+    def read(name):
+        try:
+            data = (directory/name).read_bytes()
+            evidence[name] = hashlib.sha256(data).hexdigest()
+            return data.decode('utf-8', errors='strict')
+        except (OSError, UnicodeError) as error:
+            errors.append(f'{name}: {type(error).__name__}')
+            return ''
+    def check(condition, reason):
+        if not condition: errors.append(reason)
+    status = {}
+    for line in read('load-status.txt').splitlines():
+        if '=' in line:
+            key, value = line.split('=',1)
+            check(key not in status, 'DUPLICATE_STATUS_KEY')
+            status[key] = value
+    remote = config['remote'][side]
+    expected_exe = remote+'/public_socket_dds_experiment'
+    check(status.get('status') == 'COMPLETE', 'SAMPLER_NOT_COMPLETE')
+    check(status.get('run') == config['run'], 'SAMPLER_RUN_MISMATCH')
+    try: collector=json.loads(read('load-collector.json'))
+    except (ValueError,TypeError): collector={};errors.append('COLLECTOR_JSON_INVALID')
+    check(collector.get('run')==config['run'] and collector.get('side')==side,'COLLECTOR_RUN_SIDE_MISMATCH')
+    check(str(collector.get('target_pid'))==status.get('pid'),'COLLECTOR_APP_PID_MISMATCH')
+    check(collector.get('pass') is True and collector.get('remoteExit')==0 and collector.get('hdcExit')==0,'COLLECTOR_INCOMPLETE')
+    check(bool(re.fullmatch(r'[1-9][0-9]*',status.get('pid',''))),'PID_INVALID')
+    check(read('load-exe.txt').strip() == expected_exe,'EXE_PATH_MISMATCH')
+    check(read('load-cwd.txt').strip() == remote,'CWD_MISMATCH')
+    vector_format=status.get('vector_format','LEGACY_NEWLINE')
+    check(vector_format in {'NUL_V1','LEGACY_NEWLINE'},'UNKNOWN_PROC_VECTOR_FORMAT')
+    def vector(name):
+        value=read(name)
+        if vector_format=='NUL_V1':
+            check(bool(value) and value.endswith('\0'),'UNTERMINATED_PROC_VECTOR:'+name)
+            parts=value[:-1].split('\0') if value.endswith('\0') else []
+            check(all(parts),'EMPTY_PROC_VECTOR_ELEMENT:'+name)
+            return parts
+        check('\0' not in value,'UNDECLARED_NUL_VECTOR:'+name)
+        return value.splitlines()
+    environment = {}
+    for line in vector('load-environ.txt'):
+        if '=' in line:
+            key,value=line.split('=',1)
+            check(key not in environment,'DUPLICATE_ENVIRONMENT_KEY')
+            environment[key]=value
+    check(environment.get('PATH') == '/system/bin:/system/xbin','PATH_MISMATCH')
+    check(environment.get('LD_LIBRARY_PATH') == remote+':'+':'.join(config['system_library_dirs']),'LD_LIBRARY_PATH_MISMATCH')
+    check(set(environment).issubset({'PATH','LD_LIBRARY_PATH','SKIP_DEFAULT_XML','PWD','OLDPWD','SHLVL','_'}),'UNDECLARED_ENVIRONMENT_KEY')
+    check(environment.get('SKIP_DEFAULT_XML') == '1','DEFAULT_XML_NOT_DISABLED')
+    command = vector('load-cmdline.txt')
+    check(bool(command) and command[0] == expected_exe,'ARGV0_MISMATCH')
+    check(command.count('--run') == 1 and '--run' in command and
+          command[command.index('--run')+1:command.index('--run')+2] == [config['run']], 'ARGV_RUN_MISMATCH')
+    def stat_identity(text):
+        end = text.rfind(')')
+        try: return (text.split(' ',1)[0],text[end+2:].split()[19])
+        except (IndexError,ValueError): return None
+    before = stat_identity(read('load-stat-before.txt'))
+    after = stat_identity(read('load-stat-after.txt'))
+    check(before is not None and before == after == (status.get('pid'),status.get('starttime')), 'PROC_IDENTITY_CHANGED')
+    uptime = read('load-uptime.txt').split()
+    check(bool(uptime) and re.fullmatch(r'[0-9]+(?:\.[0-9]+)?',uptime[0]) is not None,'MONOTONIC_TIMESTAMP_MISSING')
+    mapped = set()
+    for line in read('load-maps.txt').splitlines():
+        columns = line.split(None,5)
+        if len(columns) == 6 and columns[5].startswith('/'):
+            mapped.add(columns[5])
+    package_paths = [remote+'/'+item['name'] for item in config['package_artifacts']]
+    package_names = {item['name'] for item in config['package_artifacts']}
+    for expected in package_paths+config['required_platform_paths']:
+        check(expected in mapped, 'MISSING_MAPPING:'+expected)
+    for actual in sorted(mapped):
+        name = PurePosixPath(actual.removesuffix(' (deleted)')).name
+        if name in package_names:
+            check(actual in package_paths, 'WRONG_PACKAGE_MAPPING:'+actual)
+        if actual.startswith('/data/'):
+            check(actual in package_paths, 'UNDECLARED_DATA_MAPPING:'+actual)
+    return {'schema':1,'complete':not errors,'run':config['run'],'board':side,
+            'pid':status.get('pid'),'starttime':status.get('starttime'),
+            'monotonic_uptime_seconds':uptime[0] if uptime else None,
+            'environment':environment,
+            'proc_vector_format':vector_format,
+            'collector':collector,
+            'scope':'LIVE_PROC_SNAPSHOT_NOT_FULL_SDK_MODULE_CLOSURE',
+            'expected_package_paths':package_paths,'mapped_paths':sorted(mapped),
+            'errors':errors,'evidence_sha256':evidence}
+
+
+if __name__ == '__main__':
+    parser=argparse.ArgumentParser()
+    parser.add_argument('window',type=Path)
+    parser.add_argument('side',choices=['A','B'])
+    args=parser.parse_args()
+    config=json.loads((args.window/'window.json').read_text(encoding='utf-8-sig'))
+    result=analyze(args.window/args.side/'load',config,args.side)
+    target=args.window/args.side/'actual-load-origin.json'
+    with target.open('x',encoding='utf-8') as stream: json.dump(result,stream,indent=2)
+    print(json.dumps({'board':args.side,'complete':result['complete'],'errors':result['errors']}))
+    raise SystemExit(0 if result['complete'] else 1)

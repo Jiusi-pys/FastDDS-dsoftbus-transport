@@ -487,6 +487,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
     // adopting one. It is never a licence to write another binding's state.
     bool owns_application = false;
     bool routed = false;
+    bool provider_terminal = false;
     NativeSocketId socket = -1;
     NativeStatus last_status = NativeStatus::None;
     ReceiveAdmissionDiagnostic last_diagnostic;
@@ -593,6 +594,8 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
         std::lock_guard<std::mutex> lock(gate);
         if (phase != BindingPhase::Empty) return NativeStatus::WrongState;
         const bool joining = static_cast<bool>(request.existing);
+        if(request.defer_accepted_ownership&&(!request.is_accepted||!joining||request.role!=RecordRole::Server))
+            return NativeStatus::InvalidConfiguration;
         if (joining) {
             // Join: the entrance must be an issued one for a live record and role
             // that matches this binding's role. No slot is reserved and no
@@ -654,6 +657,13 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
                 ReleaseLocalLocked();
                 return NativeStatus::InvalidConfiguration;
             }
+            if(request.defer_accepted_ownership) {
+                auto prepared=native.PrepareInbound(ns,request.accepted_socket,request.accepted);
+                if(!prepared){phase=BindingPhase::Failed;ReleaseLocalLocked();return prepared.issue.code;}
+                owner=std::move(*prepared.value);
+                phase=BindingPhase::Prepared;
+                return NativeStatus::None; // no owned socket, membership or Shutdown right
+            }
             auto inbound = native.ObserveInbound(ns, request.accepted_socket, request.accepted);
             if (inbound.status != NativeStatus::None || !inbound.owner) {
                 phase = BindingPhase::Failed;
@@ -682,9 +692,11 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
 
     NativeStatus Connect() noexcept
     {
-        std::lock_guard<std::mutex> lock(gate);
+        std::unique_lock<std::mutex> lock(gate);
         if (phase != BindingPhase::Prepared) return NativeStatus::WrongState;
+        if(provider_terminal)return NativeStatus::OwnerUnavailable;
         if (request.is_accepted) {
+            if(socket<0)return NativeStatus::NotReady;
             // The accepted socket already exists; its owner was adopted whole.
             phase = BindingPhase::Connected;
             return NativeStatus::None;
@@ -692,7 +704,9 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
         if (!socket_call || !owner) { phase = BindingPhase::Failed; return NativeStatus::WrongState; }
         auto entered = socket_call->CallEntered();
         if (entered != NativeStatus::None) { phase = BindingPhase::Failed; return entered; }
+        lock.unlock(); // Original ticket remains owned; controls are externally serialized.
         const auto created = provider.CreateSocket();
+        lock.lock();
         const auto socket_completion = socket_call->Complete(created);
         socket_call.reset();
         if (socket_completion.status != NativeStatus::None) {
@@ -711,7 +725,9 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             listen_call.emplace(std::move(*ticket.value));
             entered = listen_call->CallEntered();
             if (entered != NativeStatus::None) { phase = BindingPhase::Failed; return entered; }
+            lock.unlock();
             const auto result = provider.Listen(socket);
+            lock.lock();
             const auto completion = listen_call->Complete(result);
             listen_call.reset();
             if (completion.status != NativeStatus::None) { phase = BindingPhase::Failed; return completion.status; }
@@ -722,12 +738,15 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             bind_call.emplace(std::move(*ticket.value));
             entered = bind_call->CallEntered();
             if (entered != NativeStatus::None) { phase = BindingPhase::Failed; return entered; }
+            lock.unlock();
             const auto result = provider.Bind(socket);
+            lock.lock();
             const auto completion = bind_call->Complete(result);
             bind_call.reset();
             if (completion.status != NativeStatus::None) { phase = BindingPhase::Failed; return completion.status; }
             if (!result.success) { phase = BindingPhase::Failed; return NativeStatus::OwnerUnavailable; }
         }
+        if(provider_terminal){phase=BindingPhase::Failed;return NativeStatus::OwnerUnavailable;}
         phase = BindingPhase::Connected;
         return NativeStatus::None;
     }
@@ -736,6 +755,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
     {
         std::lock_guard<std::mutex> lock(gate);
         if (phase != BindingPhase::Connected) return NativeStatus::WrongState;
+        if(provider_terminal)return NativeStatus::OwnerUnavailable;
         if (socket < 0) { phase = BindingPhase::Failed; return NativeStatus::NoOwnedId; }
         if (control == nullptr) { phase = BindingPhase::Failed; return NativeStatus::WrongState; }
         try {
@@ -766,7 +786,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
                 // binding adopting a different receiver would believe it owns a
                 // registration it does not.
                 phase = BindingPhase::Failed;
-                ReleaseLocalLocked();
+                if(!request.defer_accepted_ownership)ReleaseLocalLocked();
                 return NativeStatus::InvalidConfiguration;
             case RecordControl::Adopt::Fresh:
                 break;
@@ -775,7 +795,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
                 auto claim_outcome = attachments.ClaimApplication({request.local}, request.directory);
                 if (claim_outcome.result != ApplicationClaimResult::Claimed) {
                     phase = BindingPhase::Failed;
-                    ReleaseLocalLocked();
+                    if(!request.defer_accepted_ownership)ReleaseLocalLocked();
                     return FromClaimResult(claim_outcome.result);
                 }
                 // The claim is installed by ClaimApplication, so this binding owns
@@ -792,7 +812,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
                 auto open_outcome = attachments.OpenReceiver(claim, request.local, request.receiver);
                 if (open_outcome.result != ReceiverOpenResult::Opened) {
                     phase = BindingPhase::Failed;
-                    ReleaseLocalLocked();
+                    if(!request.defer_accepted_ownership)ReleaseLocalLocked();
                     return FromReceiverResult(open_outcome.result);
                 }
                 pending_receiver = std::move(open_outcome.binding);
@@ -803,7 +823,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
                     // Unreachable for a freshly built registration; refuse rather
                     // than publish on a registration that is already settling.
                     phase = BindingPhase::Failed;
-                    ReleaseLocalLocked();
+                    if(!request.defer_accepted_ownership)ReleaseLocalLocked();
                     return NativeStatus::WrongState;
                 }
                 pending_owner = nullptr;
@@ -817,7 +837,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             //    same record control, so the record serves every owner of it.
             if (!control->AddRoute(request.role, socket, shared_from_this())) {
                 phase = BindingPhase::Failed;
-                ReleaseLocalLocked();
+                if(!request.defer_accepted_ownership)ReleaseLocalLocked();
                 return NativeStatus::AdmissionSaturated;
             }
             routed = true;
@@ -826,11 +846,11 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             return NativeStatus::None;
         } catch (const std::bad_alloc&) {
             phase = BindingPhase::Failed;
-            ReleaseLocalLocked();
+            if(!request.defer_accepted_ownership)ReleaseLocalLocked();
             return NativeStatus::AllocationFailure;
         } catch (const std::invalid_argument&) {
             phase = BindingPhase::Failed;
-            ReleaseLocalLocked();
+            if(!request.defer_accepted_ownership)ReleaseLocalLocked();
             return NativeStatus::InvalidConfiguration;
         }
     }
@@ -1135,6 +1155,34 @@ NativeResult<std::unique_ptr<ServiceRecordBinding>> ServiceRecordBinding::BuildW
 }
 NativeStatus ServiceRecordBinding::Prepare() noexcept
 { return state_ ? state_->Prepare() : NativeStatus::InvalidHandle; }
+NativeOwnerLease ServiceRecordBinding::OriginalOwner() const noexcept
+{ if(!state_)return {};std::lock_guard<std::mutex> lock(state_->gate);return state_->owner; }
+NativeStatus ServiceRecordBinding::CommitAccepted(NativeSocketId id) noexcept
+{
+    if(!state_)return NativeStatus::InvalidHandle;
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(state_->provider_terminal)return NativeStatus::Revoked;
+    if(!state_->request.is_accepted||!state_->request.defer_accepted_ownership||state_->phase!=BindingPhase::Prepared)
+        return NativeStatus::WrongState;
+    const auto result=state_->native.CommitInbound(state_->owner,id);
+    if(result==NativeStatus::None)state_->socket=id;
+    return result;
+}
+NativeStatus ServiceRecordBinding::ObserveProviderShutdown(NativeSocketId id) noexcept
+{
+    if(!state_)return NativeStatus::InvalidHandle;
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(!state_->owner||state_->socket<0||id!=state_->socket)return NativeStatus::UnknownSocket;
+    auto callback=state_->ns.AdmitCallback(id);
+    if(!callback)return callback.issue.code;
+    // The fixed binding's original owner must match; never accept a replacement
+    // found by numeric ID alone. This is adapter capture, not SDK epoch proof.
+    if(callback.value->CapturedOwner().incarnation!=state_->owner.Observe().incarnation)
+        return NativeStatus::StaleHandle;
+    const auto result=callback.value->ObserveShutdown();
+    if(result==NativeStatus::None){state_->provider_terminal=true;if(state_->phase==BindingPhase::Published)state_->phase=BindingPhase::Closing;}
+    return result;
+}
 NativeStatus ServiceRecordBinding::Connect() noexcept
 { return state_ ? state_->Connect() : NativeStatus::InvalidHandle; }
 NativeStatus ServiceRecordBinding::Publish() noexcept

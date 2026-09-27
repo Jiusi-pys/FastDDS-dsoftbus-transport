@@ -11,6 +11,7 @@
 
 namespace mdds::dsoftbus {
 namespace detail { struct ServiceRecordState; }
+namespace phase0 { class PublicSocketBackend; }
 class ServiceRecordTable;
 
 // Exact public DSoftBus byte-callback shape (communication_dsoftbus
@@ -164,6 +165,9 @@ public:
     bool operator!=(const RecordEntrance& o) const noexcept { return !(*this == o); }
 private:
     friend class ServiceRecordTable;
+    // The thin public-API shim derives its fixed bridge index from this original
+    // record/role slot. It neither allocates another identity nor writes this one.
+    friend class phase0::PublicSocketBackend;
     // Slot access for the composition layer's record-scoped dispatch key; see
     // RecordReservation.
     friend class ServiceRecordBinding;

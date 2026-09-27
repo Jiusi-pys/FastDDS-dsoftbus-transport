@@ -1,4 +1,7 @@
 #include <mdds/dsoftbus/HostProviderLoop.hpp>
+#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+#include <mdds/dsoftbus/RuntimeProbeAccess.hpp>
+#endif
 #include <condition_variable>
 #include <mutex>
 namespace mdds::dsoftbus::host_test {
@@ -40,8 +43,17 @@ bool HostProviderLoop::Start(const DSoftBusTransportDescriptor& d) noexcept {
     // facade rejected above must never stop the first facade's live backend.
     struct Rollback {HostProviderLoop& loop;bool done=false;~Rollback(){if(!done)loop.Shutdown();}} rollback{*this};
     try {
-    if(!s.backend||s.backend->Kind()!=BackendKind::HostMock||d.directory.locals.size()!=1||d.directory.routes.size()!=1) return false;
-    s.config.directory=d.directory;s.config.directions={RouteDirection::Dial};s.config.service_pkg_name="mdds.host.loop";
+#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+    constexpr auto admitted_kind=BackendKind::DSoftBusProvider;
+#else
+    constexpr auto admitted_kind=BackendKind::HostMock;
+#endif
+    if(!s.backend||s.backend->Kind()!=admitted_kind||d.directory.locals.size()!=1||d.directory.routes.size()!=1) return false;
+    s.config.directory=d.directory;s.config.directions={s.backend->Topology()==BackendTopology::ListenerAndOutgoing?RouteDirection::Both:RouteDirection::Dial};s.config.service_pkg_name="mdds.host.loop";
+#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+    s.config.service_pkg_name="com.kaihong.mdds";
+#endif
+    s.config.dial_only_egress=s.backend->Topology()==BackendTopology::ListenerAndOutgoing;
     auto native=NativeOwnerTable::Build(s.config);if(!native)return false;s.native=std::move(*native.value);
     AttachmentLimits receive_limits;
     receive_limits.max_record_bytes=d.maxMessageSize;
@@ -83,7 +95,11 @@ InputOpenResult HostProviderLoop::Open(const Locator& local, InputChannels::Rece
     if(!directory.value)return InputOpenResult::InvalidLocal;
     request.directory=*directory.value;request.receiver=receiver;
     request.receive_observer=s.observer;
+#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+    auto result=RuntimeProbeAccess::Build(s.domain,ServiceRecordTable::Process(),*s.native,*s.attachments,s.backend,request);
+#else
     auto result=ProviderAdapter::Build(s.domain,ServiceRecordTable::Process(),*s.native,*s.attachments,s.backend,request);
+#endif
     if(result.status!=BackendStatus::None)return InputOpenResult::Conflict;
     // Unpublished ownership stays local until all steps succeed. Every failure
     // releases only this pending binding before false reaches the receiver owner.
@@ -91,7 +107,11 @@ InputOpenResult HostProviderLoop::Open(const Locator& local, InputChannels::Rece
     if(pending->Initialize()!=BackendStatus::None||pending->Publish()!=BackendStatus::None) {
         settle_pending();return InputOpenResult::Disabled;
     }
+#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+    auto provider=RuntimeProbeAccess::SendBridge(*pending,*s.native);
+#else
     auto provider=pending->BindSendProvider(*s.native);
+#endif
     if(!provider){settle_pending();return InputOpenResult::Disabled;}
     std::lock_guard<std::mutex> lock(s.gate);
     s.adapter=std::move(pending);s.send_provider=std::move(provider);s.receiver=receiver;s.input_open=true;return InputOpenResult::Opened;
@@ -140,6 +160,7 @@ BackendStatus HostProviderLoop::PumpReceive() noexcept {
     return s.adapter->DispatchOne();
 }
 bool HostProviderLoop::Shutdown() noexcept {
+    if(!InputCloseAllowedOnThisThread())return false;
     auto& s=*state_;
     {
         std::unique_lock<std::mutex> lock(s.gate);
@@ -163,7 +184,11 @@ bool HostProviderLoop::Shutdown() noexcept {
     return result.status==BackendStatus::None&&result.adapter_drained;
 }
 bool HostProviderLoop::InputCloseAllowedOnThisThread() const noexcept {
-    return !ServiceRecordBinding::IsCallbackContext();
+    return !ServiceRecordBinding::IsCallbackContext()&&!ProviderAdapter::IsProviderCallbackContext();
+}
+BackendStatus HostProviderLoop::CloseAccepted() noexcept {
+    if(!InputCloseAllowedOnThisThread())return BackendStatus::InvalidState;
+    return state_->adapter?state_->adapter->CloseAccepted():BackendStatus::InvalidState;
 }
 HostLoopObservation HostProviderLoop::Observe() const noexcept {
     auto& s=*state_;HostLoopObservation v;
@@ -171,6 +196,7 @@ HostLoopObservation HostProviderLoop::Observe() const noexcept {
         v.open_calls=s.open_calls;v.close_calls=s.close_calls;v.shutdown_calls=s.shutdown_calls;v.first_close_order=s.first_close_order;v.first_shutdown_order=s.first_shutdown_order;}
     if(s.registration){v.tx=s.registration.SnapshotUsage();v.send=s.execution->Observe(s.registration);}
     if(s.attachments)v.receive=s.attachments->SnapshotUsage();
+    if(s.native)v.native=s.native->SnapshotUsage();
     if(s.adapter)v.adapter=s.adapter->Observe();return v;
 }
 bool HostProviderLoop::WaitSealed(std::chrono::steady_clock::time_point deadline) const {

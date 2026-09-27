@@ -12,6 +12,7 @@
 #include <string>
 
 namespace mdds::dsoftbus {
+namespace phase0::detail {struct ProviderAdapterState;}
 class ServiceRecordBinding;
 class ServiceRecordBindingTestAccess;
 
@@ -59,6 +60,7 @@ struct BindingRequest
     ObservedPeerKey accepted{};
     NativeSocketId accepted_socket = -1;
     bool is_accepted = false;
+    bool defer_accepted_ownership = false; // negotiation: budget only until CommitAccepted
     // The binding that created this record. Required when joining one, so that a
     // join always names the record it joins, and read only while the joining
     // binding is being built. Ingress routing and the shared (application,
@@ -209,6 +211,8 @@ public:
     // Publish : the record-side membership, the application/receiver lease, and
     //           then the single point at which this binding starts admitting.
     NativeStatus Prepare() noexcept;
+    NativeStatus CommitAccepted(NativeSocketId) noexcept;
+    NativeStatus ObserveProviderShutdown(NativeSocketId) noexcept;
     NativeStatus Connect() noexcept;
     NativeStatus Publish() noexcept;
     // Independent RX-only control for a sole-member local registration. Native
@@ -279,6 +283,8 @@ public:
     BindingObservation Observe() const noexcept;
 private:
     friend class ServiceRecordBindingTestAccess;
+    friend struct phase0::detail::ProviderAdapterState;
+    NativeOwnerLease OriginalOwner() const noexcept;
     // The record-scoped ingress dispatch control, defined in the implementation.
     // It pins one binding's state and is the only other reader of the private
     // State; both are implementation details of the same translation unit.

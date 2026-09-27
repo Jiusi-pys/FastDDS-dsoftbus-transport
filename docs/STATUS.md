@@ -1,5 +1,49 @@
 # Project status
 
+## 当前 PRE-COMMIT SNAPSHOT：LOCAL_NATIVE_DDS_BASELINE_COMMIT（2026-09-27；artifact run 20260927T005155Z）
+
+本 pre-commit snapshot 达到 **`LOCAL_NATIVE_DDS_BASELINE_HOST_VERIFIED / CHECKPOINT_READY`**，范围是用户明确授权的当前分支一次本地 commit。没有写入未来 commit hash；merge、push、device、SDK、release 和 QualificationProfile 仍未授权。候选冻结 345 个文件前后 SHA-256 一致；最终 CONFIG Release 全量 CTest 为 `420/420 PASS`、exit 0、144.58 秒。首轮 `418/420` 的两个 `Get-FileHash` PowerShell module-path 环境失败保留，恢复模块路径后完整重跑通过；`LastTest.log` 后被 discovery 覆盖，未宣称重建 raw transcript。final affected helper gate 为 `3/3 PASS`。
+
+候选 review 无 unresolved blocking finding。R3 ASan/device evidence 按匹配 source bytes 复用，不是本 checkpoint 新执行；published code/default 仍 `NativeBackendUnavailable`，P0/PF-01/PF-02 为 `BLOCKED / NOT QUALIFIED`，P4 未放行，SPDP/SDK drain/full `TransportInterface` 仍受限。7 个 helper 与 3 个 analyzer tests 的 provenance 已收据化；实际授权 header checkout `5518313...` 与未变更 repository gitlink `dd6037...` 明确区分。旧工作包 `NOT_COMMITTED` 段落保留为历史，不回写全局状态。
+
+详见 [Public Socket baseline build](PUBLIC_SOCKET_BASELINE_BUILD.md)、[Public Socket evidence index](PUBLIC_SOCKET_EVIDENCE_INDEX.json) 与本包 artifact receipt。Main 仍需完成实际 index/mode/blob/tree、graph/allowlist 和 staged-tree review 技术门。
+
+## 当前工作包：REAL_DDS_OVER_NEW_PUBLIC_SOCKET_DEVICE_BASELINE（2026-09-27；artifact run 20260926T225417Z）
+
+本工作包达到 **`REAL_DDS_OVER_NEW_PUBLIC_SOCKET_DEVICE_BASELINE_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`**。D1 `e6e553762d29ceb2` 为 delete B→A，D2 `c4af736f2b0d35c6` 为 delete A→B；两窗口均在两块 RK3588A 上通过实际 `DSoftBusTransport façade → NativeSendExecution → ProviderAdapter/PublicSocketBackend → public Socket API → remote accepted/ProviderAdapter/Binding → ReceiverResource/DataReader`，每方向 5 条，合计 20 条正式样本 GUID/SN 链。无重试；DDS wait API 不是 ACK packet 计数。
+
+Host full r1 `414/414 PASS`；final affected Host/ASan r3 各 `161/161 PASS`；final probe Host/ASan 各 `9/9 PASS`，这些集合有重叠且不相加。四窗口、八个 board-window guards 通过。B control trace 的 12 条 SPDP ingress 与 11 条 owned/running 之间的精确原因保持 `UNOBSERVED`，不能据此宣称所有 native packet delivery。设备前捕获的是一次实际 Fake-call QoS 参数 RED（误把 numeric 3 的 RTT_LEVEL 用作 MAX_WAIT_TIMEOUT，修复为 1），另有三个独立 analyzer counterexamples；R2 从未部署。
+
+final r3 package `2c42f3fc...`、source freeze `fb4400...`、target-r3 1,514 inputs/6 members 均按 receipt 绑定。该结论仅是 small DDS baseline：hot rebuild、full QoS、full `TransportInterface`、firmware/SDK ABI、SDK drain/quiescence、arbitrary topology 与生产 enablement 仍未验证。默认 `NativeBackendUnavailable`、P0/PF-01/PF-02 `BLOCKED / NOT QUALIFIED`、P4 未放行、无 QualificationProfile；不修改旧 runtime/Host package 的设备归属。
+
+详见 [Real DDS Public Socket device baseline](REAL_DDS_PUBLIC_SOCKET_DEVICE_BASELINE.md) 与本包 artifact receipt。
+
+## 当前工作包：PUBLIC_SOCKET_TARGET_LOAD_AND_BOUNDED_RUNTIME_PROBE（2026-09-27；artifact run 20260926T200859Z）
+
+本工作包记录 **`TARGET_LOAD_OBSERVED / BOUNDED_PUBLIC_SOCKET_CALLBACK_PATH_OBSERVED / NEW_SHIM_BIDIRECTIONAL_SMALL_BYTES_OBSERVED / CHECKPOINT_READY / NOT_COMMITTED`**。L `93a421640af19a22` 无 grant 且完成实际 load-origin/symbol/map 检查；guarded query `7ec64dad0b67367d` 完成独立 route identity 与 grant/revoke guard；唯一实际数据窗口 S `d82c4df0d3dccd73` 双板每方向发送/接收 5 条完整 256-byte 合成记录，正常退出并恢复 guards。第二次数据尝试未执行且不需要。
+
+S 窗口实际走新 shim 的 ticket → adapter/Binding/receiver 路径：listener=1、outgoing=2、accepted=3；A 对 accepted/outgoing/listener 各显式调用 void Shutdown，B 对 outgoing/accepted 观察到 typed OnShutdown reason 8 后仅显式关闭 listener。A3 void close 与 B2 typed reason/ listener close 是实际角色差异，不是 SDK drain 证明。普通 `Negotiate2`/`OnError` 未观察到。
+
+独立 Host R3 `407/407 PASS`；最终受影响 Host `151/151`、ASan `151/151`；运行时 Host `10/10`、ASan `10/10`，这些集合有重叠，不相加。目标 fresh probe `989bb...`，target-r4 绑定 1,357 inputs/6 package members；headers 来自授权 source checkout 而非 SDK bundled headers。S 是合成小 BYTES probe，非 DDS/RTPS/Participant，不能升级为新 SDK DDS、firmware ABI、drain/quiescence、性能或 PF 资格。
+
+默认 `NativeBackendUnavailable`、P0/PF-01/PF-02 `BLOCKED / NOT QUALIFIED`、P4 未放行、无 QualificationProfile。此包的双板观察不回写为旧 accepted-only 包的设备证据；无 commit/push/device expansion。
+
+详见 [Public Socket runtime probe](PUBLIC_SOCKET_RUNTIME_PROBE.md) 与当前 artifact receipt。
+
+## 当前工作包：PUBLIC_SOCKET_ACCEPTED_AND_REAL_DDS_HOST_INTEGRATION（2026-09-27；artifact run 20260926T174047Z）
+
+本工作包达到 **`PUBLIC_SOCKET_ACCEPTED_HOST_CONTRACT_VERIFIED / REAL_DDS_OVER_PUBLIC_SOCKET_FAKE_VERIFIED / SOURCE_HEADER_TARGET_LINK_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`**。范围是双 Host endpoint、每侧 one listener/outgoing/accepted、Fake public Socket C API、现有 owner/adapter/binding/receiver 路径与真实公开 Fast DDS DDS fixture；旧 9 个 DDS 用例仅作 Mock regression，新 5 个用例覆盖 PublicSocketBackend。
+
+独立 Release focused `80/80 PASS`、full `396/396 PASS`、exit 0；ASan affected `139/139 PASS`，外部预编译 DDS DLL 未插桩，396 与 139 不相加。E4 在现有 live pair 上拒绝额外 accepted negotiation，清理未交接 candidate 后继续 10 次 DDS take；不是 Participant 创建失败，不能写成 null result。F1 保留首个运行错误与 cleanup status，F2 保留 role terminal state 与严格 TX 归属，F3 使用无分配 `TryTake`/destruction 排空 accepted RX。M1–M9 有效变异均 killed，早期无效 operator/build failure 历史保留。
+
+target-r2 为 727 inputs/7 outputs，API23 AArch64 编译/静态链接使用授权公共 headers 与历史 DSO；未加载、未执行、未部署。`Negotiate2` 普通 BYTES 路径跳过，unsupported access-info/special routes fail-closed；边界为 bounded topology、accepted-only business RX、无 reconnect/RAW/general topology。生产 `NativeBackendUnavailable`、P0/PF-01/PF-02 `BLOCKED / NOT QUALIFIED`、P4 未放行、无 QualificationProfile；SDK/device/native runtime/drain/quiescence/firmware ABI 仍未验证。详见 [Public Socket accepted Host](PUBLIC_SOCKET_ACCEPTED_HOST.md) 与本包 artifact receipt。
+
+## 当前工作包：DSOFTBUS_PUBLIC_SOCKET_SHIM_COMPILE_AND_CONTRACT（2026-09-27；artifact run 20260926T160850Z）
+
+本工作包达到 **`DSOFTBUS_PUBLIC_SOCKET_SHIM_IMPLEMENTED / TARGET_SDK_BUILD_VERIFIED / HOST_SHIM_CONTRACT_TESTED / CHECKPOINT_READY / NOT_COMMITTED`**。新增 shim 只负责把现有 `NativeBackend` 接到公共 `Socket`、`Listen`、`Bind`、`SendBytes`、`Shutdown` 声明；默认生产工厂仍不可用，真实 `DSoftBusProvider` kind 仍被拒绝。25 个 shim CTest 经过实际 shim、ProviderAdapter、ServiceRecordBinding、owned-copy、receiver lease 和测试 receiver；另有 17 个 ProviderAdapter CTest，合计 Release `42/42`，受影响核心另为 `73/73`。ASan 同样是 shim/provider `42/42`，并包含既有 Host Participant Mock 回归 `9/9` 与 input-close `14/14`。该 9/9 fixture 没有替换为新 PublicSocketBackend/FakeSDK，因此不构成新 shim 到真实 DDS 的端到端证明；这些结果也不是设备或 SDK runtime 结果。
+
+API23 AArch64 目标使用 `native6.1.0.32` clang `15.0.4`，配置/编译和五个公共符号静态审计通过，目标未执行。声明头文件来自授权的 `communication_dsoftbus` 公共源码 checkout（HEAD `5518313ee70e79f788fc4d9f9a9310c8b24827cc`），而不是安装 SDK bundled headers；source-to-firmware ABI、loader、SDK 内部 drain/quiescence 和最后使用仍 `NOT_ESTABLISHED/UNPROVEN`。freeze-r1 的完整 `372/372` 运行和之后发现的 `/EHs-c-`/C4530 异常展开问题均保留；改为 `/EHsc-` 后，r3 先重跑受影响 Release `42/42 + 73/73` 与 ASan `42/42 + 9/9 + 14/14`，随后又在冻结源码上独立完成最终 full-r3 `372/372 PASS`（build/CTest exit 0，124.517 秒，13/13 source-freeze 无漂移，无 C4530 或 `/EHs-` 覆盖）。这不是把 r1 结果改名。回调使用由原 slot/role 导出的 shim 专用 trampoline。Listen accepted/reconnect ownership 仍 `DEFERRED`。`NativeBackendUnavailable`、P0/PF-01/PF-02、生产 P4 和 QualificationProfile 状态不变。完整范围见 [Public Socket shim](PUBLIC_SOCKET_SHIM.md) 和本包 artifact receipt。
+
 ## 当前工作包：REAL_FASTDDS_PARTICIPANT_OVER_HOST_NATIVE_BACKEND（2026-09-26；artifact run 20260926T093712Z）
 
 本工作包达到 **`REAL_FASTDDS_PARTICIPANT_HOST_INTEGRATION_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`**。限定范围是 Fast DDS 公开 factory → test-only descriptor → 当前 Host facade → `SenderResource`/`NativeSendExecution`/`ProviderAdapter`/`Binding` → 真实 `ReceiverResource` → `DataReader` 的 one-local、one-dial、双 Participant 单进程 Host 链路；未链接旧 `ExperimentalTransport`。配置固定为 RELIABLE/VOLATILE、`MddsKeyedSample` 32-byte payload、`maxMessageSize=8192`、builtin transports/intraprocess/DataSharing 关闭。

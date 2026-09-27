@@ -1445,6 +1445,41 @@ void RegistrationAllocationFailure()
 // adopted whole through ObserveInbound: the composition performs no Socket or
 // Listen call of its own, the owner plan comes from the native table, and the
 // release path claims the accepted socket's close responsibility.
+void PreparedAcceptedBinding()
+{
+    Fixture f;
+    auto listener=f.Deploy(f.CreateRequest("pkg.prepared.accepted",RecordRole::Server,false),331);
+    const auto initial=Table().SnapshotUsage();
+    auto request=f.JoinRequest(*listener,RecordRole::Server,false);
+    request.is_accepted=true;request.defer_accepted_ownership=true;request.accepted_socket=332;
+    request.accepted={f.config.directory.locals[0].callback_namespace,"net.c","peer.c",RecordDataType::Bytes};
+    auto pending=f.Build(request);
+    RequireStatus(pending->Prepare(),NativeStatus::None,"reserve negotiation budget");
+    Require(!pending->Observe().socket_known&&!pending->Observe().membership,"negotiation is NOT owned socket or published receiver");
+    RequireStatus(pending->Connect(),NativeStatus::NotReady,"OnBind is required before connect");
+    RequireStatus(pending->Abandon(),NativeStatus::None,"cancel negotiation");
+    RequireEqual(f.provider.shutdown,0,"unowned candidate has no Shutdown right");
+    RequireEqual(f.native->SnapshotUsage().owners,1,"pending budget returned");
+    pending.reset();
+    auto accepted=f.Build(request);RequireStatus(accepted->Prepare(),NativeStatus::None,"prepare retry");
+    RequireStatus(accepted->CommitAccepted(999),NativeStatus::InvalidResult,"wrong ID does not adopt");
+    RequireStatus(accepted->CommitAccepted(332),NativeStatus::None,"exact candidate acquires ownership");
+    RequireStatus(accepted->Connect(),NativeStatus::None,"accepted no public create/bind");
+    RequireStatus(accepted->Publish(),NativeStatus::None,"publish original listener record");
+    RequireEqual(Table().SnapshotUsage().records_created,initial.records_created,"accepted consumes no new record");
+    Require(accepted->Observe().record_incarnation==listener->Observe().record_incarnation,"original live record");
+    Require(accepted->Observe().owner_incarnation!=listener->Observe().owner_incarnation,"distinct native owner");
+    Require(!accepted->Observe().owns_application&&listener->Observe().receiver_open,"shared existing receiver claim");
+    f.Emit(*accepted,332,PayloadBytes());RequireEqual(f.Drain(*accepted),1,"accepted delivery");
+    RequireStatus(accepted->ObserveProviderShutdown(332),NativeStatus::None,"exact owner shutdown notification");
+    RequireStatus(accepted->Abandon(),NativeStatus::None,"control settles observed shutdown");
+    RequireEqual(f.provider.shutdown,0,"notification does not license another Shutdown");
+    Require(listener->Observe().receiver_open,"listener claim unaffected");
+    RequireStatus(listener->Abandon(),NativeStatus::None,"final listener close");
+    RequireEqual(f.provider.shutdown,1,"owned listener still closes exactly once");
+    Fixture::RequireAttachmentsEmpty(*f.attachments,"last claim settles");
+}
+
 void AcceptedTopology()
 {
     Fixture fixture;
@@ -1955,6 +1990,7 @@ int main(int argc, char** argv)
         {"join-during-settle", JoinDuringSettle}, {"joiner-failure-keeps-creator", JoinerFailureKeepsCreator},
         {"registration-allocation-failure", RegistrationAllocationFailure},
         {"accepted-topology", AcceptedTopology},
+        {"prepared-accepted", PreparedAcceptedBinding},
         {"close-request-from-callback", CloseRequestFromCallback},
         {"close-sync-refused-in-callback", CloseSyncRefusedInCallback},
         {"close-completion-guard-in-callback", CloseCompletionGuardInCallback},

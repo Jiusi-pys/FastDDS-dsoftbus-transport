@@ -46,8 +46,8 @@ struct Backend final:NativeBackend {
     BackendKind Kind()const noexcept override{return BackendKind::HostMock;}
     BackendIdentity Identity()const override{return {"host.real.dds."+std::to_string(side),{std::uint64_t(151+side)},{std::uint64_t(251+side)}};}
     BackendSocketResult Create(ProviderCallbacks c)override{std::lock_guard<std::mutex> l(gate);callbacks=c;++creates;trace->Add({"PROVIDER_CREATE","","","declared_model_identity",side});return {BackendStatus::None,42+side};}
-    BackendStatus Listen(std::int32_t)override{return BackendStatus::None;}
-    BackendStatus Bind(std::int32_t)override{++binds;trace->Add({"PROVIDER_BIND","","",fail_bind?"MODEL_REJECTED":"MODEL_OK",side});return fail_bind?BackendStatus::BindingRejected:BackendStatus::None;}
+    BackendCallResult Listen(std::int32_t)override{return BackendStatus::None;}
+    BackendCallResult Bind(std::int32_t)override{++binds;trace->Add({"PROVIDER_BIND","","",fail_bind?"MODEL_REJECTED":"MODEL_OK",side});return fail_bind?BackendStatus::BindingRejected:BackendStatus::None;}
     BackendSendResult Send(std::int32_t id,const std::uint8_t* bytes,std::size_t n,std::chrono::steady_clock::time_point)override{
         Require(id==42+side&&!stopped,"send live own model socket");++sends;
         auto owner=loop.lock();Require(bool(owner),"live model loop");const auto view=owner->Observe();Require(view.send.admitted_outstanding==1,"original NativeSendExecution ticket pinned");
@@ -64,7 +64,7 @@ struct Backend final:NativeBackend {
         }
         return {BackendStatus::None,0};
     }
-    BackendStatus Shutdown(std::int32_t id)override{Require(id==42+side,"shutdown owned model socket");stopped=true;++closes;trace->Add({"PROVIDER_SHUTDOWN","","","no_SDK_drain_claim",side});return BackendStatus::None;}
+    BackendCallResult Shutdown(std::int32_t id)override{Require(id==42+side,"shutdown owned model socket");stopped=true;++closes;trace->Add({"PROVIDER_SHUTDOWN","","","no_SDK_drain_claim",side});return BackendStatus::None;}
 };
 // Test-program-only descriptor; no normal descriptor or production default changes.
 struct HostDescriptor final:rtps::TransportDescriptorInterface {

@@ -1,0 +1,2 @@
+# Preserve the reviewed device collector's POSIX line endings on Windows clones.
+scripts/public_socket/capture-load.sh text eol=lf

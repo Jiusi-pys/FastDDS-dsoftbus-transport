@@ -1,13 +1,17 @@
 #ifndef MDDS_HOST_FACADE_BACKEND_HPP
 #define MDDS_HOST_FACADE_BACKEND_HPP
-#ifndef MDDS_HOST_BACKEND_TESTING
+#if !defined(MDDS_HOST_BACKEND_TESTING) && !defined(MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT)
 #error "Host facade injection requires the dedicated Host test library"
+#endif
+#if defined(MDDS_HOST_BACKEND_TESTING) && defined(MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+#error "FACADE_VARIANTS_EXCLUSIVE"
 #endif
 #include <mdds/dsoftbus/DSoftBusTransportDescriptor.hpp>
 #include <mdds/dsoftbus/DSoftBusSenderResource.hpp>
 #include <mdds/dsoftbus/InputChannels.hpp>
 namespace mdds::dsoftbus {
-// Manual Host fixture only. Single-channel close/reopen; no Participant use.
+// Shared injected facade contract: Host tests or exclusive DDS experiment.
+// Not available to the ordinary default backend. Single-channel close/reopen.
 class HostFacadeBackend {
 public:
     virtual ~HostFacadeBackend() = default;

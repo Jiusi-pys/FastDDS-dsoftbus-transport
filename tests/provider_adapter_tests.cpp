@@ -40,6 +40,7 @@ struct MockProviderBackend final : NativeBackend {
     bool throw_create=false, inline_bytes=false, inline_stop=false, throw_shutdown=false;
     std::vector<std::int32_t> create_stops;
     BackendStatus inline_result=BackendStatus::NotImplemented;
+    std::function<void()> during_setup;
     BackendKind Kind() const noexcept override {return BackendKind::HostMock;}
     BackendIdentity Identity() const override {return identity;}
     BackendSocketResult Create(ProviderCallbacks c) override {
@@ -47,9 +48,10 @@ struct MockProviderBackend final : NativeBackend {
         for(auto id:create_stops) inline_result=callbacks.OnShutdown(id);
         return {BackendStatus::None,11};
     }
-    BackendStatus Listen(std::int32_t) override {++listened; return Setup();}
-    BackendStatus Bind(std::int32_t) override {++bound; return Setup();}
+    BackendCallResult Listen(std::int32_t) override {++listened; return Setup();}
+    BackendCallResult Bind(std::int32_t) override {++bound; return Setup();}
     BackendStatus Setup() {
+        if(during_setup)during_setup();
         const std::uint8_t byte=7;
         if(inline_bytes) inline_result=callbacks.OnBytes(11,&byte,1);
         if(inline_stop) inline_result=callbacks.OnShutdown(11);
@@ -58,7 +60,7 @@ struct MockProviderBackend final : NativeBackend {
     BackendSendResult Send(std::int32_t,const std::uint8_t*,std::size_t,std::chrono::steady_clock::time_point) override {
         ++sends; return {BackendStatus::NotImplemented,std::nullopt};
     }
-    BackendStatus Shutdown(std::int32_t id) override {Check(id==11,"owned socket close"); ++closed; if(throw_shutdown) throw std::runtime_error("shutdown"); return BackendStatus::None;}
+    BackendCallResult Shutdown(std::int32_t id) override {Check(id==11,"owned socket close"); ++closed; if(throw_shutdown) throw std::runtime_error("shutdown"); return BackendStatus::None;}
 };
 struct Fixture {
     ProviderAdapterDomain domain;
@@ -91,9 +93,9 @@ struct Fixture {
 };
 void P0() {
     NullBackend n;Check(n.Kind()==BackendKind::Unavailable,"null mode");Check(!n.Create({}).socket,"no socket");
-    Check(n.Listen(11)==BackendStatus::NativeBackendUnavailable && n.Bind(11)==BackendStatus::NativeBackendUnavailable,"null setup");
+    Check(n.Listen(11).status==BackendStatus::NativeBackendUnavailable && n.Bind(11).status==BackendStatus::NativeBackendUnavailable,"null setup");
     auto send=n.Send(11,nullptr,0,{});Check(send.status==BackendStatus::NativeBackendUnavailable && !send.provider_return,"notcalled no fabricated rc");
-    Check(n.Shutdown(11)==BackendStatus::NativeBackendUnavailable,"null shutdown");
+    Check(n.Shutdown(11).status==BackendStatus::NativeBackendUnavailable,"null shutdown");
     Fixture f; DSoftBusTransportDescriptor d(64);d.directory=f.config.directory;
     d.default_metatraffic_unicast={Loc(1)};d.default_user_unicast={Loc(1)};
     DSoftBusTransport t(d);Check(t.mode()==FacadeMode::NativeUnavailable,"real facade default");
@@ -197,11 +199,16 @@ void IngressAllocation() {
     Check(f.receiver.calls==0 && view.binding.receive.queued==0 && view.binding.receive.copying==0,"no partial delivery or future queue");
     f.Deliver(*a);Check(a->Close().adapter_drained,"binding recovers after callback allocation fault");
 }
+void SetupObserve() {
+    Fixture f;auto a=f.Make();bool observed=false;
+    f.provider->during_setup=[&]{std::cerr<<"PROVIDER_SETUP_REENTER_OBSERVE\n"<<std::flush;auto v=a->Observe();observed=v.phase==AdapterPhase::Deploying;};
+    f.Ready(*a);Check(observed,"provider call is outside binding gate");Check(a->Close().adapter_drained,"close");
+}
 }
 int main(int argc,char** argv) {
     try {
         Check(argc==2,"one case required");std::string s=argv[1];
-        const std::pair<const char*,void(*)()> cases[]={{"P0",P0},{"P1",P1},{"P2",P2},{"P3",P3},{"P4",P4},{"P5",P5},{"P6",P6},{"P7",P7},{"early-stop",EarlyStop},{"provider-throw",ProviderThrow},{"listen",Listen},{"create-stop",CreateStop},{"create-foreign",CreateForeign},{"create-conflict",CreateConflict},{"shutdown-failure",ShutdownFailure},{"ingress-allocation",IngressAllocation}};
+        const std::pair<const char*,void(*)()> cases[]={{"P0",P0},{"P1",P1},{"P2",P2},{"P3",P3},{"P4",P4},{"P5",P5},{"P6",P6},{"P7",P7},{"early-stop",EarlyStop},{"provider-throw",ProviderThrow},{"listen",Listen},{"create-stop",CreateStop},{"create-foreign",CreateForeign},{"create-conflict",CreateConflict},{"shutdown-failure",ShutdownFailure},{"ingress-allocation",IngressAllocation},{"setup-observe",SetupObserve}};
         for(const auto& c:cases)if(s==c.first){c.second();std::cout<<"PASS "<<s<<'\n';return 0;}
         throw std::runtime_error("unknown case");
     }catch(const std::exception& e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}

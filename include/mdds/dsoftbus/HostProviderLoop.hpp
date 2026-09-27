@@ -14,6 +14,7 @@ struct HostLoopObservation {
     SendQueueUsage tx;
     AttachmentUsage receive; // Runtime ledger remains observable after input detachment.
     NativeEgressActivity send;
+    NativeUsageSnapshot native;
     phase0::AdapterObservation adapter;
     phase0::BackendCloseResult close;
     std::optional<phase0::BackendCloseResult> failed_open_cleanup;
@@ -32,6 +33,7 @@ public:
     bool Shutdown() noexcept override;
     NativeSendRunResult PumpSend() noexcept;
     phase0::BackendStatus PumpReceive() noexcept;
+    phase0::BackendStatus CloseAccepted() noexcept;
     HostLoopObservation Observe() const noexcept;
     bool WaitSealed(std::chrono::steady_clock::time_point) const;
     bool WaitInputClosing(std::chrono::steady_clock::time_point) const;

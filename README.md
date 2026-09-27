@@ -1,6 +1,50 @@
 # FastDDS dsoftbus Transport
 
+> **当前 PRE-COMMIT SNAPSHOT（2026-09-27；artifact run 20260927T005155Z）：**
+> `LOCAL_NATIVE_DDS_BASELINE_HOST_VERIFIED / CHECKPOINT_READY`。
+> 用户授权范围为当前分支一次本地 commit；不包含 merge/push/device/SDK/release，且
+> 当前尚无 commit hash。候选 345 个冻结文件前后哈希一致，最终 CONFIG Release
+> CTest `420/420 PASS`、exit 0（144.58s）；初始 `418/420` 的两个
+> `Get-FileHash` PowerShell 环境失败保留，并在恢复模块路径后完整复跑通过。最终
+> affected helper gate `3/3 PASS`。详见 [Public Socket baseline build](docs/PUBLIC_SOCKET_BASELINE_BUILD.md)
+> 与 [Public Socket evidence index](docs/PUBLIC_SOCKET_EVIDENCE_INDEX.json)。默认
+> `NativeBackendUnavailable`、P0/PF-01/PF-02、P4 与 QualificationProfile 不变。
+
+> **当前工作包（2026-09-27；artifact run 20260926T225417Z）：**
+> `REAL_DDS_OVER_NEW_PUBLIC_SOCKET_DEVICE_BASELINE_VERIFIED / CHECKPOINT_READY /
+> NOT_COMMITTED`。D1 `e6e553...` 与 D2 `c4af736...` 在两块 RK3588A 上通过实际
+> DSoftBusTransport façade→NativeSendExecution→ProviderAdapter/PublicSocketBackend→
+> public Socket API→remote accepted/ProviderAdapter/Binding→ReceiverResource/DataReader；
+> 每窗口每方向 5 条、共 20 条正式样本 GUID/SN 链。Host full `414/414`，final affected
+> Host/ASan 各 `161/161`，final probe Host/ASan 各 `9/9`（重叠不相加）。这是小型
+> DDS baseline，不是 full QoS/TransportInterface/SDK drain/PF/P4/生产放行。默认
+> `NativeBackendUnavailable`、P0/PF-01/PF-02、P4 与 QualificationProfile 不变。
+> 详见 [Real DDS Public Socket device baseline](docs/REAL_DDS_PUBLIC_SOCKET_DEVICE_BASELINE.md)。
+
+> **当前工作包（2026-09-27；artifact run 20260926T200859Z）：**
+> `TARGET_LOAD_OBSERVED / BOUNDED_PUBLIC_SOCKET_CALLBACK_PATH_OBSERVED /
+> NEW_SHIM_BIDIRECTIONAL_SMALL_BYTES_OBSERVED / CHECKPOINT_READY / NOT_COMMITTED`。
+> L `93a421...`、guarded query `7ec64...` 与唯一实际 socket 数据窗口 `d82c4...`
+> 均有双板 guard；后者为每方向 5 条 256-byte 合成 BYTES probe，非 DDS/RTPS。
+> Host R3 `407/407`、最终受影响 Host/ASan 各 `151/151`，运行时 Host/ASan 各
+> `10/10`（不相加）。目标包使用授权公共 headers 和同一 fresh probe；不证明
+> firmware ABI、SDK drain、完整 DDS 或生产资格。默认 `NativeBackendUnavailable`、
+> P0/PF-01/PF-02、P4 和 QualificationProfile 不变。详见
+> [Public Socket runtime probe](docs/PUBLIC_SOCKET_RUNTIME_PROBE.md)。
+
+> **最新工作包（2026-09-27；artifact run 20260926T174047Z）：**
+> `PUBLIC_SOCKET_ACCEPTED_HOST_CONTRACT_VERIFIED / REAL_DDS_OVER_PUBLIC_SOCKET_FAKE_VERIFIED /
+> SOURCE_HEADER_TARGET_LINK_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`。限定双 Host
+> endpoint、one listener/outgoing/accepted、Fake public Socket C API 与真实公开
+> Fast DDS DDS 链路；独立 focused `80/80 PASS`、full `396/396 PASS`，ASan affected
+> `139/139 PASS`（总数不相加）。E4 是 live pair 上额外 accepted capacity refusal 后
+> 继续 10 次 DDS take，不是 Participant create failure。目标 `727` inputs/`7` outputs
+> 的 API23 AArch64 静态链接证据仍不代表 SDK/device/runtime。生产 `NativeBackendUnavailable`、
+> P0/PF-01/PF-02、P4 与 QualificationProfile 不变。详见 [Public Socket accepted Host](docs/PUBLIC_SOCKET_ACCEPTED_HOST.md)。
+
 Current versioned Host capability, build dependencies and external evidence: [Host DDS baseline](docs/HOST_DDS_BASELINE.md). Host validation does not enable the SDK backend or release P0/PF/P4.
+
+> **最新工作包（2026-09-27；artifact run 20260926T160850Z）：** `DSOFTBUS_PUBLIC_SOCKET_SHIM_IMPLEMENTED / TARGET_SDK_BUILD_VERIFIED / HOST_SHIM_CONTRACT_TESTED / CHECKPOINT_READY / NOT_COMMITTED`。现有 `NativeBackend` 已有面向公共 DSoftBus Socket API 的薄 shim，并通过 Host Fake 公共符号、既有 adapter/Binding/owned-copy/receiver lease 路径测试；API23 AArch64 目标配置/编译及五个公共符号静态审计通过。头文件来自授权的 `communication_dsoftbus` 源码，不是安装 SDK 自带头文件；目标程序未运行、未部署，固件 ABI、loader、SDK drain 和真实设备仍未验证。默认 `NativeBackendUnavailable`、真实 provider 准入、P0/PF-01/PF-02、生产 P4 和 QualificationProfile 状态不变。详见 [Public Socket shim](docs/PUBLIC_SOCKET_SHIM.md)。
 
 > **最新工作包（2026-09-26；artifact run 20260926T093712Z）：**
 > `REAL_FASTDDS_PARTICIPANT_OVER_HOST_NATIVE_BACKEND` 达到 `REAL_FASTDDS_PARTICIPANT_HOST_INTEGRATION_VERIFIED /

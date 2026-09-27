@@ -1,0 +1,136 @@
+#include <mdds/dsoftbus/HostProviderLoop.hpp>
+#include <fastdds/LibrarySettings.hpp>
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/dds/domain/DomainParticipant.hpp>
+#include <fastdds/dds/publisher/Publisher.hpp>
+#include <fastdds/dds/publisher/DataWriter.hpp>
+#include <fastdds/dds/subscriber/Subscriber.hpp>
+#include <fastdds/dds/subscriber/DataReader.hpp>
+#include <fastdds/dds/subscriber/SampleInfo.hpp>
+#include <fastdds/dds/topic/TypeSupport.hpp>
+#include <fastdds/rtps/common/WriteParams.hpp>
+#include "MddsKeyedSamplePubSubTypes.hpp"
+#include "HostParticipantEvidence.hpp"
+#include <atomic>
+#include <cstdlib>
+#include <iostream>
+#include <stdexcept>
+#include <thread>
+#include <functional>
+#include <sstream>
+
+#include <mdds/dsoftbus/PublicSocketBackend.hpp>
+#include "FakePublicSocketLink.hpp"
+namespace public_dds {
+using namespace mdds::dsoftbus;using namespace mdds::dsoftbus::phase0;using namespace mdds::dsoftbus::host_test;using namespace host_dds;
+namespace dds=eprosima::fastdds::dds;namespace rtps=eprosima::fastdds::rtps;using namespace std::chrono_literals;
+void Require(bool v,const char* why){if(!v)throw std::runtime_error(why);}
+std::string Guid(const rtps::GUID_t& g){return Hex(g.guidPrefix.value,12)+Hex(g.entityId.value,4);}
+std::string Handle(const dds::InstanceHandle_t& h){return Hex(h.value,16);}
+std::uint64_t Sequence(const rtps::SequenceNumber_t& n){return(std::uint64_t(std::uint32_t(n.high))<<32)|n.low;}
+Locator Local(int side){EndpointId id{};id[0]=10;id[14]=128;id[15]=std::uint8_t(side+1);Locator l;Require(LocatorCodec::Encode(id,l),"locator");return l;}
+std::string Name(int side,const char* role){return std::string("host.public.")+(side?"B.":"A.")+role;}
+std::string Network(int side){return side?"model.net.B":"model.net.A";}
+DSoftBusTransportDescriptor Configuration(int side){DSoftBusTransportDescriptor d(8192);auto local=Local(side),peer=Local(1-side);d.directory.locals={{local,Name(side,"namespace"),Name(side,"listener")}};d.directory.routes={{{local,peer},{Network(1-side),Name(1-side,"listener"),Name(side,"outgoing"),{Name(1-side,"outgoing")},RecordDataType::Bytes},1}};d.default_metatraffic_unicast={local};d.default_user_unicast={local};return d;}
+PublicSocketConfiguration PublicConfig(int side){PublicSocketConfiguration c;c.identity={Name(side,"outgoing"),{std::uint64_t(910+side*4)},{std::uint64_t(1010+side*4)}};c.listener_identity={Name(side,"listener"),{std::uint64_t(911+side*4)},{std::uint64_t(1011+side*4)}};c.package_name="host.public.dds";c.peer_name=Name(1-side,"listener");c.peer_network_id=Network(1-side);c.bind_qos={{0,65536}};c.listen_qos=c.bind_qos;c.max_message_size=8192;return c;}
+struct Descriptor final:rtps::TransportDescriptorInterface {
+    DSoftBusTransportDescriptor config;std::shared_ptr<HostProviderLoop> loop;mutable std::atomic<unsigned> factories{0};
+    Descriptor(int side,std::shared_ptr<HostProviderLoop> p):TransportDescriptorInterface(8192,1),config(Configuration(side)),loop(std::move(p)){}
+    rtps::TransportInterface* create_transport()const override{++factories;return HostFacadeTestAccess::Create(config,loop).release();}
+    std::uint32_t min_send_buffer_size()const override{return config.min_send_buffer_size();}
+};
+void Isolate(){
+    for(const auto* name:{"FASTDDS_DEFAULT_PROFILES_FILE","FASTRTPS_DEFAULT_PROFILES_FILE","FASTDDS_ENVIRONMENT_FILE","ROS_DISCOVERY_SERVER","ROS_SUPER_CLIENT","FASTDDS_BUILTIN_TRANSPORTS","FASTDDS_STATISTICS"})Require(_putenv_s(name,"")==0,"clear process-only DDS environment");
+    Require(_putenv_s("SKIP_DEFAULT_XML","1")==0,"skip default XML");
+    eprosima::fastdds::LibrarySettings s;s.intraprocess_delivery=eprosima::fastdds::INTRAPROCESS_OFF;
+    auto* f=dds::DomainParticipantFactory::get_instance();Require(f->set_library_settings(s)==dds::RETCODE_OK,"intraprocess set");
+    Require(f->get_library_settings(s)==dds::RETCODE_OK&&s.intraprocess_delivery==eprosima::fastdds::INTRAPROCESS_OFF,"intraprocess effective");
+}
+dds::DomainParticipantQos Qos(int side,std::shared_ptr<rtps::TransportDescriptorInterface> desc){
+    dds::DomainParticipantQos q;q.name("HostNative"+std::to_string(side));q.transport().use_builtin_transports=false;q.transport().user_transports={std::move(desc)};
+    q.properties().properties().emplace_back("fastdds.ignore_local_endpoints","true");
+    auto& w=q.wire_protocol();w.builtin.metatrafficMulticastLocatorList.clear();w.builtin.metatrafficUnicastLocatorList.clear();w.builtin.metatrafficUnicastLocatorList.push_back(Local(side));w.default_unicast_locator_list.clear();w.default_unicast_locator_list.push_back(Local(side));w.default_multicast_locator_list.clear();w.builtin.initialPeersList.clear();w.builtin.initialPeersList.push_back(Local(1-side));
+    w.builtin.discovery_config.leaseDuration_announcementperiod={1,0};w.builtin.discovery_config.initial_announcements.count=5;w.builtin.discovery_config.initial_announcements.period={0,200000000};return q;
+}
+template<class Q>void EndpointQos(Q& q){
+    q.reliability().kind=dds::RELIABLE_RELIABILITY_QOS;q.reliability().max_blocking_time={1,0};
+    q.durability().kind=dds::VOLATILE_DURABILITY_QOS;q.history().kind=dds::KEEP_LAST_HISTORY_QOS;q.history().depth=16;
+    q.resource_limits().max_samples=32;q.resource_limits().max_instances=1;q.resource_limits().max_samples_per_instance=32;q.resource_limits().allocated_samples=16;q.data_sharing().off();
+}
+template<class Q>bool EffectiveEndpoint(const Q& q){return q.reliability().kind==dds::RELIABLE_RELIABILITY_QOS&&q.durability().kind==dds::VOLATILE_DURABILITY_QOS&&q.history().kind==dds::KEEP_LAST_HISTORY_QOS&&q.history().depth==16&&q.resource_limits().max_samples==32&&q.resource_limits().max_instances==1&&q.resource_limits().max_samples_per_instance==32&&q.data_sharing().kind()==dds::OFF;}
+
+struct Observer final:ProcessReceiveObserver {
+    int side;std::shared_ptr<Trace> trace;
+    Observer(int i,std::shared_ptr<Trace> t):side(i),trace(std::move(t)){}
+    void OnReceive(ReceiveStage stage,const ReceiveDiagnostic& d,const std::uint8_t* p,std::size_t n)noexcept override{
+        const auto native=d.native.Observe();
+        const char* name=stage==ReceiveStage::Captured?"RX_CAPTURED":stage==ReceiveStage::OwnedCopy?"RX_OWNED":stage==ReceiveStage::Running?"RX_RUNNING":"RX_OTHER";
+        if(stage==ReceiveStage::Captured||stage==ReceiveStage::OwnedCopy||stage==ReceiveStage::Running){
+            if(native.role!=NativeOwnerRole::Accepted||!native.owned_id)trace->Add({"TRACE_ERROR","","","non_accepted_receive_owner",side});
+            trace->Frame(name,side,p,n,d.correlation,d.identity.application_incarnation,d.identity.receiver_incarnation);
+            trace->Add({"ORIGINAL_ACCEPTED_LEASE","","","owner="+std::to_string(native.incarnation)+",generation="+std::to_string(native.generation)+",socket="+std::to_string(native.owned_id.value_or(-1)),side,0,0,d.correlation,d.identity.application_incarnation,d.identity.receiver_incarnation});
+        }
+    }
+};
+struct Endpoint {
+    std::shared_ptr<PublicSocketBackend> backend;std::shared_ptr<HostProviderLoop> loop;std::shared_ptr<Descriptor> descriptor;
+    dds::DomainParticipant* participant=nullptr;dds::Publisher* publisher=nullptr;dds::Subscriber* subscriber=nullptr;dds::Topic* topic=nullptr;dds::DataWriter* writer=nullptr;dds::DataReader* reader=nullptr;
+    std::thread pump;std::atomic<bool> stop{false};std::string p,w,r;
+};
+struct Fixture {
+    std::shared_ptr<Trace> trace=std::make_shared<Trace>();Endpoint e[2];dds::TypeSupport type{new MddsKeyedSamplePubSubType};
+    std::uint64_t run=std::uint64_t(std::chrono::steady_clock::now().time_since_epoch().count());std::atomic<bool> finishing{false};bool cleanup_failed=false;
+    explicit Fixture(bool forwarding=true){
+        public_socket_fake::Configure(trace,forwarding);
+        for(int i=0;i<2;++i){e[i].backend=std::make_shared<PublicSocketBackend>(PublicConfig(i));e[i].loop=std::make_shared<HostProviderLoop>(e[i].backend,std::make_shared<Observer>(i,trace));e[i].descriptor=std::make_shared<Descriptor>(i,e[i].loop);}
+        public_socket_fake::SetSendObserver([&](int side,int id){const auto v=e[side].loop->Observe();Require(id==101+100*side&&v.send.admitted_outstanding==1&&v.native.send.entered==1,"original outgoing NativeSendExecution ticket");trace->Add({"ORIGINAL_SEND_TICKET","","","outgoing="+std::to_string(id)+",owner="+std::to_string(v.adapter.binding.owner_incarnation)+",record="+std::to_string(v.adapter.binding.record_incarnation),side});});
+    }
+    ~Fixture(){finishing=true;for(int i:{1,0})if(e[i].participant)try{Delete(i,false);}catch(...){cleanup_failed=true;}for(auto& x:e)x.stop=true;for(auto& x:e)if(x.pump.joinable())x.pump.join();public_socket_fake::SetSendObserver({});trace->Dump(run);}
+    void CreateBoth(){
+        std::exception_ptr errors[2];std::thread creation[2];
+        for(int i=0;i<2;++i)creation[i]=std::thread([&,i]{try{e[i].participant=dds::DomainParticipantFactory::get_instance()->create_participant(151,Qos(i,e[i].descriptor));trace->Add({"DDS_CREATE_RESULT","","",e[i].participant?"non_null":"null",i});}catch(...){errors[i]=std::current_exception();}});
+        for(auto& t:creation)t.join();for(auto& error:errors)if(error)std::rethrow_exception(error);
+        const auto api=public_socket_fake::Observe();
+        for(int i=0;i<2;++i){auto& x=e[i];Require(x.participant!=nullptr,"normal real Participant return");x.p=Guid(x.participant->guid());auto q=x.participant->get_qos();
+            Require(!q.transport().use_builtin_transports&&q.transport().user_transports.size()==1&&q.transport().user_transports[0]==x.descriptor,"effective only actual facade descriptor");
+            const auto& wire=q.wire_protocol();const auto one=[](const auto& locators,const Locator& l){return locators.size()==1&&*locators.begin()==l;};
+            Require(one(wire.builtin.metatrafficUnicastLocatorList,Local(i))&&one(wire.default_unicast_locator_list,Local(i))&&one(wire.builtin.initialPeersList,Local(1-i))&&wire.builtin.metatrafficMulticastLocatorList.empty()&&wire.default_multicast_locator_list.empty(),"effective exact private locator mapping");
+            bool ignore_local=false;for(const auto& property:q.properties().properties())if(property.name()=="fastdds.ignore_local_endpoints"&&property.value()=="true")ignore_local=true;Require(ignore_local,"effective local-match exclusion");
+            trace->Add({"EFFECTIVE_LOCATORS","","","domain=151,kind="+std::to_string(Local(i).kind)+",local="+Hex(Local(i).address,16)+",peer="+Hex(Local(1-i).address,16)+",meta=user,builtin=off,intraprocess=off",i});
+            Require(x.descriptor->factories==1&&x.loop->Observe().input_open,"actual factory/ReceiverResource input");
+            Require(x.backend->Topology()==BackendTopology::ListenerAndOutgoing&&api.sockets[i]==2&&api.listens[i]==1&&api.binds[i]==1,"actual PublicSocketBackend and actual Fake C calls, not old Mock");
+            const auto view=x.loop->Observe();Require(view.adapter.accepted_phase==AcceptedPhase::Active&&view.adapter.accepted.socket==102+100*i,"committed accepted is receiving owner");
+            Require(view.adapter.listener.record_incarnation==view.adapter.accepted.record_incarnation&&view.adapter.listener.owner_incarnation!=view.adapter.accepted.owner_incarnation,"same original record, distinct owner");
+            trace->Add({"FACTORY_PUBLIC_SHIM","","","implementation=PublicSocketBackend,environment=Fake_C_API,participant="+x.p+",outgoing="+std::to_string(view.adapter.binding.socket)+",accepted="+std::to_string(view.adapter.accepted.socket)+",listener_record="+std::to_string(view.adapter.listener.record_incarnation)+",accepted_record="+std::to_string(view.adapter.accepted.record_incarnation),i});
+            Require(type.register_type(x.participant)==dds::RETCODE_OK,"register type");x.topic=x.participant->create_topic("PublicSocketHostBounded",type.get_type_name(),dds::TOPIC_QOS_DEFAULT);x.publisher=x.participant->create_publisher(dds::PUBLISHER_QOS_DEFAULT);x.subscriber=x.participant->create_subscriber(dds::SUBSCRIBER_QOS_DEFAULT);Require(x.topic&&x.publisher&&x.subscriber,"DDS entities");
+            auto wq=dds::DATAWRITER_QOS_DEFAULT;EndpointQos(wq);wq.publish_mode().kind=dds::SYNCHRONOUS_PUBLISH_MODE;auto rq=dds::DATAREADER_QOS_DEFAULT;EndpointQos(rq);
+            x.writer=x.publisher->create_datawriter(x.topic,wq);x.reader=x.subscriber->create_datareader(x.topic,rq);Require(x.writer&&x.reader,"real Writer/Reader");Require(EffectiveEndpoint(x.writer->get_qos())&&EffectiveEndpoint(x.reader->get_qos())&&x.writer->get_qos().publish_mode().kind==dds::SYNCHRONOUS_PUBLISH_MODE,"effective bounded QoS");x.w=Guid(x.writer->guid());x.r=Guid(x.reader->guid());
+            x.pump=std::thread([&,i]{try{while(!e[i].stop){auto tx=e[i].loop->PumpSend();public_socket_fake::PumpOne();auto rx=e[i].loop->PumpReceive();
+                const bool txok=tx.outcome==NativeSendOutcome::NotEntered&&(tx.status==NativeStatus::NotFound||finishing)||tx.outcome==NativeSendOutcome::ReturnedSdkCode&&tx.actual_return_code&&(tx.actual_return_code==0||finishing);
+                const bool rxok=rx==BackendStatus::None||rx==BackendStatus::NoWork||(finishing&&(rx==BackendStatus::InvalidState||rx==BackendStatus::ChannelClosed||rx==BackendStatus::ProviderStopped||rx==BackendStatus::BindingRejected));
+                if(!txok||!rxok)trace->Add({"PUMP_ERROR","","","tx="+std::to_string(int(tx.status))+",outcome="+std::to_string(int(tx.outcome))+",rx="+std::to_string(int(rx)),i});std::this_thread::sleep_for(1ms);}}
+                catch(...){trace->Add({"PUMP_ERROR","","","exception",i});}});
+        }
+    }
+    void Wait(const std::function<bool()>& f,const char* why){auto end=std::chrono::steady_clock::now()+8s;while(!f()){Require(trace->Good(),"trace/pump fault");Require(std::chrono::steady_clock::now()<end,why);std::this_thread::sleep_for(10ms);}}
+    std::set<std::string> Readers(int i){std::vector<dds::InstanceHandle_t> hs;Require(e[i].writer->get_matched_subscriptions(hs)==dds::RETCODE_OK,"matched Reader API");std::set<std::string> values;for(auto& h:hs)values.insert(Handle(h));return values;}
+    std::set<std::string> Writers(int i){std::vector<dds::InstanceHandle_t> hs;Require(e[i].reader->get_matched_publications(hs)==dds::RETCODE_OK,"matched Writer API");std::set<std::string> values;for(auto& h:hs)values.insert(Handle(h));return values;}
+    void Match(){Wait([&]{return CurrentMatch(Readers(0),e[1].r)&&CurrentMatch(Readers(1),e[0].r)&&CurrentMatch(Writers(0),e[1].w)&&CurrentMatch(Writers(1),e[0].w);},"current remote match over new shim");}
+    void Traffic(){
+        for(int i=0;i<2;++i)for(unsigned n=1;n<=5;++n){MddsKeyedSample s;s.key(1);s.run(run);s.writer(i+1);s.ordinal(n);for(unsigned k=0;k<32;++k)s.payload()[k]=std::uint8_t(n+k+i);rtps::WriteParams p;Require(e[i].writer->write(&s,p)==dds::RETCODE_OK,"DDS write");trace->Add({"DDS_WRITE","DATA",e[i].w,std::to_string(n),i,Sequence(p.sample_identity().sequence_number())});}
+        for(int i=0;i<2;++i){std::vector<SampleReceipt> rows;Wait([&]{MddsKeyedSample s;dds::SampleInfo info;for(;;){auto rc=e[i].reader->take_next_sample(&s,&info);if(rc==dds::RETCODE_NO_DATA)break;Require(rc==dds::RETCODE_OK,"Reader take");if(!info.valid_data)continue;bool payload=s.key()==1&&s.writer()==unsigned(2-i);for(unsigned k=0;k<32;++k)payload=payload&&s.payload()[k]==std::uint8_t(s.ordinal()+k+1-i);Require(rows.size()<16,"bounded sample ledger");rows.push_back({e[i].r,Guid(info.sample_identity.writer_guid()),s.run(),Sequence(info.sample_identity.sequence_number()),s.ordinal(),payload,true});trace->Add({"DDS_TAKE","DATA",rows.back().writer,std::to_string(s.ordinal())+":"+e[i].r,i,rows.back().sn});}return rows.size()>=5;},"Reader delivery");Require(LedgerValid(rows,e[i].r,e[1-i].w,run,1,5),"exact Writer/run/SN/payload independent Reader ledger");for(auto& row:rows)Require(trace->Has("FAKE_SEND",1-i,"DATA",row.writer,row.sn)&&trace->Has("FAKE_INGRESS",i,"DATA",row.writer,row.sn)&&trace->Has("RX_OWNED",i,"DATA",row.writer,row.sn)&&trace->Has("RX_RUNNING",i,"DATA",row.writer,row.sn),"same-run public shim/Fake bytes/accepted lease/Reader chain");}
+        for(int i=0;i<2;++i){Require(e[i].writer->wait_for_acknowledgments({3,0})==dds::RETCODE_OK,"DDS wait operation");trace->Add({"DDS_WAIT_OK","","","API_not_network_packet_count",i});}
+        const auto end=std::chrono::steady_clock::now()+100ms;while(std::chrono::steady_clock::now()<end){for(auto& x:e){MddsKeyedSample s;dds::SampleInfo info;auto rc=x.reader->take_next_sample(&s,&info);Require(rc==dds::RETCODE_NO_DATA||(rc==dds::RETCODE_OK&&!info.valid_data),"no late extra valid delivery");}std::this_thread::sleep_for(1ms);}
+        for(int i=0;i<2;++i){Require(trace->Has("FAKE_SEND",i,"SPDP")&&trace->Has("RX_RUNNING",1-i,"SPDP"),"both SPDP paths");Require(trace->Has("FAKE_SEND",i,"SEDP")&&trace->Has("RX_RUNNING",1-i,"SEDP"),"both SEDP paths");Require(trace->Has("FAKE_SEND",i,"HEARTBEAT")||trace->Has("FAKE_SEND",i,"ACKNACK"),"actual RTPS reliable control");}
+    }
+    void Delete(int side,bool verify){auto& x=e[side];if(!x.participant)return;bool ok=x.participant->delete_contained_entities()==dds::RETCODE_OK;ok=dds::DomainParticipantFactory::get_instance()->delete_participant(x.participant)==dds::RETCODE_OK&&ok;x.participant=nullptr;x.writer=nullptr;x.reader=nullptr;
+        const auto v=x.loop->Observe();const bool settled=x.backend->Observe().closed&&v.closed&&!v.input_open&&v.active_pumps==0&&v.close.adapter_drained&&v.close.status==BackendStatus::None&&v.receive.records==0&&v.receive.active_applications==0&&v.receive.retained_applications==0&&v.tx.records==0&&v.native.callbacks==0&&v.native.receives==0&&v.open_calls>0&&v.close_calls>0&&v.shutdown_calls>0;
+        public_socket_fake::LateBytes(side);Require(x.loop->Observe().receive.records==0,"post-delete typed callback never reaches old receiver");
+        trace->Add({"DDS_DELETE_AND_SETTLE","","","api_ok="+std::to_string(ok)+",settled="+std::to_string(settled)+",input_close="+std::to_string(v.close_calls)+",shutdown="+std::to_string(v.shutdown_calls)+",pump_alive="+std::to_string(x.pump.joinable()&&!x.stop),side});cleanup_failed=cleanup_failed||!ok||!settled;if(verify)Require(ok&&settled&&x.pump.joinable()&&!x.stop,"actual DDS delete drains owned resources with pumps alive");}
+    void End(bool bfirst){finishing=true;Delete(bfirst?1:0,true);Delete(bfirst?0:1,true);Wait([&]{return public_socket_fake::Observe().queued==0;},"Fake copy queue drains");for(auto& x:e)x.stop=true;for(auto& x:e)if(x.pump.joinable())x.pump.join();auto sdk=public_socket_fake::Observe();Require(sdk.live==0&&sdk.bytes==0&&sdk.invalid==0&&!cleanup_failed&&trace->Good(),"final joined Fake/adapter ledger");trace->Add({"FINAL_FAKE_LEDGER","","","live=0,queue=0,bytes=0,shutdown_calls="+std::to_string(sdk.shutdowns[0]+sdk.shutdowns[1])+",terminal_notifications="+std::to_string(sdk.notified[0]+sdk.notified[1]),0});}
+};
+void Normal(bool bfirst,bool rejection){Isolate();Fixture f;f.CreateBoth();f.Match();if(rejection){const auto a=f.e[0].loop->Observe(),b=f.e[1].loop->Observe();Require(public_socket_fake::RejectExtraCandidate(1),"actual extra accepted rejected");const auto after=f.e[1].loop->Observe(),other=f.e[0].loop->Observe();const auto same=[](const HostLoopObservation& x,const HostLoopObservation& y){return x.native.owners==y.native.owners&&x.adapter.binding.owner_incarnation==y.adapter.binding.owner_incarnation&&x.adapter.listener.owner_incarnation==y.adapter.listener.owner_incarnation&&x.adapter.accepted.owner_incarnation==y.adapter.accepted.owner_incarnation&&x.adapter.accepted.receiver_identity.application_incarnation==y.adapter.accepted.receiver_identity.application_incarnation&&x.adapter.accepted.receiver_identity.receiver_incarnation==y.adapter.accepted.receiver_identity.receiver_incarnation;};Require(after.adapter.accepted_last_rejection==BackendStatus::Capacity&&same(after,b)&&same(other,a),"rejection does not replace or close any established owner or receiver");f.trace->Add({"E4_REJECTION","","","two_participants_non_null,extra_candidate_rejected_and_SDK_deleted,existing_owners_unchanged",1});}f.Traffic();f.End(bfirst);}
+void Negative(){Isolate();Fixture f(false);f.CreateBoth();const auto end=std::chrono::steady_clock::now()+2s;while(std::chrono::steady_clock::now()<end){Require(f.Readers(0).empty()&&f.Readers(1).empty()&&f.Writers(0).empty()&&f.Writers(1).empty(),"disabled link cannot bypass-match");for(auto& x:f.e){MddsKeyedSample s;dds::SampleInfo info;Require(x.reader->take_next_sample(&s,&info)==dds::RETCODE_NO_DATA,"disabled link cannot deliver");}std::this_thread::sleep_for(10ms);}auto observed=public_socket_fake::Observe();Require(observed.sends[0]>0&&observed.sends[1]>0&&observed.forwards[0]==0&&observed.forwards[1]==0,"negative actually exercised both Fake send paths");f.End(true);}
+void Default(){Isolate();auto trace=std::make_shared<Trace>();public_socket_fake::Configure(trace,true);auto d=std::make_shared<DSoftBusTransportDescriptor>(Configuration(0));DSoftBusTransport plain(*d);Require(!plain.init()&&plain.last_error().error==FacadeError::NativeBackendUnavailable,"default still unavailable");auto* p=dds::DomainParticipantFactory::get_instance()->create_participant(151,Qos(0,d));std::cout<<"DEFAULT_PARTICIPANT_RETURN "<<(p?"non_null":"null")<<'\n';if(p)Require(dds::DomainParticipantFactory::get_instance()->delete_participant(p)==dds::RETCODE_OK,"delete default result");auto v=public_socket_fake::Observe();Require(v.sockets[0]+v.sockets[1]==0,"default never enters Fake API");}
+}
+int main(int argc,char**argv){try{using namespace public_dds;Require(argc==2,"case");std::string c=argv[1];if(c=="normal-b-first")Normal(true,false);else if(c=="normal-a-first")Normal(false,false);else if(c=="accepted-reject")Normal(true,true);else if(c=="disabled-link")Negative();else if(c=="default")Default();else throw std::runtime_error("unknown case");std::cout<<"PASS REAL_DDS_ACTUAL_PUBLIC_SOCKET_FAKE "<<c<<'\n';return 0;}catch(const std::exception&e){std::cerr<<"FIRST_FAILURE "<<e.what()<<'\n';return 1;}}
