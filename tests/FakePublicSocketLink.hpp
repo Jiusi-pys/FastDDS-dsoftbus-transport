@@ -15,6 +15,10 @@ struct Snapshot {
 void Configure(std::shared_ptr<host_dds::Trace>,bool forwarding);
 void UseBoundedBackpressure();
 void SetSendObserver(std::function<void(int,int)>);
+// Declared detail window. Lifecycle events, error records and every counter stay
+// unconditional; only per-packet detail is gated. Required or sampled rows can
+// still overflow the unchanged 8192 limit, which remains a test failure.
+void SetFrameDetail(bool);
 bool PumpOne();
 Snapshot Observe();
 bool RejectExtraCandidate(int side);

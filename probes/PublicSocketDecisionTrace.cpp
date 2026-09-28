@@ -1,5 +1,6 @@
 #include "PublicSocketDecisionTrace.hpp"
 #include "PublicSocketDecisionStore.hpp"
+#include "PublicSocketRuntimeTrace.hpp"
 #include <cstdio>
 #include <new>
 namespace mdds::dsoftbus::dds_experiment {
@@ -18,7 +19,7 @@ const char* Branch(ReceiveDecisionBranch v) noexcept {
 #endif
 void RecordDecision(const ReceiveDecision& d,std::uint64_t ingress,unsigned side) noexcept {
 #ifdef MDDS_PUBLIC_SOCKET_DECISION_DIAGNOSTICS
-    Decisions().Record(d,ingress,side);
+    Decisions().Record(d,ingress,side,runtime_probe::DetailedObservation());
 #else
     (void)d;(void)ingress;(void)side;
 #endif
@@ -32,7 +33,7 @@ void DumpDecisions() noexcept {
     }
     for(std::size_t i=0;i<Store::branches;++i)std::printf("RX_DECISION_BRANCH branch=%s count=%zu\n",Branch(static_cast<ReceiveDecisionBranch>(i)),snapshot.branch_totals[i]);
     for(std::size_t i=0;i<Store::reasons;++i)if(snapshot.bridge_totals[i])std::printf("RX_DECISION_REASON reason=%s count=%zu\n",RxAdmissionReasonName(static_cast<RxAdmissionReason>(i)),snapshot.bridge_totals[i]);
-    std::printf("RX_DECISION_SUMMARY count=%zu total=%zu overflow=%zu unknown=%zu limit=%zu storage_bytes=%zu\n",snapshot.count,snapshot.total,snapshot.overflow,snapshot.unknown,limit,sizeof(Store));
+    std::printf("RX_DECISION_SUMMARY count=%zu total=%zu overflow=%zu unknown=%zu limit=%zu storage_bytes=%zu omitted=%zu\n",snapshot.count,snapshot.total,snapshot.overflow,snapshot.unknown,limit,sizeof(Store),snapshot.omitted);
 #endif
 }
 }

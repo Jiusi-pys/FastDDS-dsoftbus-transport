@@ -10,7 +10,7 @@ namespace public_socket_fake {
 namespace {
 using namespace std::chrono_literals;
 struct Row {int id=0,side=0,role=0,peer=-1;bool active=false,bound=false,pending_bind=false;std::string name;const ISocketListener* listener=nullptr;};
-struct Record {int from=0,to=0,target_id=0;const ISocketListener* callback=nullptr;std::vector<std::uint8_t> bytes;};
+struct Record {int from=0,to=0,target_id=0;const ISocketListener* callback=nullptr;std::vector<std::uint8_t> bytes;host_dds::DetailStamp observation;};
 struct Link {std::mutex gate;std::condition_variable changed;std::array<Row,6> rows{};std::array<bool,2> binding{};Snapshot counts;bool backpressure=false,forwarding=true,delay_bind=false,release_bind=false;std::deque<Record> queue;std::shared_ptr<host_dds::Trace> trace;std::function<void(int,int)> send_observer;};
 std::shared_ptr<Link> link;
 std::string Name(int side,const char* role){return std::string("host.public.")+(side?"B.":"A.")+role;}
@@ -26,6 +26,7 @@ void Configure(std::shared_ptr<host_dds::Trace> trace,bool forwarding){
 }
 void UseBoundedBackpressure(){std::lock_guard<std::mutex> lock(link->gate);link->backpressure=true;}
 void SetSendObserver(std::function<void(int,int)> f){std::lock_guard<std::mutex> lock(link->gate);link->send_observer=std::move(f);}
+void SetFrameDetail(bool on){link->trace->SetDetail(on);}
 Snapshot Observe(){std::lock_guard<std::mutex> lock(link->gate);auto v=link->counts;v.queued=link->queue.size();for(auto& r:link->rows)if(r.active)++v.live;return v;}
 void DelayBindCallbacks(){std::lock_guard<std::mutex> lock(link->gate);link->delay_bind=true;}
 void ReleaseBindCallbacks(){std::lock_guard<std::mutex> lock(link->gate);link->release_bind=true;}
@@ -37,7 +38,7 @@ bool PumpBind(){const ISocketListener* callback=nullptr;int side=0,id=0;
 bool PumpOne(){if(PumpBind())return true;Record r;bool deliver=false;{
     std::lock_guard<std::mutex> lock(link->gate);if(link->queue.empty())return false;r=std::move(link->queue.front());link->queue.pop_front();link->counts.bytes-=r.bytes.size();link->changed.notify_all();const int index=Index(r.target_id);deliver=index>=0&&link->rows[index].active&&link->rows[index].bound;
     if(deliver)++link->counts.forwards[r.from];}
-    if(deliver){link->trace->Frame("FAKE_INGRESS",r.to,r.bytes.data(),r.bytes.size());Event("FAKE_SAVED_SERVER_CALLBACK",r.to,"accepted="+std::to_string(r.target_id));r.callback->OnBytes(r.target_id,r.bytes.data(),static_cast<uint32_t>(r.bytes.size()));}
+    if(deliver){link->trace->DetailFrame(r.observation,"FAKE_INGRESS",r.to,r.bytes.data(),r.bytes.size());link->trace->Detail({"FAKE_SAVED_SERVER_CALLBACK","","","accepted="+std::to_string(r.target_id),r.to},r.observation);r.callback->OnBytes(r.target_id,r.bytes.data(),static_cast<uint32_t>(r.bytes.size()));}
     else Event("FAKE_TERMINAL_QUEUE_DROP",r.to,"closed_original_target="+std::to_string(r.target_id));
     return true;
 }
@@ -81,16 +82,16 @@ int32_t Bind(int32_t id,const QosTV* q,uint32_t n,const ISocketListener* cb){usi
     if(!deferred){server->OnBind(accepted_id,peer);Event("FAKE_ON_BIND",destination,"accepted="+std::to_string(accepted_id)+",adapter_readiness_checked_by_test_not_assumed_from_void_callback");}
     {std::lock_guard<std::mutex> lock(link->gate);link->rows[destination*3+2].bound=true;link->rows[side*3+1].bound=true;}return 0;
 }
-int32_t SendBytes(int32_t id,const void* data,uint32_t size){using namespace public_socket_fake;int side=0,to=0,target=0;const ISocketListener* callback=nullptr;std::function<void(int,int)> observer;
+int32_t SendBytes(int32_t id,const void* data,uint32_t size){using namespace public_socket_fake;int side=0,to=0,target=0;const ISocketListener* callback=nullptr;std::function<void(int,int)> observer;const auto observation=link->trace->Capture();
     {std::lock_guard<std::mutex> lock(link->gate);const auto k=Index(id);if(k<0||link->rows[k].role!=1||!data||!size||size>8192)return Invalid("Fake send wrong role/buffer");auto& r=link->rows[k];side=r.side;++link->counts.sends[side];const auto destination=Index(r.peer);if(!r.active||!r.bound||destination<0||!link->rows[destination].active)return -704;if(link->rows[destination].role!=2||!link->rows[destination].bound)return Invalid("Fake send target not accepted");to=link->rows[destination].side;target=r.peer;callback=link->rows[destination].listener;observer=link->send_observer;}
-    if(observer)observer(side,id);const auto* p=static_cast<const std::uint8_t*>(data);link->trace->Frame("FAKE_SEND",side,p,size);
+    if(observer)observer(side,id);const auto* p=static_cast<const std::uint8_t*>(data);link->trace->DetailFrame(observation,"FAKE_SEND",side,p,size);
     if(!link->forwarding)return 0;
     {std::unique_lock<std::mutex> lock(link->gate);
         const auto alive=[&]{const auto from=Index(id),to=Index(target);return from>=0&&to>=0&&link->rows[from].active&&link->rows[from].bound&&link->rows[from].peer==target&&link->rows[to].active&&link->rows[to].bound&&link->rows[to].listener==callback;};
         const auto capacity=[&]{return link->queue.size()<64&&size<=512*1024-link->counts.bytes;};
         if(link->backpressure&&!capacity()){++link->counts.capacity_waits;const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(1);if(!link->changed.wait_until(lock,end,[&]{return capacity()||!alive();})){++link->counts.capacity_timeouts;return -705;}}
         if(!alive())return -704;
-        if(!capacity())return Invalid("bounded Fake byte queue exhausted");Record r;r.from=side;r.to=to;r.target_id=target;r.callback=callback;r.bytes.assign(p,p+size);link->queue.push_back(std::move(r));link->counts.bytes+=size;link->counts.record_peak=std::max(link->counts.record_peak,link->queue.size());link->counts.byte_peak=std::max(link->counts.byte_peak,link->counts.bytes);}return 0;
+        if(!capacity())return Invalid("bounded Fake byte queue exhausted");Record r;r.from=side;r.to=to;r.target_id=target;r.callback=callback;r.observation=observation;r.bytes.assign(p,p+size);link->queue.push_back(std::move(r));link->counts.bytes+=size;link->counts.record_peak=std::max(link->counts.record_peak,link->queue.size());link->counts.byte_peak=std::max(link->counts.byte_peak,link->counts.bytes);}return 0;
 }
 void Shutdown(int32_t id){using namespace public_socket_fake;const ISocketListener* notify=nullptr;int peer=-1,side=0,peer_side=0;
     {std::lock_guard<std::mutex> lock(link->gate);const auto k=Index(id);if(k<0||!link->rows[k].active){Invalid("Fake unknown/duplicate Shutdown");return;}auto& r=link->rows[k];side=r.side;r.active=false;++link->counts.shutdowns[side];const auto pi=Index(r.peer);if(pi>=0&&link->rows[pi].active){auto& other=link->rows[pi];other.active=false;peer=other.id;peer_side=other.side;notify=other.listener;++link->counts.notified[peer_side];}}

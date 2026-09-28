@@ -1,7 +1,14 @@
 #include "HostProviderTestSupport.hpp"
+#include "../probes/SharedSendControl.hpp"
+namespace mdds::dsoftbus::shared_probe {
+struct SendControlTestAccess {
+    static void Exhaust(SendControl& c){c.started_=c.finished_=std::numeric_limits<std::uint64_t>::max();}
+};
+}
 namespace mdds::dsoftbus::host_test {
 class HostProviderLoopTestAccess {
 public:static void Hooks(HostProviderLoop& loop,std::function<void()> publish,std::function<void()> seal){loop.SetSharedControlHooks(std::move(publish),std::move(seal));}
+    static void SendHook(HostProviderLoop& loop,std::function<void(bool)> hook){loop.SetSharedSendHook(std::move(hook));}
 };
 }
 namespace {
@@ -46,6 +53,86 @@ void Reattach(){SharedFixture f;auto old=f.root->Observe().receiver_identity;f.p
 void Queued(){SharedFixture f;f.Bytes();f.p.reset();Check(f.mock->closes==0,"queued P cancel does not close Q");const auto before_pump=f.root->Observe().receive;Check(before_pump.records==1&&before_pump.queued==1&&before_pump.retained_applications==1,"only Q queue and claim remain before any pump");f.Pump();Check(f.rp.calls==0&&f.rq.calls==1,"queued only P canceled without pump");Check(f.root->Observe().receive.records==0,"queue bytes and lease refunded");}
 void Running(){SharedFixture f;Event entered,release;std::thread pump,close;std::atomic<bool> done=false;Cleanup cleanup{[&]{release.Signal();if(pump.joinable())pump.join();if(close.joinable())close.join();}};f.rp.pause=[&]{entered.Signal();release.Wait();};f.Bytes();pump=std::thread([&]{f.root->PumpReceive();});entered.Wait();close=std::thread([&]{f.p->shutdown();done=true;});Check(f.root->WaitInputClosing(std::chrono::steady_clock::now()+3s),"P close linearized");Check(!done&&f.mock->closes==0,"running P lease pins receiver and Q native owner");release.Signal();pump.join();close.join();f.Pump();Check(f.rp.calls==1&&f.rq.calls==1,"captured receivers complete");f.Bytes();f.Pump();Check(f.rp.calls==1&&f.rq.calls==2,"no later P receiver use");}
 bool Submit(DSoftBusTransport& t);
+void CancelSelected(bool admitted){
+    SharedFixture f;Event entered,release;std::thread pump,close;
+    HostSendObservation selected;NativeSendRunResult result;
+    shared_probe::SendControl control;
+    const auto identity=f.root->Observe().receiver_identity;
+    shared_probe::Retirement planned{identity,1,1,0,false};
+    Check(control.Register(planned),"explicit P retirement");const auto sequence=control.Begin();
+    Cleanup cleanup{[&]{release.Signal();if(pump.joinable())pump.join();if(close.joinable())close.join();HostProviderLoopTestAccess::SendHook(*f.root,{});}};
+    HostProviderLoopTestAccess::SendHook(*f.root,[&](bool at_admit){if(at_admit==admitted){entered.Signal();release.Wait();}});
+    Check(Submit(*f.p),"actual P queued");
+    pump=std::thread([&]{result=f.joined->PumpSendObserved(selected);});entered.Wait();
+    close=std::thread([&]{f.p->shutdown();});
+    const auto end=std::chrono::steady_clock::now()+3s;
+    while(!f.root->Observe().send.admission_closed&&std::chrono::steady_clock::now()<end)std::this_thread::yield();
+    Check(f.root->Observe().send.admission_closed,"own registration actually revoked");
+    release.Signal();pump.join();close.join();
+    Check(control.Complete(identity),"delete completed before classification");
+    shared_probe::Retirement receipt;
+    Check(control.Find(sequence,selected.receiver,receipt),"intent survives pump-return/delete-complete race");
+    Check(result.status==NativeStatus::Revoked&&result.outcome==NativeSendOutcome::NotEntered&&!result.actual_return_code,"actual cancellation keeps result");
+    Check(selected.selected&&selected.receiver==identity&&selected.view_closing&&selected.admission_closed&&selected.registration_status==NativeStatus::None,"actual selected P closure");
+    Check(f.mock->sends==0&&f.mock->closes==0&&f.root->Observe().send.drained,"no SDK entry, P drained, native retained");
+    const bool expected=shared_probe::RetiredBeforeEntry(result,selected,f.joined->Observe(),receipt);
+    Check(control.Finish(sequence),"classification completes");
+    Check(!control.Find(sequence,identity,receipt),"finished receipt cannot release later work");
+    Check(Submit(*f.q),"Q submission after P revoke");
+    const auto q=f.joined->Observe().receiver_identity;
+    auto sent=f.root->PumpSendObserved(selected);f.Pump();
+    Check(sent.outcome==NativeSendOutcome::ReturnedSdkCode&&sent.actual_return_code==0&&selected.receiver==q&&f.rq.calls==1,"retired P controller observes actual Q send and receive");
+    sent=f.root->PumpSendObserved(selected);
+    Check(sent.status==NativeStatus::NotFound&&!selected.selected&&selected.receiver==ReceiverIdentity{},"reused observation cleared on no work");
+    Check(expected,"legal selected P retirement must not fault the shared probe");
+}
+void SendClassification(){
+    SharedFixture f;auto runtime=f.root->Observe();auto identity=runtime.receiver_identity;
+    HostSendObservation selected{identity,true,true,true,NativeStatus::None};
+    shared_probe::Retirement retirement{identity,1,1,0,false};NativeSendRunResult result{NativeStatus::Revoked};
+    const auto accepts=[&]{return shared_probe::RetiredBeforeEntry(result,selected,runtime,retirement);};
+    Check(accepts(),"positive exact cancellation");
+    const auto original=result;
+    for(auto status:{NativeStatus::NotFound,NativeStatus::ServiceClosing,NativeStatus::NotReady,NativeStatus::WrongState,NativeStatus::ForeignState,NativeStatus::DeadlineExpired,NativeStatus::ProviderContractFault}){result.status=status;Check(!accepts(),"other status rejected");}result=original;
+    result.actual_return_code=0;Check(!accepts(),"SDK code present rejected");result=original;
+    for(auto outcome:{NativeSendOutcome::ReturnedSdkCode,NativeSendOutcome::ReturnedInvalidCode,NativeSendOutcome::ReturnedByException}){result.outcome=outcome;Check(!accepts(),"entered outcome rejected");}result=original;
+    selected.receiver=f.joined->Observe().receiver_identity;Check(!accepts(),"unplanned Q rejected");selected.receiver=identity;
+    selected.selected=false;Check(!accepts(),"no selected work rejected");selected.selected=true;
+    selected.view_closing=false;Check(!accepts(),"live view rejected");selected.view_closing=true;
+    selected.admission_closed=false;Check(!accepts(),"open registration rejected");selected.admission_closed=true;
+    selected.registration_status=NativeStatus::InvalidHandle;Check(!accepts(),"unobserved registration rejected");selected.registration_status=NativeStatus::None;
+    const auto before=runtime;
+    runtime.shared_runtime=false;Check(!accepts(),"exclusive rejected");runtime=before;
+    runtime.started=false;Check(!accepts(),"not started rejected");runtime=before;
+    runtime.live_views=0;Check(!accepts(),"no survivor rejected");runtime=before;
+    runtime.sealed=true;Check(!accepts(),"sealed uses separate tail policy");runtime=before;
+    runtime.closed=true;Check(!accepts(),"closed rejected");runtime=before;
+    runtime.adapter.outgoing_stopped=true;Check(!accepts(),"stopped native rejected");runtime=before;
+    runtime.adapter.binding.owner_closed=true;Check(!accepts(),"closed owner rejected");runtime=before;
+    runtime.adapter.binding.setup_complete=false;Check(!accepts(),"unready owner rejected");runtime=before;
+    retirement.group=1;Check(!accepts(),"Q cannot retire during cycles");retirement.final=true;Check(accepts(),"explicit final Q only");
+}
+void SendControlLedger(){
+    SharedFixture f;shared_probe::SendControl control;
+    auto p=f.root->Observe().receiver_identity,q=f.joined->Observe().receiver_identity;
+    const auto n=control.Begin();Check(n==1,"single pump begins");
+    Check(control.Register({p,1,1,0,true}),"P final intent");Check(control.Complete(p),"P complete before classify");
+    Check(control.Register({q,1,1,1,true}),"Q final intent retains P");Check(control.Complete(q),"Q complete before classify");
+    shared_probe::Retirement receipt;
+    Check(control.Find(n,p,receipt)&&control.Find(n,q,receipt),"both final receipts retained through classification");
+    Check(control.Finish(n),"finish reclaims both");auto next=control.Begin();
+    Check(!control.Find(next,p,receipt)&&!control.Find(next,q,receipt),"old generation not inherited by next pump");Check(control.Finish(next),"next finish");
+    Check(control.Register({p,2,2,0,false})&&control.Complete(p),"no in-flight deletion reclaims");
+    next=control.Begin();Check(!control.Find(next,p,receipt),"no stale receipt after no-inflight completion");Check(control.Finish(next),"finish idle");
+    shared_probe::SendControl invalid;Check(!invalid.Register({q,1,1,1,false})&&!invalid.Good(),"Q intermediate fails closed");
+    shared_probe::SendControl overlap;Check(overlap.Begin()&&!overlap.Begin()&&!overlap.Good(),"concurrent TX pump rejected");
+    shared_probe::SendControl order;auto seq=order.Begin();Check(!order.Finish(seq+1)&&!order.Good(),"out of order finish rejected");
+    shared_probe::SendControl exhausted;shared_probe::SendControlTestAccess::Exhaust(exhausted);Check(!exhausted.Begin()&&!exhausted.Good(),"sequence overflow fails closed");
+    shared_probe::SendControl full;seq=full.Begin();Check(full.Register({p,1,1,0,true})&&full.Complete(p)&&full.Register({q,1,1,1,true}),"two occupied slots");
+    auto other=p;++other.application_incarnation;Check(!full.Register({other,2,2,0,false})&&!full.Good(),"no hidden growth on slot exhaustion");
+}
+void CancelTaken(){CancelSelected(false);}
+void CancelAdmitted(){CancelSelected(true);}
 // The join guard compares six views of the limits frozen by the first view. Each is
 // exercised on its own, with every other field left legal, so an implementation that
 // ignored any one of them fails its own case. Each case is one process with one
@@ -333,7 +420,7 @@ bool Submit(DSoftBusTransport& t){rtps::SendResourceList list;Check(t.OpenOutput
 void Sending(){SharedFixture f;Event entered,release,sealed;std::thread send,close;std::atomic<bool> done=false;Cleanup cleanup{[&]{release.Signal();if(send.joinable())send.join();if(close.joinable())close.join();HostProviderLoopTestAccess::Hooks(*f.root,{},{});}};f.mock->during_send=[&]{entered.Signal();release.Wait();};HostProviderLoopTestAccess::Hooks(*f.root,{},[&]{sealed.Signal();});Check(Submit(*f.p),"P submission");send=std::thread([&]{f.root->PumpSend();});entered.Wait();close=std::thread([&]{f.p->shutdown();done=true;});sealed.Wait();Check(!done&&f.mock->closes==0&&f.root->Observe().native.send.entered==1,"original in-Send ticket owner not released");Check(f.root->Observe().send.admitted_outstanding==1&&!f.root->Observe().send.drained,"the in-flight admission is charged and the registration is not drained");Check(!f.joined->Observe().send.admission_closed,"the other view's own registration stays open");release.Signal();send.join();close.join();Check(f.root->Observe().send.drained&&f.root->Observe().send.admitted_outstanding==0,"the closed view settles once its execution returns");f.mock->during_send={};f.Pump();Check(f.rq.calls==1&&f.rp.calls==0,"returned send echo only enters surviving Q");Check(Submit(*f.q),"Q send admission survived P revoke");f.joined->PumpSend();f.Pump();Check(f.rq.calls==2,"Q continued TX RX");}
 void JoinLast(){SharedFixture f;f.q.reset();Event sealed,release;std::thread close;Cleanup cleanup{[&]{release.Signal();if(close.joinable())close.join();HostProviderLoopTestAccess::Hooks(*f.root,{},{});}};HostProviderLoopTestAccess::Hooks(*f.root,{},[&]{sealed.Signal();release.Wait();});close=std::thread([&]{f.p->shutdown();});sealed.Wait();auto next=f.root->Join();Check(bool(next),"join wins before last membership release");release.Signal();close.join();Check(f.mock->closes==0,"reserved live join keeps native runtime");Receiver fresh;auto p=HostFacadeTestAccess::Create(f.config,next);Check(p->init()&&p->OpenInputChannel(L(2),&fresh,64),"reserved view starts");p.reset();Check(f.mock->closes==1&&!f.root->Join(),"last close wins, old retained handle cannot resurrect");}
 }
-int main(int argc,char**argv){try{Check(argc==2,"case required");const std::pair<const char*,void(*)()> cases[]={{"shared",Shared},{"creator",Creator},{"controller-released",ControllerReleased},{"reattach",Reattach},{"queued",Queued},{"running",Running},{"foreign",Foreign},{"old-snapshot",OldSnapshot},{"budget",Budget},{"open-close-race",OpenCloseRace},{"concurrent-first",ConcurrentFirst},{"concurrent-close",ConcurrentClose},{"copying",Copying},{"admitted",Admitted},{"rollback",Rollback},{"sending",Sending},{"join-last",JoinLast},
+int main(int argc,char**argv){try{Check(argc==2,"case required");const std::pair<const char*,void(*)()> cases[]={{"send-classification",SendClassification},{"send-control-ledger",SendControlLedger},{"cancel-taken",CancelTaken},{"cancel-admitted",CancelAdmitted},{"shared",Shared},{"creator",Creator},{"controller-released",ControllerReleased},{"reattach",Reattach},{"queued",Queued},{"running",Running},{"foreign",Foreign},{"old-snapshot",OldSnapshot},{"budget",Budget},{"open-close-race",OpenCloseRace},{"concurrent-first",ConcurrentFirst},{"concurrent-close",ConcurrentClose},{"copying",Copying},{"admitted",Admitted},{"rollback",Rollback},{"sending",Sending},{"join-last",JoinLast},
         {"pinned-close",PinnedClose},{"own-lease",OwnLease},{"candidate-order",CandidateOrder},
         {"capture-accounting",CaptureAccounting},{"egress-settled",EgressSettled},
         {"egress-queued",EgressQueued},{"egress-old-resource",EgressOldResource},

@@ -1,6 +1,7 @@
 #include "../probes/PublicSocketDdsExperiment.hpp"
 #include "../probes/PublicSocketDdsTrace.hpp"
 #include "../probes/PublicSocketRuntimeTrace.hpp"
+#include "../probes/PublicSocketDecisionStore.hpp"
 #include "FakePublicSocketLink.hpp"
 #include <fastdds/dds/publisher/DataWriter.hpp>
 #include <fastdds/rtps/common/WriteParams.hpp>
@@ -23,6 +24,31 @@ int main(int argc,char**argv){try{
     Check(argc==2,"case");std::string test=argv[1];
     auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);
     Check(IsolateProcess(),"effective process isolation");
+    if(test=="sampling-transition"){
+        std::array<std::uint8_t,44> p{};std::memcpy(p.data(),"RTPS",4);p[4]=2;p[20]=21;p[21]=1;p[22]=20;p[35]=0xc2;p[40]=1;
+        mdds::dsoftbus::runtime_probe::SetObservationCycle(1);
+        SetAfterFrameSelectionForTest([]{mdds::dsoftbus::runtime_probe::SetObservationCycle(2);});
+        SocketFrame("SDK_SEND",7,p.data(),p.size());SetAfterFrameSelectionForTest({});
+        Check(FrameCount()==1&&FrameCycleForTest(0)==1,"selected frame retains original observation cycle");
+        SocketFrame("SDK_SEND",7,p.data(),p.size());Check(FrameCount()==1&&FrameOverflow()==0,"next observation obeys new window");
+        DumpFrames();return 0;
+    }
+    if(test=="sampling"){
+        std::array<std::uint8_t,44> p{};std::memcpy(p.data(),"RTPS",4);p[4]=2;p[20]=21;p[21]=1;p[22]=20;p[35]=0xc2;p[40]=1;
+        mdds::dsoftbus::runtime_probe::SetObservationCycle(2);
+        for(unsigned i=0;i<20000;++i){SocketFrame("SDK_SEND",7,p.data(),p.size());mdds::dsoftbus::runtime_probe::TraceEvent("SendBytes_return",1,1,7,0,44);}
+        Check(FrameCount()==0&&FrameOverflow()==0&&mdds::dsoftbus::runtime_probe::TraceCount()==0,"target planned omission precedes storage");
+        mdds::dsoftbus::runtime_probe::TraceEvent("SendBytes_return",1,1,7,-5,44);
+        mdds::dsoftbus::runtime_probe::TraceEvent("OnBytesRejected",1,1,7,-5,44);
+        Check(mdds::dsoftbus::runtime_probe::TraceCount()==2,"target errors never omitted");
+        DecisionStore<2> store;ReceiveDecision d;d.branch=ReceiveDecisionBranch::Forwarded;d.status_known=true;d.status=0;
+        for(unsigned i=0;i<20000;++i)store.Record(d,i,0,false);
+        Check(store.Capture().omitted==20000&&store.Capture().total==20000&&store.Capture().count==0,"decision aggregate retained");
+        d.branch=ReceiveDecisionBranch::InvalidBuffer;d.refused_receive=true;
+        for(unsigned i=0;i<3;++i)store.Record(d,i,0,false);
+        Check(store.Capture().count==2&&store.Capture().overflow==1&&store.Capture().omitted==20000,"required decision overflow retained");
+        DumpFrames();mdds::dsoftbus::runtime_probe::DumpTrace();return 0;
+    }
     if(test=="trace"){
         std::array<std::uint8_t,44> p{};std::memcpy(p.data(),"RTPS",4);p[4]=2;p[20]=21;p[21]=1;p[22]=20;p[35]=0xc2;p[40]=1;
         SocketFrame("UNIT",7,nullptr,44);SocketFrame("UNIT",7,p.data(),19);Check(FrameCount()==0,"invalid bytes never parsed");
@@ -42,8 +68,10 @@ int main(int argc,char**argv){try{
     if(test=="invalid"){c[0].side=2;auto v=Run(c[0],[](const char*){return true;});Check(!v.success&&public_socket_fake::Observe().sockets[0]==0,"invalid rejected before SDK");return 0;}
     if(test=="stage-failure"){auto v=Run(c[0],[](const char*){return false;});Check(!v.success&&v.drained&&public_socket_fake::Observe().live==0,"listener-stage failure public DDS cleanup");return 0;}
     const bool regression=test=="BE_DELAYED_DROP"||test=="F256"||test=="F1M"||test=="REL_LOSS"||test=="BE_LOSS"||test=="VOL_LATE"||test=="TL_LATE"||test=="KEYED_LAST";
-    const bool shared=test=="SHARED_W1"||test=="SHARED_W2"||test=="SHARED_DELETE_FAILURE";
-    if(shared)for(auto& v:c)v.scenario=test=="SHARED_DELETE_FAILURE"?"SHARED_W1":test;
+    const bool cycling=test=="SHARED_CYCLE_2"||test=="SHARED_CYCLE_10"||test=="SHARED_CYCLE_100";
+    const bool shared=cycling||test=="SHARED_W1"||test=="SHARED_W2"||test=="SHARED_DELETE_FAILURE";
+    if(shared)for(auto& v:c){v.scenario=test=="SHARED_DELETE_FAILURE"||cycling?"SHARED_W1":test;v.cycles=cycling?unsigned(std::stoul(test.substr(13))):1;if(test=="SHARED_CYCLE_100"){v.scenario="SHARED_W2";v.delete_first=0;}}
+    if(cycling)trace->Sampling(1);
     if(regression){public_socket_fake::UseBoundedBackpressure();for(auto& v:c)v.scenario=test=="BE_DELAYED_DROP"?"BE_LOSS":test;}
     Check(shared||regression||test=="a-first"||test=="b-first"||test=="late-extra"||test=="qos","known case");
     std::mutex gate;std::condition_variable cv;std::map<std::string,unsigned> counts;bool deleted[2]{},aborted=false,extra_acked=false;unsigned after_wait=0;std::atomic<bool> stop{false};
@@ -57,14 +85,15 @@ int main(int argc,char**argv){try{
         else {std::unique_lock<std::mutex> l(gate);Check(cv.wait_for(l,5s,[&]{return extra_acked;}),"late ack observed before new take");}
       });
       result[i]=Run(c[i],[&,i](const char* p){std::unique_lock<std::mutex> l(gate);std::string stage=p;
-        if(stage=="DDS_DELETED"){deleted[i]=true;cv.notify_all();return true;}
-        if(stage=="DELETE")return i==c[i].delete_first||cv.wait_for(l,20s,[&]{return deleted[1-i]||aborted;});
+        if(cycling&&stage.rfind("C",0)==0)trace->Cycle(unsigned(std::stoul(stage.substr(1,stage.find('_')-1))));
+        if(stage=="DDS_DELETED"||stage=="C"+std::to_string(c[i].cycles)+"_DDS_DELETED"){deleted[i]=true;cv.notify_all();return true;}
+        if(stage=="DELETE"||stage=="C"+std::to_string(c[i].cycles)+"_DELETE")return i==c[i].delete_first||cv.wait_for(l,20s,[&]{return deleted[1-i]||aborted;});
         ++counts[stage];cv.notify_all();const bool ready=cv.wait_for(l,20s,[&]{return counts[stage]==2||aborted;})&&!aborted;l.unlock();if(ready&&test=="BE_DELAYED_DROP"&&i==0&&stage=="MATCH")std::this_thread::sleep_for(2s);return ready;});SetAfterWaitHook({});if(!result[i].success){std::lock_guard<std::mutex> l(gate);aborted=true;cv.notify_all();}});
     for(auto& t:sides)t.join();stop=true;bytes.join();DumpFrames();if(regression)mdds::dsoftbus::runtime_probe::DumpTrace();
     if(shared){
         mdds::dsoftbus::runtime_probe::DumpTrace();
         if(test=="SHARED_DELETE_FAILURE"){Check(!result[0].success&&result[0].first_failure=="SHARED_DELETE"&&result[0].drained&&result[1].drained&&public_socket_fake::Observe().live==0,"real API deletion failure retains ownership and bounded cleanup succeeds");std::cout<<"PASS_SHARED_FAILED_DELETE_OWNERSHIP\n";return 0;}
-        for(unsigned i=0;i<2;++i){std::cout<<"SHARED_CONTRACT side="<<i<<" failure="<<result[i].first_failure<<'\n';Check(result[i].success&&result[i].drained&&result[i].factories==3&&result[i].writes==15&&result[i].takes==15,"actual shared target fixture");for(unsigned group=0;group<3;++group)Check(!result[i].shared_writers[group].empty()&&result[i].shared_remote_writers[group]==result[1-i].shared_writers[group]&&result[i].shared_remote_readers[group]==result[1-i].shared_readers[group],"actual opposite incarnation identities");}
+        for(unsigned i=0;i<2;++i){std::cout<<"SHARED_CONTRACT side="<<i<<" failure="<<result[i].first_failure<<'\n';Check(result[i].success&&result[i].drained&&result[i].factories==c[i].cycles+2&&result[i].writes==15*c[i].cycles&&result[i].takes==15*c[i].cycles,"actual shared target fixture");for(unsigned group=0;group<3;++group)Check(!result[i].shared_writers[group].empty()&&result[i].shared_remote_writers[group]==result[1-i].shared_writers[group]&&result[i].shared_remote_readers[group]==result[1-i].shared_readers[group],"actual opposite incarnation identities");}
         auto sdk=public_socket_fake::Observe();Check(sdk.live==0&&sdk.invalid==0&&sdk.sockets[0]==2&&sdk.sockets[1]==2&&sdk.listens[0]==1&&sdk.listens[1]==1&&sdk.binds[0]==1&&sdk.binds[1]==1&&FrameOverflow()==0,"one native topology and bounded evidence");std::cout<<"PASS_SHARED_TARGET_ASSEMBLY_FAKE_API\n";return 0;
     }
     if(test=="late-extra"){Check(extra_acked&&!result[1].success&&result[1].first_failure=="AFTER_ACK_EXTRA","late real DDS sample must not disappear at delete");Check(result[0].drained&&result[1].drained,"negative cleanup");return 0;}

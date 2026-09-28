@@ -13,7 +13,7 @@ struct Config {
     std::string run, peer_network;
     std::string scenario="SMALL";
     std::string service_prefix="com.kaihong.mdds.p";
-    unsigned side=0, delete_first=1;
+    unsigned side=0, delete_first=1, cycles=1;
 };
 struct Result {
     bool success=false,drained=false;
@@ -34,6 +34,8 @@ bool DropRegressionRecord(std::int32_t,const std::uint8_t*,std::size_t) noexcept
 bool ExpectedTerminal(const NativeSendRunResult&,const host_test::HostLoopObservation&,bool) noexcept;
 #ifdef MDDS_DDS_EXPERIMENT_TESTING
 void SetAfterWaitHook(std::function<void(eprosima::fastdds::dds::DataWriter*)>);
+void SetAfterFrameSelectionForTest(std::function<void()>);
+unsigned FrameCycleForTest(std::size_t);
 void SetSharedDeleteFailureForTest(bool);
 bool DropIsolationObserved() noexcept;
 #endif

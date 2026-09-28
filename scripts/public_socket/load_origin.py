@@ -32,9 +32,13 @@ def analyze(directory, config, side):
     check(status.get('run') == config['run'], 'SAMPLER_RUN_MISMATCH')
     try: collector=json.loads(read('load-collector.json'))
     except (ValueError,TypeError): collector={};errors.append('COLLECTOR_JSON_INVALID')
+    if not isinstance(collector,dict):collector={};errors.append('COLLECTOR_JSON_TYPE')
     check(collector.get('run')==config['run'] and collector.get('side')==side,'COLLECTOR_RUN_SIDE_MISMATCH')
     check(str(collector.get('target_pid'))==status.get('pid'),'COLLECTOR_APP_PID_MISMATCH')
     check(collector.get('pass') is True and collector.get('remoteExit')==0 and collector.get('hdcExit')==0,'COLLECTOR_INCOMPLETE')
+    check(collector.get('collectorClosed') is True and collector.get('signal') is None,'COLLECTOR_NOT_CLOSED_OR_CANCELLED')
+    output=collector.get('output_bytes')
+    check(isinstance(output,dict) and output.get('complete') is True and output.get('overflow')==0,'COLLECTOR_OUTPUT_INCOMPLETE')
     check(bool(re.fullmatch(r'[1-9][0-9]*',status.get('pid',''))),'PID_INVALID')
     check(read('load-exe.txt').strip() == expected_exe,'EXE_PATH_MISMATCH')
     check(read('load-cwd.txt').strip() == remote,'CWD_MISMATCH')
@@ -87,7 +91,7 @@ def analyze(directory, config, side):
             check(actual in package_paths, 'WRONG_PACKAGE_MAPPING:'+actual)
         if actual.startswith('/data/'):
             check(actual in package_paths, 'UNDECLARED_DATA_MAPPING:'+actual)
-    return {'schema':1,'complete':not errors,'run':config['run'],'board':side,
+    return {'schema':1,'complete':not errors,'status':'LOAD_CAPTURE_FAILED' if errors else 'COMPLETE','run':config['run'],'board':side,
             'pid':status.get('pid'),'starttime':status.get('starttime'),
             'monotonic_uptime_seconds':uptime[0] if uptime else None,
             'environment':environment,

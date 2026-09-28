@@ -871,3 +871,201 @@ N3 之后仍不得宣称：生产 Transport、真实 SendBytes、SDK callback �
 ### 20.4 边界
 
 真实 SDK provider、目标 ABI 等价、callback 排空、设备与 DDS、热重建与 RMW 仍 `NOT_RUN`；`DSoftBusTransport::init` 仍 `NativeBackendUnavailable`；P0/PF/P4/QualificationProfile 不变；组合层仍无生产调用方。本轮记录的边界：① fail-fast 只能跨进程观测（由子进程 case 固定，父进程同时要求退出码、契约诊断与“销毁回调未返回”标记），其等待由每 case 的 CTest 超时与运行器上下界约束；② 守卫的身份由**被投递工作自身的执行**给出（拥有它的 attachments 实例 + 该投递的 application 身份），因此在结构上覆盖了“同一 attachments 队列上另一个注册的工作被本帧取走”这一形状，但该形状**没有**独立用例：要在 Host 里驱动它需要一个第二 local 及其 dial 路由进入共享夹具的目录，而组件的方向校验会拒绝该配置。若要固定它，可选 **B**（把结算延后到之后某个非回调入口——本轮工作包禁止的新机制）或 **C**（在 attachments 上开放注册身份访问器，使用例无需改共享夹具即可构造该形状）；③ 部署阶段内的关闭请求、以及请求与另一线程释放的竞争未覆盖；④ 已请求但无人完成的关闭会让 binding 停在 closing 相位并持有注册——这是所有者的义务（头文件、本节与收据均已声明，`Observe()` 报告相位），但没有强制。
+
+## 21. SHARED_LIFECYCLE_R8_CLOSEOUT_AND_CHECKPOINT（2026-09-28 CST；IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED / REVIEWED，限定实验范围；COMMITTED_LOCAL_NOT_PUSHED）
+
+### 21.1 目标与交付物
+
+在一个进程内让两个真实 Fast DDS DomainParticipant 共享同一套 DSoftBus runtime，并验证两种创建者顺序下的单轮热重建。交付物：`include/mdds/dsoftbus/{ApplicationAttachments,HostProviderLoop,ProviderAdapter,ServiceRecordBinding}.hpp`、`src/` 同名的四个实现、`cmake/PublicSocketDdsExperiment.cmake`、`CMakeLists.txt` 的接线，以及新增的 `probes/PublicSocketSharedDds.inc`、`tests/{PublicSocketDdsTestSupport.hpp,host_shared_channel_tests.cpp,public_socket_shared_dds_tests.cpp,public_socket_shared_analysis_tests.py}`、`scripts/public_socket/analyze_shared.py`。累计相对 `400e4ff` 为 16 修改 + 6 新增，共 22 个路径，无 gitlink。
+
+所有权：`HostProviderLoop::State` 持有 backend、native owner table、ApplicationAttachments、NativeSendExecution 与唯一的 ProviderAdapter；每个 façade 是一个 `View`，只持有自己的 egress registration、`BindingInput`、receiver 指针与 `ReceiverIdentity`。创建者本身也是一个 View，不是 native 寿命的所有者；新 façade 只能通过活 runtime 上的 `Join()` 取得，因此合法共享不能来自同名服务查找。
+
+### 21.2 不可豁免的合同
+
+1. **准入时固定接收集合**：`State::Admit` 在 record 自身 gate 下把当时合格的注册固定成只含弱句柄的 `CandidateSet`；之后新建的注册无法加入该集合，执行期也不做 current-application 回查。
+2. **逐目标准入 pin**：只为该目标自己取 pin，紧邻它自己的 `AdmitOne`，由不可拷贝、只可移动的 `ApplicationGroup::Pin` 释放恰好一次。任一目标的关闭都不得等待本记录尚未到达的另一目标的工作。
+3. **逐 View egress**：每个 View 持有自己的注册；关闭一个 View 只强撤销（`BeginRevoke` + `Progress`，即 `FreezeAdmissions` + 队列关闭 + barrier）它自己的注册，另一个 View 的注册保持可用。
+4. **claim 互斥**：同一 local 上 shared claim 与 exclusive claim 不得并存，方向对称；拒绝不得改动持有者的身份、预算或寿命。
+5. **关闭与回滚**：被拒绝的关闭要发布确定状态并唤醒等待者，保留 receiver/claim/成员资格；不得伪装 Closed，不得释放仍在使用的资源。
+6. **pump 权限单一规则**：`Start` 从未成功的 View 不得驱动共享 runtime；已启动的 View 关闭后仍保留该权限，因此存活 Participant 与最终 drain 不会失去唯一推进者。
+7. **失败要响亮**：在无法关闭输入的上下文中释放成员 View 时快速失败，并命名合法替代做法；共享输入释放同理。
+
+### 21.3 必测矩阵
+
+| 条目 | case | 覆盖 |
+| --- | --- | --- |
+| 两个真实 façade 共享一个 runtime | `shared`、`reattach`、`concurrent-first` | 一个 native owner、各自 receiver、重复 open 身份不变、新建 P 的全新 application/receiver/token 世代 |
+| creator 退出、Q 存活 | `creator`、`controller-released`、`queued`、`running`、`sending` | creator 销毁不关 Q 的 owner，Q 的收发继续，P 的在途/排队工作按原对象结算 |
+| joiner 退出、Q 仍工作 | `foreign`、`foreign-peer-records`、`foreign-peer-bytes`、`foreign-global-records`、`foreign-global-bytes`、`foreign-record-bound-legal` | 六个比较字段逐个单字段负例 + 记录边界本身合法的正控制 |
+| 捕获粒度与寿命 | `pinned-close`、`own-lease`、`candidate-order`、`capture-accounting` | 较早目标暂停时 joiner 关闭**必须完成**；关闭者**自己的**关闭在自己的拷贝计费时**不得返回**；无首目标特权；200 轮含关闭重开的精确计数 |
+| 逐 View egress | `egress-settled`、`egress-queued`、`egress-old-resource` | 强撤销与 barrier 可观察、queue 关闭且为空、旧 sender resource 被拒且不新建 ticket、反复关闭不重复结算 |
+| pump 权限 | `pump-authority` | `Start` 失败的 View 两个方向泵都被拒；已启动并关闭的 View 仍保留权限 |
+| 预算分层 | `budget-two-views`、`budget-ceiling` | 两个注册各自驱动；第二个注册被 native ceiling 在暴露前拒绝且不留成员与 claim |
+| shared/exclusive | `AA-09-mixed-shared-exclusive-claims` | 双向拒绝、拒绝不改身份与预算、真实模型接收正控制、合法释放后可再 claim、不同 local 不过度拒绝、多共享成员下仍拒独占 |
+| 分析器 text 入口 | `public_socket_shared_analysis_tests.py` 的 9 个真实文本用例 | 用真实日志的独立副本驱动 `analyze(case, texts)`；正例仍通过，删/重复/错 run/writer/life/phase/缺字段/结构非法目标行必须失败 |
+
+### 21.4 执行状态（2026-09-28 CST）
+
+| 检查 | 结果 |
+| --- | --- |
+| 完整 CONFIG Host（最终候选） | **484/484 PASS**，0 fail / 0 err / 0 skip，224.4 s，exit 0 |
+| 受影响集 ASan | **121/121 PASS**（预构建 Fast DDS 未插桩，TSan 未执行） |
+| 独立变异 | **13 个全部被杀死，0 存活**；含 `g1-no-strong-revoke`（逐 View egress）、`exclusive-ignores-shared`（组合层）、`f1-bulk-pin`、`f1-pin-released-early`、`f4-*`、`f6-stale-identity`、`f7-ceiling-ignored` 及五个回归变异 |
+| 分析器 | **36/36 PASS**，含 9 个真实文本边界用例；round-5 与 round-8 共四份设备日志 observed == expected == 30 |
+| 设备 SHARED_W1（P 先建） | `256cce1c37aabcac` PASS；删除顺序 B→A；runner/controller/analyzer 全 PASS |
+| 设备 SHARED_W2（Q 先建） | `372d9a20c0db57e9` PASS；删除顺序 A→B；同上 |
+| 设备 F1M 回归 | `cb0a993d921f9c8b` PASS |
+| 只读路由查询 | `query-r8` PASS，对端真实 local 精确匹配一次 |
+| 两板 guard | 每个窗口：`final-guard Passed`、`byte_match`、`metadata_match`、`process_absent`、`service_permission=DENIED`、`first_failure=null`、`cleanup_failures=[]`，且每板 PID 全程不变 |
+| Native 连续性 | P 删除与同名重建全程 `socket/listen/bind=2/1/1`、`shutdown=0`、entry 与 record/owner 世代不变；`FINAL` 时 `views=0` 且 `shutdown` 恰好 1 |
+| 目标包静态审计 | AArch64、`$ORIGIN`、shared-reattach define 存在、DDS-testing define 不存在、六个禁用符号均不存在、五个公共 Socket 导入齐全、必需链接符号齐全、无未声明工程编译源、六个包成员且不含系统 DSoftBus DSO、授权 `trans_type.h` 哈希匹配 |
+| 提交 | `7f40798`，parent `400e4ff`，tree `6948c5e`；恰好一个新 commit；分支不变；22 路径；无 gitlink；`git diff --cached --check` 通过；未 push/merge/amend；无 upstream |
+
+独立 review 覆盖冻结修订 r7（回归、两道 review 视角与一个单问题 reviewer 均返回结论），其报出的两个真实缺陷与三个次要项已修复；修复 diff 另有一次定向复审，五个修复全部判为 correct，并报出 `R8-R1`/`R8-R2`。设备窗口在 review 完成并修复重测之后运行，但早于修复 diff 复审的返回，该时序偏差记为 `PROCEDURE_DEVIATION`，未回填为设备前批准。
+
+### 21.5 边界与未验证项
+
+- `R8-R1`、`R8-R2`：已知非阻塞限制，按各自可达性记录，未改运行时代码，也未扩大为「同一 guard 覆盖所有析构与错误路径」。
+- 准入 pin 的**双重逻辑释放**无直接用例；RAII 使其只能靠改 pin 代码表达，本轮未运行对应隔离变异。
+- `capture-accounting` 的阻塞关闭调用无自身 watchdog，挂起仅由 CTest 的 20 s 超时兜底；不能仅凭 ASan 无报告证明逻辑计数正确。
+- 三个未跟踪文件（`tests/host_shared_channel_tests.cpp`、`scripts/public_socket/analyze_shared.py`、`tests/public_socket_shared_analysis_tests.py`）没有 freeze-r4 逐字节原件，其 r4→r8 谱系为 `NOT_ESTABLISHED`（其中测试文件有 PARTIAL 快照）；五个跟踪文件的 r4 原件可从 `freeze-r4/SOURCE.diff` 或 HEAD 复得，为 `ESTABLISHED`。
+- `src/service_record_binding_tests.cpp` 是未跟踪的过期重复源文件，保留原样；已核实无任何 target 引用它，且 `CMakeLists.txt` 与 `cmake/*.cmake` 无 `file(GLOB)`/`GLOB_RECURSE`/`aux_source_directory`。
+- Graph：`HostProviderLoop` 47 个上游依赖 risk `CRITICAL`、`ApplicationAttachments` 43 个 `HIGH`；`Affected processes: 0` 是建模缺口（准入经 `RecordIngressSink::OnAttributedBytes` 虚接口与 `weak_ptr::lock()` 到达扇出），不是无影响。
+- 平台边界不变：SDK 物理记录 epoch 连续性 `UNPROVEN`；PF-02、P0/PF `BLOCKED`；P4 未放行；默认 `NativeBackendUnavailable`；`QualificationProfile` `NOT_GENERATED`；SDK drain/cancellation/original-event identity、完整 firmware ABI 未验证。
+
+### 21.6 证据入口
+
+工作包根 `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/`：`claude-r8/FINAL_REPORT.md`、`claude-r8/CLOSEOUT.md`、`claude-r8/POST_COMMIT_VERIFICATION.json`、`claude-r8/FINAL_EVIDENCE_INDEX.json`、`claude-r8/{host-r1,asan-r1,mutations-r8,review}/`、`claude-r6/{ISSUE_CLOSURE.md,F7_BUDGET_LAYERING.md,GRAPH_COVERAGE.md,review/FINDINGS_VERBATIM.md,RETRY_EVIDENCE_R6.json}`、`DEVICE_CONTRACT-r8.json`、`CASE_MATRIX_R6.md`、`target-audit-r8/`、`freeze-r6|r7|r8/`、`windows/{query,w1,w2,f1m}-r8/`。round-5 的窗口、包与 receipt 保留为其自身历史身份，未被作废或复用。
+## 22. NEW_PATH_EXACT_ONCE_AND_BOUNDED_REBUILD_REPETITION — FINAL BLOCKED STATE (2026-09-28 CST)
+
+本节是当前工作包的 post-validation 文档 delta，发生在 r5 验证与设备运行结束之后。
+它不改变 r4 C++/ASan、r5 两文件 Python-only 分析器/测试 delta 或既有 r8/r9 历史证据
+的归属。r5 SOURCE390 SHA 是冻结快照；“其余 388 SOURCE 与 EXECUTOR25 无漂移”仅
+表示 r4→r5 冻结比较，不宣称当前整树仍为 390/390 零漂移，也不把计划状态改写成执行结果。
+
+| Gate | 当前证据状态 |
+| --- | --- |
+| `EXACT_ONCE_PIN_VALIDATION_CLOSED` | **PASS**；原 r9 exact-once pin guard 与定向 T-A 历史收据保留，最终 r5 host/target review 已覆盖 |
+| `HOST_100_CYCLE_VERIFIED` | **PASS**；实际 Host100 formal CLI/replay 通过，3000 writes/takes；自然窗口无 cancellation，不替代 cancellation 专项用例 |
+| r4 C++/Host full CONFIG | **PASS**；507/507，exit 0；首次 missing-target 与宽泛日志 extraction 失败原件保留 |
+| r4 ASan | **PASS**；唯一并集 220（130+90，smoke 5 为重复子集）；预编译第三方 Fast DDS DLL 未完整插桩 |
+| `r5 Python-only delta` | **PASS**；冻结 SOURCE390 SHA `09ba0a53238890acff824d597f5ad60ed03e0d771502eb5ceabf4384ed59ef1f`，仅两 Python 路径变化，其余 388 SOURCE 与 EXECUTOR25 无漂移（仅 r4→r5 比较） |
+| r5 review | **PASS**；`review-fix-r5-host/REPORT.md` 与 `review-fix-r5-target/REPORT.md` 均闭合 R4-C1，无未解决代码 review blocker |
+| Device N10 repair | **FAIL**；唯一尝试 `c1ed9706ef5b794f`，formal cycle analysis rc=1/pass=false |
+| `NEW_PATH_100_CYCLE_FUNCTIONAL_REGRESSION_PASS` | **NOT_RUN**；N10 repair 失败，原 N100 限定授权的前置 gate 未满足，当前不执行 |
+| `CHECKPOINT_READY` | **NO / BLOCKED**；设备 gate 未通过 |
+| `NOT_COMMITTED` | **YES**；工作树未提交 |
+
+| `NEW_PATH_10_CYCLE_FUNCTIONAL_REGRESSION_PASS` | **FAIL**；唯一获准 repair N10 真实设备尝试失败 |
+
+N10 的失败边界须按原始收据表述：整窗 `timedOut=false`；A 为
+`SHARED_READER_MISSING`（84 writes/81 takes），B 在 `C6_P_OLD_DELETED` 收到
+collector `SIGTERM`（`control-92.json`：`code=null`、`collector_closed=true`、空
+stdout/stderr），不能归因远程 SDK。B 的 `q_deleted=0` 与已有 `SHARED_DELETE Q FINAL`
+收据并存，且 egress 已 closed/drained；不宣称十轮完成或完整生命周期账本 PASS。A 的
+null-input load collection 失败、B 完整收集、两端 grant/revoke、JSON/byte/metadata/
+ownership/DENIED/process_absent guards、`cleanup_failures=[]` 与 collector closed 均保留。
+
+继续取得新数据前，必须先离线定位 C6 控制 collector 终止与 load collection 错误，并
+取得新的限定 attempt 授权。本轮停止新数据；原 N100 限定授权的前置 gate 未满足，当前不执行；SDK 内部 drain/epoch 仍
+`UNPROVEN`，P0/PF/P4、默认 `NativeBackendUnavailable` 与 `QualificationProfile`
+状态不变。
+
+证据入口：
+
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/tester-n10-repair-initial/TEST_RESULT.json`
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/tester-r4-asan/TEST_RESULT.json`
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/tester-final-r5/TEST_RESULT.json`
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/windows/n10-codex-repair-r1/N10_REPAIR_TEST_RESULT.json` (SHA `594ac61796983c94f12b408174b6de435d1b35f369df4f52490b98b3232cd26f`)
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/review-fix-r5-host/REPORT.md`
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/review-fix-r5-target/REPORT.md`
+
+## 24. N10_OBSERVED_RETRY_AND_CONDITIONAL_N100 — STOPPED PRE-DISPATCH (2026-09-28 CST)
+
+停止后的文档增量：新 N10 为 `INCOMPLETE / PRE-DISPATCH STOP`，不是完成的 data FAIL
+或 PASS。唯一 query `5ca407e7845f0484` 在本地 post-query `route_query.py` 因
+`Supplemental quota already claimed` 停止；query pair 使用 1、剩余 0，data dispatch
+为 0、data quota 剩余 1，详见 `windows/query-observed-n10/BUDGET_CLARIFICATION.json`
+（SHA `19c0460634c52c840fa5b7f30b409c4863663db7cfa4ce6ac0a0a21c3cd77f70`）。两端
+query/restore guards PASS，但无 P/Q data、删除、live-load、postrun data 或 DDS 样本证据。
+
+新包身份仅记录 stopped r12 scope：SOURCE390 SHA `8628e57951767cf235b00d6ca836050bfca35eeeb3547e768452d50b6c7c2641`、EXECUTOR27 SHA `3332d6a067631c13ad7c084aae3d6592288597e2116c0a234cecbd91bbbd1fb3`、main SHA `590bfc9ecbb04c6c0ebfb2c95a6fdd397326a30e2ef67cc2a2348b89cfff2bc3`、r12 contract SHA `1243a809208348a9837e91523b5f7843a6dd211cafc580c259f78d14046ca737`。这是停止后的文档增量，不改写 r12 报告、selection、manifest、历史窗口或原件，也不声称当前全树仍匹配该 source390。
+
+27/27 tester 与 review-stop 只覆盖其声明的本地/预设备范围；两板只读预检/目录 query
+已执行且 local/remote rc0/0，但未进入 data runner/collector。新静态构建只证明
+BUILDS + static audit；旧 r4 507/507、ASan220、r5 结果保留各自版本归属，未在本轮重跑。
+README/PLAN 此处是停止后的文档增量，不宣称当前全树仍匹配运行的 source390；旧 r12
+与运行包身份不改写。前置 review 漏掉
+prepare→claim→postrun 整路径，必须在未来修复中补充同一 consumed query receipt 的
+完整回放、10.0/100.0 非整数拒绝、query/data quota 分离、route binding/result receipt、
+claim replay/耗尽、27 execution-file drift 与新的独立 review。历史 N10 FAIL、N100 NOT_RUN、
+CHECKPOINT_READY NO、repair0 保持；N100 条件额度未准入，不自动继续。完整记录见
+[observed-retry/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/observed-retry/FINAL_REPORT.md)。
+
+## 25. QUERY_CLAIM_POSTRUN_REPAIR_AND_EVIDENCE_REPLAY (2026-09-28 CST)
+
+运行后的文档增量：`QUERY_CLAIM_PHASE_REPAIR_VERIFIED`、`POSTRUN_QUERY_REPLAY_VERIFIED`
+与 `NEW_PATH_10_CYCLE_FUNCTIONAL_REGRESSION_PASS` 均 **PASS**；N10 run
+`df9319fdf22ab3d9` 已由独立证据复核接受。每端 P11/Q1、150 writes/takes，合计
+300/300；166 control 全部成功，339 条 host HDC 收据已独立复核；本轮新目录 query=0。
+N10 data 用1剩0，query 用1剩0，repair0。N100 **NOT_RUN**：原 query10 不能作为
+purpose100，缺 query100 且新 query 许可为0；条件额度1不构成准入。`CHECKPOINT_READY_FOR_ORIGINAL_PACKAGE=NO`、
+`NOT_COMMITTED=YES`、SDK drain/epoch `UNPROVEN`，不能宣称 P4/生产资格。
+
+本段是运行后的文档增量，不宣称当前整树仍等于冻结 source390；r12、r13、manifest、
+replay 与历史原件身份不改写。无 C++ 新构建；新静态包仅 `BUILDS + static audit`，旧
+r4 507/507、ASan220、r5 结果保留原版本归属且未重跑。完整记录见
+[query-replay/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/query-replay/FINAL_REPORT.md)。
+
+## 26. QUERY100_AND_FINAL_N100_EXECUTION (2026-09-28 CST)
+
+运行后的文档增量：query100 `12ceebf2b741302e` PASS，Q-first N100
+`eab10c4b776d792c` PASS，独立 review 接受 2894 evidence hashes。每端 P101/101、Q1/1，
+1500 writes/takes；全局3000/3000，1606 control 完整正常关闭；host receipt recount
+1861。既有 P-first N10 `df9319fdf22ab3d9` 保持 PASS，本轮不重跑，不把两顺序各100写成已验证。
+
+query100 与 N100 quota 各用1剩0，N10本轮0，repair0。`CHECKPOINT_READY` 仅表示有限
+证据记录，`NOT_COMMITTED=YES`；SDK drain/epoch/cancellation、长期资源上限、生产/P4、
+QualificationProfile 仍未证明。新静态包仅 `BUILDS + static audit`；旧 r4 507/507、ASan220、
+r5 结果保留原版本归属且未重跑。此处是运行后 documentation delta，不宣称当前全树仍等于
+source390；r14/manifest/claim/replay/验收原件不改写。完整记录见
+[final-n100/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/final-n100/FINAL_REPORT.md)
+与 [EVIDENCE_INDEX.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/final-n100/EVIDENCE_INDEX.md)。
+
+## 23. OFFLINE_DIAGNOSIS_AND_BOUNDED_REPAIR_ONLY (2026-09-28 CST)
+
+离线包 `offline-c6` 的结论为：`OFFLINE_CAUSALITY_GAP_BOUNDED / HISTORICAL_N10_CAUSE_PARTIALLY_UNRESOLVED / INDEPENDENT_REVIEW_CLOSED / DEVICE_RETRY_AUTHORIZATION_REQUIRED`。
+本包只做本地诊断与有界证据修复；tester-2 的 18/18 命令为本地 Node/PowerShell/Python
+子进程和合成控制文本，未执行 C++/ASan/HostDDS100、HDC、SDK、目标程序、设备或真实
+window。freeze-2 SOURCE427、EXECUTOR25、817 历史窗口与六个 r5 包成员的哈希比较均通过，
+但 README/PLAN 后改属于 post-validation documentation delta，不宣称当前整树仍与
+SOURCE427 完全一致。纠正后的 FACTS SHA 为 `f33bb84bca9166a8075e2066c4d2c728cd3e6ce9116d86151c143bb631bd005a`。
+
+F05/F32 的错误 C6 归属已按实际 `C5_SHARED_DATA_DONE` stage 修正并经
+`review-final/REPORT.md`、`review-causality/REPORT.md` 复核关闭。历史
+`TERMINATION_INITIATOR_UNOBSERVED` / `TERMINATION_REASON_UNOBSERVED` 保持不变：
+control-92 的 SIGTERM、空输出和 `timedOut=false` 不能归因 timer、远程 shell 或 SDK。
+150 个前五轮跨侧样本严格匹配；C6 A84/81、B81/81 的未观察项不证明丢包。Q FINAL
+public delete 返回与 B `q_deleted=0` 的差异保留为未满足后置条件未知，不改写为正常完成。
+
+离线修复包括 typed incomplete receipts、structured load failure、确认 close 的 UTF-8/
+CRLF/tail 处理、依赖 release 停止、command-scoped termination/requester/reason/deadline/
+PID/exit/close/bytes 收据、显式 executable 与有界 exit-close drain；原 7s/5s/250ms
+预算和容量未扩大。真实 Windows held-pipe gap 未直接复现，注入 close-delivery 的
+RED/GREEN 保留其限定。`NEXT_N10_REQUEST_DRAFT.md` 仍是草案，不创建 window/contract，
+不恢复授权。历史 N10 FAIL、N100 NOT_RUN、CHECKPOINT_READY NO、retry=0 及原六项 gate
+保持不变。完整记录见 [.artifacts/.../offline-c6/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/offline-c6/FINAL_REPORT.md)。
+
+## 27. CHECKPOINT_LOCAL_R6_FINAL_CLOSURE (2026-09-28 CST)
+
+本地文档 checkpoint：标准 CONFIG `523/523 PASS`、Host100 replay `25 PASS`、target-core
+W2 replay `5 PASS`；tester final closure `11/11` 命令与 Flow21 PASS，HDC/device=0。
+17+2 task/external execution-member closure 是本地 promotion path，不是历史 device
+execution path。内部9项历史 RealText 保持 SKIP，DLL allocator injection 未触发，初次无效
+环境日志保留；ASan220 仅复用原证据，未新跑。r6 review closure PASS，CP-1/CP-2/CP-3
+及 external analyzer dependency 已闭合。
+
+N10/N100 有限范围与历史失败边界不改写；默认 `NativeBackendUnavailable`、P0/PF/P4、
+生产限制和 SDK drain/epoch 边界不变。README/PLAN 为运行后文档增量，不宣称当前全树
+等于候选快照。完整文档收据见
+[checkpoint-local/docs-final/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/checkpoint-local/docs-final/FINAL_REPORT.md)。

@@ -1,4 +1,5 @@
 import copy
+import re
 from pathlib import Path
 import sys
 import unittest
@@ -209,5 +210,96 @@ class RealText(unittest.TestCase):
             row = [l for l in t.splitlines() if l.startswith('SHARED_TAKE')][0]
             return t.replace(row, row.replace('group=P', 'group=', 1).replace('group=Q', 'group=', 1), 1)
         self.reject('w1-r8', edit)
+
+
+
+# --- distributable text layer -------------------------------------------------------
+# Same real text -> parse -> validate entry, but the text is generated here instead of
+# being read from captured device logs, so the parse layer is covered on any machine and
+# the suite has no hidden dependency on a local ignored path. The captured-log replay in
+# RealText below stays a separate evidence layer with its own skip semantics.
+def render(board):
+    lines = []
+    for tag, rows in board.items():
+        for row in rows:
+            lines.append(tag + ' ' + ' '.join(str(k) + '=' + str(v) for k, v in row.items()))
+    return chr(10).join(lines) + chr(10)
+
+
+class GeneratedText(unittest.TestCase):
+    """The real entry, fed generated text, so no device log is needed."""
+
+    def pair(self, case='SHARED_W1'):
+        b = fixture(case)
+        return b, [render(b[0]), render(b[1])]
+
+    def reject(self, edit, case='SHARED_W1'):
+        b, texts = self.pair(case)
+        texts[0] = edit(texts[0])
+        with self.assertRaises((ValueError, KeyError)):
+            a.analyze(case, texts)
+
+    def test_round_trip_and_pass(self):
+        for case in ('SHARED_W1', 'SHARED_W2'):
+            b, texts = self.pair(case)
+            self.assertEqual([a.parse(t) for t in texts], b, 'generated text must round-trip through parse')
+            r = a.analyze(case, texts)
+            self.assertTrue(r['pass_'], case)
+            self.assertEqual(r['reader_samples'], r['expected_reader_samples'], case)
+            self.assertEqual(r['reader_samples'], sum(len(side['SHARED_TAKE']) for side in b), case)
+
+    def test_deleted_record(self):
+        def edit(t):
+            row = next(l for l in t.splitlines() if l.startswith('SHARED_TAKE'))
+            return t.replace(row + chr(10), '', 1)
+        self.reject(edit)
+
+    def test_duplicated_record(self):
+        def edit(t):
+            row = next(l for l in t.splitlines() if l.startswith('SHARED_TAKE'))
+            return t.replace(row + chr(10), row + chr(10) + row + chr(10), 1)
+        self.reject(edit)
+
+    def test_wrong_run(self):
+        def edit(t):
+            row = next(l for l in t.splitlines() if l.startswith('SHARED_TAKE'))
+            return t.replace(row, re.sub(r'run=[0-9a-f]{16}', 'run=0000000000000000', row), 1)
+        self.reject(edit)
+
+    def test_wrong_writer(self):
+        def edit(t):
+            row = next(l for l in t.splitlines() if l.startswith('SHARED_TAKE'))
+            return t.replace(row, re.sub(r'writer=[0-9a-f]{32}', 'writer=' + 'f' * 32, row), 1)
+        self.reject(edit)
+
+    def test_wrong_life(self):
+        def edit(t):
+            row = next(l for l in t.splitlines() if l.startswith('SHARED_ID') and 'group=P' in l and 'life=1' in l)
+            return t.replace(row, row.replace('life=1', 'life=9'), 1)
+        self.reject(edit)
+
+    def test_wrong_phase(self):
+        def edit(t):
+            row = next(l for l in t.splitlines() if l.startswith('SHARED_WRITE') and 'phase=INITIAL' in l)
+            return t.replace(row, row.replace('phase=INITIAL', 'phase=REATTACH'), 1)
+        self.reject(edit)
+
+    def test_missing_field(self):
+        def edit(t):
+            row = next(l for l in t.splitlines() if l.startswith('SHARED_TAKE'))
+            return t.replace(row, re.sub(r' sn=[0-9]+', '', row), 1)
+        self.reject(edit)
+
+    def test_invalid_target_row(self):
+        def edit(t):
+            row = next(l for l in t.splitlines() if l.startswith('SHARED_TAKE'))
+            return t.replace(row, re.sub(r'group=[PQ]', 'group=', row), 1)
+        self.reject(edit)
+
+    def test_other_order_negatives(self):
+        def edit(t):
+            row = next(l for l in t.splitlines() if l.startswith('SHARED_TAKE'))
+            return t.replace(row, re.sub(r'ordinal=[0-9]+', 'ordinal=99', row), 1)
+        self.reject(edit, case='SHARED_W2')
 
 if __name__=='__main__':unittest.main()

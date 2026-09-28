@@ -319,6 +319,15 @@ struct ApplicationGroup final
             if (!group_) return;
             {
                 std::lock_guard<std::mutex> lock(group_->gate);
+                if (group_->snapshots == 0) {
+                    // A release with no matching acquisition would wrap the count, and then
+                    // every later Settle would wait on a predicate that can never become
+                    // true -- a hang with no clue about its cause. A destructor cannot
+                    // refuse, so the violation is made loud and located instead of silent.
+                    std::fprintf(stderr, "MDDS DSoftBus shared registration: admission pin released "
+                            "without a matching acquisition");
+                    std::fputc('\n', stderr); std::fflush(stderr); std::abort();
+                }
                 --group_->snapshots;
                 group_->changed.notify_all();
             }

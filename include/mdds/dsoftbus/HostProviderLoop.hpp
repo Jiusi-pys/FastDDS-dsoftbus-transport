@@ -5,6 +5,13 @@
 #include <mdds/dsoftbus/NativeSendExecution.hpp>
 #include <mdds/dsoftbus/ProviderAdapter.hpp>
 namespace mdds::dsoftbus::host_test {
+// Observation of the work actually selected by a shared runtime pump. It grants
+// no authority and carries neither owners nor SDK generations.
+struct HostSendObservation {
+    ReceiverIdentity receiver{};
+    bool selected=false, view_closing=false, admission_closed=false;
+    NativeStatus registration_status=NativeStatus::NotFound;
+};
 struct HostLoopObservation {
     bool started=false, input_open=false, sealed=false, closed=false;
     std::size_t active_pumps=0;
@@ -51,6 +58,7 @@ public:
     SenderAttachResult Attach(eprosima::fastdds::rtps::SendResourceList&) override;
     bool Shutdown() noexcept override;
     NativeSendRunResult PumpSend() noexcept;
+    NativeSendRunResult PumpSendObserved(HostSendObservation&) noexcept;
     phase0::BackendStatus PumpReceive() noexcept;
     phase0::BackendStatus CloseAccepted() noexcept;
     HostLoopObservation Observe() const noexcept;
@@ -58,6 +66,10 @@ public:
     bool WaitInputClosing(std::chrono::steady_clock::time_point) const;
 private:
     friend class HostProviderLoopTestAccess;
+    NativeSendRunResult PumpSendImpl(HostSendObservation*) noexcept;
+#ifdef MDDS_HOST_BACKEND_TESTING
+    void SetSharedSendHook(std::function<void(bool)>);
+#endif
     void SetSharedControlHooks(std::function<void()> before_publish,std::function<void()> after_seal);
     struct State;
     struct View;

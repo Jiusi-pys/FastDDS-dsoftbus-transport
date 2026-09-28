@@ -39,12 +39,26 @@ inline std::vector<ProtocolItem> Parse(const std::uint8_t* p,std::size_t n){
 }
 struct Event {
     std::string stage,kind,writer,detail;int side=0;std::uint64_t sn=0,hash=0,correlation=0,app=0,receiver=0;
-    std::size_t length=0;
+    std::size_t length=0;unsigned cycle=0;
 };
+// Host observation only. Never used as an SDK generation or routing permission.
+struct DetailStamp {bool enabled=true;unsigned cycle=0;};
+struct TraceCounts {std::uint64_t observations=0,omitted=0,stored=0,lost=0,required_lost=0;};
 class Trace {
 public:
     Trace(){events_.reserve(8192);}
-    void Add(Event e) noexcept{try{std::lock_guard<std::mutex> l(gate_);if(events_.size()==8192){overflow_=true;return;}events_.push_back(std::move(e));}catch(...){std::lock_guard<std::mutex> l(gate_);overflow_=true;}}
+    void Sampling(unsigned detailed_cycles){std::lock_guard<std::mutex> l(gate_);sampling_=true;detailed_cycles_=detailed_cycles;stamp_.enabled=stamp_.cycle<=detailed_cycles_;}
+    void Cycle(unsigned cycle){std::lock_guard<std::mutex> l(gate_);stamp_.cycle=cycle;stamp_.enabled=!sampling_||cycle<=detailed_cycles_;}
+    void SetDetail(bool enabled){std::lock_guard<std::mutex> l(gate_);stamp_.enabled=enabled;}
+    DetailStamp Capture()const{std::lock_guard<std::mutex> l(gate_);return stamp_;}
+    TraceCounts Counts()const{std::lock_guard<std::mutex> l(gate_);return counts_;}
+    std::vector<Event> Events()const{std::lock_guard<std::mutex> l(gate_);return events_;}
+    void Add(Event e) noexcept{Store(std::move(e),false);}
+    void Detail(Event e,DetailStamp stamp)noexcept{if(!ObserveDetail(stamp))return;e.cycle=stamp.cycle;Store(std::move(e),true);}
+    void DetailFrame(DetailStamp stamp,const char* stage,int side,const std::uint8_t* p,std::size_t n,std::uint64_t c=0,std::uint64_t a=0,std::uint64_t r=0)noexcept{
+        if(!ObserveDetail(stamp))return;
+        try{if(!p||!n)return;const auto h=Hash(p,n);for(const auto& x:Parse(p,n))Store({stage,x.kind,x.writer,"",side,x.sn,h,c,a,r,n,stamp.cycle},true);}catch(...){Add({"TRACE_ERROR","","","allocation",side});}
+    }
     void Frame(const char* stage,int side,const std::uint8_t* p,std::size_t n,std::uint64_t c=0,std::uint64_t a=0,std::uint64_t r=0)noexcept{
         try{if(!p||!n)return;const auto h=Hash(p,n);for(const auto& x:Parse(p,n))Add({stage,x.kind,x.writer,"",side,x.sn,h,c,a,r,n});}catch(...){Add({"TRACE_ERROR","","","allocation",side});}
     }
@@ -55,10 +69,13 @@ public:
     std::string FirstPumpFailure()const{std::lock_guard<std::mutex> l(gate_);for(const auto&e:events_)if(e.stage=="PUMP_ERROR")return e.detail;return {};}
     void Dump(std::uint64_t run)const{
         std::lock_guard<std::mutex> l(gate_);std::size_t ordinal=0;
-        for(const auto&e:events_)std::cout<<"HOST_MODEL run="<<run<<" event="<<++ordinal<<" side="<<e.side<<" stage="<<e.stage<<" kind="<<e.kind<<" writer="<<e.writer<<" sn="<<e.sn<<" length="<<e.length<<" hash="<<e.hash<<" correlation="<<e.correlation<<" app="<<e.app<<" receiver="<<e.receiver<<" detail="<<e.detail<<'\n';
-        std::cout<<"TRACE_SUMMARY count="<<events_.size()<<" limit=8192 overflow="<<overflow_<<'\n';
+        for(const auto&e:events_)std::cout<<"HOST_MODEL run="<<run<<" event="<<++ordinal<<" side="<<e.side<<" stage="<<e.stage<<" kind="<<e.kind<<" writer="<<e.writer<<" sn="<<e.sn<<" length="<<e.length<<" hash="<<e.hash<<" correlation="<<e.correlation<<" app="<<e.app<<" receiver="<<e.receiver<<" cycle="<<e.cycle<<" detail="<<e.detail<<'\n';
+        std::cout<<"TRACE_SUMMARY count="<<events_.size()<<" limit=8192 overflow="<<overflow_<<" detail_observations="<<counts_.observations<<" omitted_observations="<<counts_.omitted<<" stored_detail_rows="<<counts_.stored<<" lost_detail_rows="<<counts_.lost<<" required_lost="<<counts_.required_lost<<'\n';
     }
-private:mutable std::mutex gate_;std::vector<Event> events_;bool overflow_=false;
+private:
+    bool ObserveDetail(DetailStamp stamp)noexcept{std::lock_guard<std::mutex> l(gate_);++counts_.observations;if(!stamp.enabled){++counts_.omitted;return false;}return true;}
+    void Store(Event e,bool detail)noexcept{try{std::lock_guard<std::mutex> l(gate_);if(events_.size()==8192){overflow_=true;++(detail?counts_.lost:counts_.required_lost);return;}events_.push_back(std::move(e));if(detail)++counts_.stored;}catch(...){std::lock_guard<std::mutex> l(gate_);overflow_=true;++(detail?counts_.lost:counts_.required_lost);}}
+    mutable std::mutex gate_;std::vector<Event> events_;bool overflow_=false,sampling_=false;unsigned detailed_cycles_=0;DetailStamp stamp_;TraceCounts counts_;
 };
 struct SampleReceipt {std::string reader,writer;std::uint64_t run=0,sn=0;unsigned ordinal=0;bool payload=false,taken=false;};
 inline bool CurrentMatch(const std::set<std::string>& actual,const std::string& expected){return actual==std::set<std::string>{expected};}

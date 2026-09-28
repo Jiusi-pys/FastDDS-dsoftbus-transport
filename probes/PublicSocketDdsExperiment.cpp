@@ -1,6 +1,8 @@
 #include "PublicSocketDdsExperiment.hpp"
+#include "SharedSendControl.hpp"
 #include "PublicSocketDdsTrace.hpp"
 #include "PublicSocketDecisionTrace.hpp"
+#include "PublicSocketRuntimeTrace.hpp"
 #include "PublicSocketRtpsObservation.hpp"
 #include "../experiments/fastdds_socket/LargeSampleContract.hpp"
 #include "ExperimentLargeSamplePubSubTypes.hpp"
@@ -35,6 +37,7 @@ thread_local const Control* control=nullptr;
 thread_local bool setup_control_failed=false;
 #ifdef MDDS_DDS_EXPERIMENT_TESTING
 thread_local std::function<void(dds::DataWriter*)> after_wait_hook;
+thread_local std::function<void()> after_frame_selection;
 thread_local bool shared_delete_failure_once=false;
 #endif
 thread_local HostProviderLoop* inspecting=nullptr;
@@ -52,13 +55,18 @@ constexpr std::size_t frame_limit=16384;
 #else
 constexpr std::size_t frame_limit=4096;
 #endif
-struct Frame {const char* stage=nullptr;const char* kind=nullptr;std::int32_t socket=-1;std::array<std::uint8_t,16> writer{},reader{};std::uint64_t ingress=0,packet=0,sn=0,hash=0,correlation=0,app=0,receiver=0,owner=0,admitted=0,entered=0;std::size_t length=0,offset=0;std::uint32_t first=0,count=0,fragment_size=0,sample_size=0,bits=0;std::array<std::uint32_t,8> bitmap{};bool writer_known=true,reader_known=false;};
-struct Frames {std::mutex gate;std::array<Frame,frame_limit> rows{};std::size_t count=0,overflow=0;std::uint64_t packets=0;};
+struct Frame {const char* stage=nullptr;const char* kind=nullptr;std::int32_t socket=-1;std::array<std::uint8_t,16> writer{},reader{};std::uint64_t ingress=0,packet=0,sn=0,hash=0,correlation=0,app=0,receiver=0,owner=0,admitted=0,entered=0;std::size_t length=0,offset=0;std::uint32_t first=0,count=0,fragment_size=0,sample_size=0,bits=0;std::array<std::uint32_t,8> bitmap{};bool writer_known=true,reader_known=false;unsigned cycle=0;};
+struct Frames {std::mutex gate;std::array<Frame,frame_limit> rows{};std::size_t count=0,overflow=0;std::uint64_t packets=0,omitted=0;};
 Frames& Store(){alignas(Frames) static unsigned char memory[sizeof(Frames)];static Frames* p=new(memory) Frames;return *p;}
 std::uint64_t FrameBytes(const char* stage,std::int32_t socket,const std::uint8_t* p,std::size_t n,const ReceiveDiagnostic* diagnostic=nullptr) noexcept {
     if(!p||n<20||n>8192)return 0;
+    const auto observation_cycle=runtime_probe::ObservationCycle();
+    if(observation_cycle>1){auto& s=Store();std::lock_guard<std::mutex> l(s.gate);++s.omitted;return ++s.packets;}
+#ifdef MDDS_DDS_EXPERIMENT_TESTING
+    if(after_frame_selection)after_frame_selection();
+#endif
     const auto seen=mdds::experiment::ObserveRtps(p,n);if(!seen.valid)return 0;
-    Frame base;base.stage=stage;base.socket=socket;base.length=n;base.hash=14695981039346656037ull;for(std::size_t i=0;i<n;++i){base.hash^=p[i];base.hash*=1099511628211ull;}
+    Frame base;base.cycle=observation_cycle;base.stage=stage;base.socket=socket;base.length=n;base.hash=14695981039346656037ull;for(std::size_t i=0;i<n;++i){base.hash^=p[i];base.hash*=1099511628211ull;}
     if(diagnostic){auto native=diagnostic->native.Observe();base.correlation=diagnostic->correlation;base.app=diagnostic->identity.application_incarnation;base.receiver=diagnostic->identity.receiver_incarnation;base.owner=native.incarnation;}
     else if(inspecting){auto view=inspecting->Observe();base.owner=view.adapter.binding.owner_incarnation;base.admitted=view.shared_runtime?view.runtime_admitted_outstanding:view.send.admitted_outstanding;base.entered=view.native.send.entered;}
     auto& store=Store();std::lock_guard<std::mutex> l(store.gate);base.packet=++store.packets;base.ingress=std::strcmp(stage,"SDK_INGRESS")==0?base.packet:current_ingress;
@@ -200,6 +208,8 @@ struct Endpoint {
 }
 #ifdef MDDS_DDS_EXPERIMENT_TESTING
 void SetAfterWaitHook(std::function<void(dds::DataWriter*)> h){after_wait_hook=std::move(h);}
+void SetAfterFrameSelectionForTest(std::function<void()> h){after_frame_selection=std::move(h);}
+unsigned FrameCycleForTest(std::size_t index){auto& s=Store();std::lock_guard<std::mutex> l(s.gate);return s.rows.at(index).cycle;}
 void SetSharedDeleteFailureForTest(bool enabled){shared_delete_failure_once=enabled;}
 bool DropIsolationObserved() noexcept {
     auto& s=Store();std::lock_guard<std::mutex> l(s.gate);std::uint64_t occurrence=0;bool observed=false;
@@ -218,6 +228,7 @@ bool shared=false;
 #ifdef MDDS_PUBLIC_SOCKET_SHARED_REATTACH
 shared=c.scenario=="SHARED_W1"||c.scenario=="SHARED_W2";
 #endif
+if(c.cycles<1||c.cycles>100||(!shared&&c.cycles!=1))return false;
 if(!shared&&c.scenario!="SMALL"&&c.scenario!="F256"&&c.scenario!="F1M"&&c.scenario!="REL_LOSS"&&c.scenario!="BE_LOSS"&&c.scenario!="VOL_LATE"&&c.scenario!="TL_LATE"&&c.scenario!="KEYED_LAST")return false;if(c.side>1||c.delete_first>1||c.run.size()!=16||c.peer_network.empty()||c.peer_network.size()>64)return false;for(char v:c.run)if(!((v>='0'&&v<='9')||(v>='a'&&v<='f')))return false;return c.service_prefix=="com.kaihong.mdds.p"||c.service_prefix=="host.public";}
 bool IsolateProcess() noexcept {try{for(const char* p:{"FASTDDS_DEFAULT_PROFILES_FILE","FASTRTPS_DEFAULT_PROFILES_FILE","FASTDDS_ENVIRONMENT_FILE","ROS_DISCOVERY_SERVER","ROS_SUPER_CLIENT","FASTDDS_BUILTIN_TRANSPORTS","FASTDDS_STATISTICS"}){
 #ifdef _WIN32
@@ -251,6 +262,6 @@ bool DropRegressionRecord(std::int32_t socket,const std::uint8_t* p,std::size_t 
 }
 std::size_t FrameOverflow() noexcept {auto& s=Store();std::lock_guard<std::mutex> l(s.gate);return s.overflow;}
 std::size_t FrameCount() noexcept {auto& s=Store();std::lock_guard<std::mutex> l(s.gate);return s.count;}
-void DumpFrames() noexcept {DumpDecisions();try{std::vector<Frame> rows;std::size_t overflow;auto& s=Store();{std::lock_guard<std::mutex> l(s.gate);rows.assign(s.rows.begin(),s.rows.begin()+s.count);overflow=s.overflow;}unsigned ordinal=0;for(auto& e:rows)std::printf("DDS_FRAME event=%u packet=%llu ingress=%llu stage=%s kind=%s socket=%d length=%zu hash=%llu writer=%s sn=%llu correlation=%llu app=%llu receiver=%llu owner=%llu admitted=%llu entered=%llu offset=%zu first=%u count=%u fragment_size=%u sample_size=%u writer_known=%d reader=%s reader_known=%d bits=%u bitmap=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",++ordinal,(unsigned long long)e.packet,(unsigned long long)e.ingress,e.stage,e.kind,e.socket,e.length,(unsigned long long)e.hash,Hex(e.writer.data(),16).c_str(),(unsigned long long)e.sn,(unsigned long long)e.correlation,(unsigned long long)e.app,(unsigned long long)e.receiver,(unsigned long long)e.owner,(unsigned long long)e.admitted,(unsigned long long)e.entered,e.offset,e.first,e.count,e.fragment_size,e.sample_size,e.writer_known,Hex(e.reader.data(),16).c_str(),e.reader_known,e.bits,e.bitmap[0],e.bitmap[1],e.bitmap[2],e.bitmap[3],e.bitmap[4],e.bitmap[5],e.bitmap[6],e.bitmap[7]);std::printf("DDS_FRAME_SUMMARY count=%zu limit=%zu overflow=%zu storage_bytes=%zu\n",rows.size(),frame_limit,overflow,sizeof(Frames));}catch(...){auto& s=Store();std::lock_guard<std::mutex> l(s.gate);++s.overflow;}}
+void DumpFrames() noexcept {DumpDecisions();try{std::vector<Frame> rows;std::size_t overflow;std::uint64_t omitted,packets;auto& s=Store();{std::lock_guard<std::mutex> l(s.gate);rows.assign(s.rows.begin(),s.rows.begin()+s.count);overflow=s.overflow;omitted=s.omitted;packets=s.packets;}unsigned ordinal=0;for(auto& e:rows)std::printf("DDS_FRAME event=%u cycle=%u packet=%llu ingress=%llu stage=%s kind=%s socket=%d length=%zu hash=%llu writer=%s sn=%llu correlation=%llu app=%llu receiver=%llu owner=%llu admitted=%llu entered=%llu offset=%zu first=%u count=%u fragment_size=%u sample_size=%u writer_known=%d reader=%s reader_known=%d bits=%u bitmap=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",++ordinal,e.cycle,(unsigned long long)e.packet,(unsigned long long)e.ingress,e.stage,e.kind,e.socket,e.length,(unsigned long long)e.hash,Hex(e.writer.data(),16).c_str(),(unsigned long long)e.sn,(unsigned long long)e.correlation,(unsigned long long)e.app,(unsigned long long)e.receiver,(unsigned long long)e.owner,(unsigned long long)e.admitted,(unsigned long long)e.entered,e.offset,e.first,e.count,e.fragment_size,e.sample_size,e.writer_known,Hex(e.reader.data(),16).c_str(),e.reader_known,e.bits,e.bitmap[0],e.bitmap[1],e.bitmap[2],e.bitmap[3],e.bitmap[4],e.bitmap[5],e.bitmap[6],e.bitmap[7]);std::printf("DDS_FRAME_SUMMARY count=%zu limit=%zu overflow=%zu storage_bytes=%zu observations=%llu omitted=%llu\n",rows.size(),frame_limit,overflow,sizeof(Frames),(unsigned long long)packets,(unsigned long long)omitted);}catch(...){auto& s=Store();std::lock_guard<std::mutex> l(s.gate);++s.overflow;}}
 }
 namespace mdds::dsoftbus::phase0 {bool RuntimeProbeBeforeConnect() noexcept {try{const bool ok=dds_experiment::control&&(*dds_experiment::control)("LISTENER_READY");if(!ok)dds_experiment::setup_control_failed=true;return ok;}catch(...){dds_experiment::setup_control_failed=true;return false;}}}

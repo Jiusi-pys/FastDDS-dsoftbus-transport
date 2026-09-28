@@ -31,13 +31,25 @@ class LoadOriginTest(unittest.TestCase):
         self.write('load-stat-before.txt', '42 (app) S '+'0 '*18+'123 0\n')
         self.write('load-stat-after.txt', '42 (app) S '+'0 '*18+'123 0\n')
         self.write('load-uptime.txt','123.45 0.0\n')
-        self.write('load-collector.json',json.dumps({'run':'0123456789abcdef','side':'A','target_pid':42,'pass':True,'hdcExit':0,'remoteExit':0}))
+        self.write('load-collector.json',json.dumps({'run':'0123456789abcdef','side':'A','target_pid':42,'pass':True,'hdcExit':0,'remoteExit':0,
+                    'collectorClosed':True,'signal':None,'output_bytes':{'complete':True,'overflow':0}}))
         self.maps = '\n'.join('1000-2000 r-xp 00000000 00:01 1 '+p for p in (
             self.remote+'/public_socket_dds_experiment',self.remote+'/libfastdds.so.3.6','/system/lib64/libc.so'))+'\n'
         self.write('load-maps.txt', self.maps)
     def tearDown(self): self.temp.cleanup()
     def write(self,name,data): (self.path/name).write_text(data,encoding='utf-8')
     def test_complete_identity(self): self.assertTrue(module.analyze(self.path,self.cfg,'A')['complete'])
+    def test_collector_requires_complete_closed_evidence(self):
+        good=json.loads((self.path/'load-collector.json').read_text())
+        for key in ('collectorClosed','output_bytes'):
+            bad=copy.deepcopy(good);bad.pop(key)
+            self.write('load-collector.json',json.dumps(bad))
+            self.assertFalse(module.analyze(self.path,self.cfg,'A')['complete'])
+    def test_null_collector_is_not_empty_success(self):
+        self.write('load-collector.json','null')
+        result=module.analyze(self.path,self.cfg,'A')
+        self.assertFalse(result['complete'])
+        self.assertIn('COLLECTOR_JSON_TYPE',result['errors'])
     def test_missing_capture_never_passes(self):
         (self.path/'load-maps.txt').unlink()
         self.assertFalse(module.analyze(self.path,self.cfg,'A')['complete'])
@@ -69,8 +81,12 @@ class LoadOriginTest(unittest.TestCase):
         self.write('load-environ.txt','PATH=/system/bin:/system/xbin\nLD_LIBRARY_PATH='+self.remote+':/system/lib64\nSKIP_DEFAULT_XML=1\nLD_PRELOAD=/tmp/wrong.so\n')
         self.assertFalse(module.analyze(self.path,self.cfg,'A')['complete'])
     def test_collector_wrong_pid_fails(self):
-        self.write('load-collector.json',json.dumps({'run':'0123456789abcdef','side':'A','target_pid':44,'pass':True,'hdcExit':0,'remoteExit':0}))
-        self.assertFalse(module.analyze(self.path,self.cfg,'A')['complete'])
+        collector=json.loads((self.path/'load-collector.json').read_text())
+        collector['target_pid']=44
+        self.write('load-collector.json',json.dumps(collector))
+        result=module.analyze(self.path,self.cfg,'A')
+        self.assertFalse(result['complete'])
+        self.assertIn('COLLECTOR_APP_PID_MISMATCH',result['errors'])
 
 
     def test_default_xml_environment_required(self):

@@ -23,7 +23,8 @@ struct Invocation {Config config;std::string control;std::uint64_t token=0;};
 bool Parse(int argc,char** argv,Invocation& v){
     std::map<std::string,std::string> args;
     for(int i=1;i<argc;i+=2){if(i+1==argc||!args.emplace(argv[i],argv[i+1]).second)return false;}
-    for(auto& e:args)if(e.first!="--scenario"&&e.first!="--delete-first"&&e.first!="--run"&&e.first!="--side"&&e.first!="--control"&&e.first!="--peer"&&e.first!="--token")return false;
+    for(auto& e:args)if(e.first!="--cycles"&&e.first!="--scenario"&&e.first!="--delete-first"&&e.first!="--run"&&e.first!="--side"&&e.first!="--control"&&e.first!="--peer"&&e.first!="--token")return false;
+    if(args.count("--cycles")){const auto& s=args["--cycles"];auto r=std::from_chars(s.data(),s.data()+s.size(),v.config.cycles);if(r.ec!=std::errc{}||r.ptr!=s.data()+s.size())return false;}
     if(args.count("--scenario"))v.config.scenario=args["--scenario"];v.config.run=args["--run"];v.control=args["--control"];
     if(args["--delete-first"]!="A"&&args["--delete-first"]!="B")return false;v.config.delete_first=args["--delete-first"]=="A"?0:1;
     if(args["--side"]!="A"&&args["--side"]!="B")return false;v.config.side=args["--side"]=="A"?0:1;
@@ -37,9 +38,10 @@ bool Parse(int argc,char** argv,Invocation& v){
 }
 bool Stage(const Invocation& v,const char* stage){
     std::printf("DDS_STAGE run=%s side=%c pid=%d stage=%s\n",v.config.run.c_str(),v.config.side?'B':'A',getpid(),stage);std::fflush(stdout);
-    if(std::strcmp(stage,"DDS_DELETED")==0)return true;
+    if(std::strcmp(stage,"DDS_DELETED")==0||std::string(stage)=="C"+std::to_string(v.config.cycles)+"_DDS_DELETED")return true;
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(20);
-    while(std::chrono::steady_clock::now()<deadline){std::ifstream file(v.control+"."+stage);std::string line;std::getline(file,line);if(line==v.config.run+" "+stage)return true;std::this_thread::sleep_for(std::chrono::milliseconds(10));}
+    const auto marker=v.config.run+" "+(v.config.cycles>1?std::string(v.config.side?"B ":"A "):std::string())+stage;
+    while(std::chrono::steady_clock::now()<deadline){std::ifstream file(v.control+"."+stage);std::string line;std::getline(file,line);if(line==marker)return true;std::this_thread::sleep_for(std::chrono::milliseconds(10));}
     std::printf("DDS_CONTROL_TIMEOUT stage=%s\n",stage);return false;
 }
 bool Symbols(){

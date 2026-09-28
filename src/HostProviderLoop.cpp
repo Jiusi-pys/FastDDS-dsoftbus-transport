@@ -34,6 +34,9 @@ struct HostProviderLoop::View {
     ReceiverIdentity identity{};
     ReceiverIdentity retired_identity{};
     std::function<void()> before_publish,after_seal;
+#ifdef MDDS_HOST_BACKEND_TESTING
+    std::function<void(bool)> send_hook;
+#endif
 };
 struct HostProviderLoop::State {
     State(std::shared_ptr<NativeBackend> p,std::shared_ptr<ProcessReceiveObserver> o):backend(std::move(p)),observer(std::move(o)){}
@@ -340,6 +343,17 @@ SenderAttachResult HostProviderLoop::Attach(eprosima::fastdds::rtps::SendResourc
     return s.execution->Attach(s.registration,list);
 }
 NativeSendRunResult HostProviderLoop::PumpSend() noexcept {
+    return PumpSendImpl(nullptr);
+}
+NativeSendRunResult HostProviderLoop::PumpSendObserved(HostSendObservation& observation) noexcept {
+    observation={};return PumpSendImpl(&observation);
+}
+#ifdef MDDS_HOST_BACKEND_TESTING
+void HostProviderLoop::SetSharedSendHook(std::function<void(bool)> hook) {
+    view_->send_hook=std::move(hook); // Installed before starting test workers.
+}
+#endif
+NativeSendRunResult HostProviderLoop::PumpSendImpl(HostSendObservation* observation) noexcept {
     auto& s=*state_;
     if(s.shared){
         std::array<std::shared_ptr<View>,2> eligible;std::size_t count=0;
@@ -358,12 +372,27 @@ NativeSendRunResult HostProviderLoop::PumpSend() noexcept {
         }
         State::PumpGuard pump{s};
         for(const auto& v:eligible)if(v){
-            {std::lock_guard<std::mutex> lock(s.gate);if(v->closing||v->closed)continue;++v->active_tx;}
+            EgressRegistration registration;ReceiverIdentity identity;
+            {std::lock_guard<std::mutex> lock(s.gate);if(v->closing||v->closed)continue;++v->active_tx;registration=v->registration;identity=v->identity==ReceiverIdentity{}?v->retired_identity:v->identity;}
             struct Pin {State& s;View& v;~Pin(){std::lock_guard<std::mutex> lock(s.gate);--v.active_tx;s.changed.notify_all();}} pin{s,*v};
-            auto work=s.execution->Take(v->registration);if(!work)continue;
+            // Preserve the existing no-work/Take-failure behavior. This receipt
+            // describes only successfully taken work, not every Take rejection.
+            auto work=s.execution->Take(registration);if(!work)continue;
+            if(observation){observation->selected=true;observation->receiver=identity;}
+            const auto observe=[&]{if(!observation)return;
+                {std::lock_guard<std::mutex> lock(s.gate);observation->view_closing=v->closing;}
+                const auto activity=s.execution->Observe(registration);
+                observation->registration_status=activity.status;observation->admission_closed=activity.admission_closed;
+            };
+#ifdef MDDS_HOST_BACKEND_TESTING
+            if(v->send_hook)v->send_hook(false);
+#endif
             auto invocation=s.execution->TryAdmit(*work.value,s.send_provider);
-            if(!invocation)return {invocation.issue.code};
-            return invocation.value->Run();
+            if(!invocation){observe();return {invocation.issue.code};}
+#ifdef MDDS_HOST_BACKEND_TESTING
+            if(v->send_hook)v->send_hook(true);
+#endif
+            auto result=invocation.value->Run();observe();return result;
         }
         return {NativeStatus::NotFound};
     }
