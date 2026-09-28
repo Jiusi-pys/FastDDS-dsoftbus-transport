@@ -1,5 +1,12 @@
 # FastDDS dsoftbus Transport
 
+> **Library delivery checkpoint（2026-09-29）**：r1 完整 CONFIG `524/524 PASS`
+>（677.01 s）；r2 受影响安装、move-prefix 外部消费者、Host DDS/default-Unavailable、
+> 负例、API23 真实库 compile/link/$ORIGIN 与限定 ASan 复测均 PASS。正式 review PASS；
+> 仅 1 个 nested DLL allocator-injection case 未触发而 SKIPPED。该包只有 Host/compile/
+> static API23 证据，设备/HDC=0，不是 DSoftBus runtime/device/生产资格。README/INSTALL
+> 本轮新增薄封装及安装/导出，未改既有生命周期实现。详见 [安装与交付边界](docs/INSTALL.md)。
+
 > **Local checkpoint closure（2026-09-28；`checkpoint-local`）**：标准 CONFIG
 > `523/523 PASS`（复用原 source correspondence），Host100 replay `25 PASS`、target-core
 > W2 replay `5 PASS`；final tool closure `11/11` commands、Flow21 PASS。17 个 task members

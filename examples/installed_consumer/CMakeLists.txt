@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.22)
+project(mdds_installed_consumer LANGUAGES CXX)
+find_package(MDDS CONFIG REQUIRED)
+add_executable(mdds_consumer main.cpp)
+target_link_libraries(mdds_consumer PRIVATE MDDS::mdds_dsoftbus_transport_facade MDDS::mdds_example_types)
+target_compile_features(mdds_consumer PRIVATE cxx_std_17)
+enable_testing()
+add_test(NAME installed_consumer COMMAND mdds_consumer)

@@ -267,7 +267,7 @@ endif()
 if(BUILD_DSOFTBUS_DIRECTORY)
     add_library(mdds_dsoftbus_directory STATIC src/EndpointDirectory.cpp src/V1Address.cpp src/V1Configuration.cpp)
     target_include_directories(mdds_dsoftbus_directory PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include")
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:include>")
     target_link_libraries(mdds_dsoftbus_directory PUBLIC mdds_fastdds_binding)
     target_compile_features(mdds_dsoftbus_directory PUBLIC cxx_std_17)
     if(MDDS_FASTDDS_MODE STREQUAL "SOURCE_PROBE")
@@ -389,7 +389,7 @@ if(BUILD_DSOFTBUS_SERVICE_RECORD_TABLE)
     find_package(Threads REQUIRED)
     add_library(mdds_dsoftbus_service_record_table STATIC src/ServiceRecordTable.cpp)
     target_include_directories(mdds_dsoftbus_service_record_table PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include")
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:include>")
     target_link_libraries(mdds_dsoftbus_service_record_table PUBLIC Threads::Threads)
     target_compile_features(mdds_dsoftbus_service_record_table PUBLIC cxx_std_17)
     # The bounded-counter test hooks exist only in this library and its test
@@ -783,3 +783,5 @@ if(BUILD_TESTING AND BUILD_PUBLIC_SOCKET_BOUNDED_REGRESSION)
     add_test(NAME dsoftbus.public_socket_analysis.decisions COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/public_socket_decision_analysis_tests.py")
     add_test(NAME dsoftbus.public_socket_analysis.shared COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/public_socket_shared_analysis_tests.py")
 endif()
+
+include(cmake/MDDSLibraryDelivery.cmake)
