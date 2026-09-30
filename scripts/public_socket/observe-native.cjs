@@ -6,7 +6,7 @@ function createLoadObserver({config,directory,spawn=require('node:child_process'
  const states={},ended=new Set(),inputErrors={};
  function start(side,pid){
   const root=config.remote[side];if(!Number.isSafeInteger(pid)||pid<1||root!==`/data/local/tmp/mdds_dds_${config.run}_${side}`)throw Error('Invalid observed identity');
-  const command=`env -i PATH=/system/bin:/system/xbin timeout 10 /system/bin/sh ${root}/capture-load.sh ${config.run} ${pid} ${root} ${side}; rc=$?; echo LOAD_OBSERVER_REMOTE_EXIT=$rc`;
+  const command=`env -i PATH=/system/bin:/system/xbin timeout 10 /system/bin/sh ${root}/capture-load.sh ${config.run} ${pid} ${root} ${side}${config.scenario==='INSTALLED_RUNTIME'?' '+config.main_member:''}; rc=$?; echo LOAD_OBSERVER_REMOTE_EXIT=$rc`;
   const state=states[side]={run:config.run,side,target_pid:pid,pid_source:'DDS_MAIN_RUN_SIDE_BOUND',command,pass:false};
   const dir=path.join(directory,side);fs.mkdirSync(dir,{recursive:true});
   fs.writeFileSync(path.join(dir,'load-collector.command.json'),JSON.stringify([config.hdc_path,'-t',config.targets[side],'shell',command]),{flag:'wx'});
@@ -33,7 +33,7 @@ function createLoadObserver({config,directory,spawn=require('node:child_process'
    }catch(e){state.error=String(e);complete(null,null,true);}
   });record({event:'LOAD_COLLECTOR_BEGIN',side,target_pid:pid,command});
  }
- const parsers=Object.fromEntries(['A','B'].map(side=>[side,createLines(line=>{const m=/^DDS_MAIN run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) mode=(dds) /.exec(line);if(m){if(ended.has(side)){inputErrors[side]||='PID_OBSERVED_AFTER_STREAM_END';return;}if(m[1]!==config.run||m[2]!==side||m[4]!=='dds')throw Error('Probe identity mismatch');if(!states[side])start(side,Number(m[3]));else states[side].error='MULTIPLE_NATIVE_PIDS';}},reason=>{inputErrors[side]||=reason;})]));
+ const parsers=Object.fromEntries(['A','B'].map(side=>[side,createLines(line=>{const m=new RegExp('^'+(config.main_prefix||'DDS_MAIN')+' run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) mode='+(config.main_mode||'dds')+' ').exec(line);if(m){if(ended.has(side)){inputErrors[side]||='PID_OBSERVED_AFTER_STREAM_END';return;}if(m[1]!==config.run||m[2]!==side)throw Error('Process identity mismatch');if(!states[side])start(side,Number(m[3]));else states[side].error='MULTIPLE_NATIVE_PIDS';}},reason=>{inputErrors[side]||=reason;})]));
  async function admission(){const result={};for(const side of ['A','B']){result[side]=states[side]?await states[side].promise:{pass:false,error:'NO_NATIVE_PID_RECORD'};if(states[side]?.error||inputErrors[side])result[side]={...result[side],pass:false,error:states[side]?.error||inputErrors[side]};}return result;}
  return {output(side,stream,data){if(stream==='stdout')parsers[side](data);},end(side,confirmed){ended.add(side);parsers[side].end(confirmed);},admission,async finish(){const result=await admission();fs.writeFileSync(path.join(directory,'load-collectors.json'),JSON.stringify(result,null,2),{flag:'wx'});return result;}};
 }

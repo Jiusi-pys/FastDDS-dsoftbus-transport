@@ -1,6 +1,76 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
-const CASES=['SHARED_W1','SHARED_W2','F1M'];
+const CASES=['SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME'];
+const INSTALLED_STAGES=['LISTENER_READY','MATCH','DATA_DONE','DDS_DELETED'];
+const isInstalled=c=>c.scenario==='INSTALLED_RUNTIME';
+// The installed runtime consumer reports INST_* receipts, never SHARED_*/N10/N100
+// events, so its stage and sample contracts are validated separately instead of
+// being expressed in the probe's grammar.
+function installedReceipts(c,fail){
+ const identities={},matches={},writes={A:{},B:{}},takes={A:{},B:{}},deletes={},exits={},perSide=c.expected_writes.A;
+ const kv=text=>Object.fromEntries([...text.matchAll(/(\w+)=([^ ]*)/g)].map(m=>[m[1],m[2]]));
+ const sideOf=r=>r.side;
+ function line(side,text){
+  if(!/^INST_(ID|MATCH|WRITE|TAKE|DELETE|EXIT) /.test(text))return false;
+  const r=kv(text),other=side==='A'?'B':'A';
+  // The consumer prints pid on INST_MAIN and INST_STAGE, not on INST_ID, so the
+  // pid identity is enforced where it is actually emitted: the launcher/collector
+  // main-line pattern and the controller's stage-line pid pin.
+  if(r.run!==c.run||sideOf(r)!==side){fail('INSTALLED_RECEIPT_IDENTITY');return true;}
+  if(text.startsWith('INST_ID ')){
+   if(identities[side]||![r.participant,r.writer,r.reader].every(x=>/^[0-9a-f]{32}$/.test(x||''))){fail('INSTALLED_ID_RECEIPT');return true;}
+   identities[side]=r;return true;
+  }
+  if(text.startsWith('INST_MATCH ')){
+   const own=identities[side];if(!own||matches[side]||Number(r.pub_matched)<1||Number(r.sub_matched)<1||r.writer!==own.writer||r.reader!==own.reader){fail('INSTALLED_MATCH_RECEIPT');return true;}
+   matches[side]=r;return true;
+  }
+  if(text.startsWith('INST_WRITE ')){
+   const own=identities[side],o=Number(r.ordinal);
+   if(!own||r.writer!==own.writer||r.rc!=='0'||!(o>=1&&o<=perSide)||writes[side][o]){fail('INSTALLED_WRITE_RECEIPT');return true;}
+   writes[side][o]=r;return true;
+  }
+  if(text.startsWith('INST_TAKE ')){
+   const own=identities[side],o=Number(r.ordinal);
+   // The peer's own create receipt may still be in flight: the two boards stream
+   // independently, so the cross-board writer identity is checked at DATA_DONE
+   // where both sides must have reported it, not at line arrival.
+   if(!own||r.reader!==own.reader||r.payload_ok!=='1'||r.writer_field!==String(other==='A'?1:2)||r.run_field!==String(BigInt('0x'+c.run))||!(o>=1&&o<=perSide)||takes[side][o]){fail('INSTALLED_TAKE_RECEIPT');return true;}
+   takes[side][o]=r;return true;
+  }
+  if(text.startsWith('INST_DELETE ')){
+   if(deletes[side]||r.entities_rc!=='0'||r.participant_rc!=='0'){fail('INSTALLED_DELETE_RECEIPT');return true;}
+   deletes[side]=r;return true;
+  }
+  if(text.startsWith('INST_EXIT ')){
+   if(exits[side]||r.result!=='0'||r.restored!=='1'){fail('INSTALLED_EXIT_RECEIPT');return true;}
+   exits[side]=r;return true;
+  }
+  return false;
+ }
+ function stage(name){
+  if(name!=='DATA_DONE')return true;
+  for(const side of ['A','B']){
+   const other=side==='A'?'B':'A',own=identities[side],peer=identities[other];
+   if(!own||!peer||!matches[side]){fail('INSTALLED_MATCH_BEFORE_DATA');return false;}
+   // This consumer learns the remote endpoint identity from the received sample,
+   // not from the match line, so the cross-board correlation below is the take's
+   // remote_writer against the peer's own created writer.
+   if(matches[side].writer!==own.writer||matches[side].reader!==own.reader){fail('INSTALLED_MATCH_LOCAL_IDENTITY');return false;}
+   for(let o=1;o<=perSide;++o){
+    const w=writes[side][o],t=takes[side][o];
+    if(!w||!t){fail('INSTALLED_INCOMPLETE_SAMPLE_LEDGER');return false;}
+    if(t.remote_writer!==peer.writer){fail('INSTALLED_SAMPLE_SOURCE');return false;}
+   }
+  }
+  return true;
+ }
+ function finish(){
+  for(const side of ['A','B'])if(!deletes[side]||!exits[side])return 'INSTALLED_MISSING_LIFECYCLE_RECEIPT';
+  return null;
+ }
+ return {line,stage,finish,report:()=>({identities,matches,writes,takes,deletes,exits})};
+}
 // The real entry verifies all materialized/window bytes before loading task code.
 let sharedControlModule;
 const sharedControl=()=>sharedControlModule||(sharedControlModule=require('./shared-control.cjs'));
@@ -8,11 +78,23 @@ const isShared=(...args)=>sharedControl().isShared(...args);
 const phasesFor=(...args)=>sharedControl().phasesFor(...args);
 const cycleCount=(...args)=>sharedControl().cycleCount(...args);
 const sharedReceipts=(...args)=>sharedControl().sharedReceipts(...args);
-const phases=c=>isShared(c)?phasesFor(c):['LISTENER_READY','NATIVE_READY',...(c.scenario==='F1M'?['MATCH','SAMPLE_1','SAMPLE_2','SAMPLE_3']:['MATCH']),'DATA_DONE','DELETE','DDS_DELETED'];
+const phases=c=>isInstalled(c)?INSTALLED_STAGES:isShared(c)?phasesFor(c):['LISTENER_READY','NATIVE_READY',...(c.scenario==='F1M'?['MATCH','SAMPLE_1','SAMPLE_2','SAMPLE_3']:['MATCH']),'DATA_DONE','DELETE','DDS_DELETED'];
 const LIBDIRS=['/system/lib64/platformsdk','/system/lib64/chipset-sdk-sp','/system/lib64/chipset-sdk','/system/lib64'];
 function buildCommands(c,expectedTokens){
  if(!expectedTokens)throw Error("Explicit token identity binding required");
- if(!/^[0-9a-f]{16}$/.test(c.run)||!CASES.includes(c.scenario)||c.delete_first!==(c.scenario==='SHARED_W2'?'A':'B')||JSON.stringify(c.system_library_dirs)!==JSON.stringify(LIBDIRS))throw Error('Invalid frozen DDS command');
+ if(!/^[0-9a-f]{16}$/.test(c.run)||!CASES.includes(c.scenario)||JSON.stringify(c.system_library_dirs)!==JSON.stringify(LIBDIRS))throw Error('Invalid frozen DDS command');
+ if(isInstalled(c)){
+  if(c.main_prefix!=='INST_MAIN'||c.main_mode!=='installed_runtime')throw Error('Installed process identity contract');
+  const budget=c.timeout_seconds;if(!Number.isInteger(budget)||budget<60||budget>600)throw Error('Installed window deadline contract');
+  if(!/^[a-z0-9.]{1,40}$/.test(c.service_prefix||'')||!/^[A-Za-z0-9_.]{1,64}$/.test(c.package_name||''))throw Error('Installed service identity');
+  const commands={};for(const side of ['A','B']){
+   const root=`/data/local/tmp/mdds_dds_${c.run}_${side}`;if(c.remote[side]!==root||c.token[side]!==expectedTokens[side]||!/^([1-9][0-9]*)$/.test(expectedTokens[side])||!/^[0-9a-f]{64}$/.test(c.peer[side]))throw Error('Identity');
+   // Fixed argv, never assembled through a shell evaluation.
+   const args=[side==='A'?'0':'1',c.peer[side],c.package_name,c.service_prefix,c.run,c.token[side],root+'/control'];
+   commands[side]=`cd ${root} && env -i PATH=/system/bin:/system/xbin LD_LIBRARY_PATH=${root}:${LIBDIRS.join(':')} SKIP_DEFAULT_XML=1 timeout ${budget} ${root}/${c.main_member} ${args.join(' ')}; rc=$?; echo REMOTE_EXIT=$rc; exit $rc`;
+  }return commands;
+ }
+ if(c.delete_first!==(c.scenario==='SHARED_W2'?'A':'B'))throw Error('Invalid frozen DDS command');
  const cycles=cycleCount(c);if(!Number.isInteger(cycles)||cycles<1||cycles>100||cycles>1&&!isShared(c))throw Error("Invalid cycles");const budget=cycles>1?180+330*cycles:180;if(cycles>1&&c.timeout_seconds!==budget)throw Error("Cycle deadline contract");
  const commands={};for(const side of ['A','B']){
   const root=`/data/local/tmp/mdds_dds_${c.run}_${side}`;if(c.remote[side]!==root||c.token[side]!==expectedTokens[side]||!/^([1-9][0-9]*)$/.test(expectedTokens[side])||!/^[0-9a-f]{64}$/.test(c.peer[side]))throw Error('Identity');
@@ -21,11 +103,12 @@ function buildCommands(c,expectedTokens){
  }return commands;
 }
 function createController(c,release,admission){
- const stages=phases(c);const progress={A:0,B:0},pids={},identities={},matches={},programResults={};let first=null,chain=Promise.resolve(),receiptSequence=0,cleanupOverflow=false;const failureCleanup=[];const released=[],issued=[],deletion_order=[];const firstSide=c.delete_first,secondSide=firstSide==='A'?'B':'A';
+ const stages=phases(c);const progress={A:0,B:0},pids={},identities={},matches={},programResults={};let first=null,chain=Promise.resolve(),receiptSequence=0,cleanupOverflow=false;const failureCleanup=[];const released=[],issued=[],deletion_order=[];const installed=isInstalled(c);const firstSide=installed?null:c.delete_first,secondSide=installed?null:(c.delete_first==='A'?'B':'A');
  const secondary=[];const fail=why=>{if(first!==null){if(secondary.length<8)secondary.push(String(why));return;}first=String(why);try{release.cancel?.({requester:'controller',first_failure:first});}catch(e){if(secondary.length<8)secondary.push(String(e));}};const kv=line=>Object.fromEntries([...line.matchAll(/(\w+)=([^ ]*)/g)].map(m=>[m[1],m[2]]));
  const queue=fn=>{chain=chain.then(async()=>{if(!first)await fn()}).catch(e=>fail(String(e)))};
  const send=async(s,t)=>{if(first)return;issued.push(s+t);await release(s,t);released.push(s+t)};
  const shared=sharedReceipts(c,fail,issued);
+ const receipts=installed?installedReceipts(c,fail):null;
  return {stop:fail,line(side,text){
   if(isShared(c)&&text.startsWith('SHARED_RESULT ')){
    const r=kv(text);if(r.run!==c.run||r.side!==(side==='A'?'0':'1')||Number(r.cycles)!==cycleCount(c)||programResults[side]){fail('PROGRAM_RESULT_IDENTITY_OR_DUPLICATE');return;}
@@ -39,18 +122,20 @@ function createController(c,release,admission){
    }
   }
   if(isShared(c)&&shared.line(side,text))return;
-  if(text.startsWith('DDS_IDENTITIES ')||text.startsWith('DDS_MATCH ')){const data=kv(text),target=text.startsWith('DDS_MATCH ')?matches:identities;if(data.side!==(side==='A'?'0':'1')||target[side]){fail('DUPLICATE_OR_WRONG_ENDPOINT_RECEIPT');return;}target[side]=data;return;}
-  const m=/^DDS_STAGE run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) stage=([A-Z_0-9]+)$/.exec(text);if(!m)return;
+  if(installed&&receipts.line(side,text))return;
+  if(!installed&&(text.startsWith('DDS_IDENTITIES ')||text.startsWith('DDS_MATCH '))){const data=kv(text),target=text.startsWith('DDS_MATCH ')?matches:identities;if(data.side!==(side==='A'?'0':'1')||target[side]){fail('DUPLICATE_OR_WRONG_ENDPOINT_RECEIPT');return;}target[side]=data;return;}
+  const m=(installed?/^INST_STAGE run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) stage=([A-Z_0-9]+)$/:new RegExp('^DDS_STAGE run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) stage=([A-Z_0-9]+)$')).exec(text);if(!m)return;
   if(m[1]!==c.run||m[2]!==side||m[4]!==stages[progress[side]]||(pids[side]&&pids[side]!==m[3])){fail('CONTROL_IDENTITY_OR_ORDER');return;}pids[side]=m[3];const index=progress[side]++;
-  if(index<stages.length-2&&progress.A>index&&progress.B>index){queue(async()=>{
+  if(index<(installed?stages.length-1:stages.length-2)&&progress.A>index&&progress.B>index){queue(async()=>{
     if(isShared(c)&&!shared.stage(stages[index]))return;
+    if(installed&&!receipts.stage(stages[index]))return;
     if(index===0){const proof=await admission();if(first)return;if(!proof.A?.pass||!proof.B?.pass){fail('LOAD_CAPTURE_FAILED');return;}}
-    if(stages[index]==='MATCH'){for(const s of ['A','B']){const d=s==='A'?'B':'A',i=identities[s],j=identities[d],m=matches[s];if(!i||!j||!m||![i.writer,i.reader,j.writer,j.reader].every(x=>/^[0-9a-f]{32}$/.test(x))||m.writer!==i.writer||m.reader!==i.reader||m.remote_writer!==j.writer||m.remote_reader!==j.reader||i.writer.slice(0,24)===j.writer.slice(0,24)){fail('CROSS_BOARD_MATCH_IDENTITY');return;}}}
+    if(!installed&&stages[index]==='MATCH'){for(const s of ['A','B']){const d=s==='A'?'B':'A',i=identities[s],j=identities[d],m=matches[s];if(!i||!j||!m||![i.writer,i.reader,j.writer,j.reader].every(x=>/^[0-9a-f]{32}$/.test(x))||m.writer!==i.writer||m.reader!==i.reader||m.remote_writer!==j.writer||m.remote_reader!==j.reader||i.writer.slice(0,24)===j.writer.slice(0,24)){fail('CROSS_BOARD_MATCH_IDENTITY');return;}}}
     for(const s of ['A','B'])await send(s,stages[index]);
    });}
-  if(index===stages.length-2&&progress.A>=stages.length-1&&progress.B>=stages.length-1)queue(()=>send(firstSide,stages[stages.length-2]));
-  if(index===stages.length-1){if(isShared(c)&&!shared.stage(stages[index],side))return;if((deletion_order.length===0?firstSide:secondSide)!==side||!issued.includes(side+stages[stages.length-2])){fail('DDS_DELETE_ORDER');return;}deletion_order.push(side);if(side===firstSide)queue(()=>send(secondSide,stages[stages.length-2]));}
- },end(side,confirmed){if(!confirmed)fail('COLLECTOR_INCOMPLETE_'+side);else if(progress[side]!==stages.length)fail('EARLY_COLLECTOR_CLOSE_'+side);},async finish(){let pending;do{pending=chain;await pending;}while(pending!==chain);return {pass:!first&&progress.A===stages.length&&progress.B===stages.length&&released.length===2*(stages.length-2)+2&&deletion_order.length===2,first_failure:first||((progress.A!==stages.length||progress.B!==stages.length)?'INCOMPLETE_STAGES':null),secondary_failures:secondary,program_results:programResults,failure_cleanup_observations:failureCleanup,cleanup_observation_overflow:cleanupOverflow,released,issued,deletion_order,identities,matches,shared:isShared(c)?shared.report():null};}};
+  if(!installed&&index===stages.length-2&&progress.A>=stages.length-1&&progress.B>=stages.length-1)queue(()=>send(firstSide,stages[stages.length-2]));
+  if(!installed&&index===stages.length-1){if(isShared(c)&&!shared.stage(stages[index],side))return;if((deletion_order.length===0?firstSide:secondSide)!==side||!issued.includes(side+stages[stages.length-2])){fail('DDS_DELETE_ORDER');return;}deletion_order.push(side);if(side===firstSide)queue(()=>send(secondSide,stages[stages.length-2]));}
+ },end(side,confirmed){if(!confirmed)fail('COLLECTOR_INCOMPLETE_'+side);else if(progress[side]!==stages.length)fail('EARLY_COLLECTOR_CLOSE_'+side);},async finish(){let pending;do{pending=chain;await pending;}while(pending!==chain);if(installed){const late=receipts.finish();if(late)fail(late);}return {pass:!first&&progress.A===stages.length&&progress.B===stages.length&&released.length===(installed?2*(stages.length-1):2*(stages.length-2)+2)&&(installed||deletion_order.length===2),first_failure:first||((progress.A!==stages.length||progress.B!==stages.length)?'INCOMPLETE_STAGES':null),secondary_failures:secondary,program_results:programResults,failure_cleanup_observations:failureCleanup,cleanup_observation_overflow:cleanupOverflow,released,issued,deletion_order,identities,matches,shared:isShared(c)?shared.report():null};}};
 }
 function createControlRelease(c,directory,{spawn=require('node:child_process').spawn,timeoutMs=7000,drainMs=250}={}){
  if(!path.isAbsolute(c.hdc_path)||!Number.isInteger(timeoutMs)||timeoutMs<1||!Number.isInteger(drainMs)||drainMs<1||drainMs>1000)throw Error('Explicit control executable/deadline required');
@@ -96,7 +181,24 @@ function createControlRelease(c,directory,{spawn=require('node:child_process').s
  release.cancel=({requester='controller',first_failure,command_id}={})=>{for(const {r,terminate} of active.values())if(!command_id||command_id===r.command_id)terminate({requester,reason:'CONTROLLER_FAILURE',first_failure});};
  release.receipts=receipts;return release;
 }
+// The process identity rule is read from the frozen window config, so the
+// launcher gate, the load collector and the receipt checks cannot drift apart.
+function mainLinePattern(c,side){
+ if(c.main_prefix!=='INST_MAIN'||c.main_mode!=='installed_runtime')throw Error('Installed process identity contract');
+ // Built from the scenario's fixed literals, never from free configuration, so a
+ // recorded program that is not this consumer can never start B or its collector.
+ if(!/^[0-9a-f]{16}$/.test(c.run)||!['A','B'].includes(side))throw Error('Installed main run/side');
+ return new RegExp('^INST_MAIN run='+c.run+' side='+side+' pid=[1-9][0-9]* mode=installed_runtime ');}
 function createDataDispatcher(c,directory){
+ if(isInstalled(c)){const ledger=path.join(path.resolve(directory,'../..'),'installed-runtime','attempt-ledger');
+  if(c.simulated!==true&&(!Number.isInteger(c.installed_attempt)||![1,2].includes(c.installed_attempt)))throw Error('INSTALLED_ATTEMPT_SCOPE');
+  const claim=path.join(ledger,c.simulated===true?'data.json':`data-${c.installed_attempt}.json`);const nonce=require('node:crypto').randomUUID();
+  return (side,executable,argv)=>{if(!['A','B'].includes(side))throw Error('DATA_DISPATCH_SIDE');const receipt={scope:c.work_package,run:c.run,window:path.resolve(directory),side,host_pid:process.pid,kind:'DATA_DISPATCH_INTENT',remote_execution:'UNOBSERVED_AT_INTENT',executable,argv_sha256:require('node:crypto').createHash('sha256').update(JSON.stringify(argv)).digest('hex'),host_monotonic_ns:String(process.hrtime.bigint()),simulated:c.simulated===true};
+   receipt.node_nonce=nonce;
+   if(c.simulated!==true)receipt.attempt=c.installed_attempt;
+   if(side==='A'){fs.mkdirSync(ledger,{recursive:true});fs.writeFileSync(claim,JSON.stringify(receipt,null,2),{flag:'wx'});fs.writeFileSync(path.join(directory,'DATA_ATTEMPT_STARTED'),JSON.stringify(receipt,null,2),{flag:'wx'});}
+   else {const owner=JSON.parse(fs.readFileSync(claim,'utf8'));if(owner.run!==c.run||owner.window!==path.resolve(directory)||owner.node_nonce!==nonce||owner.host_pid!==process.pid)throw Error('FOREIGN_OR_RESTARTED_DISPATCH');}
+   fs.writeFileSync(path.join(directory,`data-dispatch-${side}.json`),JSON.stringify(receipt,null,2),{flag:'wx'});};}
  const scope='N10_OBSERVED_RETRY_AND_CONDITIONAL_N100';
  if(c.work_package!==scope)return ()=>{};
  const task=path.resolve(directory,'../..'),nonce=require('node:crypto').randomUUID();
@@ -120,8 +222,14 @@ function readBoundPrivate(c){
  const proof=c.task_contract;if(!proof||!path.isAbsolute(proof.task_root))throw Error('Explicit task binding required');
  const contractBytes=fs.readFileSync(proof.freeze_path),privateBytes=fs.readFileSync(path.join(proof.task_root,'PRIVATE_CONFIG.json'));
  const frozen=JSON.parse(contractBytes),privateConfig=JSON.parse(privateBytes);
+ for(const key of ['local_contract_test','execution_admitted','device_authorized','device_evidence'])if(Object.hasOwn(frozen,key)&&typeof frozen[key]!=='boolean')throw Error('Contract mode field must be a JSON boolean: '+key);
  if(digest(contractBytes)!==proof.freeze_sha256||digest(privateBytes)!==c.private_config_sha256||frozen.private_config_sha256!==c.private_config_sha256||privateConfig.task_root!==proof.task_root||privateConfig.hdc_path!==c.hdc_path||JSON.stringify(privateConfig.targets)!==JSON.stringify(c.targets))throw Error('Private identity/contract drift');
- if(frozen.execution_admitted!==true||frozen.task_root!==proof.task_root||frozen.scope!==c.work_package)throw Error('Independent execution gates incomplete');
+ const localInstalled=isInstalled(c)&&frozen.scope==='INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER'&&frozen.local_contract_test===true;
+ if(localInstalled){
+  const d=frozen.local_driver,base=path.resolve(proof.task_root),sandbox=d&&path.resolve(d.sandbox_root||'');
+  if(frozen.execution_admitted===true||frozen.device_authorized===true||frozen.device_evidence===true||!d||d.kind!=='LOCAL_FAKE_SANDBOX'||path.resolve(d.test_root||'')!==base||!sandbox.startsWith(base+path.sep)||!path.resolve(c.hdc_path).startsWith(base+path.sep)||path.basename(c.hdc_path)!=='fake-hdc.exe'||c.simulated!==true||c.targets.A!=='SIM-A'||c.targets.B!=='SIM-B'||typeof frozen.local_test_basis!=='string'||!frozen.local_test_basis)throw Error('Installed local contract boundary');
+ }else if(frozen.execution_admitted!==true)throw Error('Independent execution gates incomplete');
+ if(frozen.task_root!==proof.task_root||frozen.scope!==c.work_package)throw Error('Independent execution gates incomplete');
  const materializationBytes=fs.readFileSync(path.join(proof.task_root,'MATERIALIZATION.json'));
  if(digest(materializationBytes)!==frozen.materialization_sha256)throw Error('Materialization descriptor drift');
  const materialization=JSON.parse(materializationBytes),required=["executor-route-query/launch.ps1", "executor-route-query/prepare-query.py", "executor-route-query/query_receipt.py", "executor-route-query/route_query.py", "executor-route-query/run-window.ps1", "executor/bounded-output.cjs", "executor/capture-load.sh", "executor/load_origin.py", "executor/observe-native.cjs", "executor/prepare-window.py", "executor/private_config.py", "executor/record-pair.cjs", "executor/route_binding.py", "executor/run-window.ps1", "executor/runner-template.cjs", "executor/shared-control.cjs", "executor/task_contract.py"];
@@ -150,10 +258,10 @@ async function main(){
  const observer=createLoadObserver({config:c,directory:__dirname});const controller=createController(c,release,observer.admission);
  const fds={},sinks={},lines={};for(const side of ['A','B']){fds[side]={stdout:fs.openSync(path.join(__dirname,side+'.raw.stdout.log'),'wx'),stderr:fs.openSync(path.join(__dirname,side+'.raw.stderr.log'),'wx')};sinks[side]=createBoundedSink({cap:c.stdout_budget,write:()=>{},overflow:()=>controller.stop('OUTPUT_OVERFLOW_'+side)});lines[side]=createLines(line=>controller.line(side,line),reason=>controller.stop(reason+'_'+side));}
  fs.writeFileSync(path.join(__dirname,'commands.json'),JSON.stringify(commands,null,2),{flag:'wx'});
- const transitions=[];const result=await runRecordPair({onBeforeStart:createDataDispatcher(c,__dirname),executable:c.hdc_path,targets:c.targets,commands,timeoutMs:(c.timeout_seconds+15)*1000,drainGraceMs:250,env:{...process.env,Path:path.dirname(c.hdc_path)+';'+(process.env.Path||process.env.PATH||'')},onTransition:e=>{transitions.push(e);if(e.event==='TERMINATION_REQUEST'||e.event==='TERMINATION_RESULT')fs.writeFileSync(path.join(__dirname,`business-${e.role}-${e.event.toLowerCase()}.json`),JSON.stringify({run:c.run,side:e.role,phase:'WINDOW_COLLECTION',...e},null,2),{flag:'wx'});if(e.event==='OUTPUT_ERROR'||e.event==='EXIT_DRAIN_INCOMPLETE'||e.event==='COLLECTOR_ERROR'||e.event==='DISPATCH_REFUSED_OR_SPAWN_FAILED')controller.stop(e.event+'_'+e.role+(e.error?':'+e.error:''));},onStreamEnd:(side,confirmed)=>{lines[side].end(confirmed);observer.end(side,confirmed);controller.end(side,confirmed);},onOutput:(side,stream,data)=>{const before=sinks[side].state().retained;sinks[side].feed(data);const n=sinks[side].state().retained-before;if(n)fs.writeSync(fds[side][stream],data.subarray(0,n));observer.output(side,stream,data);if(stream==='stdout')lines[side](data);}});
+ const transitions=[];const result=await runRecordPair({onBeforeStart:createDataDispatcher(c,__dirname),executable:c.hdc_path,targets:c.targets,commands,timeoutMs:(c.timeout_seconds+15)*1000,drainGraceMs:250,mainLineRegex:mainLinePattern(c,'A'),env:{...process.env,Path:path.dirname(c.hdc_path)+';'+(process.env.Path||process.env.PATH||'')},onTransition:e=>{transitions.push(e);if(e.event==='TERMINATION_REQUEST'||e.event==='TERMINATION_RESULT')fs.writeFileSync(path.join(__dirname,`business-${e.role}-${e.event.toLowerCase()}.json`),JSON.stringify({run:c.run,side:e.role,phase:'WINDOW_COLLECTION',...e},null,2),{flag:'wx'});if(e.event==='OUTPUT_ERROR'||e.event==='EXIT_DRAIN_INCOMPLETE'||e.event==='COLLECTOR_ERROR'||e.event==='DISPATCH_REFUSED_OR_SPAWN_FAILED')controller.stop(e.event+'_'+e.role+(e.error?':'+e.error:''));},onStreamEnd:(side,confirmed)=>{lines[side].end(confirmed);observer.end(side,confirmed);controller.end(side,confirmed);},onOutput:(side,stream,data)=>{const before=sinks[side].state().retained;sinks[side].feed(data);const n=sinks[side].state().retained-before;if(n)fs.writeSync(fds[side][stream],data.subarray(0,n));observer.output(side,stream,data);if(stream==='stdout')lines[side](data);}});
  const phase=await controller.finish(),loads=await observer.finish();for(const side of ['A','B'])for(const fd of Object.values(fds[side]))fs.closeSync(fd);
  const out={...result,run:c.run,scenario:c.scenario,activeCollectors:result.activeCollectors.map(({role,pid})=>({role,pid})),controller:phase,loads,transitions,controls:controlReceipts,log_retention:Object.fromEntries(['A','B'].map(s=>[s,sinks[s].state()])),pass:result.pass&&phase.pass&&Object.values(loads).every(x=>x.pass)&&Object.values(sinks).every(x=>x.state().complete)};
  fs.writeFileSync(path.join(__dirname,'result.json'),JSON.stringify(out,null,2),{flag:'wx'});process.exitCode=out.pass?0:1;
 }
-module.exports={readBoundPrivate,createDataDispatcher,createControlRelease,buildCommands,createController,phases,CASES};
+module.exports={readBoundPrivate,createDataDispatcher,createControlRelease,buildCommands,createController,phases,CASES,isInstalled,installedReceipts,INSTALLED_STAGES};
 if(require.main===module)main().catch(e=>{console.error(e.stack||String(e));process.exitCode=1;});

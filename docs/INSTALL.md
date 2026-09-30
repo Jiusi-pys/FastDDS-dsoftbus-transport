@@ -1,5 +1,26 @@
 # MDDS installed library and external consumers
 
+## Latest bounded device result
+
+The installed public consumer has one independently accepted dual-board window:
+
+- query: `52093e521faf0dcb`;
+- data: `73ff0560343b4afb`;
+- A and B: five writes and five Reader takes each, with per-sample peer Writer
+  GUID, DDS sequence number, ordinal, run field and payload checks;
+- listener readiness was observed on both sides before connection release;
+- the observed close sequence was public DDS deletion, `Runtime::Close`, token
+  restoration, the `DDS_DELETED` receipt, process exit and remote exit 0; the public
+  DDS deletion API occurs before Runtime close.
+
+This is evidence for the bounded installed-runtime configuration. It does not
+qualify the default backend or establish SDK epoch, internal drain, cancellation,
+complete SDK module closure, PF/P0/P4, or production readiness. The accepted
+window used the real installed consumer and current package provenance; it did
+not use the local Fake driver, local claims, simulated permission state, or local
+`NO_STATE_CHANGE` recovery. See [the acceptance record](INSTALLED_RUNTIME_ACCEPTANCE.md)
+for the source and evidence boundaries.
+
 This package delivers the existing SDK-free cores and default descriptor, plus an
 optional, isolated public-Socket runtime. Installation is not production qualification.
 Default `DSoftBusTransportDescriptor::create_transport()` still creates a transport
@@ -7,7 +28,8 @@ whose valid initialization reports `NativeBackendUnavailable`. P0/PF/P4 remain u
 
 ## Current delivery checkpoint
 
-The current library delivery has **local execution and static target evidence**.
+The current library delivery has **local execution, static target evidence, and a
+separate bounded installed-runtime device result**.
 The complete r1 CONFIG result is `524/524 PASS` (677.01 s). The r2
 affected closure rechecked installation, moved-prefix external consumers, Host DDS and
 default-Unavailable behavior, relative-dependency negative cases, Debug/Experimental/
@@ -15,9 +37,10 @@ empty-release-map rejection, real Fake-option exclusion, API23 real-library comp
 relocated external consumer `$ORIGIN` behavior and a limited ASan scope. The r2 tester
 and formal review both PASS.
 
-The new package proves Host/compile/static API23 boundaries. It does not prove device
-execution, SDK runtime behavior, DSoftBus traffic, production readiness, P0/PF/P4 or a
-QualificationProfile. Device/HDC execution for this delivery is `0`. The one nested DLL
+The library package itself proves Host/compile/static API23 boundaries. The separate
+installed-runtime acceptance proves the listed consumer window with the declared
+package and platform inputs. It does not prove SDK runtime behavior beyond that
+window, production readiness, P0/PF/P4 or a QualificationProfile. The one nested DLL
 allocator-injection case was `SKIPPED` because it was not triggered; it is not counted as
 a failure or as allocator coverage. Existing P-first N10 and Q-first N100 records retain
 their original run/package identities and are not relabeled as this library delivery.
@@ -61,6 +84,11 @@ The concrete macro-dependent `DSoftBusTransport` class, Host facade injection,
 not installed. Consumers use the stable descriptor, Fast DDS `TransportInterface`,
 and optional `experimental::Runtime` pimpl. No consumer includes probes, tests or
 artifacts. Fake SDK test libraries and implementation files are not installed.
+
+The repository example at `examples/installed_runtime_dual_board` is the explicit
+experimental installed-consumer entry point. It uses public installed headers and
+exported targets; it does not embed board identities, tokens, routes or permission
+files and is separate from Host/Fake test targets.
 
 ## Host build, install and relocated consumption
 

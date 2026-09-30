@@ -2,6 +2,7 @@
 #include <mdds/dsoftbus/DSoftBusTransportDescriptor.hpp>
 #include <mdds/dsoftbus/PublicSocketBackend.hpp>
 #include <mdds/dsoftbus/NativeSendExecution.hpp>
+#include <functional>
 #include <memory>
 
 namespace mdds::dsoftbus::experimental {
@@ -16,6 +17,19 @@ public:
     ~Runtime();
     Runtime(const Runtime&) = delete;
     Runtime& operator=(const Runtime&) = delete;
+    // Opt-in, one-shot coordinator for the existing isolated assembly hook. It
+    // runs exactly once inside this runtime's transport creation, after this
+    // side's listener is published and before the outgoing native connect, so a
+    // caller can wait for a peer's listener without retrying the connect. The
+    // callable receives no socket, record, owner or lease handle and must not
+    // start a second lifecycle; returning false fails the connect. Leaving it
+    // unset keeps the previous unconditional continue. Set it before
+    // MakeDescriptor; a later call is rejected and changes nothing. The gate is
+    // owned by this Runtime; another Runtime's gate is independent. A replacement
+    // before descriptor issuance affects only this Runtime. Pass an empty
+    // function to clear its gate. The callable is retained by value throughout
+    // its synchronous invocation. Returns whether the requested state was applied.
+    bool SetPreConnectGate(std::function<bool()>);
     // Both descriptor issuance and actual transport factory invocation are one-shot.
     std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>
     MakeDescriptor(const DSoftBusTransportDescriptor&);

@@ -6,7 +6,7 @@ QUERY_SHA256='d01365fc20d70206a1ddeb32c5c278642125f5c1eb49f80754b2d1c8350a172b'
 PERMISSION_SHA256='c99bd1641c7802acd11e70bdd6da6cc86fd08380b19fe56694ca37837de5a0f2'
 def digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
-def prepare(destination,preflight_path,provenance,contract_path=None,query_cycles=None):
+def prepare(destination,preflight_path,provenance,contract_path=None,query_cycles=None,retry=None):
     if query_cycles is not None and (type(query_cycles) is not int or query_cycles not in (10,100)):raise ValueError('Invalid explicit query purpose')
     repo=Path.cwd().resolve();here=Path(__file__).resolve().parent
     destination=Path(destination).resolve();preflight_path=Path(preflight_path).resolve();provenance=Path(provenance).resolve()
@@ -42,6 +42,9 @@ def prepare(destination,preflight_path,provenance,contract_path=None,query_cycle
       'command_contract':'--list-nodes --expected-token <board-token> --preflight-confirmed',
       'scope':'CURRENT_PUBLIC_DIRECTORY_ONLY; NO_SOCKET; DDS_NOT_RUN'}
     frozen=json.loads(Path(task_contract['freeze_path']).read_text())
+    if frozen['scope']==contract.INSTALLED_SCOPE and frozen.get('local_contract_test') is not True:
+        config['installed_attempt']=contract.installed_next_attempt()
+        if retry:config['retry_evidence']={'path':str(Path(retry).resolve()),'sha256':digest(retry)}
     if frozen['scope']==contract.OBSERVED_SCOPE:
         config['work_package']=frozen['scope'];config['query_for_cycles']=query_cycles
         if query_cycles==100:
@@ -56,5 +59,5 @@ def prepare(destination,preflight_path,provenance,contract_path=None,query_cycle
     return {'run':run,'window':str(destination),'status':'FROZEN_NOT_EXECUTED','scope':config['scope']}
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('destination',type=Path);p.add_argument('--preflight-config',type=Path,required=True);p.add_argument('--helper-provenance',type=Path,required=True);p.add_argument('--contract',type=Path);p.add_argument('--for-cycles',type=int,choices=[10,100])
-    a=p.parse_args();print(json.dumps(prepare(a.destination,a.preflight_config,a.helper_provenance,a.contract,a.for_cycles)))
+    p=argparse.ArgumentParser();p.add_argument('destination',type=Path);p.add_argument('--preflight-config',type=Path,required=True);p.add_argument('--helper-provenance',type=Path,required=True);p.add_argument('--contract',type=Path);p.add_argument('--for-cycles',type=int,choices=[10,100]);p.add_argument('--retry',type=Path)
+    a=p.parse_args();print(json.dumps(prepare(a.destination,a.preflight_config,a.helper_provenance,a.contract,a.for_cycles,a.retry)))

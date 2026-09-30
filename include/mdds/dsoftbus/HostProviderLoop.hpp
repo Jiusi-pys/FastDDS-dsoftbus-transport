@@ -4,6 +4,7 @@
 #include <mdds/dsoftbus/DSoftBusTransport.hpp>
 #include <mdds/dsoftbus/NativeSendExecution.hpp>
 #include <mdds/dsoftbus/ProviderAdapter.hpp>
+#include <functional>
 namespace mdds::dsoftbus::host_test {
 // Observation of the work actually selected by a shared runtime pump. It grants
 // no authority and carries neither owners nor SDK generations.
@@ -51,6 +52,10 @@ public:
     static std::shared_ptr<HostProviderLoop> CreateShared(std::shared_ptr<phase0::NativeBackend>,
             std::shared_ptr<ProcessReceiveObserver> = {});
     std::shared_ptr<HostProviderLoop> Join() noexcept;
+    // Internal assembly seam, not installed. The owning Runtime supplies its
+    // optional coordination gate here; the loop arms it for exactly one
+    // Initialize() call on the calling thread. Refused once the loop has started.
+    bool SetPreConnectGate(std::function<bool()>);
     bool Start(const DSoftBusTransportDescriptor&) noexcept override;
     InputOpenResult Open(const Locator&, InputChannels::Receiver*) noexcept override;
     bool InputCloseAllowedOnThisThread() const noexcept override;

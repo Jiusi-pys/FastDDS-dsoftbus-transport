@@ -45,7 +45,65 @@ foreach ($name in @('task-contract-check.stdout.log','task-contract-check.stderr
 $proofContract = [IO.Path]::GetFullPath([string]$cfg.task_contract.freeze_path)
 if ((Split-Path -Parent $proofContract) -ine $taskRoot -or (Get-FileHash -LiteralPath $proofContract).Hash.ToLowerInvariant() -cne $cfg.task_contract.freeze_sha256) {throw 'Contract bootstrap identity changed'}
 $bootstrapFreeze = Get-Content -Raw -LiteralPath $proofContract | ConvertFrom-Json
-if ($bootstrapFreeze.execution_admitted -ne $true -or [IO.Path]::GetFullPath([string]$bootstrapFreeze.task_root) -ine $taskRoot) {throw 'Execution contract not admitted'}
+# ---- bootstrap mode dispatch ------------------------------------------------
+# StrictMode stays on. Optional contract fields are probed for existence before
+# their value is read, so a device contract that legitimately omits the local
+# fields cannot raise PropertyNotFoundException. No condition is shared between
+# the two modes: each branch validates itself fully, so one branch can never mask
+# an illegal state in the other. Nothing here converts a non-boolean into a
+# permission.
+function Read-ContractBool([object]$Object, [string]$Name) {
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) { return $null }
+    if ($property.Value -isnot [bool]) { throw "Contract field '$Name' must be a JSON boolean" }
+    return [bool]$property.Value
+}
+function Read-ContractString([object]$Object, [string]$Name, [bool]$Required) {
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        if ($Required) { throw "Contract field '$Name' is required" }
+        return $null
+    }
+    if ($property.Value -isnot [string] -or ([string]$property.Value).Length -eq 0) {
+        throw "Contract field '$Name' must be a non-empty string"
+    }
+    return [string]$property.Value
+}
+if ([IO.Path]::GetFullPath([string]$bootstrapFreeze.task_root) -ine $taskRoot) {throw 'Execution contract bound to another task'}
+$bootstrapLocal   = Read-ContractBool $bootstrapFreeze 'local_contract_test'
+$bootstrapAdmit   = Read-ContractBool $bootstrapFreeze 'execution_admitted'
+$bootstrapDeviceE = Read-ContractBool $bootstrapFreeze 'device_evidence'
+$bootstrapDeviceA = Read-ContractBool $bootstrapFreeze 'device_authorized'
+if ($null -eq $bootstrapLocal -or $bootstrapLocal -eq $false) {
+    # Device mode. The admission rule is unchanged from the reviewed contract.
+    if ($bootstrapDeviceE -eq $true) {throw 'Device contract may not carry local-test authority fields'}
+    if ($bootstrapFreeze.scope -ceq 'INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER') {
+        if ($bootstrapDeviceA -ne $true -or $bootstrapFreeze.PSObject.Properties['local_driver'] -or $bootstrapFreeze.PSObject.Properties['local_test_basis']) {throw 'Installed device authorization/driver boundary'}
+    } elseif ($bootstrapDeviceA -eq $true) {throw 'Device contract may not carry local-test authority fields'}
+    if ($bootstrapAdmit -ne $true) {throw 'Execution contract not admitted'}
+} else {
+    # Local contract test mode. It claims no device authority of any kind and it
+    # may not hold the device admission record.
+    if ($bootstrapDeviceE -eq $true) {throw 'A local contract test may not claim device evidence'}
+    if ($bootstrapDeviceA -eq $true) {throw 'A local contract test may not claim device authorization'}
+    if ($bootstrapAdmit -eq $true) {throw 'A local contract test may not claim the device admission record'}
+    $null = Read-ContractString $bootstrapFreeze 'local_test_basis' $true
+    $localDriverProperty = $bootstrapFreeze.PSObject.Properties['local_driver']
+    if ($null -eq $localDriverProperty -or $null -eq $localDriverProperty.Value) {throw 'Local contract test needs a declared local driver'}
+    $localDriver = $localDriverProperty.Value
+    if ((Read-ContractString $localDriver 'kind' $true) -cne 'LOCAL_FAKE_SANDBOX') {throw 'Unsupported local driver kind'}
+    $localTestRoot  = [IO.Path]::GetFullPath((Read-ContractString $localDriver 'test_root' $true))
+    $localSandbox   = [IO.Path]::GetFullPath((Read-ContractString $localDriver 'sandbox_root' $true))
+    if (-not $localTestRoot.Equals($taskRoot, [StringComparison]::OrdinalIgnoreCase)) {throw 'Local test root must be this task root'}
+    if (-not $localSandbox.StartsWith($localTestRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {throw 'Local sandbox root must live inside the local test root'}
+    # Bind the device tool this window will actually execute, before any
+    # subcommand is spawned. Selecting the real device tool is refused here.
+    $driverName = [IO.Path]::GetFileName($hdcPath)
+    if ($driverName -ieq 'hdc' -or $driverName -ieq 'hdc.exe') {throw 'Local contract test must not select the device tool'}
+    if (-not $hdcPath.StartsWith($localTestRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {throw 'Local driver must live inside the declared local test root'}
+    if (-not (Test-Path -LiteralPath $hdcPath -PathType Leaf)) {throw 'Local driver is missing'}
+}
+
 $bootstrapValidator = Join-Path $taskRoot 'executor/task_contract.py'
 $validatorBindings = @($bootstrapFreeze.execution_files | Where-Object {
     $entryPath = [string]$_.path
@@ -98,6 +156,10 @@ foreach ($artifact in $cfg.package_artifacts) {
 
 # Load project code only after contract, dependency and guard hashes pass.
 . (Join-Path $repoRoot 'scripts\NativePermissionGuard.ps1')
+if ($bootstrapLocal -eq $true -or $bootstrapFreeze.scope -ceq 'INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER') {
+    & python $contractValidator --claim-query (Join-Path $windowRoot 'window.json')
+    if ($LASTEXITCODE -ne 0) {throw 'Local test query claim refused'}
+}
 [IO.File]::WriteAllText((Join-Path $windowRoot 'EXECUTION_STARTED'), [DateTime]::UtcNow.ToString('o'), $utf8)
 
 
@@ -203,7 +265,7 @@ function Assert-ProcessAbsent([string]$Board, [string]$Step) {
 
     $record = Invoke-Remote -Board $Board -Step $Step -CommandText 'ps -A'
 
-    if ($record.Text -match 'fastdds_socket|public_socket|native_permiss|softbus_record|softbus_recor') {throw "Experiment or permission process still present on $Board"}
+    if ($record.Text -match 'fastdds_socket|public_socket|native_permiss|softbus_record|softbus_recor|mdds_installed') {throw "Experiment or permission process still present on $Board"}
 
 }
 

@@ -26,8 +26,14 @@ def analyze(directory, config, side):
             key, value = line.split('=',1)
             check(key not in status, 'DUPLICATE_STATUS_KEY')
             status[key] = value
+    modeled = config.get('simulated') is True
+    check(status.get('scope') == 'LOCAL_MODELED_CAPTURE' if modeled else
+          status.get('scope') != 'LOCAL_MODELED_CAPTURE', 'LOAD_CAPTURE_MODE_SCOPE_MISMATCH')
     remote = config['remote'][side]
-    expected_exe = remote+'/public_socket_dds_experiment'
+    installed = config.get('scenario') == 'INSTALLED_RUNTIME'
+    member = config.get('main_member') if installed else 'public_socket_dds_experiment'
+    check(not installed or member == 'mdds_installed_consumer', 'INSTALLED_MAIN_MEMBER_MISMATCH')
+    expected_exe = remote+'/'+str(member)
     check(status.get('status') == 'COMPLETE', 'SAMPLER_NOT_COMPLETE')
     check(status.get('run') == config['run'], 'SAMPLER_RUN_MISMATCH')
     try: collector=json.loads(read('load-collector.json'))
@@ -65,8 +71,12 @@ def analyze(directory, config, side):
     check(environment.get('SKIP_DEFAULT_XML') == '1','DEFAULT_XML_NOT_DISABLED')
     command = vector('load-cmdline.txt')
     check(bool(command) and command[0] == expected_exe,'ARGV0_MISMATCH')
-    check(command.count('--run') == 1 and '--run' in command and
-          command[command.index('--run')+1:command.index('--run')+2] == [config['run']], 'ARGV_RUN_MISMATCH')
+    if installed:
+        expected=[expected_exe,'0' if side=='A' else '1',config['peer'][side],config['package_name'],config['service_prefix'],config['run'],config['token'][side],remote+'/control']
+        check(command == expected, 'INSTALLED_ARGV_MISMATCH')
+    else:
+        check(command.count('--run') == 1 and '--run' in command and
+              command[command.index('--run')+1:command.index('--run')+2] == [config['run']], 'ARGV_RUN_MISMATCH')
     def stat_identity(text):
         end = text.rfind(')')
         try: return (text.split(' ',1)[0],text[end+2:].split()[19])
@@ -97,7 +107,7 @@ def analyze(directory, config, side):
             'environment':environment,
             'proc_vector_format':vector_format,
             'collector':collector,
-            'scope':'LIVE_PROC_SNAPSHOT_NOT_FULL_SDK_MODULE_CLOSURE',
+            'scope':'LOCAL_MODELED_CAPTURE_NOT_DEVICE_EVIDENCE' if modeled else 'LIVE_PROC_SNAPSHOT_NOT_FULL_SDK_MODULE_CLOSURE',
             'expected_package_paths':package_paths,'mapped_paths':sorted(mapped),
             'errors':errors,'evidence_sha256':evidence}
 
@@ -106,10 +116,13 @@ if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('window',type=Path)
     parser.add_argument('side',choices=['A','B'])
+    parser.add_argument('--output',type=Path,help='Fresh derived replay result inside this window; originals are never overwritten')
     args=parser.parse_args()
     config=json.loads((args.window/'window.json').read_text(encoding='utf-8-sig'))
     result=analyze(args.window/args.side/'load',config,args.side)
-    target=args.window/args.side/'actual-load-origin.json'
+    target=args.output if args.output else args.window/args.side/'actual-load-origin.json'
+    if args.output and not target.resolve().is_relative_to(args.window.resolve()):
+        parser.error('Derived replay output must belong to this window')
     with target.open('x',encoding='utf-8') as stream: json.dump(result,stream,indent=2)
     print(json.dumps({'board':args.side,'complete':result['complete'],'errors':result['errors']}))
     raise SystemExit(0 if result['complete'] else 1)

@@ -44,8 +44,28 @@ if(MDDS_BUILD_EXPERIMENTAL_RUNTIME OR MDDS_BUILD_EXPERIMENTAL_TESTS)
         add_executable(experimental_runtime_tests tests/experimental_runtime_tests.cpp tests/FakePublicSocketLink.cpp)
         target_include_directories(experimental_runtime_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
         target_link_libraries(experimental_runtime_tests PRIVATE ${_entry})
+        # One Runtime lifecycle per process: the installed entry documents that
+        # contract and the process-global service-record table is not reusable
+        # across two live pairs, so each case runs as its own process.
         add_test(NAME dsoftbus.library.experimental_assembly COMMAND experimental_runtime_tests)
-        set_tests_properties(dsoftbus.library.experimental_assembly PROPERTIES TIMEOUT 30)
+        add_test(NAME dsoftbus.library.experimental_preconnect_gate COMMAND experimental_runtime_tests --gate)
+        add_test(NAME dsoftbus.library.experimental_preconnect_refusal COMMAND experimental_runtime_tests --refusal)
+        add_test(NAME dsoftbus.library.experimental_preconnect_ownership COMMAND experimental_runtime_tests --ownership)
+        add_test(NAME dsoftbus.library.experimental_preconnect_throw COMMAND experimental_runtime_tests --throw)
+        add_test(NAME dsoftbus.library.experimental_preconnect_reentrant_lifetime COMMAND experimental_runtime_tests --reentrant-lifetime)
+        set_tests_properties(dsoftbus.library.experimental_assembly
+            dsoftbus.library.experimental_preconnect_gate
+            dsoftbus.library.experimental_preconnect_refusal
+            dsoftbus.library.experimental_preconnect_ownership
+            dsoftbus.library.experimental_preconnect_throw
+            dsoftbus.library.experimental_preconnect_reentrant_lifetime PROPERTIES TIMEOUT 30)
+        add_executable(installed_consumer_identity_tests
+            tests/installed_consumer_identity_tests.cpp
+            examples/installed_runtime_dual_board/identity/token_first_entry.cpp)
+        target_include_directories(installed_consumer_identity_tests PRIVATE examples/installed_runtime_dual_board/identity)
+        target_compile_features(installed_consumer_identity_tests PRIVATE cxx_std_17)
+        add_test(NAME dsoftbus.library.installed_consumer_identity COMMAND installed_consumer_identity_tests)
+        set_tests_properties(dsoftbus.library.installed_consumer_identity PROPERTIES TIMEOUT 15)
     endif()
 endif()
 if(MDDS_INSTALL_PACKAGE)

@@ -4,7 +4,8 @@
 // permission preflight/grant/revoke itself. Those remain a separate gated step.
 function runRecordPair({spawn: injectedSpawn, executable, targets, commands,
   env = process.env, timeoutMs = 15000, drainGraceMs = 250,
-  onOutput = () => {}, onTransition = () => {}, onStreamEnd = () => {}, onBeforeStart=()=>{}}) {
+  onOutput = () => {}, onTransition = () => {}, onStreamEnd = () => {}, onBeforeStart=()=>{},
+  mainLineRegex = /^DDS_MAIN run=[0-9a-f]{16} side=A pid=[1-9][0-9]* mode=(dds) /}) {
   const spawn=injectedSpawn||require('node:child_process').spawn;
   // Legacy injected-event tests have no OS executable; real launches must be explicit.
   const program=executable||(injectedSpawn?'INJECTED_TEST_ONLY':null);
@@ -54,7 +55,7 @@ function runRecordPair({spawn: injectedSpawn, executable, targets, commands,
         const exit = /^REMOTE_EXIT=(\d+)$/.exec(text);
         if (exit) {if(state.remoteExits.length<2)state.remoteExits.push(Number(exit[1]));else state.error='too many remote exit records';}
         if (role === 'A' && !state.closed && !state.exited && !state.error && !states.B && !timedOut &&
-            /^DDS_MAIN run=[0-9a-f]{16} side=A pid=[1-9][0-9]* mode=(dds) /.test(text)) {
+            mainLineRegex.test(text)) {
           state.ready = true;
           emit({event:'A_MAIN_WHILE_HDC_OPEN', role:'A'});
           start('B');

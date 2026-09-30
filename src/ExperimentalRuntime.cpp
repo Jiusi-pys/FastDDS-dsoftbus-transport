@@ -2,13 +2,20 @@
 #include <mdds/dsoftbus/HostProviderLoop.hpp>
 #include <mdds/dsoftbus/RuntimeProbeAccess.hpp>
 #include <atomic>
+#include <functional>
+#include <memory>
+#include <mutex>
 #include <utility>
 
 namespace mdds::dsoftbus::phase0 {
 // Existing isolated assembly hook: continue to the real Bind call. This is not
 // permission, peer-ready, deadline or platform-proof evidence. Applications must
 // establish deployment/authorization prerequisites before constructing DDS.
-bool RuntimeProbeBeforeConnect() noexcept { return true; }
+// With no armed gate the behaviour is unchanged. A callable that throws is a
+// refusal, exactly like returning false.
+bool RuntimeProbeBeforeConnect() noexcept {
+    return InvokeArmedPreConnectGate();
+}
 }
 namespace mdds::dsoftbus::experimental {
 struct Runtime::Impl {
@@ -32,6 +39,13 @@ struct Runtime::Descriptor final : eprosima::fastdds::rtps::TransportDescriptorI
     std::shared_ptr<Impl> impl;
 };
 Runtime::Runtime(phase0::PublicSocketConfiguration config) : impl_(std::make_shared<Impl>(std::move(config))) {}
+bool Runtime::SetPreConnectGate(std::function<bool()> gate) {
+    // Refuse to change the coordination point once this runtime's descriptor, and
+    // therefore its one-shot factory path, exists. The gate belongs to this
+    // Runtime's own loop, so it can never affect another runtime's connect.
+    if (impl_->issued.load()) return false;
+    return impl_->loop->SetPreConnectGate(std::move(gate));
+}
 Runtime::~Runtime() = default;
 std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>
 Runtime::MakeDescriptor(const DSoftBusTransportDescriptor& config) {

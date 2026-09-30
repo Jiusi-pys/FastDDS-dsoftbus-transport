@@ -1,5 +1,15 @@
 # FastDDS dsoftbus Transport
 
+> **Installed Runtime dual-board acceptance（2026-09-30）**：安装版公开消费者的
+> 双板窗口 `data-2`（run `73ff0560343b4afb`）通过独立原始收据复核；配套
+> `query-3` 为 `52093e521faf0dcb`。A/B 各完成 5 writes 与 5 Reader takes，
+> 每个方向的 ordinal、Writer GUID、DDS SN、run 字段和 payload 均逐项匹配。
+> A/B 均在 listener-ready 后释放连接并完成正常 DDS 删除、`Runtime::Close`、
+> token restore 与进程退出。该结果只覆盖当前安装包和配置的限定双板功能窗口，
+> 不证明 SDK epoch/drain/cancellation、完整 SDK 模块闭包、PF/P0/P4 或生产资格。
+> 历史 `data-1` FAIL 与 `query-r6-1` FAIL/RECOVERY_BLOCKED 保持原样；本次查询和
+> 数据额度已用尽，没有后续设备窗口。详见 [Installed Runtime acceptance](docs/INSTALLED_RUNTIME_ACCEPTANCE.md)。
+
 > **Library delivery checkpoint（2026-09-29）**：r1 完整 CONFIG `524/524 PASS`
 >（677.01 s）；r2 受影响安装、move-prefix 外部消费者、Host DDS/default-Unavailable、
 > 负例、API23 真实库 compile/link/$ORIGIN 与限定 ASan 复测均 PASS。正式 review PASS；

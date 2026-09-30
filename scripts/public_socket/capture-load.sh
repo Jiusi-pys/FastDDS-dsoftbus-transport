@@ -4,6 +4,8 @@ run=$1
 target_pid=$2
 root=$3
 side=$4
+main_member=${5:-public_socket_dds_experiment}
+case "$main_member" in public_socket_dds_experiment|mdds_installed_consumer) ;; *) exit 2 ;; esac
 set -f
 read_starttime() {
     IFS= read -r stat_line < "$1" || return 1
@@ -32,7 +34,7 @@ while [ "$attempt" -lt 128 ]; do
     starttime=$(read_starttime "$root/load-stat-before.txt") || continue
     endtime=$(read_starttime "$root/load-stat-after.txt") || continue
     [ "$starttime" = "$endtime" ] || continue
-    [ "$(cat "$root/load-exe.txt")" = "$root/public_socket_dds_experiment" ] || continue
+    [ "$(cat "$root/load-exe.txt")" = "$root/$main_member" ] || continue
     complete=1
     while IFS= read -r required; do
         found=0

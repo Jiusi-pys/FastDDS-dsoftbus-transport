@@ -10,7 +10,13 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
     proof=contract.load(contract_path);frozen=json.loads(Path(proof['freeze_path']).read_text());pre=json.loads(preflight.read_text());manifest_path=build/'build-manifest.json';manifest=json.loads(manifest_path.read_text());package=build/'package'
     if not pre['eligible_for_executor_gate'] or any(manifest[k]!=0 for k in ['bridgeExit','configureExit','buildExit']):raise ValueError('Preflight/build not eligible')
     artifacts=[{'name':e['name'],'sha256':e['sha256'],'source':e['path']} for e in manifest['artifacts']]
-    if len(artifacts)!=6 or {e['name'] for e in artifacts}!={p.name for p in package.iterdir()}:raise ValueError('Package members differ')
+    if {e['name'] for e in artifacts}!={q.name for q in package.iterdir()}:raise ValueError('Package members differ')
+    if len(artifacts)!=len({e['name'] for e in artifacts}):raise ValueError('Duplicate package member')
+    installed=mode==contract.INSTALLED_SCENARIO
+    if not installed and len(artifacts)!=6:raise ValueError('Package members differ')
+    main_member=manifest.get('main') if installed else 'public_socket_dds_experiment'
+    if installed and (not isinstance(main_member,str) or main_member not in {e['name'] for e in artifacts}):raise ValueError('Installed package needs an explicit main member')
+    if installed and main_member!=contract.INSTALLED_MAIN:raise ValueError('Installed scenario requires the installed consumer as main member')
     for e in artifacts:
         if digest(package/e['name'])!=e['sha256'] or digest(e['source'])!=e['sha256']:raise ValueError('Package hash mismatch')
     if digest(build/'source-state.json')!=manifest['sourceStateSha256']:raise ValueError('Source receipt changed')
@@ -20,7 +26,7 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
         spec=importlib.util.spec_from_file_location('runtime_route',here/'route_binding.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);route_proof=m.load_route_binding(route);peer=route_proof['peer']
     run=secrets.token_hex(8)
     cfg={'work_package':frozen['scope'],'task_contract':proof,'run':run,'scenario':mode,'cycles':cycles,'delete_first':'A' if mode=='SHARED_W2' else 'B','repo':str(repo),'window_root':str(destination),
-         'package':str(package),'package_artifacts':artifacts,'main_sha256':digest(package/'public_socket_dds_experiment'),
+         'package':str(package),'package_artifacts':artifacts,'main_sha256':digest(package/main_member),
          'build_manifest':str(manifest_path),'build_manifest_sha256':digest(manifest_path),
          'source_state':str(build/'source-state.json'),'source_state_sha256':digest(build/'source-state.json'),
          'preflight_config':str(preflight),'preflight_config_sha256':digest(preflight),'eligible_for_executor_gate':True,
@@ -29,9 +35,30 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
          'system_library_dirs':contract.LIBDIRS,'targets':contract.TARGETS,'token':contract.TOKENS,
          'remote':{s:f'/data/local/tmp/mdds_dds_{run}_{s}' for s in ['A','B']},'peer':peer,
          'hdc_path':contract.PRIVATE['hdc_path'],'private_config_sha256':digest(root/'PRIVATE_CONFIG.json'),'permission_baseline_sha256':contract.PRIVATE['permission_baseline_sha256'],
-         'expected_writes':{'A':3,'B':0} if mode=='F1M' else {'A':15*cycles,'B':15*cycles},'record_count':3 if mode=='F1M' else 30*cycles,'payload_bytes':1048576 if mode=='F1M' else 32,'max_record_bytes':8192,'timeout_seconds':180+330*cycles if cycles>1 else 180,'stdout_budget':25165824,
+         'stdout_budget':25165824,
          'analyzer_sha256':digest(repo/'scripts/public_socket/analyze_shared.py'),'shared_script_sha256':{'NativePermissionGuard.ps1':digest(repo/'scripts/NativePermissionGuard.ps1')},
          'executor_sha256':{n:digest(here/n) for n in ['run-window.ps1','runner-template.cjs','shared-control.cjs','record-pair.cjs','bounded-output.cjs','capture-load.sh','observe-native.cjs','load_origin.py','route_binding.py','task_contract.py','private_config.py','prepare-window.py']}}
+    if installed:
+        if cycles!=1:raise ValueError('Installed runtime window takes no cycles')
+        if frozen.get('local_contract_test') is not True:cfg['installed_attempt']=contract.installed_next_attempt()
+        cfg.pop('cycles',None);cfg.pop('delete_first',None)
+        cfg.update(scenario=mode,work_package=frozen['scope'],main_member=main_member,stages=list(contract.INSTALLED_STAGES),
+                   service_prefix=contract.PRIVATE['installed_service_prefix'],package_name=contract.PRIVATE['installed_package_name'],
+                   expected_writes={'A':contract.INSTALLED_LIMITS['per_side_writes'],'B':contract.INSTALLED_LIMITS['per_side_writes']},
+                   record_count=2*contract.INSTALLED_LIMITS['per_side_writes'],payload_bytes=contract.INSTALLED_LIMITS['payload_bytes'],
+                   max_record_bytes=contract.INSTALLED_LIMITS['max_record_bytes'],timeout_seconds=180,
+                   main_prefix='INST_MAIN',main_mode='installed_runtime')
+        # Mode marker. The validator compares it against the frozen contract mode, so
+        # it must be written exactly when the contract is a local contract test and
+        # never otherwise: a device window that carried simulated=true would be
+        # refused, and a local window that omitted it could not be told apart from a
+        # device one. This is the only producer of the field.
+        if frozen.get('local_contract_test') is True:
+            cfg['simulated']=True
+        elif 'simulated' in cfg:
+            raise ValueError('Device window may not carry the local simulation marker')
+    else:
+        cfg.update({'expected_writes':{'A':3,'B':0} if mode=='F1M' else {'A':15*cycles,'B':15*cycles},'record_count':3 if mode=='F1M' else 30*cycles,'payload_bytes':1048576 if mode=='F1M' else 32,'max_record_bytes':8192,'timeout_seconds':180+330*cycles if cycles>1 else 180})
     if frozen['scope']==contract.OBSERVED_SCOPE and cycles==100:
         acceptance=Path(frozen['n10_acceptance_path']);cfg['n10_acceptance']={'path':str(acceptance.resolve()),'sha256':digest(acceptance)}
     if route_proof:cfg['route_binding']=route_proof

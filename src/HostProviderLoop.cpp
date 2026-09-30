@@ -6,6 +6,24 @@
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
+#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
+namespace mdds::dsoftbus::phase0 {
+namespace { thread_local const std::function<bool()>* armed_pre_connect = nullptr; }
+// Guard storage belongs to the common loop assembly, including probe variants
+// that do not link the public Runtime archive. Only that Runtime's hook invokes
+// this callable; other probe hooks retain their existing contracts.
+bool InvokeArmedPreConnectGate() noexcept {
+    const auto* gate=armed_pre_connect;
+    if(!gate||!*gate)return true;
+    try{return (*gate)();}catch(...){return false;}
+}
+ArmedPreConnectGate::ArmedPreConnectGate(std::function<bool()> gate) noexcept
+        :gate_(std::move(gate)),previous_(armed_pre_connect) {
+    if(gate_)armed_pre_connect=&gate_;
+}
+ArmedPreConnectGate::~ArmedPreConnectGate(){armed_pre_connect=previous_;}
+}
+#endif
 namespace mdds::dsoftbus::host_test {
 using namespace phase0;
 namespace {
@@ -57,6 +75,8 @@ struct HostProviderLoop::State {
     EgressRegistration registration;
     ProviderAdapterDomain domain;
     std::unique_ptr<ProviderAdapter> adapter;
+    // Owned by this loop, so only this runtime's connect can consult it.
+    std::function<bool()> pre_connect;
     std::shared_ptr<NativeSendProvider> send_provider;
     InputChannels::Receiver* receiver=nullptr;
     BackendCloseResult close;
@@ -230,6 +250,15 @@ void HostProviderLoop::SetSharedControlHooks(std::function<void()> before_publis
 bool HostProviderLoop::Start(const DSoftBusTransportDescriptor& d) noexcept {
     return state_->shared?StartShared(d):StartRuntime(d);
 }
+bool HostProviderLoop::SetPreConnectGate(std::function<bool()> gate) {
+    auto& s=*state_;
+    std::lock_guard<std::mutex> lock(s.gate);
+    // Refuse once this loop owns a started runtime; never replace a gate that an
+    // Initialize() call could already be using.
+    if(s.attempted||s.started)return false;
+    s.pre_connect=std::move(gate);
+    return true;
+}
 bool HostProviderLoop::StartRuntime(const DSoftBusTransportDescriptor& d) noexcept {
     auto& s=*state_;
     {std::lock_guard<std::mutex> lock(s.gate);if(s.attempted||s.closed)return false;s.attempted=true;}
@@ -302,8 +331,17 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
     // Unpublished ownership stays local until all steps succeed. Every failure
     // releases only this pending binding before false reaches the receiver owner.
     pending=std::move(result.adapter);
-    if(pending->Initialize()!=BackendStatus::None||pending->Publish()!=BackendStatus::None) {
-        settle_pending();return InputOpenResult::Disabled;
+    {
+#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
+        // Armed only for this call, on this thread: the gate runs outside every
+        // management lock below it and cannot be reached by another runtime.
+        std::function<bool()> gate;
+        {std::lock_guard<std::mutex> lock(s.gate);gate=s.pre_connect;}
+        ArmedPreConnectGate armed(std::move(gate));
+#endif
+        if(pending->Initialize()!=BackendStatus::None||pending->Publish()!=BackendStatus::None) {
+            settle_pending();return InputOpenResult::Disabled;
+        }
     }
 #ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
     auto provider=RuntimeProbeAccess::SendBridge(*pending,*s.native);

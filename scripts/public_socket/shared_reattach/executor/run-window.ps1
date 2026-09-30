@@ -16,19 +16,84 @@ $expectedHash = @{A=[string]$cfg.permission_baseline_sha256.A; B=[string]$cfg.pe
 if (Test-Path -LiteralPath (Join-Path $windowRoot 'EXECUTION_STARTED')) {throw 'Refusing to reuse a window'}
 if ($cfg.run -notmatch '^[0-9a-f]{16}$') {throw 'Invalid run'}
 if ($cfg.eligible_for_executor_gate -ne $true) {throw 'Current two-board preflight not eligible'}
-if ($cfg.scenario -notin @('SHARED_W1','SHARED_W2','F1M')) {throw 'Unauthorized scenario'}
+if ($cfg.scenario -notin @('SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME')) {throw 'Unauthorized scenario'}
 foreach ($binding in @(@($cfg.build_manifest,$cfg.build_manifest_sha256),@($cfg.source_state,$cfg.source_state_sha256),@($cfg.preflight_config,$cfg.preflight_config_sha256),@($cfg.permission_helper.path,$cfg.permission_helper.sha256))) {
     if ((Get-FileHash -LiteralPath $binding[0]).Hash.ToLowerInvariant() -cne $binding[1]) {throw 'Frozen input changed'}
 }
 $currentPreflight = Get-Content -Raw -LiteralPath $cfg.preflight_config | ConvertFrom-Json
 if ($currentPreflight.eligible_for_executor_gate -ne $true) {throw 'Current baseline not eligible'}
 $frozenManifest=Get-Content -Raw -LiteralPath $cfg.build_manifest | ConvertFrom-Json
-if (@($frozenManifest.configureArguments | Where-Object {$_ -ceq '-DBUILD_PUBLIC_SOCKET_DDS_EXPERIMENT=ON'}).Count -ne 1) {throw 'Not the isolated real DDS experiment'}
+if ($cfg.scenario -ceq 'INSTALLED_RUNTIME') {
+    # The installed-runtime window must be backed by the experimental-runtime
+    # library build, not by the isolated probe experiment.
+    if (@($frozenManifest.configureArguments | Where-Object {$_ -ceq '-DMDDS_BUILD_EXPERIMENTAL_RUNTIME=ON'}).Count -ne 1) {throw 'Not the installed experimental-runtime build'}
+    if (@($frozenManifest.configureArguments | Where-Object {$_ -ceq '-DBUILD_PUBLIC_SOCKET_DDS_EXPERIMENT=ON'}).Count -ne 0) {throw 'Installed window must not use the isolated probe experiment build'}
+} else {
+    if (@($frozenManifest.configureArguments | Where-Object {$_ -ceq '-DBUILD_PUBLIC_SOCKET_DDS_EXPERIMENT=ON'}).Count -ne 1) {throw 'Not the isolated real DDS experiment'}
+}
 # Bind the validator to the reviewed contract before executing Python code.
 $proofContract = [IO.Path]::GetFullPath([string]$cfg.task_contract.freeze_path)
 if ((Split-Path -Parent $proofContract) -ine $taskRoot -or (Get-FileHash -LiteralPath $proofContract).Hash.ToLowerInvariant() -cne $cfg.task_contract.freeze_sha256) {throw 'Contract bootstrap identity changed'}
 $bootstrapFreeze = Get-Content -Raw -LiteralPath $proofContract | ConvertFrom-Json
-if ($bootstrapFreeze.execution_admitted -ne $true -or [IO.Path]::GetFullPath([string]$bootstrapFreeze.task_root) -ine $taskRoot) {throw 'Execution contract not admitted'}
+# ---- bootstrap mode dispatch ------------------------------------------------
+# StrictMode stays on. Optional contract fields are probed for existence before
+# their value is read, so a device contract that legitimately omits the local
+# fields cannot raise PropertyNotFoundException. No condition is shared between
+# the two modes: each branch validates itself fully, so one branch can never mask
+# an illegal state in the other. Nothing here converts a non-boolean into a
+# permission.
+function Read-ContractBool([object]$Object, [string]$Name) {
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) { return $null }
+    if ($property.Value -isnot [bool]) { throw "Contract field '$Name' must be a JSON boolean" }
+    return [bool]$property.Value
+}
+function Read-ContractString([object]$Object, [string]$Name, [bool]$Required) {
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        if ($Required) { throw "Contract field '$Name' is required" }
+        return $null
+    }
+    if ($property.Value -isnot [string] -or ([string]$property.Value).Length -eq 0) {
+        throw "Contract field '$Name' must be a non-empty string"
+    }
+    return [string]$property.Value
+}
+if ([IO.Path]::GetFullPath([string]$bootstrapFreeze.task_root) -ine $taskRoot) {throw 'Execution contract bound to another task'}
+$bootstrapLocal   = Read-ContractBool $bootstrapFreeze 'local_contract_test'
+$bootstrapAdmit   = Read-ContractBool $bootstrapFreeze 'execution_admitted'
+$bootstrapDeviceE = Read-ContractBool $bootstrapFreeze 'device_evidence'
+$bootstrapDeviceA = Read-ContractBool $bootstrapFreeze 'device_authorized'
+if ($null -eq $bootstrapLocal -or $bootstrapLocal -eq $false) {
+    # Device mode. The admission rule is unchanged from the reviewed contract.
+    if ($bootstrapDeviceE -eq $true) {throw 'Device contract may not carry local-test authority fields'}
+    if ($bootstrapFreeze.scope -ceq 'INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER') {
+        if ($bootstrapDeviceA -ne $true -or $bootstrapFreeze.PSObject.Properties['local_driver'] -or $bootstrapFreeze.PSObject.Properties['local_test_basis']) {throw 'Installed device authorization/driver boundary'}
+    } elseif ($bootstrapDeviceA -eq $true) {throw 'Device contract may not carry local-test authority fields'}
+    if ($bootstrapAdmit -ne $true) {throw 'Execution contract not admitted'}
+} else {
+    # Local contract test mode. It claims no device authority of any kind and it
+    # may not hold the device admission record.
+    if ($bootstrapDeviceE -eq $true) {throw 'A local contract test may not claim device evidence'}
+    if ($bootstrapDeviceA -eq $true) {throw 'A local contract test may not claim device authorization'}
+    if ($bootstrapAdmit -eq $true) {throw 'A local contract test may not claim the device admission record'}
+    $null = Read-ContractString $bootstrapFreeze 'local_test_basis' $true
+    $localDriverProperty = $bootstrapFreeze.PSObject.Properties['local_driver']
+    if ($null -eq $localDriverProperty -or $null -eq $localDriverProperty.Value) {throw 'Local contract test needs a declared local driver'}
+    $localDriver = $localDriverProperty.Value
+    if ((Read-ContractString $localDriver 'kind' $true) -cne 'LOCAL_FAKE_SANDBOX') {throw 'Unsupported local driver kind'}
+    $localTestRoot  = [IO.Path]::GetFullPath((Read-ContractString $localDriver 'test_root' $true))
+    $localSandbox   = [IO.Path]::GetFullPath((Read-ContractString $localDriver 'sandbox_root' $true))
+    if (-not $localTestRoot.Equals($taskRoot, [StringComparison]::OrdinalIgnoreCase)) {throw 'Local test root must be this task root'}
+    if (-not $localSandbox.StartsWith($localTestRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {throw 'Local sandbox root must live inside the local test root'}
+    # Bind the device tool this window will actually execute, before any
+    # subcommand is spawned. Selecting the real device tool is refused here.
+    $driverName = [IO.Path]::GetFileName($hdcPath)
+    if ($driverName -ieq 'hdc' -or $driverName -ieq 'hdc.exe') {throw 'Local contract test must not select the device tool'}
+    if (-not $hdcPath.StartsWith($localTestRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {throw 'Local driver must live inside the declared local test root'}
+    if (-not (Test-Path -LiteralPath $hdcPath -PathType Leaf)) {throw 'Local driver is missing'}
+}
+
 $bootstrapValidator = Join-Path $taskRoot 'executor/task_contract.py'
 $validatorBindings = @($bootstrapFreeze.execution_files | Where-Object {
     $entryPath = [string]$_.path
@@ -49,7 +114,7 @@ foreach ($name in @('record-pair.cjs','bounded-output.cjs','shared-control.cjs')
 }
 if ((Get-FileHash -LiteralPath (Join-Path $windowRoot 'runner.cjs')).Hash.ToLowerInvariant() -cne $cfg.executor_sha256.'runner-template.cjs') {throw 'Runner changed after window freeze'}
 if ((Get-FileHash -LiteralPath (Join-Path $windowRoot 'observe-native.cjs')).Hash.ToLowerInvariant() -cne $cfg.executor_sha256.'observe-native.cjs') {throw 'Collector changed after window freeze'}
-if ($cfg.scenario -in @('SHARED_W1','SHARED_W2','F1M')) {
+if ($cfg.scenario -in @('SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME')) {
 foreach ($name in @('route-binding-check.stdout.log','route-binding-check.stderr.log')) {
     if (Test-Path -LiteralPath (Join-Path $windowRoot $name)) {throw 'Refusing route check evidence overwrite'}
 }
@@ -60,11 +125,12 @@ foreach ($board in @('A','B')) {
     if ($cfg.remote.$board -notmatch ('^/data/local/tmp/mdds_[a-z]+_'+$cfg.run+'_'+$board+'$')) {throw 'Unbound deployment path'}
 }
 $packageFiles = @(Get-ChildItem -LiteralPath $packageRoot -File)
-if ($packageFiles.Count -ne 6) {throw 'Expected exactly six package files'}
+if ($packageFiles.Count -ne $cfg.package_artifacts.Count) {throw 'Package member count does not match the frozen list'}
 foreach ($artifact in $cfg.package_artifacts) {
     if ((Get-FileHash -LiteralPath (Join-Path $packageRoot $artifact.name)).Hash.ToLowerInvariant() -cne $artifact.sha256) {throw 'Frozen package artifact changed'}
 }
-if ((Get-FileHash -LiteralPath (Join-Path $packageRoot 'public_socket_dds_experiment')).Hash.ToLowerInvariant() -cne $cfg.main_sha256) {throw 'Wrong executable'}
+$mainMemberName = if ($cfg.PSObject.Properties['main_member']) {[string]$cfg.main_member} else {'public_socket_dds_experiment'}
+if ((Get-FileHash -LiteralPath (Join-Path $packageRoot $mainMemberName)).Hash.ToLowerInvariant() -cne $cfg.main_sha256) {throw 'Wrong executable'}
 # Load project code only after contract, dependency and guard hashes pass.
 . (Join-Path $repoRoot 'scripts\NativePermissionGuard.ps1')
 [IO.File]::WriteAllText((Join-Path $windowRoot 'EXECUTION_STARTED'), [DateTime]::UtcNow.ToString('o'), $utf8)
@@ -145,7 +211,7 @@ function Read-Metadata([string]$Board, [string]$Step) {
 }
 function Assert-ProcessAbsent([string]$Board, [string]$Step) {
     $record = Invoke-Remote -Board $Board -Step $Step -CommandText 'ps -A'
-    if ($record.Text -match 'fastdds_socket|public_socket|native_permiss') {throw "Experiment or permission process still present on $Board"}
+    if ($record.Text -match 'fastdds_socket|public_socket|mdds_installed|native_permiss') {throw "Experiment or permission process still present on $Board"}
 }
 function Assert-Platform([string]$Board, [string]$Phase) {
     $index=0
@@ -200,7 +266,8 @@ foreach ($board in @('A','B')) {
         if ($record.Text -notmatch ('(?m)^'+$property.Value+'\s+'+[regex]::Escape($remoteAux)+'\s*$')) {throw 'Auxiliary deployment mismatch'}
     }
     Invoke-Remote -Board $board -Step 'helper-executable' -CommandText ('chmod 700 '+$cfg.remote.$board+'/native_permission_probe') | Out-Null
-    Invoke-Remote -Board $board -Step 'executable' -CommandText ('chmod 700 '+$cfg.remote.$board+'/public_socket_dds_experiment && test -x '+$cfg.remote.$board+'/public_socket_dds_experiment') | Out-Null
+    $mainMember = if ($cfg.PSObject.Properties['main_member']) {[string]$cfg.main_member} else {'public_socket_dds_experiment'}
+    Invoke-Remote -Board $board -Step 'executable' -CommandText ('chmod 700 '+$cfg.remote.$board+'/'+$mainMember+' && test -x '+$cfg.remote.$board+'/'+$mainMember) | Out-Null
     foreach ($file in $packageFiles) {
         $remoteFile = $cfg.remote.$board+'/'+$file.Name
         $record = Invoke-Remote -Board $board -Step ('hash-'+$file.Name) -CommandText ('sha256sum '+$remoteFile)
@@ -220,7 +287,7 @@ try {
         $adjacent = Invoke-Remote -Board $board -Step 'adjacent-baseline-hash' -CommandText ('sha256sum '+$tokenFile)
         if ($adjacent.Text -notmatch $expectedHash[$board]) {throw "Baseline changed before grant $board"}
         Assert-ProcessAbsent -Board $board -Step 'processes-pregrant'
-        if ($cfg.scenario -in @('SHARED_W1','SHARED_W2','F1M')) {
+        if ($cfg.scenario -in @('SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME')) {
         $attempted.Add($board)
         $grant = Invoke-Permission -Board $board -Step 'grant' -Action 'grant'
         if ($grant.Text -notmatch 'verification_permission=0' -or $grant.Text -notmatch 'result=PASS') {throw "Grant verification failed $board"}
@@ -228,6 +295,9 @@ try {
         Guard-Token -Board $board -Phase Granted -Baseline $baselines[$board] -Current $grantedFile -Step 'granted-guard'
         }
     }
+    # The data dispatcher is the single writer of DATA_ATTEMPT_STARTED: it runs at
+    # the real first dispatch and records the exact intent receipt. Installed windows
+    # therefore do not pre-create the marker here.
     if ($cfg.scenario -in @('SHARED_W1','SHARED_W2','F1M') -and (-not $cfg.PSObject.Properties['work_package'] -or $cfg.work_package -cne 'N10_OBSERVED_RETRY_AND_CONDITIONAL_N100')) {[IO.File]::WriteAllText((Join-Path $windowRoot 'DATA_ATTEMPT_STARTED'), [DateTime]::UtcNow.ToString('o'), $utf8)}
     [Console]::WriteLine('WINDOW launching reviewed immutable runner')
     & node (Join-Path $windowRoot 'runner.cjs') 1> (Join-Path $windowRoot 'runner.stdout.log') 2> (Join-Path $windowRoot 'runner.stderr.log')
@@ -301,7 +371,8 @@ foreach ($board in @('A','B')) {
     if ($LASTEXITCODE -ne 0) {$loadFailures.Add($board+': load identity incomplete')}
 }
 $finalFirstFailure=if ($windowFailure) {$windowFailure} elseif ($loadFailures.Count) {'LOAD_ORIGIN: '+$loadFailures[0]} else {$null}
-[IO.File]::WriteAllText((Join-Path $windowRoot 'load-collection-summary.json'),(@{failures=@($loadFailures.ToArray());permission_cleanup_failed=($cleanupFailures.Count -ne 0);first_failure=$finalFirstFailure;business_first_failure=$windowFailure;load_scope='LIVE_PROC_SNAPSHOT';sdk_internal_settlement='UNOBSERVED'} | ConvertTo-Json -Depth 8),$utf8)
+$loadScope = if ($cfg.PSObject.Properties['simulated'] -and $cfg.simulated -is [bool] -and $cfg.simulated) {'LOCAL_MODELED_CAPTURE_NOT_DEVICE_EVIDENCE'} else {'LIVE_PROC_SNAPSHOT'}
+[IO.File]::WriteAllText((Join-Path $windowRoot 'load-collection-summary.json'),(@{failures=@($loadFailures.ToArray());permission_cleanup_failed=($cleanupFailures.Count -ne 0);first_failure=$finalFirstFailure;business_first_failure=$windowFailure;load_scope=$loadScope;sdk_internal_settlement='UNOBSERVED'} | ConvertTo-Json -Depth 8),$utf8)
 if ($windowFailure -or $cleanupFailures.Count -or $loadFailures.Count) {exit 1}
 if ($cfg.PSObject.Properties['cycles'] -and $cfg.cycles -gt 1) {
     if ((Get-FileHash -LiteralPath (Join-Path $repoRoot 'scripts/public_socket/analyze_shared.py')).Hash.ToLowerInvariant() -cne $cfg.analyzer_sha256) {throw 'Formal analyzer changed after admission'}
