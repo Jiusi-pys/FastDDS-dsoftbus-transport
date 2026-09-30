@@ -1,5 +1,9 @@
 # N1 completion record
 
+本文件是历史 N1 收据汇总；其中的旧 MDDS 选项、target 名称和命令行保留以
+绑定原始运行，不是当前 `FastDDSDSoftBusTransport` 的新构建配方。当前命名见
+[NAMING](NAMING.md) 和 [安装说明](INSTALL.md)。
+
 N1 is complete within its **SDK-free NativeOwnerTable model and public build
 target** scope. The accompanying pre-N2 source/probe baseline is preserved with
 component-specific review evidence; this does not certify every historical

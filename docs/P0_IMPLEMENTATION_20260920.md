@@ -10,7 +10,7 @@
 
 ## 本轮设计修订与定向核查
 
-共享表模型已由本轮用户批准为 **设计基线**，范围仅是回调入口的绑定粒度；完整条款及决策来源在 [冻结方案](MDDS_V1_IMPLEMENTATION_PLAN.md)。一个实际客户端 SDK service record 实例有 client/server 两个 role 表，各表保持一个固定 callback incarnation，表下 socket 各有 native owner。同一活表重复注册同一固定入口不消耗新 slot；真实 record 销毁则两 role incarnation 都结束，同名新建不继承旧入口。单个 owner 退出不误退休仍活的共享表，连续性未知时不按名字猜测、更不以新入口覆盖可能仍活的表。普通删除路径、公开可观察边界与单 owner host fixture 限制见 [生命周期核查](../.artifacts/closure-20260921/incarnation/NOTES.md)。本轮仅修订设计合同，未把现有 11 个单 owner 测试冒充共享表实现或平台证据，因此未增加为设计而造的 mock/registry，也未重跑这些未改代码的测试。
+共享表模型已由本轮用户批准为 **设计基线**，范围仅为回调入口的绑定粒度；完整条款及决策来源在[冻结方案](FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md)。一个实际客户端 SDK service record 实例有 client/server 两个 role 表，各表保持一个固定 callback incarnation，表下 socket 各有 native owner。同一活表重复注册同一固定入口不消耗新 slot；真实 record 销毁则两 role incarnation 都结束，同名新建不继承旧入口。单个 owner 退出不误退休仍活的共享表，连续性未知时不按名字猜测、更不以新入口覆盖可能仍活的表。普通删除路径、公开可观察边界与单 owner host fixture 限制见 [生命周期核查](../.artifacts/closure-20260921/incarnation/NOTES.md)。本轮仅修订设计合同，未把现有 11 个单 owner 测试冒充共享表实现或平台证据，因此未增加为设计而造的 mock/registry，也未重跑这些未改代码的测试。
 
 **C 定向结论：目标机制存在，但不足以覆盖契约。** 既有 C-mechanism/native-path 没有完成这一项，故本轮只补该缺口。目标 client `0xe0248 → 0xe0548` 的普通 TCP 分支尝试 keepalive `300 s / 4 s / 5 probes`；成功后在 `0xe05bc` 请求 TCP_USER_TIMEOUT `320000 ms`，经 utils `0x685dc`、adapter `0x31db8` 到真实 setsockopt。keepalive 失败可跳过本次 user-timeout；任一设置失败均可只记录 warning 后继续 channel 注册。**Bind 成功不证明设置成功。** 实际 channel/protocol 的对应调用、setter rc、effective value 及 timer 触发没有被既有实机记录绑定，分别仍是 NOT_OBSERVED/UNKNOWN/NOT_RUN。目标 Linux6.6.101 的供应方补丁/配置亦未绑定到公开 stable 源码。完整证据、错误出口、引用下降链和本地只读检查命令（exit0）见 [TCP timeout 定向核查](../.artifacts/closure-20260921/tcp-timeout/RECEIPT.md)。
 

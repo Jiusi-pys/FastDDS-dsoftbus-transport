@@ -4,7 +4,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 namespace {
 bool ValidServerAdmission(std::uint32_t value) noexcept { return value == 1000 || value == 3000; }
 }

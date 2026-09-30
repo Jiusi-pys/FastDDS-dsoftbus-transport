@@ -1,11 +1,11 @@
 #include "HostProviderTestSupport.hpp"
 #include "../probes/SharedSendControl.hpp"
-namespace mdds::dsoftbus::shared_probe {
+namespace fastdds_dsoftbus::dsoftbus::shared_probe {
 struct SendControlTestAccess {
     static void Exhaust(SendControl& c){c.started_=c.finished_=std::numeric_limits<std::uint64_t>::max();}
 };
 }
-namespace mdds::dsoftbus::host_test {
+namespace fastdds_dsoftbus::dsoftbus::host_test {
 class HostProviderLoopTestAccess {
 public:static void Hooks(HostProviderLoop& loop,std::function<void()> publish,std::function<void()> seal){loop.SetSharedControlHooks(std::move(publish),std::move(seal));}
     static void SendHook(HostProviderLoop& loop,std::function<void(bool)> hook){loop.SetSharedSendHook(std::move(hook));}

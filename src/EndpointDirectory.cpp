@@ -1,11 +1,11 @@
-#include <mdds/dsoftbus/EndpointDirectory.hpp>
+#include <fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp>
 
 #include <algorithm>
 #include <iterator>
 #include <limits>
 #include <utility>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace {
 
 bool DirectoryBytesValid(const std::string& bytes, std::size_t maximum)
@@ -225,4 +225,4 @@ DirectoryResult<EndpointDirectory::Snapshot> EndpointDirectory::WithUpdatedRoute
     return {std::nullopt, {DirectoryError::NotFound}};
 }
 
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

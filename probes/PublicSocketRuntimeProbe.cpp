@@ -1,8 +1,8 @@
 #include "PublicSocketRuntimeProbe.hpp"
 #include "PublicSocketRuntimeTrace.hpp"
-#include <mdds/dsoftbus/RuntimeProbeAccess.hpp>
-#include <mdds/dsoftbus/PublicSocketBackend.hpp>
-#include <mdds/dsoftbus/NativeSendExecution.hpp>
+#include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
+#include <fastdds_dsoftbus/dsoftbus/PublicSocketBackend.hpp>
+#include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -11,10 +11,10 @@
 #include <stdexcept>
 
 namespace {thread_local const std::function<bool(const char*)>* control_gate=nullptr;}
-namespace mdds::dsoftbus::phase0 {
+namespace fastdds_dsoftbus::dsoftbus::phase0 {
 bool RuntimeProbeBeforeConnect() noexcept {try{return control_gate&&(*control_gate)("LISTENER_READY");}catch(...){return false;}}
 }
-namespace mdds::dsoftbus::runtime_probe {
+namespace fastdds_dsoftbus::dsoftbus::runtime_probe {
 using namespace phase0;using namespace std::chrono_literals;namespace rtps=eprosima::fastdds::rtps;
 void ObserveTokenDiagnostic(std::string& first,const char* phase,std::uint64_t expected,std::uint64_t actual,int rc){
     const std::string name=phase;

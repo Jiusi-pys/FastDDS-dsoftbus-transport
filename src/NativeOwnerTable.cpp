@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/NativeOwnerTable.hpp>
+#include <fastdds_dsoftbus/dsoftbus/NativeOwnerTable.hpp>
 #include "NativeSendExecutionInternal.hpp"
 #include "NativeReceiveInternal.hpp"
 #include <algorithm>
@@ -6,7 +6,7 @@
 #include <mutex>
 #include <new>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace {
 constexpr std::size_t no_index = static_cast<std::size_t>(-1);
 constexpr std::size_t owner_capacity = 12, namespace_capacity = 8;
@@ -1011,4 +1011,4 @@ NativeStatus BindCallTicket::Abandon() noexcept { return token_.Abandon(NativeCa
 NativeStatus ShutdownCallTicket::CallEntered() noexcept { return token_.Enter(NativeCallKind::Shutdown); }
 NativeStatus ShutdownCallTicket::CompleteShutdownReturned() noexcept { return token_.Complete(NativeCallKind::Shutdown,true,0).status; }
 NativeStatus ShutdownCallTicket::Abandon() noexcept { return token_.Abandon(NativeCallKind::Shutdown); }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

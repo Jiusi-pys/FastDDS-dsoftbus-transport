@@ -1,18 +1,31 @@
-#include <mdds/dsoftbus/DSoftBusSenderResource.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusSenderResource.hpp>
 
 #include <utility>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 DSoftBusSenderResource::DSoftBusSenderResource(std::shared_ptr<RuntimeSendPath> runtime)
     : SenderResource(LocatorCodec::kind), runtime_(std::move(runtime))
 {
     // Installed exactly once. Base send reads it outside our resource gate:
     // Release MUST NOT clear/reassign either std::function callback.
+#if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+    send_lambda_ = [this](const eprosima::fastrtps::rtps::octet* data, std::uint32_t bytes,
+            RuntimeSendPath::Iterator* begin, RuntimeSendPath::Iterator* end,
+            const RuntimeSendPath::Clock::time_point& deadline) {
+        try {
+            return Send(std::vector<NetworkBuffer>{NetworkBuffer(data, bytes)},
+                    bytes, begin, end, deadline, 0);
+        } catch (const std::bad_alloc&) {
+            return false;
+        }
+    };
+#else
     send_lambda_ = [this](const std::vector<NetworkBuffer>& buffers, std::uint32_t bytes,
             RuntimeSendPath::Iterator* begin, RuntimeSendPath::Iterator* end,
             const RuntimeSendPath::Clock::time_point& deadline, std::int32_t priority) {
         return Send(buffers, bytes, begin, end, deadline, priority);
     };
+#endif
 }
 DSoftBusSenderResource::~DSoftBusSenderResource() { Release(); }
 SenderAttachResult DSoftBusSenderResource::Attach(eprosima::fastdds::rtps::SendResourceList& resources,
@@ -79,9 +92,9 @@ bool DSoftBusSenderResource::belongs_to(const RuntimeIdentityHandle& identity) c
 { return runtime_->identity() == identity; }
 std::optional<RuntimeSendReport> DSoftBusSenderResource::last_report() const
 { std::lock_guard<std::mutex> lock(gate_); return last_report_; }
-void DSoftBusSenderResource::add_locators_to_list(eprosima::fastdds::rtps::LocatorList_t& locals) const
+void DSoftBusSenderResource::add_locators_to_list(fastdds_dsoftbus::binding::LocatorList_t& locals) const
 {
     std::lock_guard<std::mutex> lock(gate_);
     if (!released_) for (const auto& local : runtime_->plan()->selected_locals()) locals.push_back(local);
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

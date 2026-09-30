@@ -1,7 +1,7 @@
 #pragma once
 #include "ScenarioChecks.hpp"
 #include <atomic>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 enum class LossMode { Disabled, Reliable, BestEffort };
 enum class LossVerdict { Pass, Fail, NotExercised };
 // The discovery callback claims one attempt, then publishes the completed

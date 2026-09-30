@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 inline constexpr std::size_t large_sample_bound = 1048576;
 // This admission applies to the dedicated experiment before DataWriter::write.
 // A generated bounded sequence uses std::vector and alone does not enforce its IDL bound.

@@ -4,7 +4,7 @@
 #include <set>
 #include <string>
 #include <tuple>
-namespace mdds::experiment::keyed
+namespace fastdds_dsoftbus::experiment::keyed
 {
 inline bool ExpectedLifecycleState(const std::string& case_id, const std::string& phase, unsigned key,
                                    unsigned state)
@@ -103,4 +103,4 @@ class KeyedValidator
     std::map<SampleKey, Identity> samples_;
     std::set<Identity> taken_;
 };
-} // namespace mdds::experiment::keyed
+} // namespace fastdds_dsoftbus::experiment::keyed

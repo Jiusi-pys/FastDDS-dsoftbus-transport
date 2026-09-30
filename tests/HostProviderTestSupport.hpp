@@ -1,6 +1,6 @@
-#ifndef MDDS_HOST_PROVIDER_TEST_SUPPORT_HPP
-#define MDDS_HOST_PROVIDER_TEST_SUPPORT_HPP
-#include <mdds/dsoftbus/HostProviderLoop.hpp>
+#ifndef FASTDDS_DSOFTBUS_HOST_PROVIDER_TEST_SUPPORT_HPP
+#define FASTDDS_DSOFTBUS_HOST_PROVIDER_TEST_SUPPORT_HPP
+#include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
 #include <atomic>
 #include <condition_variable>
 #include <cstring>
@@ -19,9 +19,9 @@ void operator delete(void*p)noexcept{std::free(p);}
 void operator delete[](void*p)noexcept{std::free(p);}
 void operator delete(void*p,std::size_t)noexcept{std::free(p);}
 void operator delete[](void*p,std::size_t)noexcept{std::free(p);}
-using namespace mdds::dsoftbus;
-using namespace mdds::dsoftbus::phase0;
-using namespace mdds::dsoftbus::host_test;
+using namespace fastdds_dsoftbus::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus::phase0;
+using namespace fastdds_dsoftbus::dsoftbus::host_test;
 using namespace std::chrono_literals;
 namespace rtps=eprosima::fastdds::rtps;
 namespace {

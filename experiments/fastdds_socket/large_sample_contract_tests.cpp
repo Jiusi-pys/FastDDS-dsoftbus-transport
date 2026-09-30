@@ -3,7 +3,7 @@
 #include <fastdds/rtps/common/SerializedPayload.hpp>
 #include <cstdio>
 #include <stdexcept>
-using namespace mdds::experiment;
+using namespace fastdds_dsoftbus::experiment;
 static void Require(bool value,const char* why) { if(!value) throw std::runtime_error(why); }
 int main() {
     try {

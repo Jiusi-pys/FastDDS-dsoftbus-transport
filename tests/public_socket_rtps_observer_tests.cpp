@@ -50,7 +50,7 @@ bool Observes(const char* name, const Packet& packet, std::uint64_t count,
         const Writer& expected_first = first_writer)
 {
     const auto original = packet;
-    const auto observed = mdds::experiment::ObserveRtps(packet.data(), packet.size());
+const auto observed = fastdds_dsoftbus::experiment::ObserveRtps(packet.data(), packet.size());
     const bool prefix = std::equal(packet.begin() + 8, packet.begin() + 20, observed.first_writer_guid.begin());
     const bool writer = std::equal(expected_first.begin(), expected_first.end(), observed.first_writer_guid.begin() + 12);
     const bool pass = observed.valid && observed.user == count && prefix && writer && packet == original;
@@ -74,7 +74,7 @@ bool DataContracts(bool little)
     for(unsigned i=0;i<12;++i)packet[source+8+i]=static_cast<std::uint8_t>(0x80+i);
     const auto second=packet.size();AppendData(packet,second_writer,!little);
     Put(packet,second+4+12,0xffffffff,4,!little);Put(packet,second+4+16,0x50607080,4,!little);
-    const auto original=packet;const auto seen=mdds::experiment::ObserveRtps(packet.data(),packet.size());
+const auto original=packet;const auto seen=fastdds_dsoftbus::experiment::ObserveRtps(packet.data(),packet.size());
     bool pass=seen.valid&&seen.data.size()==2&&seen.data_submessages==2&&seen.fragments.empty()&&packet==original&&
         std::equal(packet.begin()+8,packet.begin()+20,seen.first_writer_guid.begin())&&
         std::equal(first_writer.begin(),first_writer.end(),seen.first_writer_guid.begin()+12);
@@ -118,7 +118,7 @@ bool FragmentContracts(bool little)
     const auto second_offset = AppendFragment(packet, first_writer, !little,
         0xffffffff, 0x10203040, 7, 2, 16, 262156);
     const auto original = packet;
-    const auto observed = mdds::experiment::ObserveRtps(packet.data(), packet.size());
+const auto observed = fastdds_dsoftbus::experiment::ObserveRtps(packet.data(), packet.size());
     bool pass = observed.valid && observed.user == 3 && observed.fragments.size() == 2 && packet == original &&
         std::equal(packet.begin() + 8, packet.begin() + 20, observed.first_writer_guid.begin()) &&
         std::equal(first_writer.begin(), first_writer.end(), observed.first_writer_guid.begin() + 12);
@@ -148,7 +148,7 @@ bool ObserverAllocationFailure()
     AppendFragment(packet, first_writer, true, 0, 1, 1, 1, 4, 4);
     const auto original = packet;
     fail_allocations = true;
-    const auto observed = mdds::experiment::ObserveRtps(packet.data(), packet.size());
+const auto observed = fastdds_dsoftbus::experiment::ObserveRtps(packet.data(), packet.size());
     fail_allocations = false;
     const bool pass = !observed.valid && observed.fragments.empty() && packet == original;
     std::printf("%s DATA_FRAG_allocation_failure_returns_empty_observation_payload_unchanged\n", pass ? "PASS" : "FAIL");
@@ -162,7 +162,7 @@ bool AlignedFragments()
     while (packet.size() % 4) packet.push_back(0); // RTPS next-header alignment.
     const auto second_offset = AppendFragment(packet, first_writer, true, 0, 7, 2, 1, 5, 10);
     const auto original = packet;
-    const auto seen = mdds::experiment::ObserveRtps(packet.data(), packet.size());
+const auto seen = fastdds_dsoftbus::experiment::ObserveRtps(packet.data(), packet.size());
     const bool pass = seen.valid && seen.fragments.size() == 2 &&
         seen.fragments[1].submessage_offset == second_offset && seen.fragments[1].fragment_start == 2 && packet == original;
     std::printf("%s DATA_FRAG_odd_payload_alignment_following_fragment\n", pass ? "PASS" : "FAIL");
@@ -209,7 +209,7 @@ bool ReliabilityControls(bool little)
     AppendControl(packet,0x07,little);
     AppendControl(packet,0x13,!little);
     const auto original=packet;
-    const auto seen=mdds::experiment::ObserveRtps(packet.data(),packet.size());
+const auto seen=fastdds_dsoftbus::experiment::ObserveRtps(packet.data(),packet.size());
     bool pass=seen.valid && seen.controls.size()==4 && !seen.drop_shape_candidate && packet==original;
     if(seen.controls.size()==4) {
         const auto& n=seen.controls[0]; const auto& a=seen.controls[1];
@@ -232,7 +232,7 @@ bool ReliabilityControls(bool little)
 bool ControlIdentityAndBounds()
 {
     auto unknown=Header(); AppendControl(unknown,0x12,true);
-    const auto first=mdds::experiment::ObserveRtps(unknown.data(),unknown.size());
+const auto first=fastdds_dsoftbus::experiment::ObserveRtps(unknown.data(),unknown.size());
     bool pass=first.valid && first.controls.size()==1;
     if(pass) pass=first.controls[0].reader_prefix_known && !first.controls[0].writer_prefix_known &&
         !first.controls[0].destination_prefix_known && first.controls[0].writer_guid[0]==0 &&
@@ -242,17 +242,17 @@ bool ControlIdentityAndBounds()
     for(unsigned i=0;i<12;++i)changed[body+8+i]=static_cast<std::uint8_t>(0x40+i);
     AppendDestination(changed,0); // UNKNOWN leaves preceding destination in Fast DDS 3.6.2.
     AppendControl(changed,0x12,false);
-    const auto seen=mdds::experiment::ObserveRtps(changed.data(),changed.size());
+const auto seen=fastdds_dsoftbus::experiment::ObserveRtps(changed.data(),changed.size());
     pass=pass && seen.valid && seen.controls.size()==2 && seen.controls[0].reader_guid[0]==1 &&
         seen.controls[1].reader_guid[0]==0x40 && seen.controls[1].writer_guid[0]==0x80 &&
         std::all_of(seen.first_writer_guid.begin(),seen.first_writer_guid.end(),[](auto b){return b==0;});
     for(const auto kind:{0x06,0x12}) {
         auto excessive=Header(); AppendControl(excessive,static_cast<std::uint8_t>(kind),true,257);
-        pass=pass && !mdds::experiment::ObserveRtps(excessive.data(),excessive.size()).valid;
+pass=pass && !fastdds_dsoftbus::experiment::ObserveRtps(excessive.data(),excessive.size()).valid;
         auto truncated=Header(); AppendControl(truncated,static_cast<std::uint8_t>(kind),false,33); truncated.pop_back();
-        pass=pass && !mdds::experiment::ObserveRtps(truncated.data(),truncated.size()).valid;
+pass=pass && !fastdds_dsoftbus::experiment::ObserveRtps(truncated.data(),truncated.size()).valid;
         auto zero=Header(); AppendControl(zero,static_cast<std::uint8_t>(kind),false,0);
-        const auto z=mdds::experiment::ObserveRtps(zero.data(),zero.size());
+const auto z=fastdds_dsoftbus::experiment::ObserveRtps(zero.data(),zero.size());
         pass=pass && z.valid && z.controls.size()==1 && z.controls[0].num_bits==0 && z.controls[0].count==7;
     }
     std::printf("%s reliability_control_unknown_peer_INFO_SRC_bounds_zero_bitmaps\n",pass?"PASS":"FAIL");
@@ -263,19 +263,19 @@ bool DropShape()
 {
     auto packet=Header(); AppendHeader(packet,0x01,1,0); AppendHeader(packet,0x09,3,0);
     AppendDestination(packet,0x70); AppendFragment(packet,first_writer,true,0,1,3,1,4,20);
-    const auto one=mdds::experiment::ObserveRtps(packet.data(),packet.size());
+const auto one=fastdds_dsoftbus::experiment::ObserveRtps(packet.data(),packet.size());
     bool pass=one.valid && one.drop_shape_candidate && one.data_submessages==0 && one.fragments.size()==1;
-    auto mixed=packet; AppendData(mixed); auto seen=mdds::experiment::ObserveRtps(mixed.data(),mixed.size());
+auto mixed=packet; AppendData(mixed); auto seen=fastdds_dsoftbus::experiment::ObserveRtps(mixed.data(),mixed.size());
     pass=pass && seen.valid && !seen.drop_shape_candidate && seen.data_submessages==1;
     mixed=packet; AppendFragment(mixed,first_writer,true,0,1,4,1,4,20);
-    seen=mdds::experiment::ObserveRtps(mixed.data(),mixed.size()); pass=pass && seen.valid && !seen.drop_shape_candidate;
-    mixed=packet; AppendControl(mixed,0x07,true); seen=mdds::experiment::ObserveRtps(mixed.data(),mixed.size());
+seen=fastdds_dsoftbus::experiment::ObserveRtps(mixed.data(),mixed.size()); pass=pass && seen.valid && !seen.drop_shape_candidate;
+mixed=packet; AppendControl(mixed,0x07,true); seen=fastdds_dsoftbus::experiment::ObserveRtps(mixed.data(),mixed.size());
     pass=pass && seen.valid && !seen.drop_shape_candidate;
     mixed=packet; AppendHeader(mixed,0x80,1,4); mixed.insert(mixed.end(),4,0);
-    seen=mdds::experiment::ObserveRtps(mixed.data(),mixed.size()); pass=pass && seen.valid && !seen.drop_shape_candidate;
+seen=fastdds_dsoftbus::experiment::ObserveRtps(mixed.data(),mixed.size()); pass=pass && seen.valid && !seen.drop_shape_candidate;
     mixed=packet; AppendHeader(mixed,0x0c,1,20); mixed.insert(mixed.end(),20,0);
-    seen=mdds::experiment::ObserveRtps(mixed.data(),mixed.size()); pass=pass && seen.valid && !seen.drop_shape_candidate;
-    mixed=packet; mixed.pop_back(); pass=pass && !mdds::experiment::ObserveRtps(mixed.data(),mixed.size()).drop_shape_candidate;
+seen=fastdds_dsoftbus::experiment::ObserveRtps(mixed.data(),mixed.size()); pass=pass && seen.valid && !seen.drop_shape_candidate;
+mixed=packet; mixed.pop_back(); pass=pass && !fastdds_dsoftbus::experiment::ObserveRtps(mixed.data(),mixed.size()).drop_shape_candidate;
     std::printf("%s loss_shape_single_fragment_only_whole_valid_envelope\n",pass?"PASS":"FAIL");
     return pass;
 }
@@ -287,16 +287,16 @@ bool ControlBoundariesAndAllocationFailure()
         auto short_body=Header(); AppendControl(short_body,static_cast<std::uint8_t>(kind),true);
         const auto shortened=static_cast<std::uint16_t>(kind==0x06||kind==0x13?23:27);
         short_body.resize(24+shortened); Put(short_body,22,shortened,2,true);
-        pass=pass && !mdds::experiment::ObserveRtps(short_body.data(),short_body.size()).valid;
+pass=pass && !fastdds_dsoftbus::experiment::ObserveRtps(short_body.data(),short_body.size()).valid;
     }
     for(const auto kind:{0x06,0x12}) {
         auto full=Header(); AppendControl(full,static_cast<std::uint8_t>(kind),false,256,1);
         const auto original=full;
-        auto seen=mdds::experiment::ObserveRtps(full.data(),full.size());
+auto seen=fastdds_dsoftbus::experiment::ObserveRtps(full.data(),full.size());
         pass=pass && seen.valid && seen.controls.size()==1 && seen.controls[0].num_bits==256 &&
             seen.controls[0].bitmap[0]==1 && seen.controls[0].bitmap[7]==0x80000000u &&
             seen.controls[0].count==7 && full==original;
-        fail_allocations=true; seen=mdds::experiment::ObserveRtps(full.data(),full.size()); fail_allocations=false;
+fail_allocations=true; seen=fastdds_dsoftbus::experiment::ObserveRtps(full.data(),full.size()); fail_allocations=false;
         pass=pass && !seen.valid && seen.controls.empty() && seen.fragments.empty() && full==original;
     }
     std::printf("%s control_fixed_bounds_256bits_raw_words_allocation_failure_unchanged\n",pass?"PASS":"FAIL");
@@ -310,17 +310,17 @@ bool KnownStatisticsShape()
     AppendFragment(packet,first_writer,true,0,1,3,1,8,40);
     AppendHeader(packet,0x80,1,56); packet.insert(packet.end(),56,0);
     const auto original=packet;
-    const auto seen=mdds::experiment::ObserveRtps(packet.data(),packet.size());
+const auto seen=fastdds_dsoftbus::experiment::ObserveRtps(packet.data(),packet.size());
     bool pass=seen.valid && seen.drop_shape_candidate && seen.statistics_submessages==1 &&
         seen.statistics_body_bytes==56 && packet==original;
     auto unknown=packet; unknown[7]=14;
-    pass=pass && !mdds::experiment::ObserveRtps(unknown.data(),unknown.size()).drop_shape_candidate;
+pass=pass && !fastdds_dsoftbus::experiment::ObserveRtps(unknown.data(),unknown.size()).drop_shape_candidate;
     auto short_stats=packet; short_stats.resize(short_stats.size()-4); Put(short_stats,short_stats.size()-54,52,2,true);
-    pass=pass && !mdds::experiment::ObserveRtps(short_stats.data(),short_stats.size()).drop_shape_candidate;
+pass=pass && !fastdds_dsoftbus::experiment::ObserveRtps(short_stats.data(),short_stats.size()).drop_shape_candidate;
     auto repeated=packet; AppendHeader(repeated,0x80,1,56); repeated.insert(repeated.end(),56,0);
-    pass=pass && !mdds::experiment::ObserveRtps(repeated.data(),repeated.size()).drop_shape_candidate;
+pass=pass && !fastdds_dsoftbus::experiment::ObserveRtps(repeated.data(),repeated.size()).drop_shape_candidate;
     auto nonterminal=packet; AppendHeader(nonterminal,0x01,1,0);
-    pass=pass && !mdds::experiment::ObserveRtps(nonterminal.data(),nonterminal.size()).drop_shape_candidate;
+pass=pass && !fastdds_dsoftbus::experiment::ObserveRtps(nonterminal.data(),nonterminal.size()).drop_shape_candidate;
     std::printf("%s known_eProsima_statistics_terminal_body56_once_whole_packet_shape\n",pass?"PASS":"FAIL");
     return pass;
 }
@@ -328,7 +328,7 @@ bool KnownStatisticsShape()
 bool FragmentPayloadBounds(bool little)
 {
     auto plain=Header(); const auto offset=AppendFragment(plain,first_writer,little,0,1,3,1,8,40);
-    const auto a=mdds::experiment::ObserveRtps(plain.data(),plain.size());
+const auto a=fastdds_dsoftbus::experiment::ObserveRtps(plain.data(),plain.size());
     bool pass=a.valid && a.fragments.size()==1 && a.fragments[0].payload_bounds_known &&
         !a.fragments[0].inline_qos && !a.fragments[0].key_flag && a.fragments[0].octets_to_inline_qos==28 &&
         a.fragments[0].payload_offset==offset+36 && a.fragments[0].payload_bytes==8;
@@ -337,18 +337,18 @@ bool FragmentPayloadBounds(bool little)
     Put(qos,offset+2,52,2,little); Put(qos,qos_start,0x800f,2,little); Put(qos,qos_start+2,3,2,little);
     Put(qos,qos_start+8,1,2,little); // padded parameter body + PID_SENTINEL(1,0).
     const auto original=qos;
-    const auto b=mdds::experiment::ObserveRtps(qos.data(),qos.size());
+const auto b=fastdds_dsoftbus::experiment::ObserveRtps(qos.data(),qos.size());
     pass=pass && b.valid && b.drop_shape_candidate && b.fragments.size()==1 && b.fragments[0].inline_qos &&
         b.fragments[0].payload_bounds_known && b.fragments[0].payload_offset==qos_start+12 &&
         b.fragments[0].payload_bytes==8 && qos==original;
     auto malformed=qos; Put(malformed,qos_start+2,65535,2,little);
-    const auto bad=mdds::experiment::ObserveRtps(malformed.data(),malformed.size());
+const auto bad=fastdds_dsoftbus::experiment::ObserveRtps(malformed.data(),malformed.size());
     pass=pass && bad.valid && bad.fragments.size()==1 && !bad.fragments[0].payload_bounds_known && !bad.drop_shape_candidate;
     auto no_sentinel=qos; Put(no_sentinel,qos_start+8,2,2,little);
-    const auto absent=mdds::experiment::ObserveRtps(no_sentinel.data(),no_sentinel.size());
+const auto absent=fastdds_dsoftbus::experiment::ObserveRtps(no_sentinel.data(),no_sentinel.size());
     pass=pass && absent.valid && !absent.fragments[0].payload_bounds_known && !absent.drop_shape_candidate;
     auto jump=plain; Put(jump,offset+6,65535,2,little);
-    const auto invalid_jump=mdds::experiment::ObserveRtps(jump.data(),jump.size());
+const auto invalid_jump=fastdds_dsoftbus::experiment::ObserveRtps(jump.data(),jump.size());
     pass=pass && invalid_jump.valid && !invalid_jump.fragments[0].payload_bounds_known && !invalid_jump.drop_shape_candidate;
     std::printf("%s DATA_FRAG_inline_QoS_bounded_payload_%s_unchanged\n",pass?"PASS":"FAIL",little?"LE":"BE");
     return pass;
@@ -393,7 +393,7 @@ int main()
     auto truncated = Header();
     AppendHeader(truncated, 0x01, 1, 0);
     truncated.insert(truncated.end(), {0x15, 1, 20});
-    const bool bounded = !mdds::experiment::ObserveRtps(truncated.data(), truncated.size()).valid;
+const bool bounded = !fastdds_dsoftbus::experiment::ObserveRtps(truncated.data(), truncated.size()).valid;
     std::printf("%s truncated_header_after_empty_PAD\n", bounded ? "PASS" : "FAIL");
     failures += !bounded;
     failures += !FragmentContracts(false);

@@ -56,13 +56,13 @@ try {
     $experimentCmakeArguments = @('-S', $experimentRoot, '-B', $experimentBuild, '-G', 'Ninja',
         "-DCMAKE_MAKE_PROGRAM=$experimentNinja",
         "-DCMAKE_TOOLCHAIN_FILE=$experimentSdk/build/cmake/ohos.toolchain.cmake", '-DOHOS_ARCH=arm64-v8a',
-        '-DCMAKE_BUILD_TYPE=Release', '-DMDDS_FASTDDS_MODE=CONFIG',
+        '-DCMAKE_BUILD_TYPE=Release', '-DFASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG',
         "-Dfastdds_DIR=$experimentPrefix/share/fastdds/cmake",
         "-Dfastcdr_DIR=$experimentPrefix/lib/cmake/fastcdr",
         "-Dfoonathan_memory_DIR=$experimentPrefix/lib/foonathan_memory/cmake",
-        '-DBUILD_FASTDDS_DSOFTBUS_EXPERIMENT=ON', '-DMDDS_EXPERIMENT_NATIVE=ON',
-        ('-DMDDS_EXPERIMENT_RX_DROP=' + $(if ($EnableRxDrop) { 'ON' } else { 'OFF' })),
-        "-DMDDS_EXPERIMENT_TOKEN_BRIDGE=$experimentBridge", '-DBUILD_TESTING=OFF',
+        '-DBUILD_FASTDDS_DSOFTBUS_EXPERIMENT=ON', '-DFASTDDS_DSOFTBUS_EXPERIMENT_NATIVE=ON',
+        ('-DFASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP=' + $(if ($EnableRxDrop) { 'ON' } else { 'OFF' })),
+        "-DFASTDDS_DSOFTBUS_EXPERIMENT_TOKEN_BRIDGE=$experimentBridge", '-DBUILD_TESTING=OFF',
         '-DBUILD_INTERFACE_PROBE=OFF', '-DBUILD_SOFTBUS_CAPABILITY_PROBE=OFF',
         '-DBUILD_NATIVE_PERMISSION_PROBE=OFF', '-DBUILD_DSOFTBUS_DIRECTORY=OFF',
         '-DBUILD_DSOFTBUS_NATIVE_OWNER=OFF', '-DBUILD_DSOFTBUS_SEND_QUEUE=OFF',
@@ -76,7 +76,7 @@ try {
         @{ input = Join-Path $experimentPrefix 'lib/libfoonathan_memory-0.7.4.so'; name = 'libfoonathan_memory-0.7.4.so' },
         @{ input = Join-Path $experimentSdk 'llvm/lib/aarch64-linux-ohos/libc++_shared.so'; name = 'libc++_shared.so' })
     $experimentInputs = @('scripts/BuildFastDdsSocketExperiment.ps1', 'scripts/ExperimentalBuildInputs.ps1', 'CMakeLists.txt', 'cmake/FastDDSBinding.cmake',
-        'src/V1Address.cpp', 'include/mdds/dsoftbus/V1Address.hpp', 'include/mdds/dsoftbus/EndpointDirectory.hpp',
+        'src/V1Address.cpp', 'include/fastdds_dsoftbus/dsoftbus/V1Address.hpp', 'include/fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp',
         'probes/token_first_entry.cpp', 'probes/token_first_entry.hpp',
         'Fast-DDS/examples/cpp/hello_world/HelloWorld.hpp',
         'Fast-DDS/examples/cpp/hello_world/HelloWorldCdrAux.hpp',
@@ -94,7 +94,7 @@ try {
     $experimentInputs += @(Get-ChildItem -LiteralPath 'experiments/fastdds_socket' -Recurse -File | Select-Object -ExpandProperty FullName)
     # The real experiment now links the frozen lifecycle cores. Include their
     # implementations and transitive internal/public headers, not just V1Address.
-    $experimentInputs += @(Get-ChildItem -LiteralPath 'src','include/mdds/dsoftbus','cmake' -Recurse -File | Select-Object -ExpandProperty FullName)
+    $experimentInputs += @(Get-ChildItem -LiteralPath 'src','include/fastdds_dsoftbus/dsoftbus','cmake' -Recurse -File | Select-Object -ExpandProperty FullName)
     $experimentInputs += @($experimentPlatformLibraries) + @($experimentDependencies | ForEach-Object { $_.input })
     $experimentInputs += @(Get-ChildItem -LiteralPath (Join-Path $experimentTokenSource 'interfaces/innerkits/accesstoken/include') -Filter '*.h' -File | Select-Object -ExpandProperty FullName)
     $experimentInputs += Join-Path $experimentTokenSource 'interfaces/innerkits/token_setproc/include/token_setproc.h'

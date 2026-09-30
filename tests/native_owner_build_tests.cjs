@@ -29,17 +29,17 @@ if(NOT option_type STREQUAL "BOOL")
     message(FATAL_ERROR "N1_CONTRACT: missing BOOL option")
 endif()
 if(EXPECT_OWNER)
-    if(NOT BUILD_DSOFTBUS_NATIVE_OWNER OR NOT TARGET mdds_dsoftbus_native_owner)
+    if(NOT BUILD_DSOFTBUS_NATIVE_OWNER OR NOT TARGET fastdds_dsoftbus_native_owner)
         message(FATAL_ERROR "N1_CONTRACT: missing public target")
     endif()
-    get_target_property(kind mdds_dsoftbus_native_owner TYPE)
-    get_target_property(links mdds_dsoftbus_native_owner INTERFACE_LINK_LIBRARIES)
-    get_target_property(features mdds_dsoftbus_native_owner INTERFACE_COMPILE_FEATURES)
-    if(NOT kind STREQUAL "STATIC_LIBRARY" OR NOT "mdds_dsoftbus_directory" IN_LIST links
+    get_target_property(kind fastdds_dsoftbus_native_owner TYPE)
+    get_target_property(links fastdds_dsoftbus_native_owner INTERFACE_LINK_LIBRARIES)
+    get_target_property(features fastdds_dsoftbus_native_owner INTERFACE_COMPILE_FEATURES)
+    if(NOT kind STREQUAL "STATIC_LIBRARY" OR NOT "fastdds_dsoftbus_directory" IN_LIST links
             OR NOT "Threads::Threads" IN_LIST links OR NOT "cxx_std_17" IN_LIST features)
         message(FATAL_ERROR "N1_CONTRACT: missing static/PUBLIC dependency contract")
     endif()
-elseif(BUILD_DSOFTBUS_NATIVE_OWNER OR TARGET mdds_dsoftbus_native_owner)
+elseif(BUILD_DSOFTBUS_NATIVE_OWNER OR TARGET fastdds_dsoftbus_native_owner)
     message(FATAL_ERROR "N1_CONTRACT: disabled target present")
 endif()
 get_property(root_tests DIRECTORY "\${MDDS_SOURCE_ROOT}" PROPERTY TESTS)
@@ -63,18 +63,18 @@ if(EXPECT_LIBRARY_ONLY)
         endif()
     endforeach()
 endif()
-if(EXPECT_NO_BINDING AND (TARGET fastdds OR TARGET mdds_fastdds_binding))
+if(EXPECT_NO_BINDING AND (TARGET fastdds OR TARGET fastdds_dsoftbus_fastdds_binding))
     message(FATAL_ERROR "N1_CONTRACT: tools-only loaded a binding")
 endif()
 if(BUILD_CONSUMER)
     add_executable(n1_consumer main.cpp)
-    target_link_libraries(n1_consumer PRIVATE mdds_dsoftbus_native_owner)
+    target_link_libraries(n1_consumer PRIVATE fastdds_dsoftbus_native_owner)
 endif()
 message(STATUS "N1_CONTRACT: expected targets observed")
 `;
 const consumer = `#include <mdds/dsoftbus/NativeOwnerTable.hpp>
 int main() {
-    using namespace mdds::dsoftbus;
+    using namespace fastdds_dsoftbus::dsoftbus;
     EndpointId id{}; id[15] = 2; Locator local;
     if (!LocatorCodec::Encode(id, local)) return 1;
     NativeTableConfiguration config;
@@ -99,9 +99,9 @@ const base = ['-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=OFF'
     '-DBUILD_NATIVE_PERMISSION_PROBE=OFF', '-DBUILD_DSOFTBUS_DIRECTORY=ON',
     '-DBUILD_DSOFTBUS_SEND_QUEUE=OFF', '-DBUILD_DSOFTBUS_INPUT_CHANNELS=OFF',
     '-DBUILD_DSOFTBUS_APPLICATION_ATTACHMENTS=OFF', '-DBUILD_DSOFTBUS_RUNTIME_SEND_PATH=OFF',
-    '-DBUILD_DSOFTBUS_TRANSPORT_FACADE=OFF', '-DMDDS_FASTDDS_MODE=CONFIG',
+    '-DBUILD_DSOFTBUS_TRANSPORT_FACADE=OFF', '-DFASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG',
     `-Dfastdds_DIR=${prefix}/share/fastdds/cmake`, `-DCMAKE_PREFIX_PATH=${prefix}`,
-    `-DMDDS_SOURCE_ROOT=${root}`];
+    `-DFASTDDS_DSOFTBUS_SOURCE_ROOT=${root}`];
 const cases = [
     {name: 'default-on', owner: true, tests: true, extra: ['-DBUILD_TESTING=ON']},
     {name: 'directory-off-default-off', extra: ['-DBUILD_DSOFTBUS_DIRECTORY=OFF']},
@@ -115,7 +115,7 @@ const cases = [
             '-DCMAKE_DISABLE_FIND_PACKAGE_fastdds=TRUE', '-DCMAKE_DISABLE_FIND_PACKAGE_fastcdr=TRUE',
             '-DCMAKE_DISABLE_FIND_PACKAGE_foonathan_memory=TRUE']},
     {name: 'source-consumer', owner: true, libraryOnly: true, consumer: true,
-        extra: ['-DMDDS_FASTDDS_MODE=SOURCE_PROBE', '-Dfastdds_DIR=', '-DCMAKE_PREFIX_PATH=']},
+        extra: ['-DFASTDDS_DSOFTBUS_FASTDDS_MODE=SOURCE_PROBE', '-Dfastdds_DIR=', '-DCMAKE_PREFIX_PATH=']},
     {name: 'config-consumer', owner: true, libraryOnly: true, consumer: true, extra: []},
 ];
 function run(label, command, args) {

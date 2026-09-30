@@ -1,15 +1,15 @@
-#include <mdds/dsoftbus/ProviderAdapter.hpp>
-#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
-#include <mdds/dsoftbus/RuntimeProbeAccess.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ProviderAdapter.hpp>
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
+#include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
 #endif
-#include <mdds/dsoftbus/NativeSendExecution.hpp>
+#include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
 #include <stdexcept>
 #include <array>
 #include <condition_variable>
 #include <limits>
 #include <mutex>
 
-namespace mdds::dsoftbus::phase0 {
+namespace fastdds_dsoftbus::dsoftbus::phase0 {
 namespace detail {
 thread_local unsigned provider_callback_depth=0;
 struct CallbackContext {CallbackContext(){++provider_callback_depth;}~CallbackContext(){--provider_callback_depth;}};
@@ -411,7 +411,7 @@ AdapterBuildResult ProviderAdapter::BuildImpl(ProviderAdapterDomain& domain, Ser
         NativeOwnerTable& native, ApplicationAttachments& attachments, std::shared_ptr<NativeBackend> backend,
         const BindingRequest& request, bool isolated_probe) {
     bool admitted = backend && backend->Kind()==BackendKind::HostMock;
-#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
     if(isolated_probe)admitted=backend&&backend->Kind()==BackendKind::DSoftBusProvider;
 #else
     (void)isolated_probe;
@@ -453,7 +453,7 @@ AdapterBuildResult ProviderAdapter::BuildImpl(ProviderAdapterDomain& domain, Ser
     }
     return {BackendStatus::None, std::unique_ptr<ProviderAdapter>(new ProviderAdapter(std::move(state)))};
 }
-#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
 AdapterBuildResult RuntimeProbeAccess::Build(ProviderAdapterDomain& domain,ServiceRecordTable& records,
         NativeOwnerTable& native,ApplicationAttachments& attachments,std::shared_ptr<NativeBackend> backend,const BindingRequest& request){
     return ProviderAdapter::BuildImpl(domain,records,native,attachments,std::move(backend),request,true);
@@ -485,7 +485,7 @@ BackendStatus ProviderAdapter::Initialize() noexcept {
             if(setup!=NativeStatus::None||state_->stopped||state_->listener_stopped){state_->phase=AdapterPhase::Failed;return state_->provider_status==BackendStatus::None?BackendStatus::BindingRejected:state_->provider_status;}
             state_->listener_ready=true;
         }
-#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
         // Probe control handshake outside all management gates. Not an SDK proof.
         if(!RuntimeProbeBeforeConnect()){state_->Fault(BackendStatus::InvalidState);return BackendStatus::InvalidState;}
 #endif

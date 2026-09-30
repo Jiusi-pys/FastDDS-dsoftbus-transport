@@ -1,4 +1,7 @@
-# Installed Runtime dual-board acceptance
+# Historical installed Runtime dual-board acceptance
+
+The recorded binaries used the historical MDDS identifiers. The subsequent
+[naming migration](NAMING.md) does not relabel this run as execution of the new ABI.
 
 This record describes the bounded installed-consumer result currently supported by
 the saved evidence. It is a runtime acceptance record, not a production qualification
@@ -59,9 +62,10 @@ permission evidence.
 
 ## Installation and provenance
 
-The external consumer was built from the installed prefix with public MDDS/Fast DDS
-headers and the exported package targets. The accepted package has six declared
-members; the fresh API23 build installed fourteen MDDS archives and the consumer
+The external consumer was built from the installed prefix with public headers from
+the historical MDDS package and Fast DDS, using the exported package targets. The
+accepted historical package has six declared members; the fresh API23 build
+installed fourteen archives from that package and the consumer
 link map identifies thirteen linked archives. The target executable is AArch64 with
 `$ORIGIN` runpath and the declared token bridge, DSoftBus client, Fast DDS, Fast CDR,
 foonathan and libc++ shared objects.

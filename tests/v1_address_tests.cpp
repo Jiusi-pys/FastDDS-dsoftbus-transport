@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/V1Address.hpp>
+#include <fastdds_dsoftbus/dsoftbus/V1Address.hpp>
 #include <algorithm>
 #include <functional>
 #include <iostream>
@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-using namespace mdds::dsoftbus;
-namespace v1 = mdds::dsoftbus::v1;
+using namespace fastdds_dsoftbus::dsoftbus;
+namespace v1 = fastdds_dsoftbus::dsoftbus::v1;
 #define CHECK(c) do { if (!(c)) throw std::runtime_error(std::string("line ") + std::to_string(__LINE__) + ": " #c); } while(false)
 
 template<std::size_t N> std::string Hex(const std::array<std::uint8_t, N>& value)

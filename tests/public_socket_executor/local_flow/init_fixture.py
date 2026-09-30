@@ -115,8 +115,8 @@ def main():
                 "sourceStateSha256": dg(build / "source-state.json"),
                 "bridgeExit": 0, "configureExit": 0, "buildExit": 0}
     cache=Path('C:/mdds-installed-runtime-0929/target/CMakeCache.txt')
-    if 'MDDS_BUILD_EXPERIMENTAL_RUNTIME:BOOL=ON' not in cache.read_text():raise ValueError('Actual installed build option absent')
-    manifest['configureArguments']=['-DMDDS_BUILD_EXPERIMENTAL_RUNTIME=ON']
+    if 'FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME:BOOL=ON' not in cache.read_text():raise ValueError('Actual installed build option absent')
+    manifest['configureArguments']=['-DFASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME=ON']
     manifest['configuration_origin']=dict(path=str(cache),sha256=dg(cache),scope='DERIVED_CACHE_OPTION_NOT_ORIGINAL_BUILD_COMMAND')
     (build / "build-manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")

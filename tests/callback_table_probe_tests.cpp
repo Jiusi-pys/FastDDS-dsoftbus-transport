@@ -1,7 +1,7 @@
 #include "softbus_callback_table_oracle.hpp"
 #include <cstdio>
 #include <stdexcept>
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 namespace { void Check(bool value, const char* message) { if (!value) throw std::runtime_error(message); } }
 int main() {
     try {

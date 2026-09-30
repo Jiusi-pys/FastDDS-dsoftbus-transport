@@ -1,5 +1,9 @@
 # Public Socket native DDS baseline checkpoint
 
+This is a historical checkpoint. Its preserved `MDDS_*` path and option names
+bind the original run; current public package names and build options are listed in
+[NAMING](NAMING.md) and [INSTALL](INSTALL.md).
+
 Status: **`PRE-COMMIT SNAPSHOT: LOCAL_NATIVE_DDS_BASELINE_HOST_VERIFIED / CHECKPOINT_READY`**
 Artifact: `.artifacts/new-public-socket-dds-checkpoint/run-20260927T004706Z/resume-20260927T005155Z`
 
@@ -21,13 +25,13 @@ Representative configure flags from `DECLARED_DEPENDENCIES.json` are:
 
 ```powershell
 cmake -S <source> -B <build> -G "Visual Studio 17 2022" -A x64 `
-  -DCMAKE_CONFIGURATION_TYPES=Release -DMDDS_FASTDDS_MODE=CONFIG `
+  -DCMAKE_CONFIGURATION_TYPES=Release -DFASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG `
   -DBUILD_TESTING=ON -DBUILD_DSOFTBUS_TRANSPORT_FACADE=ON `
   -DBUILD_DSOFTBUS_PROVIDER_ADAPTER_PHASE0=ON -DBUILD_DSOFTBUS_HOST_PROVIDER_LOOP=ON `
   -DBUILD_DSOFTBUS_PUBLIC_SOCKET_FAKE_TESTS=ON -DBUILD_PUBLIC_SOCKET_DDS_CONTRACT_TESTS=ON `
   -DBUILD_PUBLIC_SOCKET_DDS_EXPERIMENT=OFF -DBUILD_PUBLIC_SOCKET_RUNTIME_HOST_TESTS=ON `
   -DBUILD_PUBLIC_SOCKET_RUNTIME_PROBE=OFF -DBUILD_FASTDDS_DSOFTBUS_EXPERIMENT=ON `
-  -DMDDS_EXPERIMENT_NATIVE=OFF -DMDDS_EXPERIMENT_RX_DROP=OFF `
+  -DFASTDDS_DSOFTBUS_EXPERIMENT_NATIVE=OFF -DFASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP=OFF `
   -Dfastdds_DIR=<host>/share/fastdds/cmake -Dfastcdr_DIR=<host>/lib/cmake/fastcdr `
   -Dfoonathan_memory_DIR=<host>/share/foonathan_memory/cmake `
   -DFASTDDS_SOURCE_DIR=<Fast-DDS> -DDSOFTBUS_SOURCE_DIR=<communication_dsoftbus>

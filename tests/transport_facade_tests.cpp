@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/DSoftBusTransport.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <atomic>
 #include <condition_variable>
 #include <cstdio>
@@ -29,7 +29,7 @@
 #error Facade tests require the real shared Fast DDS CONFIG binding.
 #endif
 
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 namespace rtps = eprosima::fastdds::rtps;
 using namespace std::chrono_literals;
 #define FCHECK(condition) do { if (!(condition)) throw std::runtime_error(std::string("line ") + \
@@ -47,7 +47,7 @@ void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class DSoftBusTransportTestAccess {
 public:
     static std::unique_ptr<DSoftBusTransport> CreateHostModel(const DSoftBusTransportDescriptor& d,

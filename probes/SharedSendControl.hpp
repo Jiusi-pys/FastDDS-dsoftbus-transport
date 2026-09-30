@@ -1,10 +1,10 @@
-#ifndef MDDS_SHARED_SEND_CONTROL_HPP
-#define MDDS_SHARED_SEND_CONTROL_HPP
-#include <mdds/dsoftbus/HostProviderLoop.hpp>
+#ifndef FASTDDS_DSOFTBUS_SHARED_SEND_CONTROL_HPP
+#define FASTDDS_DSOFTBUS_SHARED_SEND_CONTROL_HPP
+#include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
 #include <array>
 #include <limits>
 #include <mutex>
-namespace mdds::dsoftbus::shared_probe {
+namespace fastdds_dsoftbus::dsoftbus::shared_probe {
 // Control evidence only: no resource references, routing or cancellation powers.
 struct Retirement {
     ReceiverIdentity receiver{};
@@ -12,7 +12,7 @@ struct Retirement {
     bool final=false;
 };
 class SendControl {
-#ifdef MDDS_HOST_BACKEND_TESTING
+#ifdef FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING
     friend struct SendControlTestAccess;
 #endif
     struct Slot { Retirement value;bool used=false,complete=false;std::uint64_t cutoff=0; };

@@ -5,7 +5,7 @@
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
 #include <fastdds/rtps/common/PortParameters.hpp>
 
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 class MultiPeerTestAccess {
 public: static void PublishFault(Control& c,std::size_t after){c.tx_publish_fault_after_=after;}
 }; // No SDK generation/context is introduced.

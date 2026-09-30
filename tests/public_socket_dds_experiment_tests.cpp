@@ -5,8 +5,8 @@
 #include "FakePublicSocketLink.hpp"
 #include <fastdds/dds/publisher/DataWriter.hpp>
 #include <fastdds/rtps/common/WriteParams.hpp>
-#include "MddsKeyedSample.hpp"
-#include "MddsKeyedSamplePubSubTypes.hpp"
+#include "DSoftBusKeyedSample.hpp"
+#include "DSoftBusKeyedSamplePubSubTypes.hpp"
 #include "ExperimentLargeSamplePubSubTypes.hpp"
 #include <socket.h>
 #include <atomic>
@@ -16,8 +16,8 @@
 #include <mutex>
 #include <thread>
 #include <stdexcept>
-using namespace mdds::dsoftbus;
-using namespace mdds::dsoftbus::dds_experiment;
+using namespace fastdds_dsoftbus::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus::dds_experiment;
 using namespace std::chrono_literals;
 void Check(bool b,const char* m){if(!b)throw std::runtime_error(m);}
 int main(int argc,char**argv){try{
@@ -26,8 +26,8 @@ int main(int argc,char**argv){try{
     Check(IsolateProcess(),"effective process isolation");
     if(test=="sampling-transition"){
         std::array<std::uint8_t,44> p{};std::memcpy(p.data(),"RTPS",4);p[4]=2;p[20]=21;p[21]=1;p[22]=20;p[35]=0xc2;p[40]=1;
-        mdds::dsoftbus::runtime_probe::SetObservationCycle(1);
-        SetAfterFrameSelectionForTest([]{mdds::dsoftbus::runtime_probe::SetObservationCycle(2);});
+fastdds_dsoftbus::dsoftbus::runtime_probe::SetObservationCycle(1);
+SetAfterFrameSelectionForTest([]{fastdds_dsoftbus::dsoftbus::runtime_probe::SetObservationCycle(2);});
         SocketFrame("SDK_SEND",7,p.data(),p.size());SetAfterFrameSelectionForTest({});
         Check(FrameCount()==1&&FrameCycleForTest(0)==1,"selected frame retains original observation cycle");
         SocketFrame("SDK_SEND",7,p.data(),p.size());Check(FrameCount()==1&&FrameOverflow()==0,"next observation obeys new window");
@@ -35,19 +35,19 @@ int main(int argc,char**argv){try{
     }
     if(test=="sampling"){
         std::array<std::uint8_t,44> p{};std::memcpy(p.data(),"RTPS",4);p[4]=2;p[20]=21;p[21]=1;p[22]=20;p[35]=0xc2;p[40]=1;
-        mdds::dsoftbus::runtime_probe::SetObservationCycle(2);
-        for(unsigned i=0;i<20000;++i){SocketFrame("SDK_SEND",7,p.data(),p.size());mdds::dsoftbus::runtime_probe::TraceEvent("SendBytes_return",1,1,7,0,44);}
-        Check(FrameCount()==0&&FrameOverflow()==0&&mdds::dsoftbus::runtime_probe::TraceCount()==0,"target planned omission precedes storage");
-        mdds::dsoftbus::runtime_probe::TraceEvent("SendBytes_return",1,1,7,-5,44);
-        mdds::dsoftbus::runtime_probe::TraceEvent("OnBytesRejected",1,1,7,-5,44);
-        Check(mdds::dsoftbus::runtime_probe::TraceCount()==2,"target errors never omitted");
+fastdds_dsoftbus::dsoftbus::runtime_probe::SetObservationCycle(2);
+for(unsigned i=0;i<20000;++i){SocketFrame("SDK_SEND",7,p.data(),p.size());fastdds_dsoftbus::dsoftbus::runtime_probe::TraceEvent("SendBytes_return",1,1,7,0,44);}
+Check(FrameCount()==0&&FrameOverflow()==0&&fastdds_dsoftbus::dsoftbus::runtime_probe::TraceCount()==0,"target planned omission precedes storage");
+fastdds_dsoftbus::dsoftbus::runtime_probe::TraceEvent("SendBytes_return",1,1,7,-5,44);
+fastdds_dsoftbus::dsoftbus::runtime_probe::TraceEvent("OnBytesRejected",1,1,7,-5,44);
+Check(fastdds_dsoftbus::dsoftbus::runtime_probe::TraceCount()==2,"target errors never omitted");
         DecisionStore<2> store;ReceiveDecision d;d.branch=ReceiveDecisionBranch::Forwarded;d.status_known=true;d.status=0;
         for(unsigned i=0;i<20000;++i)store.Record(d,i,0,false);
         Check(store.Capture().omitted==20000&&store.Capture().total==20000&&store.Capture().count==0,"decision aggregate retained");
         d.branch=ReceiveDecisionBranch::InvalidBuffer;d.refused_receive=true;
         for(unsigned i=0;i<3;++i)store.Record(d,i,0,false);
         Check(store.Capture().count==2&&store.Capture().overflow==1&&store.Capture().omitted==20000,"required decision overflow retained");
-        DumpFrames();mdds::dsoftbus::runtime_probe::DumpTrace();return 0;
+DumpFrames();fastdds_dsoftbus::dsoftbus::runtime_probe::DumpTrace();return 0;
     }
     if(test=="trace"){
         std::array<std::uint8_t,44> p{};std::memcpy(p.data(),"RTPS",4);p[4]=2;p[20]=21;p[21]=1;p[22]=20;p[35]=0xc2;p[40]=1;
@@ -62,7 +62,7 @@ int main(int argc,char**argv){try{
         std::unique_ptr<eprosima::fastdds::rtps::TransportInterface> t(d.create_transport());auto actual=dynamic_cast<DSoftBusTransport*>(t.get());Check(actual&&!actual->init()&&actual->last_error().error==FacadeError::NativeBackendUnavailable,"experiment variant default factory stays unavailable");Check(public_socket_fake::Observe().sockets[0]==0,"default no public call");return 0;
     }
     if(test=="terminal-status"){host_test::HostLoopObservation v;v.sealed=true;Check(ExpectedTerminal({NativeStatus::ServiceClosing},v,true),"known close refused");for(auto status:{NativeStatus::ForeignState,NativeStatus::WrongRole,NativeStatus::InvalidConfiguration,NativeStatus::ProviderContractFault,NativeStatus::AllocationFailure,NativeStatus::OwnerUnavailable})Check(!ExpectedTerminal({status},v,true),"foreign/configuration/provider errors never terminal success");Check(ExpectedTerminal({NativeStatus::Revoked},v,true)&&ExpectedTerminal({NativeStatus::NotReady},v,true)&&!ExpectedTerminal({NativeStatus::Revoked},v,false),"close statuses require observed teardown");Check(!ExpectedTerminal({NativeStatus::NotReady,NativeSendOutcome::ReturnedSdkCode,-1},v,true),"SDK error not waived");return 0;}
-    MddsKeyedSamplePubSubType().register_type_object_representation();
+    DSoftBusKeyedSamplePubSubType().register_type_object_representation();
     ExperimentLargeSamplePubSubType().register_type_object_representation();
     Config c[2];for(unsigned i=0;i<2;++i){c[i].run="0123456789abcdef";c[i].side=i;c[i].peer_network=i?"model.net.A":"model.net.B";c[i].service_prefix="host.public";c[i].delete_first=test=="a-first"?0:1;}
     if(test=="invalid"){c[0].side=2;auto v=Run(c[0],[](const char*){return true;});Check(!v.success&&public_socket_fake::Observe().sockets[0]==0,"invalid rejected before SDK");return 0;}
@@ -81,7 +81,7 @@ int main(int argc,char**argv){try{
       SetSharedDeleteFailureForTest(test=="SHARED_DELETE_FAILURE"&&i==0);
       if(test=="late-extra")SetAfterWaitHook([&,i](eprosima::fastdds::dds::DataWriter* writer){
         {std::unique_lock<std::mutex> l(gate);++after_wait;cv.notify_all();Check(cv.wait_for(l,10s,[&]{return after_wait==2;}),"both readers finished initial ledger");}
-        if(i==0){MddsKeyedSample sample;sample.key(1);sample.run(0x0123456789abcdefULL);sample.writer(1);sample.ordinal(6);for(unsigned k=0;k<32;++k)sample.payload()[k]=std::uint8_t(6+k);eprosima::fastdds::rtps::WriteParams late;Check(writer->write(&sample,late)==eprosima::fastdds::dds::RETCODE_OK,"real late DDS write");Check(writer->wait_for_acknowledgments({3,0})==eprosima::fastdds::dds::RETCODE_OK,"late DDS accepted by peer history");std::lock_guard<std::mutex> l(gate);extra_acked=true;cv.notify_all();std::cout<<"HOST_EXTRA_DDS_WRITE_ACKED\n";}
+        if(i==0){DSoftBusKeyedSample sample;sample.key(1);sample.run(0x0123456789abcdefULL);sample.writer(1);sample.ordinal(6);for(unsigned k=0;k<32;++k)sample.payload()[k]=std::uint8_t(6+k);eprosima::fastdds::rtps::WriteParams late;Check(writer->write(&sample,late)==eprosima::fastdds::dds::RETCODE_OK,"real late DDS write");Check(writer->wait_for_acknowledgments({3,0})==eprosima::fastdds::dds::RETCODE_OK,"late DDS accepted by peer history");std::lock_guard<std::mutex> l(gate);extra_acked=true;cv.notify_all();std::cout<<"HOST_EXTRA_DDS_WRITE_ACKED\n";}
         else {std::unique_lock<std::mutex> l(gate);Check(cv.wait_for(l,5s,[&]{return extra_acked;}),"late ack observed before new take");}
       });
       result[i]=Run(c[i],[&,i](const char* p){std::unique_lock<std::mutex> l(gate);std::string stage=p;
@@ -89,9 +89,9 @@ int main(int argc,char**argv){try{
         if(stage=="DDS_DELETED"||stage=="C"+std::to_string(c[i].cycles)+"_DDS_DELETED"){deleted[i]=true;cv.notify_all();return true;}
         if(stage=="DELETE"||stage=="C"+std::to_string(c[i].cycles)+"_DELETE")return i==c[i].delete_first||cv.wait_for(l,20s,[&]{return deleted[1-i]||aborted;});
         ++counts[stage];cv.notify_all();const bool ready=cv.wait_for(l,20s,[&]{return counts[stage]==2||aborted;})&&!aborted;l.unlock();if(ready&&test=="BE_DELAYED_DROP"&&i==0&&stage=="MATCH")std::this_thread::sleep_for(2s);return ready;});SetAfterWaitHook({});if(!result[i].success){std::lock_guard<std::mutex> l(gate);aborted=true;cv.notify_all();}});
-    for(auto& t:sides)t.join();stop=true;bytes.join();DumpFrames();if(regression)mdds::dsoftbus::runtime_probe::DumpTrace();
+for(auto& t:sides)t.join();stop=true;bytes.join();DumpFrames();if(regression)fastdds_dsoftbus::dsoftbus::runtime_probe::DumpTrace();
     if(shared){
-        mdds::dsoftbus::runtime_probe::DumpTrace();
+fastdds_dsoftbus::dsoftbus::runtime_probe::DumpTrace();
         if(test=="SHARED_DELETE_FAILURE"){Check(!result[0].success&&result[0].first_failure=="SHARED_DELETE"&&result[0].drained&&result[1].drained&&public_socket_fake::Observe().live==0,"real API deletion failure retains ownership and bounded cleanup succeeds");std::cout<<"PASS_SHARED_FAILED_DELETE_OWNERSHIP\n";return 0;}
         for(unsigned i=0;i<2;++i){std::cout<<"SHARED_CONTRACT side="<<i<<" failure="<<result[i].first_failure<<'\n';Check(result[i].success&&result[i].drained&&result[i].factories==c[i].cycles+2&&result[i].writes==15*c[i].cycles&&result[i].takes==15*c[i].cycles,"actual shared target fixture");for(unsigned group=0;group<3;++group)Check(!result[i].shared_writers[group].empty()&&result[i].shared_remote_writers[group]==result[1-i].shared_writers[group]&&result[i].shared_remote_readers[group]==result[1-i].shared_readers[group],"actual opposite incarnation identities");}
         auto sdk=public_socket_fake::Observe();Check(sdk.live==0&&sdk.invalid==0&&sdk.sockets[0]==2&&sdk.sockets[1]==2&&sdk.listens[0]==1&&sdk.listens[1]==1&&sdk.binds[0]==1&&sdk.binds[1]==1&&FrameOverflow()==0,"one native topology and bounded evidence");std::cout<<"PASS_SHARED_TARGET_ASSEMBLY_FAKE_API\n";return 0;

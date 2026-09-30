@@ -5,7 +5,7 @@
 #include <limits>
 #include <stdexcept>
 
-namespace mdds::experiment::perf {
+namespace fastdds_dsoftbus::experiment::perf {
 namespace {
 constexpr std::array<CaseSpec, 6> cases{{
     {CaseId::RTT_1K, "RTT_1K", Kind::Rtt, 1024, 1056, 1068, 500, 10, 100, 3},

@@ -1,15 +1,15 @@
 #include "KeyedNativeConfig.hpp"
 #include <iostream>
 #include <vector>
-namespace ex=mdds::experiment;
-namespace v1=mdds::dsoftbus::v1;
+namespace ex=fastdds_dsoftbus::experiment;
+namespace v1=fastdds_dsoftbus::dsoftbus::v1;
 namespace {
 unsigned checks=0,failures=0;
 void Check(bool ok,const char* why){++checks;if(!ok){++failures;std::cerr<<"FAIL "<<why<<'\n';}}
 const std::string run="0123456789abcdef";
 ex::Config Seed(bool a){
     ex::Config c;c.run_id=run;c.peer_network_id=std::string(64,a?'b':'a');
-    mdds::dsoftbus::EndpointId local{},peer{};local[0]=a?1:2;peer[0]=a?2:1;
+fastdds_dsoftbus::dsoftbus::EndpointId local{},peer{};local[0]=a?1:2;peer[0]=a?2:1;
     v1::AddressCodec::EncodeLocator({local,a?1u:2u,v1::Profile::BytesNative},c.local_locator);
     v1::AddressCodec::EncodeLocator({peer,a?2u:1u,v1::Profile::BytesNative},c.peer_locator);
     ex::EncodeNativeServiceName({"exp-"+run,73,a?1u:2u,v1::Profile::BytesNative},c.local_service);

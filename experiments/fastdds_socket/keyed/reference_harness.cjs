@@ -14,7 +14,7 @@ async function main(){
   for(let attempt=0;attempt<8&&!base;attempt++){const candidate=24000+crypto.randomInt(16000),held=[];try{for(const offset of [0,2,10,12]){const s=dgram.createSocket('udp4');held.push(s);await new Promise((r,j)=>{s.once('error',j);s.bind(candidate+offset,'127.0.0.1',r);});}base=candidate;}catch{}finally{for(const s of held)try{s.close();}catch{}}}if(!base)throw Error('No free ports');
   const dirs={};for(const s of ['A','B']){dirs[s]=path.resolve(output,s+'-control');fs.mkdirSync(dirs[s]);}
   if(matrixBytes)fs.writeFileSync(path.join(output,'case-matrix.json'),matrixBytes,{flag:'wx'});
-  fs.writeFileSync(path.join(output,'window.json'),JSON.stringify({run,case_id:caseId,mode:'HOST_REFERENCE_UDP',native_proof:'NONE',executable:path.resolve(exe),base_port:base,matrix_sha256:matrixHash},null,2));
+  fs.writeFileSync(path.join(output,'window.json'),JSON.stringify({run,case_id:caseId,mode:'HOST_REFERENCE_UDP',registered_type:'DSoftBusKeyedSample',native_proof:'NONE',executable:path.resolve(exe),base_port:base,matrix_sha256:matrixHash},null,2));
   const ctlFile=fs.createWriteStream(path.join(output,'control.jsonl'),{flags:'wx'});
   async function publish(side,phase,body){const p=path.join(dirs[side],phase+'.release');await fs.promises.writeFile(p+'.tmp',body,{flag:'wx'});await fs.promises.rename(p+'.tmp',p);}
   const ctl=createMatrixController({run,caseId,release:publish,abort:(s,b)=>publish(s,'ABORT',b),record:e=>ctlFile.write(JSON.stringify(e)+'\n')});

@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-namespace mdds::experiment::keyed
+namespace fastdds_dsoftbus::experiment::keyed
 {
 struct Options
 {
@@ -25,7 +25,7 @@ class KeyedFixture final
     std::string FirstFailure() const;
     std::string CleanupFailure() const;
     std::vector<std::shared_ptr<Control>> Controls() const;
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
     // Available only in host test builds; normal reference runs leave all faults disabled.
     static bool ContractTest(const std::string &test, std::uint16_t base_port);
 #endif
@@ -34,4 +34,4 @@ class KeyedFixture final
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
-} // namespace mdds::experiment::keyed
+} // namespace fastdds_dsoftbus::experiment::keyed

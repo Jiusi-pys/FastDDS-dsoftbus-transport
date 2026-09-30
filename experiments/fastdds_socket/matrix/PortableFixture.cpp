@@ -35,7 +35,7 @@
 #else
 #include <unistd.h>
 #endif
-namespace mdds::experiment::matrix {
+namespace fastdds_dsoftbus::experiment::matrix {
 namespace dds=eprosima::fastdds::dds;
 namespace rtps=eprosima::fastdds::rtps;
 using Clock=std::chrono::steady_clock;

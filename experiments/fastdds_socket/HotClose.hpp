@@ -1,5 +1,5 @@
 #pragma once
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 struct ParticipantCloseState {bool terminal=false,failed=false,children_deleted=false,participant_deleted=false,result=false;};
 // Public DDS delete operations and ownership invalidation are deliberately
 // passed through this exact orchestration, also used by ParticipantRun::Close.

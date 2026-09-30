@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 namespace {
 void Require(bool value, const char* reason) { if (!value) throw std::runtime_error(reason); }
 OptionsQueryObservation Query(std::uint64_t tid, std::int64_t at) {

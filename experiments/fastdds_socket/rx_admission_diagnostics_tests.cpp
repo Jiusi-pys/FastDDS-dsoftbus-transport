@@ -5,7 +5,7 @@
 #include <atomic>
 #include <set>
 
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 class RuntimeTestAccess {
 public:
     static void Copy(Control& c,std::function<void()> f){c.before_rx_copy_=std::move(f);}
@@ -14,7 +14,7 @@ public:
 };
 }
 namespace {
-using Reason=mdds::dsoftbus::RxAdmissionReason;
+using Reason=fastdds_dsoftbus::dsoftbus::RxAdmissionReason;
 template<class Record> auto EndpointLimit(const Record& r,std::size_t expected,int)
     ->decltype(r.endpoint_limit_known,r.endpoint_limit,void()) {
     Require(r.endpoint_limit_known&&r.endpoint_limit==expected,"exact immutable endpoint limit observed");
@@ -93,7 +93,7 @@ void NativeCommitCase(){
     Require(copying.Wait(),"original capture reached existing copy barrier");
     a.table.OnShutdown(1001,static_cast<ShutdownReason>(0));copying.Release();call.get();
     a.Expect(Reason::NativeCommitRejected);const auto d=a.Last().decision;
-    Require(d.native_status_known&&d.native_status!=mdds::dsoftbus::NativeStatus::None,"native failure not flattened");
+Require(d.native_status_known&&d.native_status!=fastdds_dsoftbus::dsoftbus::NativeStatus::None,"native failure not flattened");
     Require(d.native_known&&d.application_known&&d.receiver_known,"original capture remains diagnostic identity");
     Require(a.receiver.messages.empty(),"revoked native record never delivered");a.Stop();
 }

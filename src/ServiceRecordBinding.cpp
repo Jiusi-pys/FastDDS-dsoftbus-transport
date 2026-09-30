@@ -14,7 +14,7 @@
 // This is a Host-verifiable model. It makes no SDK call: the provider interface
 // is implemented by the caller (a test in Host, the real backend in production),
 // and every value it returns is a model input rather than SDK evidence.
-#include <mdds/dsoftbus/ServiceRecordBinding.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ServiceRecordBinding.hpp>
 #include "ProcessReceiveInternal.hpp"
 
 #include <array>
@@ -28,7 +28,7 @@
 #include <utility>
 #include <thread>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace {
 // Nonzero while this thread runs an ingress callback, so control operations that
 // must never run on a callback stack can refuse instead of deadlocking.
@@ -324,7 +324,7 @@ struct ApplicationGroup final
                     // every later Settle would wait on a predicate that can never become
                     // true -- a hang with no clue about its cause. A destructor cannot
                     // refuse, so the violation is made loud and located instead of silent.
-                    std::fprintf(stderr, "MDDS DSoftBus shared registration: admission pin released "
+                    std::fprintf(stderr, "Fast DDS DSoftBus shared registration: admission pin released "
                             "without a matching acquisition");
                     std::fputc('\n', stderr); std::fflush(stderr); std::abort();
                 }
@@ -371,7 +371,7 @@ namespace {
 // non-last sibling, never reaches this path.
 [[noreturn]] void RefuseSharedInputRelease() noexcept
 {
-    std::fprintf(stderr, "MDDS DSoftBus shared input: released from inside a delivery callback; "
+    std::fprintf(stderr, "Fast DDS DSoftBus shared input: released from inside a delivery callback; "
             "close the facade from an external control context (CloseRequest)");
     std::fputc('\n', stderr);
     std::fflush(stderr);
@@ -1208,7 +1208,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
                     // In this precise reentrant destructor shape, only returning
                     // from this same provider stack could make progress.
                     if(HoldsCloseCredit(&native)){
-                        std::fputs("MDDS ServiceRecordBinding: destroyed from inside a callback; native close credit held by this stack; call CloseRequest() and destroy outside the callback\n",stderr);
+                        std::fputs("Fast DDS DSoftBus ServiceRecordBinding: destroyed from inside a callback; native close credit held by this stack; call CloseRequest() and destroy outside the callback\n",stderr);
                         std::fflush(stderr);std::abort();
                     }
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -1363,7 +1363,7 @@ ServiceRecordBinding::~ServiceRecordBinding()
         // callback does not take this path -- its release waits on nothing this
         // frame holds -- and neither does any normal lifetime, such as the creator
         // leaving before its joiners.
-        std::fprintf(stderr, "MDDS ServiceRecordBinding: destroyed from inside a callback; "
+        std::fprintf(stderr, "Fast DDS DSoftBus ServiceRecordBinding: destroyed from inside a callback; "
                 "call CloseRequest() and destroy the binding outside the callback");
         std::fputc('\n', stderr);
         std::fflush(stderr);
@@ -1627,4 +1627,4 @@ BindingObservation ServiceRecordBinding::Observe() const noexcept
     if (registration_owner != nullptr) view.receive = registration_owner->SnapshotUsage();
     return view;
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

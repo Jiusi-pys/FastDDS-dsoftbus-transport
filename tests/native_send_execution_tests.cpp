@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/NativeSendExecution.hpp>
+#include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
 #include "../src/NativeSendExecutionInternal.hpp"
 #include <chrono>
 #include <iostream>
@@ -16,7 +16,7 @@
 thread_local long fail_after=-1;
 thread_local std::size_t allocation_count=0;
 thread_local long close_after=-1;
-thread_local mdds::dsoftbus::NativeOwnerTable* close_target=nullptr;
+thread_local fastdds_dsoftbus::dsoftbus::NativeOwnerTable* close_target=nullptr;
 void* operator new(std::size_t n)
 {
     ++allocation_count;
@@ -32,11 +32,11 @@ void operator delete(void* p) noexcept {std::free(p);}
 void operator delete[](void* p) noexcept {std::free(p);}
 void operator delete(void* p,std::size_t) noexcept {std::free(p);}
 void operator delete[](void* p,std::size_t) noexcept {std::free(p);}
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 namespace rtps = eprosima::fastdds::rtps;
 using namespace std::chrono_literals;
 #define CHECK(x) do { if (!(x)) throw std::runtime_error(std::string("line ")+std::to_string(__LINE__)+": " #x); } while(false)
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class NativeSendExecutionTestAccess
 {
 public:

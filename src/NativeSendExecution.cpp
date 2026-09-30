@@ -1,9 +1,9 @@
-#include <mdds/dsoftbus/NativeSendExecution.hpp>
+#include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
 #include "NativeSendExecutionInternal.hpp"
 #include <algorithm>
 #include <new>
 #include <stdexcept>
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace detail {
 EgressState::~EgressState() noexcept
 {

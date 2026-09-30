@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <string_view>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 // SDK-free probe policy. The native boundary asserts these ABI enum values
 // against the actual Socket headers used for the device build.
 inline constexpr int probe_bytes_data_type = 2;
@@ -39,4 +39,4 @@ struct ProbeIdentityObservation {
 // A failed native query cannot turn an old buffer into a valid observation.
 ProbeIdentityObservation ObserveProbeIdentity(int native_result, const void* bytes,
         std::size_t capacity) noexcept;
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

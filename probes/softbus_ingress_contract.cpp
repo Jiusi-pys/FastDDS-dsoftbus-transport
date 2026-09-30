@@ -7,7 +7,7 @@
 #include <mutex>
 #include <utility>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 namespace ingress_detail {
 struct Application {
     std::shared_ptr<DiagnosticReceiver> receiver;
@@ -203,4 +203,4 @@ void IngressDiagnosticBank::Ingress(std::size_t index, std::int32_t socket,
         // SDK calls, native closing, adapter retries or late re-attribution.
     }
 }
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

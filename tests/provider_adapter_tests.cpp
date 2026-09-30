@@ -1,5 +1,5 @@
-#include <mdds/dsoftbus/ProviderAdapter.hpp>
-#include <mdds/dsoftbus/DSoftBusTransport.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ProviderAdapter.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <cstring>
 #include <iostream>
 #include <functional>
@@ -21,8 +21,8 @@ void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete(void* p,std::size_t) noexcept { std::free(p); }
 void operator delete[](void* p,std::size_t) noexcept { std::free(p); }
 
-using namespace mdds::dsoftbus;
-using namespace mdds::dsoftbus::phase0;
+using namespace fastdds_dsoftbus::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus::phase0;
 namespace {
 void Check(bool ok, const char* reason) { if (!ok) throw std::runtime_error(reason); }
 Locator Loc(std::uint8_t n) { EndpointId id{}; id[0]=0x0A; id[14]=0x7F; id[15]=n; Locator l; Check(LocatorCodec::Encode(id,l),"locator"); return l; }

@@ -1,6 +1,6 @@
-#include <mdds/dsoftbus/PublicSocketBackend.hpp>
+#include <fastdds_dsoftbus/dsoftbus/PublicSocketBackend.hpp>
 #include <socket.h>
-#include <mdds/dsoftbus/NativeOwnerTable.hpp>
+#include <fastdds_dsoftbus/dsoftbus/NativeOwnerTable.hpp>
 #include <algorithm>
 #include <atomic>
 #include <cstring>
@@ -8,21 +8,21 @@
 #include <mutex>
 #include <type_traits>
 #include <utility>
-#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
 #include "../probes/PublicSocketRuntimeTrace.hpp"
-#define MDDS_PROBE_EVENT(...) ::mdds::dsoftbus::runtime_probe::TraceEvent(__VA_ARGS__)
+#define FASTDDS_DSOFTBUS_PROBE_EVENT(...) ::fastdds_dsoftbus::dsoftbus::runtime_probe::TraceEvent(__VA_ARGS__)
 #else
-#define MDDS_PROBE_EVENT(...) ((void)0)
+#define FASTDDS_DSOFTBUS_PROBE_EVENT(...) ((void)0)
 #endif
 
-#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
 #include "../probes/PublicSocketDdsTrace.hpp"
-#define MDDS_DDS_FRAME(...) ::mdds::dsoftbus::dds_experiment::SocketFrame(__VA_ARGS__)
+#define FASTDDS_DSOFTBUS_DDS_FRAME(...) ::fastdds_dsoftbus::dsoftbus::dds_experiment::SocketFrame(__VA_ARGS__)
 #else
-#define MDDS_DDS_FRAME(...) ((void)0)
+#define FASTDDS_DSOFTBUS_DDS_FRAME(...) ((void)0)
 #endif
 
-namespace mdds::dsoftbus::phase0 {
+namespace fastdds_dsoftbus::dsoftbus::phase0 {
 namespace detail {
 constexpr std::size_t bridge_count=record_slot_capacity*static_cast<std::size_t>(RecordRole::Count);
 constexpr std::size_t qos_capacity=8;
@@ -42,7 +42,7 @@ struct PublicSocketState {
         if(dual)valid=valid&&config.role==RecordRole::Client&&config.listener_identity.record.value&&config.listener_identity.owner.value&&
                 text(config.listener_identity.service_name,255)&&config.listener_identity.service_name!=config.identity.service_name&&config.listener_identity.record.value!=config.identity.record.value;
         observation.role=config.role;
-#ifdef MDDS_PUBLIC_SOCKET_FAKE_SDK
+#if defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM)
         observation.fake_sdk=true;
 #endif
         if(!valid)return;
@@ -55,7 +55,7 @@ struct PublicSocketState {
     }
     const PublicSocketConfiguration config;
     const bool dual;
-#ifdef MDDS_PUBLIC_SOCKET_FAKE_SDK
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK
     void(*before_capability)(void*) noexcept=nullptr;
     void* before_capability_context=nullptr;
 #endif
@@ -100,16 +100,16 @@ struct PublicSocketState {
     static bool PeerValue(PeerSocketInfo in,BackendPeer& out) {
         const auto copy=[](const char* p,std::size_t limit,std::string& dst){if(!p)return false;std::size_t n=0;while(n<=limit&&p[n])++n;if(!n||n>limit)return false;dst.assign(p,n);return true;};
         if(in.dataType!=DATA_TYPE_BYTES||!copy(in.name,255,out.name)||!copy(in.networkId,64,out.network_id)||!copy(in.pkgName,64,out.package_name))return false;
-#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
-        ::mdds::dsoftbus::runtime_probe::TraceText("validated_peer_name",out.name.c_str());
-        ::mdds::dsoftbus::runtime_probe::TraceText("validated_peer_network",out.network_id.c_str());
-        ::mdds::dsoftbus::runtime_probe::TraceText("validated_peer_package",out.package_name.c_str());
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
+::fastdds_dsoftbus::dsoftbus::runtime_probe::TraceText("validated_peer_name",out.name.c_str());
+::fastdds_dsoftbus::dsoftbus::runtime_probe::TraceText("validated_peer_network",out.network_id.c_str());
+::fastdds_dsoftbus::dsoftbus::runtime_probe::TraceText("validated_peer_package",out.package_name.c_str());
 #endif
         out.data_type=RecordDataType::Bytes;return true;
     }
     void Bytes(RecordRole role,std::int32_t id,const void* data,std::uint32_t size){
         ProviderCallbacks cb;
-#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_BOUNDED_REGRESSION
         bool experiment_accepted=false;
 #endif
         {std::lock_guard<std::mutex> lock(gate);++observation.callback_entries;
@@ -117,18 +117,18 @@ struct PublicSocketState {
             if(dual&&role==RecordRole::Server){if(listener_socket<0){++observation.rejected_callbacks;return;}cb=listener_callbacks;}
             else {if(role!=config.role||primary_closed||primary_observed||primary_failed||socket<0||id!=socket){++observation.rejected_callbacks;return;}cb=callbacks;}
         }
-#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_BOUNDED_REGRESSION
         {std::lock_guard<std::mutex> lock(gate);experiment_accepted=dual&&role==RecordRole::Server&&observation.accepted_socket==id&&!accepted_closed&&!accepted_observed&&!accepted_failed;}
 #endif
-#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
-        const auto ingress_observation=::mdds::dsoftbus::dds_experiment::SocketFrame("SDK_INGRESS",id,static_cast<const std::uint8_t*>(data),size);
-        ::mdds::dsoftbus::dds_experiment::IngressObservationScope scope(ingress_observation);
-        if(experiment_accepted&&::mdds::dsoftbus::dds_experiment::DropRegressionRecord(id,static_cast<const std::uint8_t*>(data),size))return;
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+const auto ingress_observation=::fastdds_dsoftbus::dsoftbus::dds_experiment::SocketFrame("SDK_INGRESS",id,static_cast<const std::uint8_t*>(data),size);
+::fastdds_dsoftbus::dsoftbus::dds_experiment::IngressObservationScope scope(ingress_observation);
+if(experiment_accepted&&::fastdds_dsoftbus::dsoftbus::dds_experiment::DropRegressionRecord(id,static_cast<const std::uint8_t*>(data),size))return;
 #else
-        MDDS_DDS_FRAME("SDK_INGRESS",id,static_cast<const std::uint8_t*>(data),size);
+        FASTDDS_DSOFTBUS_DDS_FRAME("SDK_INGRESS",id,static_cast<const std::uint8_t*>(data),size);
 #endif
         const auto result=cb.OnBytes(id,data,size);
-        if(result!=BackendStatus::None){MDDS_PROBE_EVENT("OnBytesRejected",0,int(role),id,int(result),size);std::lock_guard<std::mutex> lock(gate);++observation.rejected_callbacks;}
+        if(result!=BackendStatus::None){FASTDDS_DSOFTBUS_PROBE_EVENT("OnBytesRejected",0,int(role),id,int(result),size);std::lock_guard<std::mutex> lock(gate);++observation.rejected_callbacks;}
     }
     void Stop(RecordRole role,std::int32_t id,std::int32_t value,bool error){
         ProviderCallbacks cb;bool known=false,is_accepted=false;
@@ -186,12 +186,12 @@ template<std::size_t N,class F>void Dispatch(F&& f)noexcept{
     }catch(...){try{++Slots()[N].exceptions;}catch(...){}}
 }
 template<std::size_t N>struct Entry {
-    static void Bytes(int32_t id,const void* p,uint32_t n)noexcept{MDDS_PROBE_EVENT("OnBytes",N,N%2,id,0,n);Dispatch<N>([&](auto& s){s.Bytes(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,p,n);});}
-    static void Stop(int32_t id,ShutdownReason reason)noexcept{MDDS_PROBE_EVENT("OnShutdown",N,N%2,id,int(reason),0);Dispatch<N>([&](auto& s){s.Stop(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,static_cast<int32_t>(reason),false);});}
-    static void Error(int32_t id,int32_t code)noexcept{MDDS_PROBE_EVENT("OnError",N,N%2,id,code,0);Dispatch<N>([&](auto& s){s.Stop(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,code,true);});}
-    static void Bound(int32_t id,PeerSocketInfo p)noexcept{MDDS_PROBE_EVENT("OnBind",N,N%2,id,int(p.dataType),0);Dispatch<N>([&](auto& s){s.Bound(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,p);});}
-    static bool Negotiate(int32_t id,PeerSocketInfo p)noexcept{MDDS_PROBE_EVENT("OnNegotiate",N,N%2,id,int(p.dataType),0);bool accepted=false;Dispatch<N>([&](auto& s){accepted=s.Negotiate(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,p,false);});MDDS_PROBE_EVENT("OnNegotiate_result",N,N%2,id,accepted,0);return accepted;}
-    static bool Negotiate2(int32_t id,PeerSocketInfo p,SocketAccessInfo*,SocketAccessInfo*)noexcept{MDDS_PROBE_EVENT("OnNegotiate2_unsupported",N,N%2,id,int(p.dataType),0);Dispatch<N>([&](auto& s){(void)s.Negotiate(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,p,true);});return false;}
+    static void Bytes(int32_t id,const void* p,uint32_t n)noexcept{FASTDDS_DSOFTBUS_PROBE_EVENT("OnBytes",N,N%2,id,0,n);Dispatch<N>([&](auto& s){s.Bytes(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,p,n);});}
+    static void Stop(int32_t id,ShutdownReason reason)noexcept{FASTDDS_DSOFTBUS_PROBE_EVENT("OnShutdown",N,N%2,id,int(reason),0);Dispatch<N>([&](auto& s){s.Stop(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,static_cast<int32_t>(reason),false);});}
+    static void Error(int32_t id,int32_t code)noexcept{FASTDDS_DSOFTBUS_PROBE_EVENT("OnError",N,N%2,id,code,0);Dispatch<N>([&](auto& s){s.Stop(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,code,true);});}
+    static void Bound(int32_t id,PeerSocketInfo p)noexcept{FASTDDS_DSOFTBUS_PROBE_EVENT("OnBind",N,N%2,id,int(p.dataType),0);Dispatch<N>([&](auto& s){s.Bound(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,p);});}
+    static bool Negotiate(int32_t id,PeerSocketInfo p)noexcept{FASTDDS_DSOFTBUS_PROBE_EVENT("OnNegotiate",N,N%2,id,int(p.dataType),0);bool accepted=false;Dispatch<N>([&](auto& s){accepted=s.Negotiate(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,p,false);});FASTDDS_DSOFTBUS_PROBE_EVENT("OnNegotiate_result",N,N%2,id,accepted,0);return accepted;}
+    static bool Negotiate2(int32_t id,PeerSocketInfo p,SocketAccessInfo*,SocketAccessInfo*)noexcept{FASTDDS_DSOFTBUS_PROBE_EVENT("OnNegotiate2_unsupported",N,N%2,id,int(p.dataType),0);Dispatch<N>([&](auto& s){(void)s.Negotiate(static_cast<RecordRole>(N%static_cast<std::size_t>(RecordRole::Count)),id,p,true);});return false;}
     static ISocketListener Make(){ISocketListener l{};l.OnBind=Bound;l.OnShutdown=Stop;l.OnBytes=Bytes;l.OnError=Error;l.OnNegotiate=Negotiate;l.OnNegotiate2=Negotiate2;return l;}
 };
 template<std::size_t... N>auto Listeners(std::index_sequence<N...>){return std::array<ISocketListener,sizeof...(N)>{Entry<N>::Make()...};}
@@ -202,7 +202,7 @@ static_assert(std::is_same<decltype(::Shutdown(0)),void>::value,"Shutdown is voi
 PublicSocketBackend::PublicSocketBackend(PublicSocketConfiguration c):state_(std::make_shared<detail::PublicSocketState>(std::move(c))){}
 PublicSocketBackend::~PublicSocketBackend()=default; // explicit owner/control performs shutdown; no hidden SDK operation
 BackendKind PublicSocketBackend::Kind()const noexcept {
-#ifdef MDDS_PUBLIC_SOCKET_FAKE_SDK
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK
     return BackendKind::HostMock;
 #else
     return BackendKind::DSoftBusProvider;
@@ -232,7 +232,7 @@ BackendSocketResult CreateSocket(const std::shared_ptr<detail::PublicSocketState
         const bool configured=listening?s->observation.listener_configured:s->observation.configured;
         if(!s->valid||!configured||attempted||s->observation.closed||!callbacks){s->Reject(PublicSocketOperation::Socket,BackendStatus::InvalidState);return {BackendStatus::InvalidState,{}};}
         attempted=true;(listening?s->listener_callbacks:s->callbacks)=std::move(callbacks);s->Enter(PublicSocketOperation::Socket);}
-    try{MDDS_PROBE_EVENT("Socket_enter",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),-1,0,0);const auto id=::Socket(listening?s->listener_info:s->info);MDDS_PROBE_EVENT("Socket_return",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),id,id,0);std::lock_guard<std::mutex> lock(s->gate);
+    try{FASTDDS_DSOFTBUS_PROBE_EVENT("Socket_enter",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),-1,0,0);const auto id=::Socket(listening?s->listener_info:s->info);FASTDDS_DSOFTBUS_PROBE_EVENT("Socket_return",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),id,id,0);std::lock_guard<std::mutex> lock(s->gate);
         if(id>=0){(listening?s->listener_socket:s->socket)=id;
             if(listening||s->config.role==RecordRole::Server)s->observation.listener_socket=id;else s->observation.outgoing_socket=id;
             const auto fact=s->Returned(PublicSocketOperation::Socket,{},id);return {fact.status,id,true,true,{}};}
@@ -242,13 +242,13 @@ BackendSocketResult CreateSocket(const std::shared_ptr<detail::PublicSocketState
 }
 BackendSocketResult PublicSocketBackend::Create(ProviderCallbacks cb){return CreateSocket(state_,std::move(cb),false);}
 BackendSocketResult PublicSocketBackend::CreateListener(ProviderCallbacks cb){if(!state_->dual)return {};return CreateSocket(state_,std::move(cb),true);}
-#ifdef MDDS_PUBLIC_SOCKET_FAKE_SDK
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK
 void PublicSocketBackend::SetAcceptedCommitHookForTest(void(*fn)(void*) noexcept,void* context) noexcept {
     std::lock_guard<std::mutex> lock(state_->gate);state_->before_capability=fn;state_->before_capability_context=context;
 }
 #endif
 BackendStatus PublicSocketBackend::CommitAcceptedOwner(const RecordEntrance& entry,const NativeOwnerLease& owner){
-#ifdef MDDS_PUBLIC_SOCKET_FAKE_SDK
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK
     void(*hook)(void*) noexcept=nullptr;void* context=nullptr;
     {std::lock_guard<std::mutex> lock(state_->gate);hook=state_->before_capability;context=state_->before_capability_context;}
     if(hook)hook(context);
@@ -271,9 +271,9 @@ BackendCallResult Setup(const std::shared_ptr<detail::PublicSocketState>& s,std:
         if(!(listening?s->observation.listener_configured:s->observation.configured)||(!s->dual&&s->config.role!=role)||(listening?s->listener_socket:s->socket)<0||id!=(listening?s->listener_socket:s->socket)||s->observation.stopped||s->observation.closed){s->Reject(op,BackendStatus::InvalidState);return BackendStatus::InvalidState;}
         s->Enter(op);}
     try {const auto& listener=detail::Listener(listening?s->observation.listener_entry_index:s->observation.entry_index);
-        MDDS_PROBE_EVENT(role==RecordRole::Client?"Bind_enter":"Listen_enter",listening?s->observation.listener_entry_index:s->observation.entry_index,int(role),id,0,0);
+        FASTDDS_DSOFTBUS_PROBE_EVENT(role==RecordRole::Client?"Bind_enter":"Listen_enter",listening?s->observation.listener_entry_index:s->observation.entry_index,int(role),id,0,0);
         const auto rc=role==RecordRole::Client ? ::Bind(id,s->qos.data(),s->qos_count,&listener) : ::Listen(id,listening?s->listener_qos.data():s->qos.data(),listening?s->listener_qos_count:s->qos_count,&listener);
-        MDDS_PROBE_EVENT(role==RecordRole::Client?"Bind_return":"Listen_return",listening?s->observation.listener_entry_index:s->observation.entry_index,int(role),id,rc,0);
+        FASTDDS_DSOFTBUS_PROBE_EVENT(role==RecordRole::Client?"Bind_return":"Listen_return",listening?s->observation.listener_entry_index:s->observation.entry_index,int(role),id,rc,0);
         std::lock_guard<std::mutex> lock(s->gate);return s->Returned(op,rc);
     }catch(...){std::lock_guard<std::mutex> lock(s->gate);return s->Exception(op);}
 }
@@ -286,7 +286,7 @@ BackendSendResult PublicSocketBackend::Send(std::int32_t id,const std::uint8_t* 
         if(!p||!size||size>s->config.max_message_size||size>UINT32_MAX){s->Reject(PublicSocketOperation::Send,BackendStatus::InvalidBuffer);return {BackendStatus::InvalidBuffer,{}};}
         if(s->socket<0||id!=s->socket||s->primary_closed||s->primary_observed||s->primary_failed||s->observation.stopped||s->observation.closed||std::chrono::steady_clock::now()>=deadline){s->Reject(PublicSocketOperation::Send,BackendStatus::InvalidState);return {BackendStatus::InvalidState,{}};}
         s->Enter(PublicSocketOperation::Send);}
-    try {MDDS_DDS_FRAME("SDK_SEND",id,p,size);MDDS_PROBE_EVENT("SendBytes_enter",s->observation.entry_index,int(RecordRole::Client),id,0,size);const auto rc=::SendBytes(id,p,static_cast<std::uint32_t>(size));MDDS_PROBE_EVENT("SendBytes_return",s->observation.entry_index,int(RecordRole::Client),id,rc,size);std::lock_guard<std::mutex> lock(s->gate);s->Returned(PublicSocketOperation::Send,rc);
+    try {FASTDDS_DSOFTBUS_DDS_FRAME("SDK_SEND",id,p,size);FASTDDS_DSOFTBUS_PROBE_EVENT("SendBytes_enter",s->observation.entry_index,int(RecordRole::Client),id,0,size);const auto rc=::SendBytes(id,p,static_cast<std::uint32_t>(size));FASTDDS_DSOFTBUS_PROBE_EVENT("SendBytes_return",s->observation.entry_index,int(RecordRole::Client),id,rc,size);std::lock_guard<std::mutex> lock(s->gate);s->Returned(PublicSocketOperation::Send,rc);
         // NativeSendExecution must see even negative or unexpected positive raw results.
         return {BackendStatus::None,rc,true,true};
     }catch(...){std::lock_guard<std::mutex> lock(s->gate);s->Exception(PublicSocketOperation::Send);return {BackendStatus::ProviderException,{},true,false};}
@@ -304,7 +304,7 @@ BackendCallResult PublicSocketBackend::Shutdown(std::int32_t id){
         if(closed||observed){closed=true;s->RefreshClosed();s->Reject(PublicSocketOperation::Shutdown,previous);return previous;}
         closed=true;if(lane==0&&!s->dual)s->observation.stopped=true;s->RefreshClosed();s->Enter(PublicSocketOperation::Shutdown);}
     BackendCallResult result;
-    try{MDDS_PROBE_EVENT("Shutdown_enter",lane? s->observation.listener_entry_index:s->observation.entry_index,int(lane?RecordRole::Server:RecordRole::Client),id,0,0);::Shutdown(id);MDDS_PROBE_EVENT("Shutdown_void_return",lane?s->observation.listener_entry_index:s->observation.entry_index,int(lane?RecordRole::Server:RecordRole::Client),id,0,0);std::lock_guard<std::mutex> lock(s->gate);result=s->Returned(PublicSocketOperation::Shutdown,{});}
+    try{FASTDDS_DSOFTBUS_PROBE_EVENT("Shutdown_enter",lane? s->observation.listener_entry_index:s->observation.entry_index,int(lane?RecordRole::Server:RecordRole::Client),id,0,0);::Shutdown(id);FASTDDS_DSOFTBUS_PROBE_EVENT("Shutdown_void_return",lane?s->observation.listener_entry_index:s->observation.entry_index,int(lane?RecordRole::Server:RecordRole::Client),id,0,0);std::lock_guard<std::mutex> lock(s->gate);result=s->Returned(PublicSocketOperation::Shutdown,{});}
     catch(...){std::lock_guard<std::mutex> lock(s->gate);result=s->Exception(PublicSocketOperation::Shutdown);}
     {std::lock_guard<std::mutex> lock(s->gate);(lane==0?s->close_status:lane==1?s->listener_close_status:s->accepted_close_status)=result.status;
         if(lane==2)s->accepted_owner={};s->RefreshClosed();}

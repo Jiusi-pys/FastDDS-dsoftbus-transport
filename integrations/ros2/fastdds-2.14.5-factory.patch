@@ -1,0 +1,71 @@
+--- a/src/cpp/fastdds/domain/DomainParticipantFactory.cpp
++++ b/src/cpp/fastdds/domain/DomainParticipantFactory.cpp
+@@ -0,0 +1 @@
++#include "FastddsHook.hpp"
+@@ -72,0 +74 @@
++                fastdds_dsoftbus_hook::destructor_notice(pit->get_participant());
+@@ -113 +115 @@
+-        std::lock_guard<std::mutex> guard(mtx_participants_);
++        std::unique_lock<std::mutex> guard(mtx_participants_);
+@@ -135,0 +138 @@
++                    auto* deleted_part=part;
+@@ -138 +141,3 @@
+-                    break;
++                    if (vit->second.empty()) participants_.erase(vit);
++                    guard.unlock();
++                    return fastdds_dsoftbus_hook::after_delete(deleted_part) ? ReturnCode_t::RETCODE_OK : ReturnCode_t::RETCODE_ERROR;
+@@ -163 +168,5 @@
+-    const DomainParticipantQos& pqos = (&qos == &PARTICIPANT_QOS_DEFAULT) ? default_participant_qos_ : qos;
++    DomainParticipantQos pqos = (&qos == &PARTICIPANT_QOS_DEFAULT) ? default_participant_qos_ : qos;
++    bool hook_ok=false;
++    auto hook_lease=fastdds_dsoftbus_hook::prepare(did,&pqos,hook_ok);
++    if(!hook_ok)return nullptr;
++    fastdds_dsoftbus_hook::PendingLeaseGuard pending_owner(hook_lease);
+@@ -190,0 +200,2 @@
++        fastdds_dsoftbus_hook::attach(dom_part,hook_lease);
++        pending_owner.disarm();
+@@ -202,0 +214,2 @@
++        fastdds_dsoftbus_hook::fail_pending(hook_lease);
++        pending_owner.disarm();
+--- a/src/cpp/fastdds/publisher/PublisherImpl.cpp
++++ b/src/cpp/fastdds/publisher/PublisherImpl.cpp
+@@ -0,0 +1,2 @@
++#include <cstdlib>
++#include <cstdio>
+@@ -227,0 +230,5 @@
++    if(std::getenv("FASTDDS_DSOFTBUS_REQUIRED_CONFIG")) {
++        const auto& effective = (&qos == &DATAWRITER_QOS_DEFAULT) ? default_datawriter_qos_ : qos;
++        if(effective.data_sharing().kind()!=OFF) { std::fputs("FDDST_ENDPOINT_DATASHARING_REJECTED\n",stderr); return nullptr; }
++        std::fprintf(stderr,"FDDST_ENDPOINT role=writer data_sharing=OFF topic=%s\n",topic->get_name().c_str());std::fflush(stderr);
++    }
+--- a/src/cpp/fastdds/subscriber/SubscriberImpl.cpp
++++ b/src/cpp/fastdds/subscriber/SubscriberImpl.cpp
+@@ -0,0 +1,2 @@
++#include <cstdlib>
++#include <cstdio>
+@@ -189,0 +192,5 @@
++    if(std::getenv("FASTDDS_DSOFTBUS_REQUIRED_CONFIG")) {
++        const auto& effective = (&qos == &DATAREADER_QOS_DEFAULT) ? default_datareader_qos_ : qos;
++        if(effective.data_sharing().kind()!=OFF) { std::fputs("FDDST_ENDPOINT_DATASHARING_REJECTED\n",stderr); return nullptr; }
++        std::fprintf(stderr,"FDDST_ENDPOINT role=reader data_sharing=OFF topic=%s\n",topic->get_name().c_str());std::fflush(stderr);
++    }
+--- a/src/cpp/rtps/xmlparser/XMLProfileManager.cpp
++++ b/src/cpp/rtps/xmlparser/XMLProfileManager.cpp
+@@ -40 +40,7 @@
+-PublisherAttributes default_publisher_attributes;
++PublisherAttributes default_publisher_attributes = [] {
++    PublisherAttributes value;
++    // Pure configuration only: no Runtime, native call, thread or ownership.
++    // Explicit XML defaults loaded later overwrite this value and are validated.
++    if(std::getenv("FASTDDS_DSOFTBUS_REQUIRED_CONFIG")) value.qos.data_sharing.off();
++    return value;
++}();
+@@ -42 +48,7 @@
+-SubscriberAttributes default_subscriber_attributes;
++SubscriberAttributes default_subscriber_attributes = [] {
++    SubscriberAttributes value;
++    // Pure configuration only: no Runtime, native call, thread or ownership.
++    // Explicit XML defaults loaded later overwrite this value and are validated.
++    if(std::getenv("FASTDDS_DSOFTBUS_REQUIRED_CONFIG")) value.qos.data_sharing.off();
++    return value;
++}();

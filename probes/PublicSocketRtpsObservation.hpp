@@ -5,7 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <cstddef>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 struct FragmentObservation {
     std::array<std::uint8_t,16> writer_guid{};
     std::int32_t sequence_hi = 0;

@@ -4,7 +4,7 @@
 #include <functional>
 #include <string>
 #include <mutex>
-namespace mdds::dsoftbus::runtime_probe {
+namespace fastdds_dsoftbus::dsoftbus::runtime_probe {
 struct ProbeConfig {
     std::string run,peer_network;
     std::string service_prefix; // main fixes this to mdds.p<run>; Host fake supplies its static directory

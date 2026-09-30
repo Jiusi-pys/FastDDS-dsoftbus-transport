@@ -1,6 +1,6 @@
 #include "LossScenarioChecks.hpp"
 #include <cstdio>
-using namespace mdds::experiment;
+using namespace fastdds_dsoftbus::experiment;
 int main() {
     int failed=0;
     const auto check=[&](bool value,const char* label) { std::printf("%s %s\n",value?"PASS":"FAIL",label); if(!value) ++failed; };

@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace mdds::experiment::perf {
+namespace fastdds_dsoftbus::experiment::perf {
 constexpr std::size_t kRecordCapacity = 8192, kErrorCapacity = 128;
 constexpr std::size_t kInboundCapacity = 1048576, kOutboundCapacity = 262176, kStorageCap = 4194304;
 constexpr int64_t kUnobservedNs = -1;

@@ -84,7 +84,7 @@ and bounded-fragment results below have separate artifacts and run IDs.
 - The experimental transport is under
   [`experiments/fastdds_socket`](../experiments/fastdds_socket), behind
   `BUILD_FASTDDS_DSOFTBUS_EXPERIMENT=OFF` by default. The native program also
-  requires `MDDS_EXPERIMENT_NATIVE=ON`, an OHOS build, real Fast DDS CONFIG
+  requires `FASTDDS_DSOFTBUS_EXPERIMENT_NATIVE=ON`, an OHOS build, real Fast DDS CONFIG
   3.6.2.0, and an explicit C/POD token bridge.
 - Effective runtime isolation was checked: `use_builtin_transports=false`, the
   sole transport descriptor is the experimental private kind, UDP/TCP/SHM
@@ -230,7 +230,7 @@ The final native package executable is
 `471317e2a95c3eba0490459d63c455a6033a9118969f3ec60e10a912027f5289`. Final
 host validation was `OFF 21/21 PASS` and `ON 23/23 PASS`; the final OHOS
 bridge/configure/build exits were `0/0/0`. The drop capability is default-OFF,
-requires `MDDS_EXPERIMENT_RX_DROP=ON` (build script `-EnableRxDrop`) and the
+requires `FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP=ON` (build script `-EnableRxDrop`) and the
 explicit controlled-loss runtime arguments, and does not
 alter the ordinary transport path. No SenderResource/registry/iterator
 refactor was introduced.

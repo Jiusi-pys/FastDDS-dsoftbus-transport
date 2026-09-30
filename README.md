@@ -1,4 +1,15 @@
-# FastDDS dsoftbus Transport
+# Fast DDS OpenHarmony DSoftBus Transport
+
+本项目是 Fast DDS 的 OpenHarmony DSoftBus Socket Transport 适配层，不是独立的
+MDDS 中间件或新的 DDS/RMW 实现。公开命名已迁移为 `fastdds_dsoftbus`、
+`<fastdds_dsoftbus/dsoftbus/...>` 和 CMake 包 `FastDDSDSoftBusTransport`。
+这次迁移改变源码/ABI/构建接口；旧设备证据仍绑定旧命名的原源码与包。
+迁移规则和保留的历史协议名称见 [命名说明](docs/NAMING.md)。
+
+当前还提供一个隔离的 ROS 2 Jazzy Host 集成入口，使用原版 `rmw_fastrtps` 和
+版本绑定的 Fast DDS 2.14 Host 前端；它不创建 `rmw_mdds`，不改变默认 Fast DDS
+3.6 基线，也不构成设备或生产资格。构建、安装、外部 `find_package` 和已验证的
+Host 范围见 [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)。
 
 > **Installed Runtime dual-board acceptance（2026-09-30）**：安装版公开消费者的
 > 双板窗口 `data-2`（run `73ff0560343b4afb`）通过独立原始收据复核；配套
@@ -347,7 +358,7 @@ Current versioned Host capability, build dependencies and external evidence: [Ho
 
 > **前序 controlled-loss 补充（历史）**：独立 OFF/ON host `21/21`、`23/23 PASS` 与 OHOS `0/0/0` 完成；RELIABLE 的单次 whole-message drop 已由 v2 因果收据关联到 NACK_FRAG、缺失范围重发、ReaderSampleInfo 与 ACK，BEST_EFFORT 则保留 samples 2/3、mask `006`、ACK `NotCalled`。两种窗口均正常清理并恢复 guards；SDK 内部物理结算仍 `UNOBSERVED`。这仍是 default-OFF 限定实验，不改变 P0/P4 结论。
 
-本快照优先于下文较早的 N1/N2/N3 历史记录；那些记录仍保留其原始范围和证据，不计入本轮计划完成度。最新冻结方案见 [docs/MDDS_V1_IMPLEMENTATION_PLAN.md](docs/MDDS_V1_IMPLEMENTATION_PLAN.md)。
+本快照优先于下文较早的 N1/N2/N3 历史记录；那些记录仍保留其原始范围和证据，不计入本轮计划完成度。最新冻结方案见 [docs/FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md](docs/FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md)。
 
 历史 N1/N2/N3 工作包中，ApplicationAttachments 的设计 R1（unique InputChannels/attachment 封装）与代码 R1（Close waiter 等待迟到 Opening）是两个不同问题，均已在各自限定范围通过 review/test；N3-1 的 N2 root public target wiring 也已通过独立 review 与最终复测。64 次仅为模型 application attachment 周期，不是 DDS Participant 或真实同名热重建。这些历史工作包当时未执行 native backend、实际 DDS/SPDP/SEDP/样本、同名 Participant 热重建或 RMW；本次 R4 的新增证据与覆盖范围见上方实验报告。
 

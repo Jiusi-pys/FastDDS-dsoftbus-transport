@@ -3,7 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 using CallbackTableRecord = std::array<std::uint8_t, 64>;
 inline constexpr std::array<unsigned, 4> callback_record_slots{{1, 1, 2, 1}};
 inline CallbackTableRecord MakeCallbackTableRecord(std::uint64_t run, unsigned sequence) {

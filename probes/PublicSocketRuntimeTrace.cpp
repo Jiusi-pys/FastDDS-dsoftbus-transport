@@ -6,10 +6,10 @@
 #include <chrono>
 #include <new>
 #include <atomic>
-namespace mdds::dsoftbus::runtime_probe {
+namespace fastdds_dsoftbus::dsoftbus::runtime_probe {
 namespace {
 std::atomic<unsigned> observation_cycle{0};
-#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_BOUNDED_REGRESSION
 constexpr std::size_t trace_limit=16384;
 #else
 constexpr std::size_t trace_limit=1024;

@@ -20,7 +20,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 namespace {
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 using Clock=std::chrono::steady_clock;
 constexpr char pkg[]="com.kaihong.mdds";
 constexpr char process_name[]="fastdds_dsoftbus_probe";

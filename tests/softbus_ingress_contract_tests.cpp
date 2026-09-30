@@ -8,7 +8,7 @@
 #include <string>
 #include <type_traits>
 
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 namespace {
 void Require(bool value, const char* reason) { if (!value) throw std::runtime_error(reason); }
 struct Receiver final : DiagnosticReceiver {

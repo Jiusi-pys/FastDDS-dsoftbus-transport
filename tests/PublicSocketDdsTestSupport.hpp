@@ -1,5 +1,5 @@
 #pragma once
-#include <mdds/dsoftbus/HostProviderLoop.hpp>
+#include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
 #include <fastdds/LibrarySettings.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
@@ -10,7 +10,7 @@
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/rtps/common/WriteParams.hpp>
-#include "MddsKeyedSamplePubSubTypes.hpp"
+#include "DSoftBusKeyedSamplePubSubTypes.hpp"
 #include "HostParticipantEvidence.hpp"
 #include <atomic>
 #include <cstdlib>
@@ -20,10 +20,10 @@
 #include <functional>
 #include <sstream>
 
-#include <mdds/dsoftbus/PublicSocketBackend.hpp>
+#include <fastdds_dsoftbus/dsoftbus/PublicSocketBackend.hpp>
 #include "FakePublicSocketLink.hpp"
 namespace public_dds {
-using namespace mdds::dsoftbus;using namespace mdds::dsoftbus::phase0;using namespace mdds::dsoftbus::host_test;using namespace host_dds;
+using namespace fastdds_dsoftbus::dsoftbus;using namespace fastdds_dsoftbus::dsoftbus::phase0;using namespace fastdds_dsoftbus::dsoftbus::host_test;using namespace host_dds;
 namespace dds=eprosima::fastdds::dds;namespace rtps=eprosima::fastdds::rtps;using namespace std::chrono_literals;
 void Require(bool v,const char* why){if(!v)throw std::runtime_error(why);}
 std::string Guid(const rtps::GUID_t& g){return Hex(g.guidPrefix.value,12)+Hex(g.entityId.value,4);}

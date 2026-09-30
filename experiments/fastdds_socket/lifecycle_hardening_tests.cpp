@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-using namespace mdds::experiment;
-namespace mdds::experiment {
+using namespace fastdds_dsoftbus::experiment;
+namespace fastdds_dsoftbus::experiment {
 // Scheduling hooks expose adapter stages only. Every native callback below
 // uses the unchanged public SDK signature and the table supplied to Listen/Bind.
 class ContractTestAccess {
@@ -106,10 +106,10 @@ private:
     std::size_t at_;
 };
 Config MakeConfig(const char* run) {
-    using Codec=mdds::dsoftbus::v1::AddressCodec;
-    using Profile=mdds::dsoftbus::v1::Profile;
+using Codec=fastdds_dsoftbus::dsoftbus::v1::AddressCodec;
+using Profile=fastdds_dsoftbus::dsoftbus::v1::Profile;
     Config c;c.run_id=run;c.peer_network_id=std::string(64,'a');
-    mdds::dsoftbus::EndpointId local{},peer{};local[0]=1;peer[0]=2;
+fastdds_dsoftbus::dsoftbus::EndpointId local{},peer{};local[0]=1;peer[0]=2;
     Require(Codec::EncodeLocator({local,7,Profile::BytesNative},c.local_locator),"local locator");
     Require(Codec::EncodeLocator({peer,9,Profile::BytesNative},c.peer_locator),"peer locator");
     Require(EncodeNativeServiceName({"experiment",7,7,Profile::BytesNative},c.local_service),"local service");

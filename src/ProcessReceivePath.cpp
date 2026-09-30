@@ -1,6 +1,6 @@
 #include "ProcessReceiveInternal.hpp"
 #include <new>
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace {
 template<class T> NativeResult<T> Failure(NativeStatus status) {return {std::nullopt,{status}};}
 }

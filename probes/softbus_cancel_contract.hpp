@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 inline constexpr std::size_t cancel_record_bytes = 60000;
 inline constexpr std::uint32_t cancel_record_limit = 4096;
 inline constexpr std::int64_t cancel_blocked_us = 200000;
@@ -151,4 +151,4 @@ std::vector<std::uint8_t> MakeCancelDeliveryReceipt(std::string_view run_id, con
         const CancelIntegrityObservation&);
 bool ParseCancelDeliveryReceipt(const void*, std::size_t, std::string_view run_id, const CancelWorkload&,
         CancelIntegrityObservation&) noexcept;
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

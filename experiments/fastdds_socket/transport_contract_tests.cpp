@@ -11,8 +11,8 @@
 #include <thread>
 #include <vector>
 static void Require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
-using namespace mdds::experiment;
-namespace mdds::experiment {
+using namespace fastdds_dsoftbus::experiment;
+namespace fastdds_dsoftbus::experiment {
 class ContractTestAccess {
 public:
     static void BeforeRetire(Control& c,std::function<void()> hook){c.before_final_retire_=std::move(hook);}
@@ -77,7 +77,7 @@ struct Receiver:rtps::TransportReceiverInterface {
 };
 void ParserContracts()
 {
-    using namespace mdds::experiment;
+using namespace fastdds_dsoftbus::experiment;
     std::vector<std::uint8_t> packet(44, 0);
     packet[0]='R'; packet[1]='T'; packet[2]='P'; packet[3]='S'; packet[4]=2; packet[5]=3;
     packet[20]=0x15; packet[21]=1; packet[22]=20;
@@ -102,10 +102,10 @@ void ParserContracts()
 }
 void TransportContracts()
 {
-    using Codec=mdds::dsoftbus::v1::AddressCodec;
-    using Profile=mdds::dsoftbus::v1::Profile;
+using Codec=fastdds_dsoftbus::dsoftbus::v1::AddressCodec;
+using Profile=fastdds_dsoftbus::dsoftbus::v1::Profile;
     Config c;c.run_id="host-contract";c.peer_network_id=std::string(64,'a');
-    mdds::dsoftbus::EndpointId lk{},pk{};lk[0]=0xff;pk[0]=0;
+fastdds_dsoftbus::dsoftbus::EndpointId lk{},pk{};lk[0]=0xff;pk[0]=0;
     Require(Codec::EncodeLocator({lk,7,Profile::BytesNative},c.local_locator),"FF key accepted");
     Require(Codec::EncodeLocator({pk,9,Profile::BytesNative},c.peer_locator),"zero key accepted");
     Require(EncodeNativeServiceName({"experiment",7,7,Profile::BytesNative},c.local_service),"service local");
@@ -174,10 +174,10 @@ void TransportContracts()
 }
 void LateBindCloseContract()
 {
-    using Codec=mdds::dsoftbus::v1::AddressCodec;
-    using Profile=mdds::dsoftbus::v1::Profile;
+using Codec=fastdds_dsoftbus::dsoftbus::v1::AddressCodec;
+using Profile=fastdds_dsoftbus::dsoftbus::v1::Profile;
     Config c;c.run_id="late-bind-close";c.peer_network_id=std::string(64,'a');
-    mdds::dsoftbus::EndpointId lk{},pk{};lk[0]=1;pk[0]=2;
+fastdds_dsoftbus::dsoftbus::EndpointId lk{},pk{};lk[0]=1;pk[0]=2;
     Require(Codec::EncodeLocator({lk,7,Profile::BytesNative},c.local_locator),"local locator");
     Require(Codec::EncodeLocator({pk,9,Profile::BytesNative},c.peer_locator),"peer locator");
     Require(EncodeNativeServiceName({"experiment",7,7,Profile::BytesNative},c.local_service),"local service");
@@ -203,10 +203,10 @@ void LateBindCloseContract()
 }
 void NativeServiceNameContract()
 {
-    using Codec=mdds::dsoftbus::v1::AddressCodec;
-    using Profile=mdds::dsoftbus::v1::Profile;
+using Codec=fastdds_dsoftbus::dsoftbus::v1::AddressCodec;
+using Profile=fastdds_dsoftbus::dsoftbus::v1::Profile;
     Config c;c.run_id="native-service-name";c.peer_network_id=std::string(64,'a');
-    mdds::dsoftbus::EndpointId lk{},pk{};lk[0]=1;pk[0]=2;
+fastdds_dsoftbus::dsoftbus::EndpointId lk{},pk{};lk[0]=1;pk[0]=2;
     Require(Codec::EncodeLocator({lk,7,Profile::BytesNative},c.local_locator),"local locator");
     Require(Codec::EncodeLocator({pk,9,Profile::BytesNative},c.peer_locator),"peer locator");
     Require(Codec::EncodeServiceName({"experiment",7,7,Profile::BytesNative},c.local_service),"bare local service");

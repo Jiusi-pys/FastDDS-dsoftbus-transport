@@ -7,7 +7,7 @@
 
 // HOST DIAGNOSTIC ONLY. This model is not wired to the native backend. It
 // deliberately cannot reconstruct an event's identity before adapter ingress.
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 using PublicBytesCallback = void (*)(std::int32_t, const void*, std::uint32_t);
 constexpr std::size_t ingress_diagnostic_slots = 8; // NOT a production limit.
 constexpr std::size_t ingress_diagnostic_records = 4;
@@ -90,4 +90,4 @@ private:
     static void OnBytes(std::int32_t, const void*, std::uint32_t) noexcept;
     static void Ingress(std::size_t, std::int32_t, const void*, std::uint32_t) noexcept;
 };
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

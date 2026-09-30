@@ -1,13 +1,13 @@
-#include <mdds/dsoftbus/ExperimentalRuntime.hpp>
-#include <mdds/dsoftbus/HostProviderLoop.hpp>
-#include <mdds/dsoftbus/RuntimeProbeAccess.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
+#include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
+#include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
 #include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <utility>
 
-namespace mdds::dsoftbus::phase0 {
+namespace fastdds_dsoftbus::dsoftbus::phase0 {
 // Existing isolated assembly hook: continue to the real Bind call. This is not
 // permission, peer-ready, deadline or platform-proof evidence. Applications must
 // establish deployment/authorization prerequisites before constructing DDS.
@@ -17,7 +17,7 @@ bool RuntimeProbeBeforeConnect() noexcept {
     return InvokeArmedPreConnectGate();
 }
 }
-namespace mdds::dsoftbus::experimental {
+namespace fastdds_dsoftbus::dsoftbus::experimental {
 struct Runtime::Impl {
     explicit Impl(phase0::PublicSocketConfiguration config)
         : backend(std::make_shared<phase0::PublicSocketBackend>(std::move(config))),

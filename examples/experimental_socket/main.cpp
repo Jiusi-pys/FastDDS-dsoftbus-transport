@@ -1,5 +1,5 @@
-#include <mdds/dsoftbus/ExperimentalRuntime.hpp>
-#include <mdds/examples/MddsKeyedSamplePubSubTypes.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
+#include <fastdds_dsoftbus/examples/DSoftBusKeyedSamplePubSubTypes.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -17,7 +17,7 @@
 #include <thread>
 
 namespace fd=eprosima::fastdds::dds;
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 void check(bool ok,const char* why) {if(!ok)throw std::runtime_error(why);}
 [[noreturn]] void FailCleanup(const char* why) {
     std::cerr<<why<<"; failed process termination, NOT normal SDK cancellation/drain\n"<<std::flush;
@@ -27,7 +27,7 @@ void check(bool ok,const char* why) {if(!ok)throw std::runtime_error(why);}
 Locator logical(unsigned side) {EndpointId id{};id[0]=10;id[15]=static_cast<std::uint8_t>(side+1);Locator l;check(LocatorCodec::Encode(id,l),"locator");return l;}
 int main(int argc,char** argv) {
     if(argc!=5 || (std::string(argv[1])!="0" && std::string(argv[1])!="1")) {
-        std::cerr<<"usage: mdds_socket_consumer <side:0|1> <peer-network-id> <authorized-package> <shared-service-prefix>\n";
+        std::cerr<<"usage: fastdds_dsoftbus_socket_consumer <side:0|1> <peer-network-id> <authorized-package> <shared-service-prefix>\n";
         return 2;
     }
     const unsigned side=std::string(argv[1])=="1";
@@ -61,7 +61,7 @@ int main(int argc,char** argv) {
         qos.transport().user_transports.push_back(descriptor);
         qos.wire_protocol().builtin.initialPeersList.push_back(logical(1-side));
         participant=factory->create_participant(177,qos);check(participant,"participant unavailable or setup failed");
-        fd::TypeSupport type(new MddsKeyedSamplePubSubType());check(type.register_type(participant)==fd::RETCODE_OK,"type");
+        fd::TypeSupport type(new DSoftBusKeyedSamplePubSubType());check(type.register_type(participant)==fd::RETCODE_OK,"type");
         auto* topic=participant->create_topic("mdds_installed_sample",type.get_type_name(),fd::TOPIC_QOS_DEFAULT);
         auto* pub=participant->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub=participant->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);
         check(topic&&pub&&sub,"entities");
@@ -69,7 +69,7 @@ int main(int argc,char** argv) {
         auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(20);fd::PublicationMatchedStatus matched;
         do {writer->get_publication_matched_status(matched);if(matched.current_count>0)break;std::this_thread::sleep_for(std::chrono::milliseconds(10));}while(std::chrono::steady_clock::now()<deadline&&!pump_failed);
         check(matched.current_count>0&&!pump_failed,"match deadline or pump failure");
-        MddsKeyedSample sample;sample.key(side+1);sample.ordinal(1);check(writer->write(&sample)==fd::RETCODE_OK,"write");
+        DSoftBusKeyedSample sample;sample.key(side+1);sample.ordinal(1);check(writer->write(&sample)==fd::RETCODE_OK,"write");
         bool received=false;fd::SampleInfo info;
         while(std::chrono::steady_clock::now()<deadline&&!pump_failed) {
             if(reader->take_next_sample(&sample,&info)==fd::RETCODE_OK&&info.valid_data&&sample.key()==2-side&&sample.ordinal()==1){received=true;break;}

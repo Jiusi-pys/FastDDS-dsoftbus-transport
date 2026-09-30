@@ -11,7 +11,7 @@ int main(int argc, char** argv) {
     // A malformed length must traverse DDS serialization/take before rejection.
     bool pass=false;
     if(std::string(argv[1])=="serialization") {
-        using namespace mdds::experiment::perf;
+using namespace fastdds_dsoftbus::experiment::perf;
         ExperimentLargeSamplePubSubType type;
         pass=true;
         for(auto id:{CaseId::RTT_1K,CaseId::RTT_4K,CaseId::RTT_256K}) {
@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
                 type.serialize(&source,payload,eprosima::fastdds::dds::XCDR_DATA_REPRESENTATION)&&payload.length==size&&
                 type.deserialize(payload,&recovered)&&recovered==source&&ValidatePayload(recovered.index(),recovered.data(),decoded)&&decoded==expected;
         }
-    } else pass = mdds::experiment::perf::PerformanceFixture::ContractTest(argv[1], static_cast<std::uint16_t>(port));
+} else pass = fastdds_dsoftbus::experiment::perf::PerformanceFixture::ContractTest(argv[1], static_cast<std::uint16_t>(port));
     std::printf("PERF_FIXTURE_CONTRACT test=%s result=%s native_proof=NONE\n", argv[1], pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

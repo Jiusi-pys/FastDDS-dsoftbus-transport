@@ -4,7 +4,7 @@
 #include "multi_instance_tests.cpp"
 #undef main
 
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 class RuntimeTestAccess {
 public:
     static void Copy(Control& c,std::function<void()> f){c.before_rx_copy_=std::move(f);}

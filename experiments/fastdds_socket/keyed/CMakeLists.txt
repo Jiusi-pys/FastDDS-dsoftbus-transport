@@ -20,7 +20,7 @@ target_link_libraries(experiment_keyed_fixture PUBLIC experimental_dsoftbus_tran
 if(NOT CMAKE_CROSSCOMPILING)
     if(BUILD_TESTING)
         find_program(KEYED_NODE_EXECUTABLE NAMES node REQUIRED)
-        target_compile_definitions(experiment_keyed_fixture PUBLIC MDDS_KEYED_HOST_CONTRACT_TESTS=1)
+        target_compile_definitions(experiment_keyed_fixture PUBLIC FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS=1)
         add_executable(keyed_fixture_contract_tests fixture_contract_tests.cpp)
         target_link_libraries(keyed_fixture_contract_tests PRIVATE experiment_keyed_fixture)
         foreach(_contract IN ITEMS loan-read-format loan-take-format loan-read-log loan-take-log loan-read-payload loan-take-payload state-no-payload graph-initial graph-late graph-final)

@@ -3,8 +3,8 @@
 #include "PublicSocketRuntimeTrace.hpp"
 #include <cstdio>
 #include <new>
-namespace mdds::dsoftbus::dds_experiment {
-#ifdef MDDS_PUBLIC_SOCKET_DECISION_DIAGNOSTICS
+namespace fastdds_dsoftbus::dsoftbus::dds_experiment {
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DECISION_DIAGNOSTICS
 namespace {
 constexpr std::size_t limit=16384;
 using Store=DecisionStore<limit>;
@@ -18,14 +18,14 @@ const char* Branch(ReceiveDecisionBranch v) noexcept {
 }
 #endif
 void RecordDecision(const ReceiveDecision& d,std::uint64_t ingress,unsigned side) noexcept {
-#ifdef MDDS_PUBLIC_SOCKET_DECISION_DIAGNOSTICS
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DECISION_DIAGNOSTICS
     Decisions().Record(d,ingress,side,runtime_probe::DetailedObservation());
 #else
     (void)d;(void)ingress;(void)side;
 #endif
 }
 void DumpDecisions() noexcept {
-#ifdef MDDS_PUBLIC_SOCKET_DECISION_DIAGNOSTICS
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DECISION_DIAGNOSTICS
     const auto snapshot=Decisions().Capture(); // immutable prefix; no lock while printing
     for(std::size_t i=0;i<snapshot.count;++i){const auto& row=Decisions().At(i);const auto& d=row.decision;const auto& b=d.bridge;
         std::printf("RX_DECISION event=%zu side=%u ingress=%llu layer=%s sequence=%llu record=%llu role=%d socket=%d phase=%d size=%zu branch=%s bridge_called=%d refused_receive=%d refused_receive_total=%zu status_known=%d status=%d correlation=%llu stage=%s reason=%s result_known=%d result=%d record_limit_known=%d record_limit=%zu native_known=%d native_status_known=%d native_status=%d owner_slot=%llu owner=%llu generation=%llu route_version=%llu application_known=%d app=%llu logical_token=%llu receiver_known=%d receiver=%llu lifecycle_known=%d app_phase=%d receiver_phase=%d stopped=%d capacity_known=%d capacity_mask=%u records=%zu records_limit=%zu bytes=%zu bytes_limit=%zu local_records=%zu local_records_limit=%zu local_bytes=%zu local_bytes_limit=%zu copying=%zu copying_limit=%zu app_copying=%zu app_copying_limit=%zu candidate_count=%u\n",

@@ -3,7 +3,7 @@
 #include "../DualValidation.hpp"
 #include "../ListenerPolicy.hpp"
 #include "KeyedValidator.hpp"
-#include "MddsKeyedSamplePubSubTypes.hpp"
+#include "DSoftBusKeyedSamplePubSubTypes.hpp"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -35,7 +35,7 @@
 #else
 #include <unistd.h>
 #endif
-namespace mdds::experiment::keyed
+namespace fastdds_dsoftbus::experiment::keyed
 {
 namespace dds = eprosima::fastdds::dds;
 namespace rtps = eprosima::fastdds::rtps;
@@ -156,7 +156,7 @@ struct KeyedFixture::Impl
         std::set<std::pair<unsigned, unsigned>> written;
     };
     Options opts;
-    dds::TypeSupport type{new MddsKeyedSamplePubSubType()};
+    dds::TypeSupport type{new DSoftBusKeyedSamplePubSubType()};
     dds::DomainParticipant *participant = nullptr;
     dds::Publisher *publisher = nullptr;
     dds::Subscriber *subscriber = nullptr;
@@ -176,7 +176,7 @@ struct KeyedFixture::Impl
     std::atomic<bool> cleaning{false};
     std::map<unsigned, unsigned> state;
     std::map<unsigned, std::pair<int, int>> generations;
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
     struct EvidenceFailure
     {
     };
@@ -448,7 +448,7 @@ struct KeyedFixture::Impl
     template <class T> bool Remote(const T &q) const
     {
         return std::string(q.topic_name.c_str()) == Topic() &&
-               std::string(q.type_name.c_str()) == "MddsKeyedSample" &&
+               std::string(q.type_name.c_str()) == "DSoftBusKeyedSample" &&
                q.reliability.kind == dds::RELIABLE_RELIABILITY_QOS &&
                q.durability.kind == (opts.case_id == "H1" ? dds::TRANSIENT_LOCAL_DURABILITY_QOS
                                                           : dds::VOLATILE_DURABILITY_QOS) &&
@@ -480,7 +480,7 @@ struct KeyedFixture::Impl
         auto *f = dds::DomainParticipantFactory::get_instance();
         eprosima::fastdds::LibrarySettings s;
         s.intraprocess_delivery = eprosima::fastdds::INTRAPROCESS_OFF;
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
         if (test_factory_preconfigured)
         {
             eprosima::fastdds::LibrarySettings actual;
@@ -660,7 +660,7 @@ struct KeyedFixture::Impl
                                               " durability=" + std::to_string(d.durability.kind) +
                                               " valid=1");
                 }
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
                 if (emit && graph_mismatch)
                     have.clear();
 #endif
@@ -694,7 +694,7 @@ struct KeyedFixture::Impl
                                           " reliability=" + std::to_string(d.reliability.kind) +
                                           " durability=" + std::to_string(d.durability.kind) + " valid=1");
             }
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
             if (emit && graph_mismatch)
                 have.clear();
 #endif
@@ -711,9 +711,9 @@ struct KeyedFixture::Impl
     {
         return Graph(late, true) || Fail(predicate);
     }
-    MddsKeyedSample Sample(unsigned writer, unsigned key, unsigned ordinal) const
+    DSoftBusKeyedSample Sample(unsigned writer, unsigned key, unsigned ordinal) const
     {
-        MddsKeyedSample x;
+        DSoftBusKeyedSample x;
         x.key(key);
         x.run(run_value);
         x.writer(writer);
@@ -806,11 +806,11 @@ struct KeyedFixture::Impl
         dds::ReturnCode_t rc = dds::RETCODE_ERROR;
         std::set<SampleKey> values;
     };
-    dds::ReturnCode_t ReturnLoan(dds::LoanableSequence<MddsKeyedSample> &data,
+    dds::ReturnCode_t ReturnLoan(dds::LoanableSequence<DSoftBusKeyedSample> &data,
                                  dds::SampleInfoSeq &infos) noexcept
     {
         const auto rc = reader->return_loan(data, infos);
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
         ++real_loan_returns;
         last_loan_rc = int(rc);
 #endif
@@ -822,7 +822,7 @@ struct KeyedFixture::Impl
     {
         Batch out;
         const auto op = ++operation;
-        dds::LoanableSequence<MddsKeyedSample> data;
+        dds::LoanableSequence<DSoftBusKeyedSample> data;
         dds::SampleInfoSeq infos;
         out.rc = take ? reader->take(data, infos, dds::LENGTH_UNLIMITED, mask, dds::ANY_VIEW_STATE,
                                      dds::ANY_INSTANCE_STATE)
@@ -835,7 +835,7 @@ struct KeyedFixture::Impl
         struct LoanGuard
         {
             Impl &owner;
-            dds::LoanableSequence<MddsKeyedSample> &data;
+            dds::LoanableSequence<DSoftBusKeyedSample> &data;
             dds::SampleInfoSeq &infos;
             bool armed;
             ~LoanGuard()
@@ -844,7 +844,7 @@ struct KeyedFixture::Impl
                     owner.ReturnLoan(data, infos);
             }
         } guard{*this, data, infos, out.rc == dds::RETCODE_OK};
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
         if (out.rc == dds::RETCODE_OK)
             InjectEvidence(EvidenceFault::Format);
 #endif
@@ -858,7 +858,7 @@ struct KeyedFixture::Impl
             Log("API_RETURN", base + " rc=" + std::to_string(int(out.rc)) + " count=0");
             return out;
         }
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
         if (out.rc == dds::RETCODE_OK)
             InjectEvidence(EvidenceFault::Log);
 #endif
@@ -897,7 +897,7 @@ struct KeyedFixture::Impl
                 }
                 continue;
             }
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
             InjectEvidence(EvidenceFault::Payload);
 #endif
             const auto &x = data[n];
@@ -1417,7 +1417,7 @@ std::vector<std::shared_ptr<Control>> KeyedFixture::Controls() const
                           : std::vector<std::shared_ptr<Control>>{};
 }
 
-#ifdef MDDS_KEYED_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_KEYED_HOST_CONTRACT_TESTS
 bool KeyedFixture::ContractTest(const std::string &test, std::uint16_t port)
 {
     const bool graph = test.rfind("graph-", 0) == 0;
@@ -1498,4 +1498,4 @@ bool KeyedFixture::ContractTest(const std::string &test, std::uint16_t port)
     return pass && clean_b && clean_a;
 }
 #endif
-} // namespace mdds::experiment::keyed
+} // namespace fastdds_dsoftbus::experiment::keyed

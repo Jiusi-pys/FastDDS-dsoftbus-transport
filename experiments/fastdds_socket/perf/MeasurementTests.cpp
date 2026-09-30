@@ -3,7 +3,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
-using namespace mdds::experiment::perf;
+using namespace fastdds_dsoftbus::experiment::perf;
 static void Require(bool ok, const char* why) { if (!ok) throw std::runtime_error(why); }
 int main()
 {

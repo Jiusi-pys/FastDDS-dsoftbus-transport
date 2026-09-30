@@ -6,7 +6,7 @@
 #include "PublicSocketRtpsObservation.hpp"
 #include "../experiments/fastdds_socket/LargeSampleContract.hpp"
 #include "ExperimentLargeSamplePubSubTypes.hpp"
-#include <mdds/dsoftbus/RuntimeProbeAccess.hpp>
+#include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
 #include <fastdds/LibrarySettings.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
@@ -17,7 +17,7 @@
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/rtps/common/WriteParams.hpp>
-#include "MddsKeyedSamplePubSubTypes.hpp"
+#include "DSoftBusKeyedSamplePubSubTypes.hpp"
 #include <socket.h> // Private opt-in assembly only; use the authorized QosType declarations.
 #include <array>
 #include <atomic>
@@ -29,13 +29,13 @@
 #include <set>
 #include <stdexcept>
 #include <thread>
-namespace mdds::dsoftbus::dds_experiment {
+namespace fastdds_dsoftbus::dsoftbus::dds_experiment {
 namespace dds=eprosima::fastdds::dds;namespace rtps=eprosima::fastdds::rtps;
 using namespace phase0;using namespace host_test;using namespace std::chrono_literals;
 namespace {
 thread_local const Control* control=nullptr;
 thread_local bool setup_control_failed=false;
-#ifdef MDDS_DDS_EXPERIMENT_TESTING
+#ifdef FASTDDS_DSOFTBUS_DDS_EXPERIMENT_TESTING
 thread_local std::function<void(dds::DataWriter*)> after_wait_hook;
 thread_local std::function<void()> after_frame_selection;
 thread_local bool shared_delete_failure_once=false;
@@ -50,7 +50,7 @@ Locator Local(unsigned side){EndpointId id{};id[0]=10;id[14]=128;id[15]=std::uin
 std::string Name(const Config& c,unsigned side,const char* role){return c.service_prefix+(c.service_prefix=="host.public"?"":c.run)+(side?".B.":".A.")+role;}
 DSoftBusTransportDescriptor Configuration(const Config& c){DSoftBusTransportDescriptor d(8192);auto l=Local(c.side),p=Local(1-c.side);d.directory.locals={{l,Name(c,c.side,"namespace"),Name(c,c.side,"listener")}};d.directory.routes={{{l,p},{c.peer_network,Name(c,1-c.side,"listener"),Name(c,c.side,"outgoing"),{Name(c,1-c.side,"outgoing")},RecordDataType::Bytes},1}};d.default_metatraffic_unicast={l};d.default_user_unicast={l};return d;}
 PublicSocketConfiguration BackendConfiguration(const Config& c){PublicSocketConfiguration b;b.identity={Name(c,c.side,"outgoing"),{910+c.side*4},{1010+c.side*4}};b.listener_identity={Name(c,c.side,"listener"),{911+c.side*4},{1011+c.side*4}};b.package_name="com.kaihong.mdds";b.peer_name=Name(c,1-c.side,"listener");b.peer_network_id=c.peer_network;b.bind_qos={{QOS_TYPE_MIN_BW,80},{QOS_TYPE_MAX_WAIT_TIMEOUT,2000}};b.listen_qos=b.bind_qos;b.max_message_size=8192;return b;}
-#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_BOUNDED_REGRESSION
 constexpr std::size_t frame_limit=16384;
 #else
 constexpr std::size_t frame_limit=4096;
@@ -62,10 +62,10 @@ std::uint64_t FrameBytes(const char* stage,std::int32_t socket,const std::uint8_
     if(!p||n<20||n>8192)return 0;
     const auto observation_cycle=runtime_probe::ObservationCycle();
     if(observation_cycle>1){auto& s=Store();std::lock_guard<std::mutex> l(s.gate);++s.omitted;return ++s.packets;}
-#ifdef MDDS_DDS_EXPERIMENT_TESTING
+#ifdef FASTDDS_DSOFTBUS_DDS_EXPERIMENT_TESTING
     if(after_frame_selection)after_frame_selection();
 #endif
-    const auto seen=mdds::experiment::ObserveRtps(p,n);if(!seen.valid)return 0;
+const auto seen=fastdds_dsoftbus::experiment::ObserveRtps(p,n);if(!seen.valid)return 0;
     Frame base;base.cycle=observation_cycle;base.stage=stage;base.socket=socket;base.length=n;base.hash=14695981039346656037ull;for(std::size_t i=0;i<n;++i){base.hash^=p[i];base.hash*=1099511628211ull;}
     if(diagnostic){auto native=diagnostic->native.Observe();base.correlation=diagnostic->correlation;base.app=diagnostic->identity.application_incarnation;base.receiver=diagnostic->identity.receiver_incarnation;base.owner=native.incarnation;}
     else if(inspecting){auto view=inspecting->Observe();base.owner=view.adapter.binding.owner_incarnation;base.admitted=view.shared_runtime?view.runtime_admitted_outstanding:view.send.admitted_outstanding;base.entered=view.native.send.entered;}
@@ -105,7 +105,7 @@ struct Endpoint {
     dds::Topic* topic=nullptr;dds::Subscriber* sub=nullptr;
     dds::TypeSupport type;dds::DomainParticipant* participant=nullptr;dds::DataWriter* writer=nullptr;dds::DataReader* reader=nullptr;
     std::atomic<bool> stop{false},tail{false},pump_fault{false};std::thread tx,rx;bool deleted=false;
-    Endpoint(const Config& c,const Control& b):config(c),barrier(b),backend(std::make_shared<PublicSocketBackend>(BackendConfiguration(c))),loop(std::make_shared<HostProviderLoop>(backend,std::make_shared<Observer>(c.side))),descriptor(std::make_shared<Descriptor>(c,loop)),type((c.scenario=="F256"||c.scenario=="F1M"||c.scenario=="REL_LOSS"||c.scenario=="BE_LOSS")?static_cast<dds::TopicDataType*>(new ExperimentLargeSamplePubSubType):static_cast<dds::TopicDataType*>(new MddsKeyedSamplePubSubType)){}
+    Endpoint(const Config& c,const Control& b):config(c),barrier(b),backend(std::make_shared<PublicSocketBackend>(BackendConfiguration(c))),loop(std::make_shared<HostProviderLoop>(backend,std::make_shared<Observer>(c.side))),descriptor(std::make_shared<Descriptor>(c,loop)),type((c.scenario=="F256"||c.scenario=="F1M"||c.scenario=="REL_LOSS"||c.scenario=="BE_LOSS")?static_cast<dds::TopicDataType*>(new ExperimentLargeSamplePubSubType):static_cast<dds::TopicDataType*>(new DSoftBusKeyedSamplePubSubType)){}
     void Failure(const char* p){if(result.first_failure.empty())result.first_failure=p;}
     void Stage(const char* p){Require(barrier&&barrier(p),p);}
     void Wait(const std::function<bool()>& predicate,std::chrono::seconds budget,const char* why){const auto end=std::chrono::steady_clock::now()+budget;while(!predicate()){Require(!pump_fault,"PUMP_FAULT");Require(std::chrono::steady_clock::now()<end,why);std::this_thread::sleep_for(2ms);}Require(!pump_fault,"PUMP_FAULT");}
@@ -135,15 +135,15 @@ struct Endpoint {
     std::set<std::pair<unsigned,unsigned>> received;std::set<std::uint64_t> sample_sequences;
     void WriteSample(unsigned ordinal,unsigned key=1){
         rtps::WriteParams identity;dds::ReturnCode_t rc;std::uint32_t serialized=0;std::uint64_t hash=0;
-        if(Large()){ExperimentLargeSample sample;Require(mdds::experiment::FillLargeSample(config.run,ordinal,Payload(),sample),"LARGE_FILL");serialized=type->calculate_serialized_size(&sample,dds::XCDR_DATA_REPRESENTATION);hash=mdds::experiment::LargeSampleHash(sample);rc=writer->write(&sample,identity);}
-        else{MddsKeyedSample sample;sample.key(key);sample.run(std::stoull(config.run,nullptr,16));sample.writer(1);sample.ordinal(ordinal);for(unsigned k=0;k<32;++k)sample.payload()[k]=std::uint8_t(ordinal+k+key);hash=14695981039346656037ull;for(auto byte:sample.payload()){hash^=byte;hash*=1099511628211ull;}serialized=type->calculate_serialized_size(&sample,dds::XCDR_DATA_REPRESENTATION);rc=writer->write(&sample,identity);}
+if(Large()){ExperimentLargeSample sample;Require(fastdds_dsoftbus::experiment::FillLargeSample(config.run,ordinal,Payload(),sample),"LARGE_FILL");serialized=type->calculate_serialized_size(&sample,dds::XCDR_DATA_REPRESENTATION);hash=fastdds_dsoftbus::experiment::LargeSampleHash(sample);rc=writer->write(&sample,identity);}
+        else{DSoftBusKeyedSample sample;sample.key(key);sample.run(std::stoull(config.run,nullptr,16));sample.writer(1);sample.ordinal(ordinal);for(unsigned k=0;k<32;++k)sample.payload()[k]=std::uint8_t(ordinal+k+key);hash=14695981039346656037ull;for(auto byte:sample.payload()){hash^=byte;hash*=1099511628211ull;}serialized=type->calculate_serialized_size(&sample,dds::XCDR_DATA_REPRESENTATION);rc=writer->write(&sample,identity);}
         auto sn=Sequence(identity.sample_identity().sequence_number());std::printf("REG_WRITE run=%s case=%s side=%u ordinal=%u key=%u writer=%s sn=%llu rc=%d payload=%zu serialized=%u hash=%llu\n",config.run.c_str(),config.scenario.c_str(),config.side,ordinal,key,Guid(identity.sample_identity().writer_guid()).c_str(),(unsigned long long)sn,int(rc),Large()?Payload():std::size_t(32),serialized,(unsigned long long)hash);std::fflush(stdout);
         Require(rc==dds::RETCODE_OK&&sn>0&&Guid(identity.sample_identity().writer_guid())==result.writer,"REG_WRITE");++result.writes;
     }
     bool TakeOne(){
         dds::SampleInfo info;unsigned ordinal=0,key=1;bool valid=false;std::uint64_t hash=0;dds::ReturnCode_t rc;
-        if(Large()){ExperimentLargeSample sample;rc=reader->take_next_sample(&sample,&info);if(rc==dds::RETCODE_OK&&info.valid_data){ordinal=sample.index();valid=mdds::experiment::LargeSampleWriteReady(config.run,Payload(),sample);hash=mdds::experiment::LargeSampleHash(sample);}}
-        else{MddsKeyedSample sample;rc=reader->take_next_sample(&sample,&info);if(rc==dds::RETCODE_OK&&info.valid_data){ordinal=sample.ordinal();key=sample.key();valid=sample.run()==std::stoull(config.run,nullptr,16)&&sample.writer()==1;for(unsigned k=0;k<32;++k)valid=valid&&sample.payload()[k]==std::uint8_t(ordinal+k+key);hash=14695981039346656037ull;for(auto byte:sample.payload()){hash^=byte;hash*=1099511628211ull;}}}
+if(Large()){ExperimentLargeSample sample;rc=reader->take_next_sample(&sample,&info);if(rc==dds::RETCODE_OK&&info.valid_data){ordinal=sample.index();valid=fastdds_dsoftbus::experiment::LargeSampleWriteReady(config.run,Payload(),sample);hash=fastdds_dsoftbus::experiment::LargeSampleHash(sample);}}
+        else{DSoftBusKeyedSample sample;rc=reader->take_next_sample(&sample,&info);if(rc==dds::RETCODE_OK&&info.valid_data){ordinal=sample.ordinal();key=sample.key();valid=sample.run()==std::stoull(config.run,nullptr,16)&&sample.writer()==1;for(unsigned k=0;k<32;++k)valid=valid&&sample.payload()[k]==std::uint8_t(ordinal+k+key);hash=14695981039346656037ull;for(auto byte:sample.payload()){hash^=byte;hash*=1099511628211ull;}}}
         if(rc==dds::RETCODE_NO_DATA)return false;Require(rc==dds::RETCODE_OK,"REG_TAKE_RC");if(!info.valid_data)return true;
         const auto sn=Sequence(info.sample_identity.sequence_number());valid=valid&&config.side==1&&Guid(info.sample_identity.writer_guid())==result.remote_writer&&sn>0&&received.insert({key,ordinal}).second&&sample_sequences.insert(sn).second;
         std::printf("REG_TAKE run=%s case=%s side=%u reader=%s writer=%s sn=%llu key=%u ordinal=%u instance=%s valid=%d hash=%llu\n",config.run.c_str(),config.scenario.c_str(),config.side,result.reader.c_str(),Guid(info.sample_identity.writer_guid()).c_str(),(unsigned long long)sn,key,ordinal,Hex(info.instance_handle.value,16).c_str(),valid,(unsigned long long)hash);std::fflush(stdout);Require(valid,"REG_LEDGER_IDENTITY");++result.takes;return true;
@@ -184,16 +184,16 @@ struct Endpoint {
         Require(Matches(true)==std::set<std::string>{result.remote_reader}&&Matches(false)==std::set<std::string>{result.remote_writer},"CURRENT_MATCH_LOST");Admission("DATA_DONE");tail=true;Stage("DATA_DONE");
     }
     void Data(){Wait([&]{auto readers=Matches(true),writers=Matches(false);if(readers.size()!=1||writers.size()!=1)return false;result.remote_reader=*readers.begin();result.remote_writer=*writers.begin();return result.remote_reader.substr(0,24)!=result.participant.substr(0,24)&&result.remote_writer.substr(0,24)!=result.participant.substr(0,24);},20s,"DDS_REMOTE_MATCH");std::printf("DDS_MATCH side=%u writer=%s reader=%s remote_writer=%s remote_reader=%s\n",config.side,result.writer.c_str(),result.reader.c_str(),result.remote_writer.c_str(),result.remote_reader.c_str());std::fflush(stdout);Stage("MATCH");const auto run=std::stoull(config.run,nullptr,16);
-        for(unsigned n=1;n<=5;++n){MddsKeyedSample s;s.key(1);s.run(run);s.writer(config.side+1);s.ordinal(n);for(unsigned k=0;k<32;++k)s.payload()[k]=std::uint8_t(n+k+config.side);rtps::WriteParams p;auto rc=writer->write(&s,p);std::printf("DDS_WRITE side=%u ordinal=%u writer=%s sn=%llu rc=%d serialized=%u\n",config.side,n,Guid(p.sample_identity().writer_guid()).c_str(),(unsigned long long)Sequence(p.sample_identity().sequence_number()),int(rc),type->calculate_serialized_size(&s,dds::XCDR_DATA_REPRESENTATION));Require(rc==dds::RETCODE_OK&&Sequence(p.sample_identity().sequence_number())>0&&Guid(p.sample_identity().writer_guid())==result.writer,"DDS_WRITE");++result.writes;}
-        std::set<unsigned> ordinals;std::set<std::uint64_t> seq;Wait([&]{for(;;){MddsKeyedSample s;dds::SampleInfo info;auto rc=reader->take_next_sample(&s,&info);if(rc==dds::RETCODE_NO_DATA)break;Require(rc==dds::RETCODE_OK,"TAKE_RC");if(!info.valid_data)continue;bool valid=s.run()==run&&s.key()==1&&s.writer()==2-config.side&&s.ordinal()>=1&&s.ordinal()<=5&&Guid(info.sample_identity.writer_guid())==result.remote_writer;for(unsigned k=0;k<32;++k)valid=valid&&s.payload()[k]==std::uint8_t(s.ordinal()+k+1-config.side);auto sn=Sequence(info.sample_identity.sequence_number());valid=valid&&sn>0&&ordinals.insert(s.ordinal()).second&&seq.insert(sn).second;std::printf("DDS_TAKE side=%u run=%s ordinal=%u reader=%s writer=%s sn=%llu valid=%d\n",config.side,config.run.c_str(),s.ordinal(),result.reader.c_str(),Guid(info.sample_identity.writer_guid()).c_str(),(unsigned long long)sn,valid);Require(valid,"READER_LEDGER");++result.takes;}return result.takes==5;},10s,"READER_MISSING");auto ack=writer->wait_for_acknowledgments({5,0});std::printf("DDS_WAIT side=%u rc=%d meaning=DDS_API_NOT_PACKET_COUNT\n",config.side,int(ack));Require(ack==dds::RETCODE_OK,"DDS_WAIT");
-#ifdef MDDS_DDS_EXPERIMENT_TESTING
+        for(unsigned n=1;n<=5;++n){DSoftBusKeyedSample s;s.key(1);s.run(run);s.writer(config.side+1);s.ordinal(n);for(unsigned k=0;k<32;++k)s.payload()[k]=std::uint8_t(n+k+config.side);rtps::WriteParams p;auto rc=writer->write(&s,p);std::printf("DDS_WRITE side=%u ordinal=%u writer=%s sn=%llu rc=%d serialized=%u\n",config.side,n,Guid(p.sample_identity().writer_guid()).c_str(),(unsigned long long)Sequence(p.sample_identity().sequence_number()),int(rc),type->calculate_serialized_size(&s,dds::XCDR_DATA_REPRESENTATION));Require(rc==dds::RETCODE_OK&&Sequence(p.sample_identity().sequence_number())>0&&Guid(p.sample_identity().writer_guid())==result.writer,"DDS_WRITE");++result.writes;}
+        std::set<unsigned> ordinals;std::set<std::uint64_t> seq;Wait([&]{for(;;){DSoftBusKeyedSample s;dds::SampleInfo info;auto rc=reader->take_next_sample(&s,&info);if(rc==dds::RETCODE_NO_DATA)break;Require(rc==dds::RETCODE_OK,"TAKE_RC");if(!info.valid_data)continue;bool valid=s.run()==run&&s.key()==1&&s.writer()==2-config.side&&s.ordinal()>=1&&s.ordinal()<=5&&Guid(info.sample_identity.writer_guid())==result.remote_writer;for(unsigned k=0;k<32;++k)valid=valid&&s.payload()[k]==std::uint8_t(s.ordinal()+k+1-config.side);auto sn=Sequence(info.sample_identity.sequence_number());valid=valid&&sn>0&&ordinals.insert(s.ordinal()).second&&seq.insert(sn).second;std::printf("DDS_TAKE side=%u run=%s ordinal=%u reader=%s writer=%s sn=%llu valid=%d\n",config.side,config.run.c_str(),s.ordinal(),result.reader.c_str(),Guid(info.sample_identity.writer_guid()).c_str(),(unsigned long long)sn,valid);Require(valid,"READER_LEDGER");++result.takes;}return result.takes==5;},10s,"READER_MISSING");auto ack=writer->wait_for_acknowledgments({5,0});std::printf("DDS_WAIT side=%u rc=%d meaning=DDS_API_NOT_PACKET_COUNT\n",config.side,int(ack));Require(ack==dds::RETCODE_OK,"DDS_WAIT");
+#ifdef FASTDDS_DSOFTBUS_DDS_EXPERIMENT_TESTING
         if(after_wait_hook)after_wait_hook(writer);
 #endif
         const auto quiet_end=std::chrono::steady_clock::now()+100ms;do{RejectExtras("AFTER_ACK_EXTRA");std::this_thread::sleep_for(1ms);}while(std::chrono::steady_clock::now()<quiet_end);RejectExtras("AFTER_ACK_EXTRA");std::printf("DDS_POST_ACK side=%u observation_ms=100 valid_extra=0\n",config.side);
         Require(Matches(true)==std::set<std::string>{result.remote_reader}&&Matches(false)==std::set<std::string>{result.remote_writer},"CURRENT_MATCH_LOST");tail=true;Stage("DATA_DONE");
     }
     void RejectExtras(const char* why){
-        for(unsigned budget=0;budget<32;++budget){MddsKeyedSample s;dds::SampleInfo info;auto rc=reader->take_next_sample(&s,&info);if(rc==dds::RETCODE_NO_DATA)return;Require(rc==dds::RETCODE_OK,"EXTRA_TAKE_RC");if(info.valid_data){std::printf("DDS_EXTRA side=%u reader=%s writer=%s sn=%llu ordinal=%u\n",config.side,result.reader.c_str(),Guid(info.sample_identity.writer_guid()).c_str(),(unsigned long long)Sequence(info.sample_identity.sequence_number()),s.ordinal());throw std::runtime_error(why);}}
+        for(unsigned budget=0;budget<32;++budget){DSoftBusKeyedSample s;dds::SampleInfo info;auto rc=reader->take_next_sample(&s,&info);if(rc==dds::RETCODE_NO_DATA)return;Require(rc==dds::RETCODE_OK,"EXTRA_TAKE_RC");if(info.valid_data){std::printf("DDS_EXTRA side=%u reader=%s writer=%s sn=%llu ordinal=%u\n",config.side,result.reader.c_str(),Guid(info.sample_identity.writer_guid()).c_str(),(unsigned long long)Sequence(info.sample_identity.sequence_number()),s.ordinal());throw std::runtime_error(why);}}
         throw std::runtime_error("EXCESS_LIFECYCLE_NOTICES");
     }
     bool Cleanup() noexcept {
@@ -206,7 +206,7 @@ struct Endpoint {
 };
 #include "PublicSocketSharedDds.inc"
 }
-#ifdef MDDS_DDS_EXPERIMENT_TESTING
+#ifdef FASTDDS_DSOFTBUS_DDS_EXPERIMENT_TESTING
 void SetAfterWaitHook(std::function<void(dds::DataWriter*)> h){after_wait_hook=std::move(h);}
 void SetAfterFrameSelectionForTest(std::function<void()> h){after_frame_selection=std::move(h);}
 unsigned FrameCycleForTest(std::size_t index){auto& s=Store();std::lock_guard<std::mutex> l(s.gate);return s.rows.at(index).cycle;}
@@ -221,11 +221,11 @@ bool DropIsolationObserved() noexcept {
 #endif
 bool ExpectedTerminal(const NativeSendRunResult& r,const HostLoopObservation& v,bool tail) noexcept {return tail&&(v.sealed||v.adapter.outgoing_stopped)&&r.outcome==NativeSendOutcome::NotEntered&&(r.status==NativeStatus::ServiceClosing||r.status==NativeStatus::Revoked||r.status==NativeStatus::NotReady);}
 bool Valid(const Config& c) noexcept {
-#ifndef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+#ifndef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_BOUNDED_REGRESSION
 if(c.scenario!="SMALL")return false;
 #endif
 bool shared=false;
-#ifdef MDDS_PUBLIC_SOCKET_SHARED_REATTACH
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_SHARED_REATTACH
 shared=c.scenario=="SHARED_W1"||c.scenario=="SHARED_W2";
 #endif
 if(c.cycles<1||c.cycles>100||(!shared&&c.cycles!=1))return false;
@@ -245,7 +245,7 @@ bool IsolateProcess() noexcept {try{for(const char* p:{"FASTDDS_DEFAULT_PROFILES
     eprosima::fastdds::LibrarySettings settings;settings.intraprocess_delivery=eprosima::fastdds::INTRAPROCESS_OFF;auto f=dds::DomainParticipantFactory::get_instance();return f->set_library_settings(settings)==dds::RETCODE_OK&&f->get_library_settings(settings)==dds::RETCODE_OK&&settings.intraprocess_delivery==eprosima::fastdds::INTRAPROCESS_OFF;
 }catch(...){return false;}}
 Result Run(const Config& c,const Control& b) noexcept {Result failed;if(!Valid(c)){failed.first_failure="CONFIG";failed.drained=true;return failed;}
-#ifdef MDDS_PUBLIC_SOCKET_SHARED_REATTACH
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_SHARED_REATTACH
 if(c.scenario=="SHARED_W1"||c.scenario=="SHARED_W2")return RunShared(c,b);
 #endif
 control=&b;setup_control_failed=false;try{Endpoint endpoint(c,b);try{endpoint.Create();if(c.scenario=="SMALL")endpoint.Data();else endpoint.RegressionData();endpoint.Stage("DELETE");if(c.scenario=="SMALL")endpoint.RejectExtras("PRE_DELETE_EXTRA");else endpoint.RegressionExtras();Require(endpoint.Cleanup(),"DDS_CLEANUP");endpoint.Stage("DDS_DELETED");Require(!endpoint.pump_fault,"PUMP_FAULT");Require(FrameOverflow()==0,"FRAME_OVERFLOW");endpoint.result.success=true;}catch(const std::exception& e){endpoint.Failure(setup_control_failed?"CONTROL_LISTENER_READY":e.what());if(!endpoint.deleted)endpoint.Cleanup();}catch(...){endpoint.Failure("UNKNOWN_EXCEPTION");if(!endpoint.deleted)endpoint.Cleanup();}control=nullptr;std::printf("DDS_RESULT side=%u success=%d writes=%u takes=%u drained=%d first_failure=%s\n",c.side,endpoint.result.success,endpoint.result.writes,endpoint.result.takes,endpoint.result.drained,endpoint.result.first_failure.c_str());std::fflush(stdout);return endpoint.result;}catch(...){control=nullptr;failed.first_failure="CONSTRUCTION_EXCEPTION";return failed;}}
@@ -254,8 +254,8 @@ IngressObservationScope::~IngressObservationScope(){current_ingress=previous_;}
 std::uint64_t SocketFrame(const char* stage,std::int32_t id,const std::uint8_t* p,std::size_t n) noexcept {return FrameBytes(stage,id,p,n);}
 std::size_t FrameLimit() noexcept{return frame_limit;}
 bool DropRegressionRecord(std::int32_t socket,const std::uint8_t* p,std::size_t n) noexcept {
-#ifdef MDDS_PUBLIC_SOCKET_BOUNDED_REGRESSION
-    try{if(!p||n>8192)return false;const auto seen=mdds::experiment::ObserveRtps(p,n);if(!seen.valid||!seen.drop_shape_candidate)return false;auto& d=Drop();bool hit=false;{std::lock_guard<std::mutex> l(d.gate);if(!d.armed||d.hit||d.socket!=socket)return false;for(const auto& f:seen.fragments)if(Hex(f.writer_guid.data(),16)==d.writer&&f.sequence_hi==0&&f.sequence_lo==1&&f.fragment_start<=3&&f.fragment_end>=3&&f.payload_bounds_known){d.hit_time=std::chrono::steady_clock::now();d.hit=true;hit=true;break;}}if(hit)FrameBytes("EXPERIMENT_DROP",socket,p,n);return hit;}catch(...){return false;}
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_BOUNDED_REGRESSION
+try{if(!p||n>8192)return false;const auto seen=fastdds_dsoftbus::experiment::ObserveRtps(p,n);if(!seen.valid||!seen.drop_shape_candidate)return false;auto& d=Drop();bool hit=false;{std::lock_guard<std::mutex> l(d.gate);if(!d.armed||d.hit||d.socket!=socket)return false;for(const auto& f:seen.fragments)if(Hex(f.writer_guid.data(),16)==d.writer&&f.sequence_hi==0&&f.sequence_lo==1&&f.fragment_start<=3&&f.fragment_end>=3&&f.payload_bounds_known){d.hit_time=std::chrono::steady_clock::now();d.hit=true;hit=true;break;}}if(hit)FrameBytes("EXPERIMENT_DROP",socket,p,n);return hit;}catch(...){return false;}
 #else
     (void)socket;(void)p;(void)n;return false;
 #endif
@@ -264,4 +264,4 @@ std::size_t FrameOverflow() noexcept {auto& s=Store();std::lock_guard<std::mutex
 std::size_t FrameCount() noexcept {auto& s=Store();std::lock_guard<std::mutex> l(s.gate);return s.count;}
 void DumpFrames() noexcept {DumpDecisions();try{std::vector<Frame> rows;std::size_t overflow;std::uint64_t omitted,packets;auto& s=Store();{std::lock_guard<std::mutex> l(s.gate);rows.assign(s.rows.begin(),s.rows.begin()+s.count);overflow=s.overflow;omitted=s.omitted;packets=s.packets;}unsigned ordinal=0;for(auto& e:rows)std::printf("DDS_FRAME event=%u cycle=%u packet=%llu ingress=%llu stage=%s kind=%s socket=%d length=%zu hash=%llu writer=%s sn=%llu correlation=%llu app=%llu receiver=%llu owner=%llu admitted=%llu entered=%llu offset=%zu first=%u count=%u fragment_size=%u sample_size=%u writer_known=%d reader=%s reader_known=%d bits=%u bitmap=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",++ordinal,e.cycle,(unsigned long long)e.packet,(unsigned long long)e.ingress,e.stage,e.kind,e.socket,e.length,(unsigned long long)e.hash,Hex(e.writer.data(),16).c_str(),(unsigned long long)e.sn,(unsigned long long)e.correlation,(unsigned long long)e.app,(unsigned long long)e.receiver,(unsigned long long)e.owner,(unsigned long long)e.admitted,(unsigned long long)e.entered,e.offset,e.first,e.count,e.fragment_size,e.sample_size,e.writer_known,Hex(e.reader.data(),16).c_str(),e.reader_known,e.bits,e.bitmap[0],e.bitmap[1],e.bitmap[2],e.bitmap[3],e.bitmap[4],e.bitmap[5],e.bitmap[6],e.bitmap[7]);std::printf("DDS_FRAME_SUMMARY count=%zu limit=%zu overflow=%zu storage_bytes=%zu observations=%llu omitted=%llu\n",rows.size(),frame_limit,overflow,sizeof(Frames),(unsigned long long)packets,(unsigned long long)omitted);}catch(...){auto& s=Store();std::lock_guard<std::mutex> l(s.gate);++s.overflow;}}
 }
-namespace mdds::dsoftbus::phase0 {bool RuntimeProbeBeforeConnect() noexcept {try{const bool ok=dds_experiment::control&&(*dds_experiment::control)("LISTENER_READY");if(!ok)dds_experiment::setup_control_failed=true;return ok;}catch(...){dds_experiment::setup_control_failed=true;return false;}}}
+namespace fastdds_dsoftbus::dsoftbus::phase0 {bool RuntimeProbeBeforeConnect() noexcept {try{const bool ok=dds_experiment::control&&(*dds_experiment::control)("LISTENER_READY");if(!ok)dds_experiment::setup_control_failed=true;return ok;}catch(...){dds_experiment::setup_control_failed=true;return false;}}}

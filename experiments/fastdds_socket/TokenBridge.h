@@ -1,13 +1,13 @@
-#ifndef MDDS_EXPERIMENT_TOKEN_BRIDGE_H
-#define MDDS_EXPERIMENT_TOKEN_BRIDGE_H
+#ifndef FASTDDS_DSOFTBUS_EXPERIMENT_TOKEN_BRIDGE_H
+#define FASTDDS_DSOFTBUS_EXPERIMENT_TOKEN_BRIDGE_H
 
 #include <stdint.h>
 
 #ifdef __cplusplus
-#define MDDS_TOKEN_NOEXCEPT noexcept
+#define FASTDDS_DSOFTBUS_TOKEN_NOEXCEPT noexcept
 extern "C" {
 #else
-#define MDDS_TOKEN_NOEXCEPT
+#define FASTDDS_DSOFTBUS_TOKEN_NOEXCEPT
 #endif
 
 /* Experimental C/POD boundary between the platform and app C++ runtimes.
@@ -15,10 +15,10 @@ extern "C" {
  * are meaningful only when their corresponding called bit is present.
  * No token-file writes, permissions changes, strings or allocations cross it. */
 enum MddsTokenBridgeCalled {
-    MDDS_TOKEN_LOOKUP_CALLED = 1,
-    MDDS_TOKEN_TYPE_CALLED = 2,
-    MDDS_TOKEN_INFO_CALLED = 4,
-    MDDS_TOKEN_PERMISSION_CALLED = 8
+    FASTDDS_DSOFTBUS_TOKEN_LOOKUP_CALLED = 1,
+    FASTDDS_DSOFTBUS_TOKEN_TYPE_CALLED = 2,
+    FASTDDS_DSOFTBUS_TOKEN_INFO_CALLED = 4,
+    FASTDDS_DSOFTBUS_TOKEN_PERMISSION_CALLED = 8
 };
 
 typedef struct MddsTokenBridgeResult {
@@ -43,12 +43,12 @@ typedef struct MddsTokenBridgeResult {
  * 0 means queries completed, not that identity or permission was accepted.
  * -1 invalid output, -2 zero token, -3 caught platform C++ exception,
  * -4 process name cannot be represented exactly as a bounded C string. */
-int32_t MddsTokenBridgeVerify(uint32_t expectedToken, MddsTokenBridgeResult* out) MDDS_TOKEN_NOEXCEPT;
-uint64_t MddsTokenBridgeGetSelfToken(void) MDDS_TOKEN_NOEXCEPT;
-int32_t MddsTokenBridgeSetSelfToken(uint64_t token) MDDS_TOKEN_NOEXCEPT;
+int32_t MddsTokenBridgeVerify(uint32_t expectedToken, MddsTokenBridgeResult* out) FASTDDS_DSOFTBUS_TOKEN_NOEXCEPT;
+uint64_t MddsTokenBridgeGetSelfToken(void) FASTDDS_DSOFTBUS_TOKEN_NOEXCEPT;
+int32_t MddsTokenBridgeSetSelfToken(uint64_t token) FASTDDS_DSOFTBUS_TOKEN_NOEXCEPT;
 
 #ifdef __cplusplus
 }
 #endif
-#undef MDDS_TOKEN_NOEXCEPT
+#undef FASTDDS_DSOFTBUS_TOKEN_NOEXCEPT
 #endif

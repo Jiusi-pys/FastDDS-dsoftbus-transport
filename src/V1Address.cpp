@@ -1,10 +1,10 @@
-#include <mdds/dsoftbus/V1Address.hpp>
+#include <fastdds_dsoftbus/dsoftbus/V1Address.hpp>
 
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
 
-namespace mdds::dsoftbus::v1 {
+namespace fastdds_dsoftbus::dsoftbus::v1 {
 namespace {
 
 bool ValidBytes(std::string_view value, std::size_t maximum) noexcept
@@ -257,4 +257,4 @@ RouteResult DeviceDirectory::Resolve(const EndpointId& key) const
 }
 
 std::size_t DeviceDirectory::size() const noexcept { return entries_.size(); }
-} // namespace mdds::dsoftbus::v1
+} // namespace fastdds_dsoftbus::dsoftbus::v1

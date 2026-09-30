@@ -28,12 +28,12 @@ int main(int argc,char** argv) {
     qos.transport().user_transports.push_back(udp);
     qos.wire_protocol().builtin.metatrafficMulticastLocatorList.clear();
     qos.wire_protocol().builtin.initialPeersList.clear();
-    if(isolated) mdds::experiment::ApplyDualParticipantPolicy(qos);
+if(isolated) fastdds_dsoftbus::experiment::ApplyDualParticipantPolicy(qos);
     const std::string run="0123456789abcdef";
-    if(fixture) mdds::experiment::ApplyDualIdentityFixture(qos,run,true,1);
+if(fixture) fastdds_dsoftbus::experiment::ApplyDualIdentityFixture(qos,run,true,1);
     auto* participant=factory->create_participant(231,qos);
     if(!participant) return 3;
-    bool setup=!isolated || mdds::experiment::DualParticipantPolicyRequested(participant->get_qos());
+bool setup=!isolated || fastdds_dsoftbus::experiment::DualParticipantPolicyRequested(participant->get_qos());
     sample_dds::TypeSupport type(new ExperimentLargeSamplePubSubType());
     setup=setup && type.register_type(participant)==sample_dds::RETCODE_OK;
     auto* topic=setup?participant->create_topic("dual-policy-same-topic",type.get_type_name(),sample_dds::TOPIC_QOS_DEFAULT):nullptr;
@@ -52,7 +52,7 @@ int main(int argc,char** argv) {
     const auto expected=isolated?0:1;
     bool matches=setup && ws.current_count==expected && rs.current_count==expected;
     if(fixture && setup) {
-        namespace ex=mdds::experiment;
+namespace ex=fastdds_dsoftbus::experiment;
         matches=matches && ex::DualBytes(participant->guid())==ex::DualIdentity(run,true,1,ex::EndpointKind::Participant) &&
             ex::DualBytes(writer->guid())==ex::DualIdentity(run,true,1,ex::EndpointKind::Writer) &&
             ex::DualBytes(reader->guid())==ex::DualIdentity(run,true,1,ex::EndpointKind::Reader);

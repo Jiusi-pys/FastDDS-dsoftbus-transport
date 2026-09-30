@@ -5,7 +5,7 @@
 #include <cstring>
 #include <limits>
 #include <type_traits>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 namespace {
 PerformanceObservation process_observation;
 std::atomic<bool> observation_enabled{false};

@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/ApplicationAttachments.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ApplicationAttachments.hpp>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -30,10 +30,10 @@ void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
 
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 using namespace std::chrono_literals;
 #define CHECK(x) do { if (!(x)) throw std::runtime_error(std::string("line ")+std::to_string(__LINE__)+": " #x); } while(false)
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class ApplicationAttachmentsTestAccess
 {
 public:

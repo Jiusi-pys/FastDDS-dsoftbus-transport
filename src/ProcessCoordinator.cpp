@@ -1,10 +1,10 @@
-#include <mdds/dsoftbus/ProcessCoordinator.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ProcessCoordinator.hpp>
 #include "ProcessReceiveInternal.hpp"
 #include <algorithm>
 #include <limits>
 #include <mutex>
 #include <stdexcept>
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace detail {
 struct ProcessIdentity {};
 struct ProcessApplicationState

@@ -64,9 +64,9 @@ def main():
   put(receipt,dict(restoration_gate='REQUIRE_RESTORED_COMPLETED',inputs=files,device_operations=0));return
  if a.phase=='build-config-receipt':
   cache=Path('C:/mdds-installed-runtime-0929/target/CMakeCache.txt');text=cache.read_text()
-  if 'MDDS_BUILD_EXPERIMENTAL_RUNTIME:BOOL=ON' not in text:raise ValueError('Actual declared build option absent')
+  if 'FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME:BOOL=ON' not in text:raise ValueError('Actual declared build option absent')
   build=root/'build-r2';shutil.copytree(root/'build',build)
-  manifest=read(build/'build-manifest.json');manifest.update(configureArguments=['-DMDDS_BUILD_EXPERIMENTAL_RUNTIME=ON'],configuration_origin=dict(path=str(cache),sha256=sha(cache),scope='DERIVED_CACHE_OPTION_NOT_ORIGINAL_BUILD_COMMAND'))
+  manifest=read(build/'build-manifest.json');manifest.update(configureArguments=['-DFASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME=ON'],configuration_origin=dict(path=str(cache),sha256=sha(cache),scope='DERIVED_CACHE_OPTION_NOT_ORIGINAL_BUILD_COMMAND'))
   put(build/'build-manifest.json',manifest)
   f=read(root/'DEVICE_CONTRACT.json');f['build_binding'].update(build_manifest=str(build/'build-manifest.json'),build_manifest_sha256=sha(build/'build-manifest.json'),source_state=str(build/'source-state.json'),source_state_sha256=sha(build/'source-state.json'))
   put(root/'DEVICE_CONTRACT-r2.json',f);return

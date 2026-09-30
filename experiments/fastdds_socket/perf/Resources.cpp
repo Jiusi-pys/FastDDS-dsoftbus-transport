@@ -13,7 +13,7 @@
 #include <time.h>
 #endif
 
-namespace mdds::experiment::perf {
+namespace fastdds_dsoftbus::experiment::perf {
 namespace {
 ObservedU64 ParseValue(const std::string& text, bool kilobytes)
 {

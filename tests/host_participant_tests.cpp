@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/HostProviderLoop.hpp>
+#include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
 #include <fastdds/LibrarySettings.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
@@ -9,7 +9,7 @@
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
 #include <fastdds/dds/topic/TypeSupport.hpp>
 #include <fastdds/rtps/common/WriteParams.hpp>
-#include "MddsKeyedSamplePubSubTypes.hpp"
+#include "DSoftBusKeyedSamplePubSubTypes.hpp"
 #include "HostParticipantEvidence.hpp"
 #include <atomic>
 #include <cstdlib>
@@ -20,9 +20,9 @@
 #include <sstream>
 
 namespace host_dds {
-using namespace mdds::dsoftbus;
-using namespace mdds::dsoftbus::phase0;
-using namespace mdds::dsoftbus::host_test;
+using namespace fastdds_dsoftbus::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus::phase0;
+using namespace fastdds_dsoftbus::dsoftbus::host_test;
 namespace dds=eprosima::fastdds::dds;
 namespace rtps=eprosima::fastdds::rtps;
 using namespace std::chrono_literals;
@@ -125,7 +125,7 @@ struct Endpoint {
 };
 struct Fixture {
     std::shared_ptr<Trace> trace=std::make_shared<Trace>();Endpoint e[2];
-    dds::TypeSupport type{new MddsKeyedSamplePubSubType};
+    dds::TypeSupport type{new DSoftBusKeyedSamplePubSubType};
     const std::uint64_t run=static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     bool cleanup_failed=false;
     explicit Fixture(bool forwarding=true){
@@ -168,10 +168,10 @@ struct Fixture {
     std::set<std::string> Writers(int side){std::vector<dds::InstanceHandle_t> h;Require(e[side].reader->get_matched_publications(h)==dds::RETCODE_OK,"current matched writers API");std::set<std::string> v;for(auto& x:h)v.insert(Handle(x));return v;}
     void Wait(const std::function<bool()>& predicate,const char* label){auto end=std::chrono::steady_clock::now()+8s;while(!predicate()){Require(trace->Good(),"trace/pump fault");Require(std::chrono::steady_clock::now()<end,label);std::this_thread::sleep_for(10ms);}}
     void Match(){Wait([&]{return CurrentMatch(Readers(0),e[1].reader_id)&&CurrentMatch(Readers(1),e[0].reader_id)&&CurrentMatch(Writers(0),e[1].writer_id)&&CurrentMatch(Writers(1),e[0].writer_id);},"current remote match");for(int i=0;i<2;++i)trace->Add({"CURRENT_REMOTE_MATCH","",e[1-i].writer_id,e[1-i].reader_id,i});}
-    void Write(int side,unsigned first,unsigned last){for(unsigned n=first;n<=last;++n){MddsKeyedSample sample;sample.key(1);sample.run(run);sample.writer(side+1);sample.ordinal(n);for(unsigned k=0;k<32;++k)sample.payload()[k]=static_cast<std::uint8_t>(n+k+side);rtps::WriteParams params;Require(e[side].writer->write(&sample,params)==dds::RETCODE_OK,"DDS write");trace->Add({"DDS_WRITE","DATA",e[side].writer_id,std::to_string(n),side,Sequence(params.sample_identity().sequence_number())});}}
+    void Write(int side,unsigned first,unsigned last){for(unsigned n=first;n<=last;++n){DSoftBusKeyedSample sample;sample.key(1);sample.run(run);sample.writer(side+1);sample.ordinal(n);for(unsigned k=0;k<32;++k)sample.payload()[k]=static_cast<std::uint8_t>(n+k+side);rtps::WriteParams params;Require(e[side].writer->write(&sample,params)==dds::RETCODE_OK,"DDS write");trace->Add({"DDS_WRITE","DATA",e[side].writer_id,std::to_string(n),side,Sequence(params.sample_identity().sequence_number())});}}
     std::vector<SampleReceipt> Take(int side,unsigned first,unsigned last){
         std::vector<SampleReceipt> rows;rows.reserve(16);auto& x=e[side];
-        Wait([&]{MddsKeyedSample sample;dds::SampleInfo info;for(;;){const auto rc=x.reader->take_next_sample(&sample,&info);if(rc==dds::RETCODE_NO_DATA)break;Require(rc==dds::RETCODE_OK,"DDS take");if(!info.valid_data)continue;Require(rows.size()<16,"bounded Reader ledger");bool valid=sample.key()==1&&sample.writer()==unsigned(2-side);for(unsigned k=0;k<32;++k)valid=valid&&sample.payload()[k]==static_cast<std::uint8_t>(sample.ordinal()+k+1-side);SampleReceipt row{x.reader_id,Guid(info.sample_identity.writer_guid()),sample.run(),Sequence(info.sample_identity.sequence_number()),sample.ordinal(),valid,true};rows.push_back(row);trace->Add({"DDS_TAKE","DATA",row.writer,std::to_string(row.ordinal)+":"+row.reader,side,row.sn});}return rows.size()>=last-first+1;},"Reader sample delivery");
+        Wait([&]{DSoftBusKeyedSample sample;dds::SampleInfo info;for(;;){const auto rc=x.reader->take_next_sample(&sample,&info);if(rc==dds::RETCODE_NO_DATA)break;Require(rc==dds::RETCODE_OK,"DDS take");if(!info.valid_data)continue;Require(rows.size()<16,"bounded Reader ledger");bool valid=sample.key()==1&&sample.writer()==unsigned(2-side);for(unsigned k=0;k<32;++k)valid=valid&&sample.payload()[k]==static_cast<std::uint8_t>(sample.ordinal()+k+1-side);SampleReceipt row{x.reader_id,Guid(info.sample_identity.writer_guid()),sample.run(),Sequence(info.sample_identity.sequence_number()),sample.ordinal(),valid,true};rows.push_back(row);trace->Add({"DDS_TAKE","DATA",row.writer,std::to_string(row.ordinal)+":"+row.reader,side,row.sn});}return rows.size()>=last-first+1;},"Reader sample delivery");
         Require(LedgerValid(rows,x.reader_id,e[1-side].writer_id,run,first,last),"exact independent Reader ledger");
         for(const auto& row:rows)for(const auto& stage:{"MODEL_SEND","MODEL_FORWARD","RX_OWNED","RX_RUNNING"})Require(trace->Has(stage,stage[0]=='M'?1-side:side,"DATA",row.writer,row.sn),"same-run model/data/take chain");return rows;
     }
@@ -180,7 +180,7 @@ struct Fixture {
         // Frozen bounded observation, not permanent absence or a transport SLA.
         const auto end=std::chrono::steady_clock::now()+100ms;
         do{Require(trace->Good(),"pump failure before post-ACK completion");for(int side=0;side<2;++side){
-            MddsKeyedSample sample;dds::SampleInfo info;
+            DSoftBusKeyedSample sample;dds::SampleInfo info;
             for(;;){const auto rc=e[side].reader->take_next_sample(&sample,&info);if(rc==dds::RETCODE_NO_DATA)break;Require(rc==dds::RETCODE_OK,"post-ACK take");
                 if(info.valid_data){trace->Add({"POST_ACK_REJECT","DATA",Guid(info.sample_identity.writer_guid()),std::to_string(sample.ordinal())+":"+e[side].reader_id,side,Sequence(info.sample_identity.sequence_number())});throw std::runtime_error("unexpected valid sample after ACK");}
             }
@@ -209,7 +209,7 @@ struct Fixture {
     void Discovery(){for(int i=0;i<2;++i){Require(trace->Has("MODEL_SEND",i,"SPDP")&&trace->Has("RX_RUNNING",1-i,"SPDP"),"both SPDP paths");Require(trace->Has("MODEL_SEND",i,"SEDP")&&trace->Has("RX_RUNNING",1-i,"SEDP"),"both SEDP paths");Require(trace->Has("MODEL_SEND",i,"HEARTBEAT")||trace->Has("MODEL_SEND",i,"ACKNACK"),"actual reliable RTPS control");}}
 };
 void Normal(bool b_first,bool recreate){Isolate();Fixture f;f.Create(0);f.Create(1);f.Match();f.Traffic(1,5);if(recreate)f.Recreate();f.Discovery();f.End(b_first);}
-void Negative(){Isolate();Fixture f(false);f.Create(0);f.Create(1);const auto end=std::chrono::steady_clock::now()+2s;while(std::chrono::steady_clock::now()<end){Require(f.Readers(0).empty()&&f.Readers(1).empty()&&f.Writers(0).empty()&&f.Writers(1).empty(),"disabled link must not bypass-match");for(auto& e:f.e){MddsKeyedSample s;dds::SampleInfo info;Require(e.reader->take_next_sample(&s,&info)==dds::RETCODE_NO_DATA,"disabled link no delivery");}std::this_thread::sleep_for(10ms);}Require(f.e[0].backend->sends>0&&f.e[1].backend->sends>0&&f.e[0].backend->forwarded==0&&f.e[1].backend->forwarded==0,"negative actually exercised sending");f.End(true);}
+void Negative(){Isolate();Fixture f(false);f.Create(0);f.Create(1);const auto end=std::chrono::steady_clock::now()+2s;while(std::chrono::steady_clock::now()<end){Require(f.Readers(0).empty()&&f.Readers(1).empty()&&f.Writers(0).empty()&&f.Writers(1).empty(),"disabled link must not bypass-match");for(auto& e:f.e){DSoftBusKeyedSample s;dds::SampleInfo info;Require(e.reader->take_next_sample(&s,&info)==dds::RETCODE_NO_DATA,"disabled link no delivery");}std::this_thread::sleep_for(10ms);}Require(f.e[0].backend->sends>0&&f.e[1].backend->sends>0&&f.e[0].backend->forwarded==0&&f.e[1].backend->forwarded==0,"negative actually exercised sending");f.End(true);}
 void Default(){Isolate();auto* f=dds::DomainParticipantFactory::get_instance();auto d=std::make_shared<DSoftBusTransportDescriptor>(Configuration(0));auto*p=f->create_participant(151,Qos(0,d));std::cout<<"DEFAULT_PARTICIPANT_RESULT="<<(p?"non_null":"null")<<'\n';if(p)f->delete_participant(p);Require(!p,"default unavailable via real Participant");}
 void Failure(){Isolate();Fixture f;f.Create(0);const auto old=f.e[0].loop->Observe();f.e[1].backend->fail_bind=true;f.Create(1,false);auto v=f.e[1].loop->Observe();Require(f.e[1].backend->binds==1&&f.e[1].backend->closes==1&&v.receive.records==0&&v.receive.active_applications==0&&!v.input_open,"failed provider prepare rollback");auto a=f.e[0].loop->Observe();Require(a.input_open&&!a.closed&&a.adapter.binding.receiver_identity==old.adapter.binding.receiver_identity&&f.e[0].backend->closes==0,"failed instance cannot clean live A");if(f.e[1].participant){Require(dds::DomainParticipantFactory::get_instance()->delete_participant(f.e[1].participant)==dds::RETCODE_OK,"delete API-returned failed-input Participant");f.e[1].participant=nullptr;}Require(f.e[1].loop->Observe().closed,"failed-instance final shutdown");f.Delete(0,true);}
 void PumpFault(){Isolate();Fixture f;f.e[0].backend->throw_once=true;f.Create(0);auto end=std::chrono::steady_clock::now()+2s;while(f.e[0].pump_errors==0&&std::chrono::steady_clock::now()<end)std::this_thread::sleep_for(1ms);Require(f.e[0].pump_errors>0&&!f.trace->Good(),"converted provider fault must reject scenario");auto first=f.trace->FirstPumpFailure();f.Delete(0,false);Require(f.trace->FirstPumpFailure()==first&&!first.empty(),"cleanup must retain first pump failure");}

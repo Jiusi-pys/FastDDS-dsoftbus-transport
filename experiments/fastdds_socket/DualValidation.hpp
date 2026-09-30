@@ -7,7 +7,7 @@
 #include <map>
 #include <mutex>
 #include <string>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 enum class EndpointKind { Participant, Writer, Reader };
 enum class DiscoveryChange { Discovered, Updated, Removed };
 // Explicit identity fixture of this dedicated two-board program. The full run

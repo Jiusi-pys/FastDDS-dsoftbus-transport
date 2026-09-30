@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <stdexcept>
 #include <string>
-using namespace mdds::experiment;
+using namespace fastdds_dsoftbus::experiment;
 static void Require(bool ok,const char* message) { if(!ok) throw std::runtime_error(message); }
 static constexpr const char* run="0123456789abcdef";
 static void Event(DualDiscovery& d,const EndpointIdentity& guid,EndpointKind kind,DiscoveryChange change=DiscoveryChange::Discovered) {

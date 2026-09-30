@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/ApplicationAttachments.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ApplicationAttachments.hpp>
 #include "ApplicationAttachmentsInternal.hpp"
 #include <algorithm>
 #include <condition_variable>
@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace detail {
 enum class ApplicationPhase { Active, Detaching, Detached };
 enum class ReceiverPhase { Empty, Opening, Open, Closing };
@@ -721,4 +721,4 @@ void ApplicationAttachments::TestSetIncarnation(const ApplicationClaim& claim, c
 std::weak_ptr<InputChannels> ApplicationAttachments::TestCore(const ApplicationClaim& claim) const
 { return claim.app_ && claim.app_->budget == control_->budget ? claim.app_->inputs : std::weak_ptr<InputChannels>{}; }
 std::weak_ptr<void> ApplicationAttachments::TestBudget() const { return control_->budget; }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

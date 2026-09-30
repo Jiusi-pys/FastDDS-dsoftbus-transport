@@ -4,6 +4,10 @@ Work package: **`REAL_FASTDDS_PARTICIPANT_OVER_HOST_NATIVE_BACKEND`**<br>
 Status: **`REAL_FASTDDS_PARTICIPANT_HOST_INTEGRATION_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`**<br>
 Artifact run: `.artifacts/real-participant-host/run-20260926T093712Z`
 
+This is a historical checkpoint recorded before the public naming migration. Its
+`MddsKeyedSample` and other legacy identifiers describe that original source and
+package only; they are not current `fastdds_dsoftbus` package or ABI evidence.
+
 This is a bounded Host integration checkpoint on Fast DDS 3.6.2.0 commit
 `343f155c36b561db3d9f047a65d866ce0f3da300`, using the current test-only
 descriptor factory and the existing Host facade. It uses one local locator and

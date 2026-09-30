@@ -1,8 +1,8 @@
 #pragma once
 
 // Dedicated, default-OFF engineering experiment. No production qualification.
-#include <mdds/dsoftbus/V1Address.hpp>
-#include <mdds/dsoftbus/ReceiveAdmissionDiagnostic.hpp>
+#include <fastdds_dsoftbus/dsoftbus/V1Address.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ReceiveAdmissionDiagnostic.hpp>
 #include <fastdds/rtps/transport/TransportInterface.hpp>
 #include <socket.h>
 #include <cstdint>
@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 namespace rtps = eprosima::fastdds::rtps;
 using Locator = rtps::Locator_t;
 
@@ -289,4 +289,4 @@ private:
     std::shared_ptr<Application> application_;
     bool implicit_runtime_=false;
 };
-} // namespace mdds::experiment
+} // namespace fastdds_dsoftbus::experiment

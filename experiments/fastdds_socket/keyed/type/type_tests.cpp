@@ -1,4 +1,4 @@
-#include "MddsKeyedSamplePubSubTypes.hpp"
+#include "DSoftBusKeyedSamplePubSubTypes.hpp"
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -29,9 +29,9 @@ static void Require(bool condition, const char* predicate)
     if (!condition) throw std::runtime_error(predicate);
 }
 
-static MddsKeyedSample Sample(uint32_t key)
+static DSoftBusKeyedSample Sample(uint32_t key)
 {
-    MddsKeyedSample result;
+    DSoftBusKeyedSample result;
     result.key(key);
     result.run(UINT64_C(0x0102030405060708));
     result.writer(7);
@@ -41,8 +41,8 @@ static MddsKeyedSample Sample(uint32_t key)
     return result;
 }
 
-static rtps::InstanceHandle_t Handle(MddsKeyedSamplePubSubType& type,
-        const MddsKeyedSample& sample, bool md5 = false)
+static rtps::InstanceHandle_t Handle(DSoftBusKeyedSamplePubSubType& type,
+        const DSoftBusKeyedSample& sample, bool md5 = false)
 {
     rtps::InstanceHandle_t handle;
     Require(type.compute_key(&sample, handle, md5), "compute_key(object)");
@@ -51,8 +51,8 @@ static rtps::InstanceHandle_t Handle(MddsKeyedSamplePubSubType& type,
 
 static void KeyContract()
 {
-    static_assert(std::is_same_v<decltype(MddsKeyedSample{}.key()), uint32_t&>);
-    MddsKeyedSamplePubSubType type;
+    static_assert(std::is_same_v<decltype(DSoftBusKeyedSample{}.key()), uint32_t&>);
+    DSoftBusKeyedSamplePubSubType type;
     Require(type.is_compute_key_provided, "is_compute_key_provided");
     Require(type.is_bounded(), "bounded fixed type");
     Require(type.max_serialized_type_size < 128, "small bounded serialized maximum");
@@ -67,7 +67,7 @@ static void KeyContract()
 
 static void NonKeyContract()
 {
-    MddsKeyedSamplePubSubType type;
+    DSoftBusKeyedSamplePubSubType type;
     const auto original = Sample(17);
     for (bool md5 : {false, true})
     {
@@ -89,7 +89,7 @@ static void NonKeyContract()
 
 static void Md5Contract()
 {
-    MddsKeyedSamplePubSubType type;
+    DSoftBusKeyedSamplePubSubType type;
     // Independent known-answer MD5 of the four bytes 12 34 56 78.
     const std::array<uint8_t, 16> expected{{0x89,0x1a,0x26,0xe0,0x58,0x1a,0x7f,0x2c,
         0x9a,0x57,0x4c,0xef,0xf1,0x54,0x9e,0xe1}};
@@ -101,7 +101,7 @@ static void Md5Contract()
 
 static void RoundtripContract()
 {
-    MddsKeyedSamplePubSubType type;
+    DSoftBusKeyedSamplePubSubType type;
     for (auto representation : {dds::XCDR_DATA_REPRESENTATION, dds::XCDR2_DATA_REPRESENTATION})
     {
         for (uint32_t key : {0u, 17u, UINT32_MAX})
@@ -112,7 +112,7 @@ static void RoundtripContract()
             Require(type.serialize(&input, payload, representation), "serialize complete sample");
             Require(payload.length <= type.max_serialized_type_size, "serialized upper bound");
             Require(payload.length == type.calculate_serialized_size(&input, representation), "actual size equals calculated size");
-            MddsKeyedSample output;
+            DSoftBusKeyedSample output;
             Require(type.deserialize(payload, &output), "deserialize complete sample");
             Require(input == output, "roundtrip preserves key and every non-key field");
             for (bool md5 : {false, true})
@@ -134,7 +134,7 @@ static void RoundtripContract()
 
 static void TypeObjectContract()
 {
-    MddsKeyedSamplePubSubType type;
+    DSoftBusKeyedSamplePubSubType type;
     type.register_type_object_representation();
     xtypes::CompleteTypeObject object;
     auto& registry = dds::DomainParticipantFactory::get_instance()->type_object_registry();
@@ -168,7 +168,7 @@ static void WithKeyContract()
     bool okay = false;
     try
     {
-        dds::TypeSupport type(new MddsKeyedSamplePubSubType);
+        dds::TypeSupport type(new DSoftBusKeyedSamplePubSubType);
         Require(type.register_type(participant) == dds::RETCODE_OK, "real Participant type registration");
         auto* topic = participant->create_topic("mdds-keyed-type-contract", type.get_type_name(), dds::TOPIC_QOS_DEFAULT);
         auto* publisher = participant->create_publisher(dds::PUBLISHER_QOS_DEFAULT);
@@ -187,7 +187,7 @@ static void WithKeyContract()
         auto sample = Sample(17);
         const auto registered = writer->register_instance(&sample);
         Require(registered != rtps::c_InstanceHandle_Unknown, "public Writer register_instance accepts key");
-        Require(registered == Handle(*static_cast<MddsKeyedSamplePubSubType*>(type.get()), sample),
+        Require(registered == Handle(*static_cast<DSoftBusKeyedSamplePubSubType*>(type.get()), sample),
                 "Writer registered instance uses generated key");
         okay = true;
     }

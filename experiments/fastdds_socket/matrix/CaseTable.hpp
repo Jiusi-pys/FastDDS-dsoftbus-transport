@@ -4,7 +4,7 @@
 #include <map>
 #include <string>
 #include <vector>
-namespace mdds::experiment::matrix {
+namespace fastdds_dsoftbus::experiment::matrix {
 struct EndpointSpec {std::string id;bool board_a;unsigned participant;bool writer;unsigned entity_id,domain;std::string topic;bool reliable,transient_local,late;};
 using WriteSet=std::map<std::string,std::vector<unsigned>>;
 using ReaderSets=std::map<std::string,WriteSet>;

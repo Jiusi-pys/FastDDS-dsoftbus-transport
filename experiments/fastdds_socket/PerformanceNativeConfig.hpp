@@ -1,6 +1,6 @@
 #pragma once
 #include "KeyedNativeConfig.hpp"
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 struct PerformanceRequest { std::string mode, directory; unsigned repeat=0; };
 inline bool ParsePerformanceRequest(int count,const char*const* values,const std::string& run,bool board_a,PerformanceRequest& out) {
     if(count!=6||!values||!KeyedHex(run,16)||run==std::string(16,'0'))return false;

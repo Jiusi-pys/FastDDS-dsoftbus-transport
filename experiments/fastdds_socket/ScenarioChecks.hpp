@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 inline constexpr char skip_default_xml_variable[] = "SKIP_DEFAULT_XML_FILE";
 // Evidence for the explicitly selected, one-peer engineering experiment only.
 // Not a platform qualification or a claim about SDK-internal resource drain.

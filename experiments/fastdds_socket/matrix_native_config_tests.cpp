@@ -1,8 +1,8 @@
 #include "MatrixNativeConfig.hpp"
 #include <iostream>
 #include <cstring>
-using namespace mdds::experiment;
-namespace v1=mdds::dsoftbus::v1;
+using namespace fastdds_dsoftbus::experiment;
+namespace v1=fastdds_dsoftbus::dsoftbus::v1;
 int main(){
     const std::string run="0123456789abcdef";Config seed;seed.run_id=run;seed.peer_network_id=std::string(64,'a');
     std::vector<MatrixDomainKeys> keys;

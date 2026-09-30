@@ -1,5 +1,5 @@
-#include <mdds/dsoftbus/DSoftBusTransport.hpp>
-using namespace mdds::dsoftbus;
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
+using namespace fastdds_dsoftbus::dsoftbus;
 int main() {
     EndpointId id{};id[0]=10;id[14]=127;id[15]=2;Locator local;
     if(!LocatorCodec::Encode(id,local))return 1;

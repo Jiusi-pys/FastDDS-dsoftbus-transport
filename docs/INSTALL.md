@@ -1,4 +1,4 @@
-# MDDS installed library and external consumers
+# Fast DDS OpenHarmony DSoftBus Transport: installation and consumers
 
 ## Latest bounded device result
 
@@ -28,6 +28,9 @@ whose valid initialization reports `NativeBackendUnavailable`. P0/PF/P4 remain u
 
 ## Current delivery checkpoint
 
+Public names now follow [the naming migration](NAMING.md). The old run and test
+receipts below keep their original identities; they did not run the renamed ABI.
+
 The current library delivery has **local execution, static target evidence, and a
 separate bounded installed-runtime device result**.
 The complete r1 CONFIG result is `524/524 PASS` (677.01 s). The r2
@@ -54,6 +57,23 @@ core implementations; deployment and commit remain separate actions and are not 
 by this document. See the delivery report at
 `.artifacts/library-delivery/run-20260929-local/docs-final/REPORT.md`.
 
+## ROS 2 Jazzy Host integration
+
+The repository also contains a separate, version-bound Host integration for ordinary ROS 2
+Jazzy applications. It uses the unmodified `rmw_fastrtps`/`rclcpp` path with an isolated
+Fast DDS 2.14.5 frontend and the installed `FastDDSDSoftBusTransportRos2Host` package.
+The default Fast DDS 3.6 package remains unchanged, and the two ABI packages must not be
+mixed in one process. This is a Host-only experimental path; it does not enable the default
+backend or qualify device/production use.
+
+The external consumer must link the exported
+`FastDDSDSoftBusTransportRos2Host::factory_configuration` target and must not include
+private Transport headers or create a Participant, Socket, Runtime, or pump itself. The
+required configuration is selected before Participant creation and fails closed when the
+configuration, backend, or version-bound factory ABI is unavailable. The supported build,
+install, consumer, and evidence boundaries are documented in
+[ROS2_HOST_INTEGRATION.md](ROS2_HOST_INTEGRATION.md).
+
 ## Dependencies and targets
 
 Use the existing **shared Release Fast DDS 3.6.2.0 CONFIG installation**, with its
@@ -65,16 +85,16 @@ inherit those options. Clang uses file-prefix maps for the same purpose.
 The SDK-free interface needs Fast DDS headers/libraries and Threads, but no DSoftBus
 headers, SDK or platform DSO. No dependencies are downloaded or bundled automatically.
 
-`find_package(MDDS CONFIG REQUIRED)` exports the existing names under `MDDS::`:
+`find_package(FastDDSDSoftBusTransport CONFIG REQUIRED)` exports the existing names under `FastDDSDSoftBusTransport::`:
 
-- `mdds_dsoftbus_transport_facade`: default, unavailable native backend.
+- `fastdds_dsoftbus_transport_facade`: default, unavailable native backend.
 - Directory, owner, queue, input, attachment, send, process and service-record core
-  targets: transitive dependencies with their existing `mdds_dsoftbus_*` names.
-- `mdds_example_types`: the existing generated keyed sample, with public headers
-  under `mdds/examples/`; not another Transport implementation.
+  targets: transitive dependencies with their existing `fastdds_dsoftbus_*` names.
+- `fastdds_dsoftbus_example_types`: the existing generated keyed sample, with public headers
+  under `fastdds_dsoftbus/examples/`; not another Transport implementation.
 
-`find_package(MDDS CONFIG REQUIRED COMPONENTS Experimental)` additionally exports
-`MDDS::mdds_experimental_runtime` and its isolated real Socket backend archive.
+`find_package(FastDDSDSoftBusTransport CONFIG REQUIRED COMPONENTS Experimental)` additionally exports
+`FastDDSDSoftBusTransport::fastdds_dsoftbus_experimental_runtime` and its isolated real Socket backend archive.
 It is built only for OHOS with an explicit platform DSO. It does not register or
 enable a production backend. Never link default, Host-injected and experimental
 facade variants into the same executable; CMake compatibility properties reject this.
@@ -97,34 +117,34 @@ already installed dependency prefix):
 
 ```powershell
 $deps = 'D:/dependencies/fastdds-release'
-$prefix = 'D:/install/mdds'
+$prefix = 'D:/install/fastdds-dsoftbus-transport'
 cmake -S . -B build-library -G 'Visual Studio 17 2022' -A x64 `
-  -DCMAKE_CONFIGURATION_TYPES=Release -DMDDS_FASTDDS_MODE=CONFIG `
+  -DCMAKE_CONFIGURATION_TYPES=Release -DFASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG `
   "-Dfastdds_DIR=$deps/share/fastdds/cmake" `
   "-Dfastcdr_DIR=$deps/lib/cmake/fastcdr" `
   "-Dfoonathan_memory_DIR=$deps/share/foonathan_memory/cmake" `
   -DBUILD_TESTING=OFF -DBUILD_INTERFACE_PROBE=OFF -DBUILD_SOFTBUS_CAPABILITY_PROBE=OFF `
-  -DBUILD_DSOFTBUS_TRANSPORT_FACADE=ON -DMDDS_INSTALL_PACKAGE=ON
+  -DBUILD_DSOFTBUS_TRANSPORT_FACADE=ON -DFASTDDS_DSOFTBUS_INSTALL_PACKAGE=ON
 cmake --build build-library --config Release --parallel 4
 cmake --install build-library --config Release --prefix "$prefix"
-cmake -S "$prefix/share/MDDS/examples/installed_consumer" -B consumer-build `
+cmake -S "$prefix/share/FastDDSDSoftBusTransport/examples/installed_consumer" -B consumer-build `
   -G 'Visual Studio 17 2022' -A x64 -DCMAKE_CONFIGURATION_TYPES=Release `
   "-DCMAKE_PREFIX_PATH=$prefix;$deps"
 cmake --build consumer-build --config Release
 $env:PATH = "$deps/bin;$deps/lib;" + $env:PATH
-& ./consumer-build/Release/mdds_consumer.exe
+& ./consumer-build/Release/fastdds_dsoftbus_consumer.exe
 ```
 
-The example checks the real default MDDS factory's failure, then separately creates
+The example checks the real default transport factory's failure, then separately creates
 a real Fast DDS Participant, Topic, Publisher/Subscriber and Writer/Reader using
 the default Fast DDS Host configuration (which may deliver intra-process), writes/takes one keyed sample and deletes all
 entities before the Participant. It prints that this **is not DSoftBus traffic**.
 The private logical endpoint identifiers are illustrative non-IP IDs; `::0`, `::1`
 and multicast-looking IDs are reserved by the actual codec.
 
-The MDDS prefix may move: supply its new `lib/cmake/MDDS` directory or new prefix to
-the consumer. Exported MDDS include/archive locations are prefix-relative. Dependency
-installations are separately declared; moving MDDS does not move or distribute them.
+The transport prefix may move: supply its new `lib/cmake/FastDDSDSoftBusTransport` directory or new prefix to
+the consumer. Exported transport include/archive locations are prefix-relative. Dependency
+installations are separately declared; moving the transport prefix does not move or distribute them.
 On other Host platforms use a supported Release generator/compiler and matching
 dependency ABI; only the actually tested platform is reported as verified.
 
@@ -140,10 +160,10 @@ BUILD_SOFTBUS_CAPABILITY_PROBE=OFF
 BUILD_DSOFTBUS_TRANSPORT_FACADE=ON
 BUILD_DSOFTBUS_PROVIDER_ADAPTER_PHASE0=ON
 BUILD_DSOFTBUS_PUBLIC_SOCKET_SHIM=ON
-MDDS_PUBLIC_SOCKET_LIBRARY=<absolute saved target libsoftbus_client.z.so>
+FASTDDS_DSOFTBUS_PUBLIC_SOCKET_LIBRARY=<absolute saved target libsoftbus_client.z.so>
 DSOFTBUS_SOURCE_DIR=<authorized communication_dsoftbus checkout>
-MDDS_INSTALL_PACKAGE=ON
-MDDS_BUILD_EXPERIMENTAL_RUNTIME=ON
+FASTDDS_DSOFTBUS_INSTALL_PACKAGE=ON
+FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME=ON
 ```
 
 Socket declarations come from the authorized `communication_dsoftbus` public source
@@ -151,18 +171,18 @@ headers (current bound checkout `5518313`), **not** bundled SDK headers. The tar
 toolchain, headers and platform DSO are distinct inputs. Target runtime-library source
 equivalence and PF contracts remain unproven. No private fd or Session API is used.
 
-After building/installing, copy the installed `share/MDDS/examples/experimental_socket`
+After building/installing, copy the installed `share/FastDDSDSoftBusTransport/examples/experimental_socket`
 directory outside the source tree. Configure that consumer with the same OHOS toolchain,
-explicit `MDDS_DIR=<new-prefix>/lib/cmake/MDDS`, target dependency CONFIG directories,
-and `MDDS_SOCKET_LIBRARY=<declared target DSO>`. Cross toolchains may root package
-searches, so explicit `MDDS_DIR` is preferable to only `CMAKE_PREFIX_PATH`.
+explicit `FastDDSDSoftBusTransport_DIR=<new-prefix>/lib/cmake/FastDDSDSoftBusTransport`, target dependency CONFIG directories,
+and `FASTDDS_DSOFTBUS_SOCKET_LIBRARY=<declared target DSO>`. Cross toolchains may root package
+searches, so explicit `FastDDSDSoftBusTransport_DIR` is preferable to only `CMAKE_PREFIX_PATH`.
 Build only. The example sets `$ORIGIN` loader policy; it does not package SDK/system
 DSOs. Actual loader provisioning and permissions require their own authorized workflow.
 
 The eventual executable arguments are:
 
 ```text
-mdds_socket_consumer <side:0|1> <peer-network-id> <authorized-package> <shared-service-prefix>
+fastdds_dsoftbus_socket_consumer <side:0|1> <peer-network-id> <authorized-package> <shared-service-prefix>
 ```
 
 There are no embedded device identities, tokens, grants or permission files. Launching

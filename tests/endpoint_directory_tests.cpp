@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/EndpointDirectory.hpp>
+#include <fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 
 #define CHECK(condition) do { if (!(condition)) throw std::runtime_error( \
     std::string("line ") + std::to_string(__LINE__) + ": " #condition); } while (false)

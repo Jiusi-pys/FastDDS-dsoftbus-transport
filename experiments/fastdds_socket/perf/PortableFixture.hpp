@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-namespace mdds::experiment::perf {
+namespace fastdds_dsoftbus::experiment::perf {
 struct Options {
     std::string run;
     bool board_a = false;
@@ -33,7 +33,7 @@ public:
     std::string FirstFailure() const;
     std::string CleanupFailure() const;
     std::vector<std::shared_ptr<Control>> Controls() const;
-#ifdef MDDS_PERF_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_PERF_HOST_CONTRACT_TESTS
     static bool ContractTest(const std::string&, std::uint16_t base_port);
 #endif
 private:

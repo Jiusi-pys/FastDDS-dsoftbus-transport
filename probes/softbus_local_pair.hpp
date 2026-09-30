@@ -3,7 +3,7 @@
 #include <array>
 #include <mutex>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 enum class LocalSide { Listener, Client };
 // Single-run diagnostic only: two explicitly different callback tables, one
 // listener, one client, one accepted ID. No reconnect or native-ID reuse claim.

@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 namespace {
 void Require(bool condition, const char* message)
 { if (!condition) throw std::runtime_error(message); }

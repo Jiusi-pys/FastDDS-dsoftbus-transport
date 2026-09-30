@@ -12,13 +12,13 @@
 // is also the positive control of the CMakeLists check that compiles it against
 // the bypassing call site, which additionally asserts that the failure there is
 // the missing member and not a missing include or a link error.
-#include <mdds/dsoftbus/ServiceRecordBinding.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ServiceRecordBinding.hpp>
 
 #include <type_traits>
 #include <utility>
 
 namespace {
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 
 // Detect any callable execution entry on the delivery handle. A private or
 // deleted member is a substitution failure here, and that is the right answer:

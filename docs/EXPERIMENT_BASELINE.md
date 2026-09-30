@@ -1,5 +1,8 @@
 # 有限实验源码基线
 
+本文件保留历史实验范围和收据，但下方新建构建示例使用当前规范的
+`FASTDDS_DSOFTBUS_*` 选项；旧运行记录中的 MDDS 选项文字仍属于原始历史身份。
+
 本基线整理从 `f6997da898d759b71a89421e4dd5e2cd471ac59c` 之后积累的实验源码、测试和工具。它保留默认关闭的实验入口；不是生产 Transport 发布。候选准备、本地提交和生产资格是不同门禁。
 
 ## 已有范围与证据
@@ -20,13 +23,13 @@
 Host 示例（`<prefix>` 是已核验的外部 Release 安装目录；分别使用全新 OFF/ON build 目录）：
 
 ```text
-cmake -S . -B <new-build> -G "Visual Studio 17 2022" -A x64 -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -DMDDS_FASTDDS_MODE=CONFIG -DBUILD_TESTING=ON -DBUILD_FASTDDS_DSOFTBUS_EXPERIMENT=ON -DMDDS_EXPERIMENT_NATIVE=OFF -DMDDS_EXPERIMENT_RX_DROP=OFF -Dfastdds_DIR=<prefix>/share/fastdds/cmake -Dfastcdr_DIR=<prefix>/lib/cmake/fastcdr -Dfoonathan_memory_DIR=<prefix>/share/foonathan_memory/cmake
+cmake -S . -B <new-build> -G "Visual Studio 17 2022" -A x64 -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -DFASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG -DBUILD_TESTING=ON -DBUILD_FASTDDS_DSOFTBUS_EXPERIMENT=ON -DFASTDDS_DSOFTBUS_EXPERIMENT_NATIVE=OFF -DFASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP=OFF -Dfastdds_DIR=<prefix>/share/fastdds/cmake -Dfastcdr_DIR=<prefix>/lib/cmake/fastcdr -Dfoonathan_memory_DIR=<prefix>/share/foonathan_memory/cmake
 cmake --build <new-build> --config Release
 ctest --test-dir <new-build> -C Release --output-on-failure
 python -m unittest discover -s tests -p dds_performance_analysis_tests.py
 ```
 
-ON 指 `MDDS_EXPERIMENT_RX_DROP=ON`，不是启用 native。Host 参考 transport 不等于设备 DSoftBus 结果。确保 Node/Python、依赖 DLL 和 Windows PowerShell 标准模块在明确记录的环境中可见。单独的嵌套 Ninja build contract 测试需要 MSVC developer environment 及显式 prefix；普通 VS configure 不会替子进程设置该环境。
+ON 指 `FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP=ON`，不是启用 native。Host 参考 transport 不等于设备 DSoftBus 结果。确保 Node/Python、依赖 DLL 和 Windows PowerShell 标准模块在明确记录的环境中可见。单独的嵌套 Ninja build contract 测试需要 MSVC developer environment 及显式 prefix；普通 VS configure 不会替子进程设置该环境。
 
 性能 Host 测试的冻结 plan/schema 已从历史 artifact 字节相同地纳入 `tests/fixtures/performance/`；它们是测试合同，不是 QualificationProfile。分析器和 fixture 不再偷偷读取历史工作目录。native 构建脚本保留正常 Git source-state 路径，另支持已审查的显式 `-RestoredSourceReceipt` 路径；没有使用收据就不得假称无 Git 的 source provenance 已验证。
 

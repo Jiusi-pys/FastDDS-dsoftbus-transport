@@ -21,11 +21,11 @@
 #include <iomanip>
 #include <sstream>
 #include <thread>
-#ifdef MDDS_PERF_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_PERF_HOST_CONTRACT_TESTS
 #include <filesystem>
 #endif
 
-namespace mdds::experiment::perf {
+namespace fastdds_dsoftbus::experiment::perf {
 namespace dds = eprosima::fastdds::dds;
 namespace rtps = eprosima::fastdds::rtps;
 namespace {
@@ -106,20 +106,20 @@ struct PerformanceFixture::Impl {
     std::array<ResourceSnapshot,3> lifecycle_resources{};
     std::array<ProcessStats,3> process_boundaries{};
     uint64_t sampled_tx_records=0,sampled_rx_records=0,sampled_tx_bytes=0,sampled_rx_bytes=0;
-#ifdef MDDS_PERF_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_PERF_HOST_CONTRACT_TESTS
     // Contract tests inject boundary timestamps after a real public DDS take.
     // These hooks are absent from native builds and inaccessible to either CLI.
     std::function<int64_t(unsigned)> test_clock;
     std::function<void(const char*)> test_event;
 #endif
     int64_t BoundaryClock(unsigned boundary) const {
-#ifdef MDDS_PERF_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_PERF_HOST_CONTRACT_TESTS
         if(test_clock) return test_clock(boundary);
 #endif
         (void)boundary; return ClockNowNs();
     }
     void TestEvent(const char* event) const {
-#ifdef MDDS_PERF_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_PERF_HOST_CONTRACT_TESTS
         if(test_event) test_event(event);
 #endif
         (void)event;
@@ -619,7 +619,7 @@ std::string PerformanceFixture::FirstFailure() const { return impl_->first_failu
 std::string PerformanceFixture::CleanupFailure() const { return impl_->cleanup_failure; }
 std::vector<std::shared_ptr<Control>> PerformanceFixture::Controls() const { return impl_->control ? std::vector<std::shared_ptr<Control>>{impl_->control} : std::vector<std::shared_ptr<Control>>{}; }
 
-#ifdef MDDS_PERF_HOST_CONTRACT_TESTS
+#ifdef FASTDDS_DSOFTBUS_PERF_HOST_CONTRACT_TESTS
 bool PerformanceFixture::ContractTest(const std::string& test,uint16_t port) {
     const bool deadline_test=test.rfind("deadline-",0)==0;
     if(test!="wrong-length" && test!="real-echo" && test!="cleanup" && test!="late-original" && test!="no-first" && test!="future-echo" && test!="expired-slot" && test!="phase-order" && !deadline_test) return false;

@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <utility>
 
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 namespace {
 void Require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
 CancelObservation Timely() {

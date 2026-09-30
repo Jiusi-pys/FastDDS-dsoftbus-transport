@@ -5,7 +5,7 @@
 // the case by argument. Within one process the two runtimes still exist
 // simultaneously, which is what makes the per-object ownership of the gate
 // observable. No case substitutes a precomputed "verified" flag for an event.
-#include <mdds/dsoftbus/ExperimentalRuntime.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
 #include "FakePublicSocketLink.hpp"
 #include <fastdds/rtps/transport/TransportReceiverInterface.hpp>
 #include <chrono>
@@ -18,7 +18,7 @@
 #include <thread>
 #include <vector>
 
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 Locator local(unsigned side) { EndpointId id{}; id[0]=10; id[15]=static_cast<std::uint8_t>(side+1); Locator l; if(!LocatorCodec::Encode(id,l))std::abort(); return l; }
 phase0::PublicSocketConfiguration config(unsigned side) {
     const std::string me=side?"host.public.B.":"host.public.A.", peer=side?"host.public.A.":"host.public.B.";

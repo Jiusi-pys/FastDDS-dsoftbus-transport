@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-namespace mdds::experiment::matrix {
+namespace fastdds_dsoftbus::experiment::matrix {
 struct MatrixOptions {
     std::string run,case_id;
     bool board_a=false;

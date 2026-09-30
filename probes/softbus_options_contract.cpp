@@ -1,5 +1,5 @@
 #include "softbus_options_contract.hpp"
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 bool OptionsNativeCallActive(std::int64_t entered, std::int64_t returned, std::int64_t observed) noexcept {
     return entered >= 0 && returned < 0 && observed >= entered;
 }

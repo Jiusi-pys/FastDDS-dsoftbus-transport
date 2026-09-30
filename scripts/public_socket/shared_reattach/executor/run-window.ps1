@@ -26,7 +26,7 @@ $frozenManifest=Get-Content -Raw -LiteralPath $cfg.build_manifest | ConvertFrom-
 if ($cfg.scenario -ceq 'INSTALLED_RUNTIME') {
     # The installed-runtime window must be backed by the experimental-runtime
     # library build, not by the isolated probe experiment.
-    if (@($frozenManifest.configureArguments | Where-Object {$_ -ceq '-DMDDS_BUILD_EXPERIMENTAL_RUNTIME=ON'}).Count -ne 1) {throw 'Not the installed experimental-runtime build'}
+    if (@($frozenManifest.configureArguments | Where-Object {$_ -ceq '-DFASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME=ON'}).Count -ne 1) {throw 'Not the installed experimental-runtime build'}
     if (@($frozenManifest.configureArguments | Where-Object {$_ -ceq '-DBUILD_PUBLIC_SOCKET_DDS_EXPERIMENT=ON'}).Count -ne 0) {throw 'Installed window must not use the isolated probe experiment build'}
 } else {
     if (@($frozenManifest.configureArguments | Where-Object {$_ -ceq '-DBUILD_PUBLIC_SOCKET_DDS_EXPERIMENT=ON'}).Count -ne 1) {throw 'Not the isolated real DDS experiment'}

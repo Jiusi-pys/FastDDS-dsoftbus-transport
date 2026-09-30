@@ -1,13 +1,13 @@
-#include <mdds/dsoftbus/HostProviderLoop.hpp>
-#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
-#include <mdds/dsoftbus/RuntimeProbeAccess.hpp>
+#include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
+#include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
 #endif
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
-#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
-namespace mdds::dsoftbus::phase0 {
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
+namespace fastdds_dsoftbus::dsoftbus::phase0 {
 namespace { thread_local const std::function<bool()>* armed_pre_connect = nullptr; }
 // Guard storage belongs to the common loop assembly, including probe variants
 // that do not link the public Runtime archive. Only that Runtime's hook invokes
@@ -24,7 +24,7 @@ ArmedPreConnectGate::ArmedPreConnectGate(std::function<bool()> gate) noexcept
 ArmedPreConnectGate::~ArmedPreConnectGate(){armed_pre_connect=previous_;}
 }
 #endif
-namespace mdds::dsoftbus::host_test {
+namespace fastdds_dsoftbus::dsoftbus::host_test {
 using namespace phase0;
 namespace {
 // The same contract the shared input release enforces, for the path that has no input to
@@ -33,7 +33,7 @@ namespace {
 // success and leave the runtime unsealed with this view's egress registration unrevoked.
 [[noreturn]] void RefuseSharedRuntimeRelease() noexcept
 {
-    std::fprintf(stderr,"MDDS DSoftBus shared runtime: a member view was destroyed from a context that "
+    std::fprintf(stderr,"Fast DDS DSoftBus shared runtime: a member view was destroyed from a context that "
             "cannot close an input; close every facade from an external control context (CloseRequest) "
             "before releasing it");
     std::fputc('\n',stderr);std::fflush(stderr);std::abort();
@@ -52,7 +52,7 @@ struct HostProviderLoop::View {
     ReceiverIdentity identity{};
     ReceiverIdentity retired_identity{};
     std::function<void()> before_publish,after_seal;
-#ifdef MDDS_HOST_BACKEND_TESTING
+#ifdef FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING
     std::function<void(bool)> send_hook;
 #endif
 };
@@ -266,14 +266,14 @@ bool HostProviderLoop::StartRuntime(const DSoftBusTransportDescriptor& d) noexce
     // facade rejected above must never stop the first facade's live backend.
     struct Rollback {HostProviderLoop& loop;bool done=false;~Rollback(){if(!done)loop.ShutdownRuntime();}} rollback{*this};
     try {
-#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
     constexpr auto admitted_kind=BackendKind::DSoftBusProvider;
 #else
     constexpr auto admitted_kind=BackendKind::HostMock;
 #endif
     if(!s.backend||s.backend->Kind()!=admitted_kind||d.directory.locals.size()!=1||d.directory.routes.size()!=1) return false;
     s.config.directory=d.directory;s.config.directions={s.backend->Topology()==BackendTopology::ListenerAndOutgoing?RouteDirection::Both:RouteDirection::Dial};s.config.service_pkg_name="mdds.host.loop";
-#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
     s.config.service_pkg_name="com.kaihong.mdds";
 #endif
     s.config.dial_only_egress=s.backend->Topology()==BackendTopology::ListenerAndOutgoing;
@@ -322,7 +322,7 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
     request.directory=*directory.value;request.receiver=receiver;
     request.receive_observer=s.observer;
     request.shared_input_channel=s.shared;
-#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
     auto result=RuntimeProbeAccess::Build(s.domain,ServiceRecordTable::Process(),*s.native,*s.attachments,s.backend,request);
 #else
     auto result=ProviderAdapter::Build(s.domain,ServiceRecordTable::Process(),*s.native,*s.attachments,s.backend,request);
@@ -332,7 +332,7 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
     // releases only this pending binding before false reaches the receiver owner.
     pending=std::move(result.adapter);
     {
-#ifdef MDDS_PUBLIC_SOCKET_RUNTIME_PROBE
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
         // Armed only for this call, on this thread: the gate runs outside every
         // management lock below it and cannot be reached by another runtime.
         std::function<bool()> gate;
@@ -343,7 +343,7 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
             settle_pending();return InputOpenResult::Disabled;
         }
     }
-#ifdef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
     auto provider=RuntimeProbeAccess::SendBridge(*pending,*s.native);
 #else
     auto provider=pending->BindSendProvider(*s.native);
@@ -386,7 +386,7 @@ NativeSendRunResult HostProviderLoop::PumpSend() noexcept {
 NativeSendRunResult HostProviderLoop::PumpSendObserved(HostSendObservation& observation) noexcept {
     observation={};return PumpSendImpl(&observation);
 }
-#ifdef MDDS_HOST_BACKEND_TESTING
+#ifdef FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING
 void HostProviderLoop::SetSharedSendHook(std::function<void(bool)> hook) {
     view_->send_hook=std::move(hook); // Installed before starting test workers.
 }
@@ -422,12 +422,12 @@ NativeSendRunResult HostProviderLoop::PumpSendImpl(HostSendObservation* observat
                 const auto activity=s.execution->Observe(registration);
                 observation->registration_status=activity.status;observation->admission_closed=activity.admission_closed;
             };
-#ifdef MDDS_HOST_BACKEND_TESTING
+#ifdef FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING
             if(v->send_hook)v->send_hook(false);
 #endif
             auto invocation=s.execution->TryAdmit(*work.value,s.send_provider);
             if(!invocation){observe();return {invocation.issue.code};}
-#ifdef MDDS_HOST_BACKEND_TESTING
+#ifdef FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING
             if(v->send_hook)v->send_hook(true);
 #endif
             auto result=invocation.value->Run();observe();return result;
@@ -532,7 +532,7 @@ bool HostProviderLoop::WaitInputClosing(std::chrono::steady_clock::time_point de
     return state_->changed.wait_until(lock,deadline,[&]{return state_->shared?view_->input_closing:state_->input_closing;});
 }
 }
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 std::unique_ptr<DSoftBusTransport> HostFacadeTestAccess::Create(const DSoftBusTransportDescriptor& d,
         std::shared_ptr<HostFacadeBackend> backend) {
     return std::unique_ptr<DSoftBusTransport>(new DSoftBusTransport(d,DSoftBusTransport::HostBackendTag{},std::move(backend)));

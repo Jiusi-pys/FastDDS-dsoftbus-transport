@@ -1,11 +1,11 @@
-#include <mdds/dsoftbus/V1Configuration.hpp>
+#include <fastdds_dsoftbus/dsoftbus/V1Configuration.hpp>
 #include <functional>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
 
-namespace v1 = mdds::dsoftbus::v1;
+namespace v1 = fastdds_dsoftbus::dsoftbus::v1;
 using namespace std::chrono_literals;
 #define CHECK(c) do { if (!(c)) throw std::runtime_error(std::string("line ") + std::to_string(__LINE__) + ": " #c); } while(false)
 

@@ -1,14 +1,14 @@
 #pragma once
-#ifndef MDDS_PUBLIC_SOCKET_DDS_EXPERIMENT
+#ifndef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
 #error "Exclusive DDS experiment variant required"
 #endif
-#include <mdds/dsoftbus/HostProviderLoop.hpp>
-#include <mdds/dsoftbus/PublicSocketBackend.hpp>
+#include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
+#include <fastdds_dsoftbus/dsoftbus/PublicSocketBackend.hpp>
 #include <functional>
 #include <string>
 #include <array>
 namespace eprosima::fastdds::dds {class DataWriter;}
-namespace mdds::dsoftbus::dds_experiment {
+namespace fastdds_dsoftbus::dsoftbus::dds_experiment {
 struct Config {
     std::string run, peer_network;
     std::string scenario="SMALL";
@@ -32,7 +32,7 @@ std::size_t FrameCount() noexcept;
 std::size_t FrameLimit() noexcept;
 bool DropRegressionRecord(std::int32_t,const std::uint8_t*,std::size_t) noexcept;
 bool ExpectedTerminal(const NativeSendRunResult&,const host_test::HostLoopObservation&,bool) noexcept;
-#ifdef MDDS_DDS_EXPERIMENT_TESTING
+#ifdef FASTDDS_DSOFTBUS_DDS_EXPERIMENT_TESTING
 void SetAfterWaitHook(std::function<void(eprosima::fastdds::dds::DataWriter*)>);
 void SetAfterFrameSelectionForTest(std::function<void()>);
 unsigned FrameCycleForTest(std::size_t);

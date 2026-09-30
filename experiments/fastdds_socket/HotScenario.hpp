@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <mutex>
 #include <vector>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 inline EndpointIdentity ProgramIdentity(const std::string& run,bool board,unsigned instance,unsigned generation,bool hot,EndpointKind kind) {
     auto id=DualIdentity(run,board,instance,kind);
     if(hot) {id[8]=0x48;id[9]=static_cast<std::uint8_t>(generation>>8);id[10]=static_cast<std::uint8_t>(generation);}

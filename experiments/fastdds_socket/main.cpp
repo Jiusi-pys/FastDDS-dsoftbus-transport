@@ -1,4 +1,4 @@
-#if !defined(MDDS_EXPERIMENT_NATIVE_ACKNOWLEDGED)
+#if !defined(FASTDDS_DSOFTBUS_EXPERIMENT_NATIVE_ACKNOWLEDGED)
 #error This program requires the dedicated unqualified native experiment build.
 #endif
 #include "ExperimentalTransport.hpp"
@@ -54,8 +54,8 @@
 namespace {
 namespace dds = eprosima::fastdds::dds;
 namespace rtps = eprosima::fastdds::rtps;
-namespace v1 = mdds::dsoftbus::v1;
-namespace ex = mdds::experiment;
+namespace v1 = fastdds_dsoftbus::dsoftbus::v1;
+namespace ex = fastdds_dsoftbus::experiment;
 using Clock = std::chrono::steady_clock;
 constexpr char package_name[] = "com.kaihong.mdds";
 constexpr unsigned domain = 73;
@@ -72,7 +72,7 @@ struct Arguments {
     ex::LossMode loss_mode = ex::LossMode::Disabled;
 };
 constexpr bool loss_build_enabled =
-#if defined(MDDS_EXPERIMENT_RX_DROP) && MDDS_EXPERIMENT_RX_DROP
+#if defined(FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP) && FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
     true;
 #else
     false;
@@ -87,23 +87,23 @@ bool Parse(int argc, char** argv, Arguments& out) {
         (std::strcmp(argv[2],"publisher") && std::strcmp(argv[2],"subscriber")) ||
         std::strcmp(argv[3],"--run-id") || !Hex(argv[4],16) ||
         std::strcmp(argv[5],"--peer-network-id") || !Hex(argv[6],64) ||
-        std::strcmp(argv[7],"--expected-token") || !mdds_probe::ParseTokenArgument(argv[8],out.token) ||
+std::strcmp(argv[7],"--expected-token") || !fastdds_dsoftbus_probe::ParseTokenArgument(argv[8],out.token) ||
         std::strcmp(argv[9],"--preflight-confirmed") || std::strcmp(argv[10],"--allow-unqualified-experiment")) return false;
     out.publisher=std::strcmp(argv[2],"publisher")==0; out.run=argv[4]; out.peer=argv[6];
     if(argc==17) {
         const char* suffix[]={argv[11],argv[12],argv[13],argv[14],argv[15],argv[16]};
         return ex::ParsePerformanceRequest(6,suffix,out.run,out.publisher,out.performance)&&
-            mdds_probe::AdmitTokenEntry({mdds_probe::TokenEntryMode::Record,true,true,out.token});
+fastdds_dsoftbus_probe::AdmitTokenEntry({fastdds_dsoftbus_probe::TokenEntryMode::Record,true,true,out.token});
     }
     if(argc==15 && !std::strcmp(argv[11],"--keyed-case")) {
         if(std::strcmp(argv[13],"--control-dir") || !ex::ValidKeyedRequest(argv[12],out.run,out.publisher,argv[14])) return false;
         out.keyed_case=argv[12];out.control_directory=argv[14];
-        return mdds_probe::AdmitTokenEntry({mdds_probe::TokenEntryMode::Record,true,true,out.token});
+return fastdds_dsoftbus_probe::AdmitTokenEntry({fastdds_dsoftbus_probe::TokenEntryMode::Record,true,true,out.token});
     }
     if(argc==15 && !std::strcmp(argv[11],"--matrix-case")) {
         if(std::strcmp(argv[13],"--control-dir") || !ex::ValidMatrixRequest(argv[12],out.run,out.publisher,argv[14])) return false;
         out.matrix_case=argv[12];out.control_directory=argv[14];
-        return mdds_probe::AdmitTokenEntry({mdds_probe::TokenEntryMode::Record,true,true,out.token});
+return fastdds_dsoftbus_probe::AdmitTokenEntry({fastdds_dsoftbus_probe::TokenEntryMode::Record,true,true,out.token});
     }
     if(argc==12) {
         if(std::strcmp(argv[11],"--dual-participant")) return false;
@@ -129,7 +129,7 @@ bool Parse(int argc, char** argv, Arguments& out) {
     }
     if(!ex::ValidDualOptions(out.dual,out.sample_bytes,out.loss_mode!=ex::LossMode::Disabled)) return false;
     if(!ex::ValidControlledLoss(out.loss_mode,static_cast<std::uint32_t>(out.sample_bytes),loss_build_enabled)) return false;
-    return mdds_probe::AdmitTokenEntry({mdds_probe::TokenEntryMode::Record,true,true,out.token});
+return fastdds_dsoftbus_probe::AdmitTokenEntry({fastdds_dsoftbus_probe::TokenEntryMode::Record,true,true,out.token});
 }
 std::string Guid(const rtps::GUID_t& guid) { std::ostringstream out; out<<guid; return out.str(); }
 ex::EndpointIdentity Identity(const rtps::GUID_t& guid) {
@@ -183,7 +183,7 @@ public:
         if(reason==rtps::WriterDiscoveryStatus::DISCOVERED_WRITER) ++writers;
         if(instance_) discovery.Writer(reason,info);
         std::printf("stage=DDS_WRITER_DISCOVERY run=%s instance=%u reason=%u guid=%s topic=%s\n",run_.c_str(),instance_,unsigned(reason),Guid(info.guid).c_str(),info.topic_name.c_str());
-#if defined(MDDS_EXPERIMENT_RX_DROP) && MDDS_EXPERIMENT_RX_DROP
+#if defined(FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP) && FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
         if(!publisher_ && loss_mode_!=ex::LossMode::Disabled &&
                 reason==rtps::WriterDiscoveryStatus::DISCOVERED_WRITER &&
                 std::string(info.topic_name.c_str())=="mdds-"+run_ && std::strcmp(info.type_name.c_str(),"ExperimentLargeSample")==0 &&
@@ -807,7 +807,7 @@ private:
         evidence.sample_mask=listener_.mask; evidence.invalid_samples=listener_.invalid;
         evidence.sample_bytes=args_.sample_bytes;
         evidence.fragment_observations=args_.publisher?s.tx_data_frag:s.rx_data_frag;
-#if defined(MDDS_EXPERIMENT_RX_DROP) && MDDS_EXPERIMENT_RX_DROP
+#if defined(FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP) && FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
         if(ControlledLoss() && !args_.publisher) {
             const auto drop=control_->DropSnapshot();
             loss_evidence.armed=drop.armed; loss_evidence.dropped_messages=drop.dropped_messages;
@@ -849,7 +849,7 @@ private:
     ex::ParticipantCloseState close_state_;
 };
 
-class Experiment final : public mdds_probe::TokenEntryOperations {
+class Experiment final : public fastdds_dsoftbus_probe::TokenEntryOperations {
 public:
     explicit Experiment(Arguments args):args_(std::move(args)),dual_execution_(args_.run,args_.publisher?"A":"B"),hot_execution_(args_.run,args_.publisher?"A":"B") { loss_evidence.mode=args_.loss_mode; }
     ex::ScenarioEvidence evidence;ex::LossEvidence loss_evidence;
@@ -869,8 +869,8 @@ public:
             args_.dual?dual_data_ && ex::DualScenarioComplete(progress_) && evidence.cleanup_observed && evidence.token_restored:
             ex::LossScenarioComplete(evidence,loss_evidence);
     }
-    mdds_probe::TaskCheckpoint ObserveTasks() override {
-        mdds_probe::TaskCheckpoint out; out.process_id=getpid(); out.current_tid=syscall(SYS_gettid);
+fastdds_dsoftbus_probe::TaskCheckpoint ObserveTasks() override {
+fastdds_dsoftbus_probe::TaskCheckpoint out; out.process_id=getpid(); out.current_tid=syscall(SYS_gettid);
         DIR* dir=opendir("/proc/self/task"); out.opened=dir!=nullptr;
         if(dir) {
             bool valid=true;
@@ -885,17 +885,17 @@ public:
             }
             if(closedir(dir)) out.complete=false;
         }
-        std::printf("stage=INITIAL_TASKS pid=%d single_main=%d\n",getpid(),mdds_probe::IsSingleMainTask(out));
+std::printf("stage=INITIAL_TASKS pid=%d single_main=%d\n",getpid(),fastdds_dsoftbus_probe::IsSingleMainTask(out));
         return out;
     }
     std::uint64_t GetSelf() override { return MddsTokenBridgeGetSelfToken(); }
     int SetSelf(std::uint64_t token) override { return MddsTokenBridgeSetSelfToken(token); }
-    mdds_probe::OwnedTokenObservation VerifyOwned(std::uint64_t token,const char* phase) override {
+fastdds_dsoftbus_probe::OwnedTokenObservation VerifyOwned(std::uint64_t token,const char* phase) override {
         MddsTokenBridgeResult result{};
         const int bridge_status=MddsTokenBridgeVerify(static_cast<std::uint32_t>(token),&result);
         std::printf("stage=TOKEN_VERIFY phase=%s bridge_status=%d called=%u info_rc=%d query_rc=%d count=%u granted=%d\n",
             phase,bridge_status,result.called,result.infoRc,result.permissionRc,result.permissionCount,result.granted);
-        mdds_probe::OwnedTokenObservation out;
+fastdds_dsoftbus_probe::OwnedTokenObservation out;
         if(bridge_status || result.called!=15 || strnlen(result.processName,sizeof(result.processName))==sizeof(result.processName)) return out;
         out.lookup=result.lookupToken; out.type=result.type; out.native_type=result.nativeType;
         out.info_rc=result.infoRc; out.process_name=result.processName; out.apl=result.apl; out.normal_apl=result.normalApl;
@@ -968,7 +968,7 @@ public:
             if(matrix_data_) failure_stage="NONE";
             return matrix_data_;
         }
-#if defined(MDDS_EXPERIMENT_RX_DROP) && MDDS_EXPERIMENT_RX_DROP
+#if defined(FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP) && FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
         // Freeze the exact capability before keyed runtime acquisition. The
         // application descriptor must not mutate that native configuration.
         config.enable_rx_drop=args_.loss_mode!=ex::LossMode::Disabled && !args_.publisher;
@@ -1366,7 +1366,7 @@ private:
         owned.reset();
         config.run_id=args_.run; config.peer_network_id=args_.peer;
         const std::string space="exp-"+args_.run;
-        const auto derive=[&](const char* network,const char* which, mdds::dsoftbus::EndpointId& out,unsigned identity_domain) {
+const auto derive=[&](const char* network,const char* which, fastdds_dsoftbus::dsoftbus::EndpointId& out,unsigned identity_domain) {
             std::array<std::uint8_t,UDID_BUF_LEN> udid; udid.fill(0xa5);
             const int rc=key(package_name,network,NODE_KEY_UDID,udid.data(),static_cast<int>(udid.size()));
             const auto length=strnlen(reinterpret_cast<const char*>(udid.data()),udid.size());
@@ -1411,7 +1411,7 @@ private:
         return encoded;
     }
     Arguments args_;void* provider_=nullptr; // Retained for process-lifetime callback tombstones.
-    ex::SocketApi api_;mdds::dsoftbus::EndpointId local_key_{},peer_key_{};
+ex::SocketApi api_;fastdds_dsoftbus::dsoftbus::EndpointId local_key_{},peer_key_{};
     std::vector<ex::MatrixDomainKeys> matrix_keys_;
     std::unique_ptr<ex::matrix::MatrixFixture> matrix_;
     bool matrix_data_=false;
@@ -1445,8 +1445,8 @@ int main(int argc,char** argv) {
         std::printf("stage=DUAL_CONFIGURATION enabled=%d instances_per_process=%d shared_topic=1 receiver_drop=DISABLED_FOR_DUAL\n",args.dual,args.dual?2:1);
         std::printf("stage=HOT_CONFIGURATION cycles=%u default_disabled=1 OLD2_PF02=BLOCKED full_native_rebuild=HISTORICAL_RED_NOT_TESTED\n",args.hot_cycles);
     } else std::printf("stage=MATRIX_CONFIGURATION case=%s control=HOST_PHASE_METADATA business_path=DSOFTBUS_ONLY max_participants_per_board=2 receiver_drop=DISABLED OLD2_PF02=BLOCKED\n",args.matrix_case.c_str());
-    Experiment experiment(args); mdds_probe::TokenFirstEntry entry(experiment);
-    const bool returned=entry.Run({mdds_probe::TokenEntryMode::Record,true,true,args.token});
+Experiment experiment(args); fastdds_dsoftbus_probe::TokenFirstEntry entry(experiment);
+const bool returned=entry.Run({fastdds_dsoftbus_probe::TokenEntryMode::Record,true,true,args.token});
     experiment.evidence.token_restored=entry.RestoreSucceeded();
     const bool success=returned && experiment.Complete();
     const bool not_exercised=!success && experiment.DataVerdict()==ex::LossVerdict::NotExercised &&

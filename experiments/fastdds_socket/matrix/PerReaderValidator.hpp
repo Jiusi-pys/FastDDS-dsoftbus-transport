@@ -6,7 +6,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
-namespace mdds::experiment::matrix {
+namespace fastdds_dsoftbus::experiment::matrix {
 using ExpectedSamples=std::map<std::string,std::set<unsigned>>;
 struct LedgerCounters {
     unsigned valid_unique=0, duplicate=0, wrong_writer=0, wrong_reader=0;

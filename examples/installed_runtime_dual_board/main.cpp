@@ -9,8 +9,8 @@
 // device-proven token entry. It carries the platform identity setup that the
 // install documentation says is a separate deployment concern, and is kept
 // apart from every MDDS and Fast DDS call below.
-#include <mdds/dsoftbus/ExperimentalRuntime.hpp>
-#include <mdds/examples/MddsKeyedSamplePubSubTypes.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
+#include <fastdds_dsoftbus/examples/DSoftBusKeyedSamplePubSubTypes.hpp>
 
 #include <fastdds/LibrarySettings.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
@@ -48,7 +48,7 @@
 #include <unistd.h>
 
 namespace fd = eprosima::fastdds::dds;
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 
 namespace {
 
@@ -132,11 +132,11 @@ Locator Logical(unsigned side) {
     return locator;
 }
 
-class Entry final : public mdds_probe::TokenEntryOperations {
+class Entry final : public fastdds_dsoftbus_probe::TokenEntryOperations {
 public:
     Entry(std::uint64_t token, std::string run) : token_(token), run_(std::move(run)) {}
-    mdds_probe::TaskCheckpoint ObserveTasks() override {
-        mdds_probe::TaskCheckpoint out;
+fastdds_dsoftbus_probe::TaskCheckpoint ObserveTasks() override {
+fastdds_dsoftbus_probe::TaskCheckpoint out;
         out.process_id = static_cast<std::uint64_t>(getpid());
         // The entry runs on the main thread, where TID equals PID.
         out.current_tid = out.process_id;
@@ -162,12 +162,12 @@ public:
     }
     std::uint64_t GetSelf() override { return MddsTokenBridgeGetSelfToken(); }
     int SetSelf(std::uint64_t token) override { return MddsTokenBridgeSetSelfToken(token); }
-    mdds_probe::OwnedTokenObservation VerifyOwned(std::uint64_t token, const char* phase) override {
+fastdds_dsoftbus_probe::OwnedTokenObservation VerifyOwned(std::uint64_t token, const char* phase) override {
         MddsTokenBridgeResult result{};
         const int rc = MddsTokenBridgeVerify(static_cast<std::uint32_t>(token), &result);
         Say("INST_IDENTITY phase=%s bridge=%d info_rc=%d permission_rc=%d granted=%d", phase, rc,
                 result.infoRc, result.permissionRc, result.granted);
-        mdds_probe::OwnedTokenObservation out;
+fastdds_dsoftbus_probe::OwnedTokenObservation out;
         if (rc || result.called != 15) return out;
         out.lookup = result.lookupToken;
         out.type = result.type;
@@ -218,7 +218,7 @@ void ReportNative(const char* stage, const phase0::PublicSocketObservation& o) {
 
 int main(int argc, char** argv) {
     if (argc != 8) {
-        std::fprintf(stderr, "usage: mdds_installed_consumer <side:0|1> <peer-network-id> <authorized-package> "
+        std::fprintf(stderr, "usage: fastdds_dsoftbus_installed_consumer <side:0|1> <peer-network-id> <authorized-package> "
                              "<shared-service-prefix> <run-hex16> <token-decimal> <control-prefix>\n");
         return 2;
     }
@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
     g_control = argv[7];
     const std::string prefix = installed_example::ServicePrefix(package,name_stem,g_run);
     std::uint64_t token = 0;
-    if (!mdds_probe::ParseTokenArgument(argv[6], token)) return 2;
+if (!fastdds_dsoftbus_probe::ParseTokenArgument(argv[6], token)) return 2;
     if (peer_network_id.size() != 64) return 2;
 
     Say("INST_MAIN run=%s side=%c pid=%d mode=installed_runtime consumer=external mdds_headers=INSTALLED",
@@ -242,8 +242,8 @@ int main(int argc, char** argv) {
     // permission itself was written and will be removed by the reviewed external
     // native permission probe, never by this process.
     Entry operations(token, g_run);
-    mdds_probe::TokenFirstEntry identity(operations);
-    const bool admitted = identity.Begin({mdds_probe::TokenEntryMode::Record, true, true, token});
+fastdds_dsoftbus_probe::TokenFirstEntry identity(operations);
+const bool admitted = identity.Begin({fastdds_dsoftbus_probe::TokenEntryMode::Record, true, true, token});
     if (!admitted) {
         Say("INST_EXIT run=%s side=%c result=1 reason=IDENTITY_ENTRY failed=1", g_run.c_str(), g_side);
         return 3;
@@ -314,7 +314,7 @@ int main(int argc, char** argv) {
         if (!native.listener_configured || !native.listener_socket) throw std::runtime_error("listener not configured");
         if (!native.outgoing_socket) throw std::runtime_error("outgoing socket missing");
 
-        fd::TypeSupport type(new MddsKeyedSamplePubSubType());
+        fd::TypeSupport type(new DSoftBusKeyedSamplePubSubType());
         if (type.register_type(participant) != fd::RETCODE_OK) throw std::runtime_error("type registration failed");
         auto* topic = participant->create_topic("mdds_installed_runtime_sample", type.get_type_name(), fd::TOPIC_QOS_DEFAULT);
         auto* publisher = participant->create_publisher(fd::PUBLISHER_QOS_DEFAULT);
@@ -369,7 +369,7 @@ int main(int argc, char** argv) {
                 published.current_count, subscribed.current_count);
         if (!Stage("MATCH")) throw std::runtime_error("MATCH stage not released");
 
-        MddsKeyedSample sample;
+        DSoftBusKeyedSample sample;
         for (int ordinal = 1; ordinal <= kPerDirection; ++ordinal) {
             sample.key(side + 1);
             sample.run(run_value);
@@ -385,7 +385,7 @@ int main(int argc, char** argv) {
         int taken = 0;
         const auto take_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
         while (taken < kPerDirection && std::chrono::steady_clock::now() < take_deadline) {
-            MddsKeyedSample received;
+            DSoftBusKeyedSample received;
             fd::SampleInfo info;
             if (reader->take_next_sample(&received, &info) != fd::RETCODE_OK) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));

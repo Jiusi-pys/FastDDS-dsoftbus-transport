@@ -2,7 +2,7 @@
 // process-lifetime entrance pool cannot be reset, so a case never inherits
 // another case's slots. Nothing here claims target SDK record lifecycle,
 // entrance-pointer equivalence on a device, or callback drainage.
-#include <mdds/dsoftbus/ServiceRecordTable.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ServiceRecordTable.hpp>
 #include "socket.h" // Current source header. Not a firmware or target equivalence claim.
 
 #include <atomic>
@@ -36,8 +36,8 @@ void operator delete[](void* memory) noexcept { std::free(memory); }
 void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
 void operator delete[](void* memory, std::size_t) noexcept { std::free(memory); }
 
-using namespace mdds::dsoftbus;
-namespace mdds::dsoftbus {
+using namespace fastdds_dsoftbus::dsoftbus;
+namespace fastdds_dsoftbus::dsoftbus {
 // Test-only access to the bounded counter conditions. It grants no production
 // authority and is the only writer of those counters outside real use.
 class ServiceRecordTableTestAccess
@@ -49,7 +49,7 @@ public:
     static void NextOwnerIncarnation(ServiceRecordTable& table, std::size_t slot, std::uint64_t value)
     { table.TestSetNextOwnerIncarnation(slot, value); }
 };
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus
 
 namespace {
 void Require(bool value, const char* reason) { if (!value) throw std::runtime_error(reason); }

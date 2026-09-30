@@ -3,14 +3,14 @@
 // real record creation or destruction: it models the adapter's side of the
 // SDK client-process service record (identity unit: record incarnation + role)
 // and its single attribution linearization point.
-#include <mdds/dsoftbus/ServiceRecordTable.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ServiceRecordTable.hpp>
 
 #include <algorithm>
 #include <limits>
 #include <mutex>
 #include <new>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace {
 constexpr std::size_t no_index = static_cast<std::size_t>(-1);
 constexpr std::size_t role_count = static_cast<std::size_t>(RecordRole::Count);
@@ -212,7 +212,7 @@ RecordResult<RecordReservation> ServiceRecordTable::ReserveRecord(const std::str
     }
 }
 
-#ifdef MDDS_SERVICE_RECORD_TABLE_TEST_HOOKS
+#ifdef FASTDDS_DSOFTBUS_SERVICE_RECORD_TABLE_TEST_HOOKS
 void ServiceRecordTable::TestSetNextIdentities(std::uint64_t record_incarnation,
         std::uint64_t reservation) noexcept
 {
@@ -645,4 +645,4 @@ void ServiceRecordTable::Dispatch(std::size_t slot, RecordRole role, std::int32_
         --state->callbacks_in_flight;
     }
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

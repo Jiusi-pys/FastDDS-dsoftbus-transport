@@ -1,7 +1,7 @@
 #include "ScenarioChecks.hpp"
 #include <cstdio>
 #include <stdexcept>
-using namespace mdds::experiment;
+using namespace fastdds_dsoftbus::experiment;
 static void Require(bool value, const char* text) { if (!value) throw std::runtime_error(text); }
 int main() {
     try {

@@ -4,7 +4,7 @@
 // state, and none claims SDK ABI, SDK behaviour or device evidence. Provider
 // results here are model inputs. One case per process unless the case itself
 // loops in-process (C11), which is reported separately from the per-case runs.
-#include <mdds/dsoftbus/ServiceRecordBinding.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ServiceRecordBinding.hpp>
 #include "../probes/PublicSocketDecisionStore.hpp"
 #include "socket.h" // Current source header, for the callback-shape assertion only.
 
@@ -44,7 +44,7 @@ void operator delete[](void* memory) noexcept { std::free(memory); }
 void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
 void operator delete[](void* memory, std::size_t) noexcept { std::free(memory); }
 
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 
 // The case that runs itself as a child process needs to name itself.
 std::string executable_path;
@@ -52,7 +52,7 @@ std::string executable_path;
 // Test access to the composition's scheduling hooks. It grants nothing a
 // production caller has: the same Build path, the same phases, the same
 // contract, plus the ability to drive one interleaving deterministically.
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class ServiceRecordBindingTestAccess
 {
 public:
@@ -66,7 +66,7 @@ public:
                 ProcessClock{}, std::move(hooks));
     }
 };
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus
 
 namespace {
 void Require(bool value, const char* reason)
@@ -1893,7 +1893,7 @@ void CallbackDestroyChild()
     // Reaching this line means the destructive callback returned, which is the
     // failure this case exists to detect. The marker is how the parent tells that
     // outcome apart from the intended abort.
-    std::printf("MDDS_SRT_CLOSE_CHILD_SURVIVED\n");
+    std::printf("FASTDDS_DSOFTBUS_SRT_CLOSE_CHILD_SURVIVED\n");
     std::fflush(stdout);
     Require(false, "the child must stop inside the destructive callback, never here");
 }
@@ -1973,7 +1973,7 @@ void RequireChildStops(const char* child_case, const char* reason,const char* de
     if(detail)Require(captured.find(detail)!=std::string::npos,"specific child contract diagnostic");
     Require(captured.find("destroyed from inside a callback") != std::string::npos,
             "and it stopped with the contract diagnostic");
-    Require(captured.find("MDDS_SRT_CLOSE_CHILD_SURVIVED") == std::string::npos,
+    Require(captured.find("FASTDDS_DSOFTBUS_SRT_CLOSE_CHILD_SURVIVED") == std::string::npos,
             "and not by returning from the destructive callback");
 }
 
@@ -1983,7 +1983,7 @@ void ShutdownDestroySameTableChild()
     Fixture f;auto a=f.Deploy(f.CreateRequest("pkg.credit.destroy",RecordRole::Client,false),81);auto b=f.Deploy(f.JoinRequest(*a,RecordRole::Client,true),82);
     f.provider.shutdown_hook=[&](NativeSocketId id){if(id==81)b.reset();};
     RequireStatus(a->BeginClose(),NativeStatus::None,"outer begin");(void)a->Abandon();
-    std::printf("MDDS_SRT_CLOSE_CHILD_SURVIVED\n");std::fflush(stdout);
+    std::printf("FASTDDS_DSOFTBUS_SRT_CLOSE_CHILD_SURVIVED\n");std::fflush(stdout);
 }
 void ShutdownDestroySameTable()
 {

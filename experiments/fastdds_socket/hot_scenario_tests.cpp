@@ -2,7 +2,7 @@
 #include "DualValidation.hpp"
 #include <cstdio>
 #include <stdexcept>
-using namespace mdds::experiment;
+using namespace fastdds_dsoftbus::experiment;
 int main(int argc,char** argv) {
     const std::string name=argc>1?argv[1]:""; bool pass=false;
     HotIdentitySnapshot a{"same",1,11,21,31,7,1,3,4},b=a,q{"Q",1,12,22,32,8,2,5,6};

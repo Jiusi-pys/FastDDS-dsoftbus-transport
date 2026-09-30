@@ -3,7 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <algorithm>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 using EndpointIdentity = std::array<std::uint8_t,16>;
 inline bool DualRemoteEndpoint(bool qos_valid,const EndpointIdentity& local,const EndpointIdentity& remote,bool same_process) noexcept {
     return qos_valid && !same_process && local!=remote &&

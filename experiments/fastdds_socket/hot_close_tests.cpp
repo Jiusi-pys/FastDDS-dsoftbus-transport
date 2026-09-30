@@ -1,7 +1,7 @@
 #include "HotClose.hpp"
 #include <cstdio>
 #include <string>
-using namespace mdds::experiment;
+using namespace fastdds_dsoftbus::experiment;
 struct CloseFixture {
     ParticipantCloseState state;
     bool participant_handle=true,writer_handle=true,children_alive=true,participant_alive=true;

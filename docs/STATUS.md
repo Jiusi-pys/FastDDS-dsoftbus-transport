@@ -1,5 +1,10 @@
 # Project status
 
+Historical sections in this file retain the exact names, counts, hashes, protocol
+markers and permission identifiers from their original runs. They are labeled by
+their work-package dates and artifact paths; they do not describe the current
+`FastDDSDSoftBusTransport` package unless a section explicitly says so.
+
 > **累计实验基线（2026-09-27）**：A 的七场景与真实 CloseBusy 责任修复，加上 B 的 opt-in 决策诊断及稳定化验证。旧 111/6 未知与新 107/2 已观察原因分别保留。
 > 范围、容量单位、依赖与证据见 [bounded DDS stabilization baseline](BOUNDED_DDS_STABILIZATION_BASELINE.md)。本 checkpoint 的当前 isolated Host CONFIG suite 为 `445/445 PASS`；设备未运行，未进行新的 ASan。下列工作包状态是历史快照，不代表当前 Git 提交状态或生产放行。
 

@@ -1,6 +1,6 @@
 #include "HostProviderTestSupport.hpp"
 #include "FakePublicSocketLink.hpp"
-#include <mdds/dsoftbus/PublicSocketBackend.hpp>
+#include <fastdds_dsoftbus/dsoftbus/PublicSocketBackend.hpp>
 
 // A6: Host BYTES ownership contract. This is not an extra DDS/RAW scenario.
 namespace {

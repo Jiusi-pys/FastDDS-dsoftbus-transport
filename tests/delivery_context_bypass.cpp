@@ -8,10 +8,10 @@
 // enter a delivery without the context and make a control call the contract
 // forbids. The check asserts the failure is the missing member (MSVC C2039), with
 // the legal call site next to it as the positive control.
-#include <mdds/dsoftbus/ServiceRecordBinding.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ServiceRecordBinding.hpp>
 
 namespace {
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 
 // Never called: this translation unit only has to fail to compile.
 void BypassTheDeliveryContext(BindingDelivery& delivery)

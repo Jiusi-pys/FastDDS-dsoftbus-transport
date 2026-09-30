@@ -4,7 +4,7 @@
 #include <condition_variable>
 #include <chrono>
 #include <thread>
-using namespace mdds::experiment::matrix;
+using namespace fastdds_dsoftbus::experiment::matrix;
 int main(){
     unsigned failures=0,checks=0;
     const auto check=[&](bool ok,const char* name){++checks;std::printf("test=%s result=%s\n",name,ok?"PASS":"FAIL");if(!ok)++failures;};

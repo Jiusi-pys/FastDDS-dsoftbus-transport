@@ -1,7 +1,7 @@
 #pragma once
 #include "Measurement.hpp"
 #include <string>
-namespace mdds::experiment::perf {
+namespace fastdds_dsoftbus::experiment::perf {
 struct ObservedU64 { bool observed = false; uint64_t value = 0; };
 struct CpuBoundary { int64_t wall_ns = kUnobservedNs; ObservedU64 cpu_ns; };
 struct ResourceSnapshot {

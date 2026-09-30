@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <iostream>
 #include <vector>
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 struct Operations : TokenEntryOperations {
     std::uint64_t current=0x100000001ULL,expected=700000123;
     int selected=0,restored=0,providers=0;bool deny=false;

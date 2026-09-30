@@ -2,7 +2,7 @@
 #include <cstdio>
 int main() {
     using eprosima::fastdds::dds::StatusMask;
-    const auto mask=mdds::experiment::ParticipantListenerMask();
+const auto mask=fastdds_dsoftbus::experiment::ParticipantListenerMask();
     const bool intercepts=(mask & StatusMask::data_on_readers()).any();
     const bool data_available=(mask & StatusMask::data_available()).any();
     const bool matched=(mask & StatusMask::subscription_matched()).any() &&

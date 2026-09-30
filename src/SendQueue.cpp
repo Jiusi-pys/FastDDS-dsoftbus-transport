@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/SendQueue.hpp>
+#include <fastdds_dsoftbus/dsoftbus/SendQueue.hpp>
 
 #include <algorithm>
 #include <condition_variable>
@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace detail {
 struct SendQueueState
 {
@@ -344,4 +344,4 @@ SendQueueUsage SendQueue::SnapshotUsage() const
     std::lock_guard<std::mutex> lock(state_->mutex);
     return {state_->total.records, state_->total.bytes, state_->peers.size(), state_->queued, state_->closed};
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

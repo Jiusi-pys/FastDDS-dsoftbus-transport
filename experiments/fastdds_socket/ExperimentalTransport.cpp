@@ -1,6 +1,6 @@
 #include "ExperimentalTransport.hpp"
 #include "PerformanceObservation.hpp"
-#include <mdds/dsoftbus/ProcessCoordinator.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ProcessCoordinator.hpp>
 #include <map>
 #include <sstream>
 #include <algorithm>
@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 using Clock = std::chrono::steady_clock;
 using Bytes = std::vector<std::uint8_t>;
 using Codec = dsoftbus::v1::AddressCodec;
@@ -360,7 +360,7 @@ void PrintProcessSummary(const char* stage) {
     std::fflush(stdout);
 }
 bool Control::ArmRxDrop(const RxDropRule& rule) noexcept {
-#ifdef MDDS_EXPERIMENT_RX_DROP
+#ifdef FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
     try {
         if(rule.sequence_hi<0 || (rule.sequence_hi==0&&rule.sequence_lo==0) || !rule.fragment_start ||
                 rule.fragment_count!=1 || !rule.sample_size || rule.sample_size>1048640 ||
@@ -530,7 +530,7 @@ struct State:std::enable_shared_from_this<State> {
         control->stats_.instance_id=instance_id;
         control->stats_.server_callback_slot=server_slot;
         control->stats_.client_callback_slot=client_slot+static_cast<int>(ProcessStats::role_entry_limit);
-#ifdef MDDS_EXPERIMENT_RX_DROP
+#ifdef FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
         control->rx_drop_enabled_=config.enable_rx_drop;
 #endif
     }
@@ -924,7 +924,7 @@ struct State:std::enable_shared_from_this<State> {
             if(r.app->control->after_tx_settle_)r.app->control->after_tx_settle_();
         }
     }
-#ifdef MDDS_EXPERIMENT_RX_DROP
+#ifdef FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
     static bool RuleIdentity(const FragmentObservation& f,const RxDropRule& rule) {
         return f.writer_guid==rule.writer_guid && f.sequence_hi==rule.sequence_hi &&
             f.sequence_lo==rule.sequence_lo && f.sample_size==rule.sample_size;
@@ -1112,7 +1112,7 @@ public:
     const std::shared_ptr<Application> application;
 };
 bool ValidConfig(const Config& c) {
-#ifndef MDDS_EXPERIMENT_RX_DROP
+#ifndef FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
     if(c.enable_rx_drop) return false;
 #endif
     if(c.additional_peers.size()>1)return false;
@@ -1172,7 +1172,7 @@ void Application::OnDataReceived(const std::uint8_t* data,std::uint32_t size,con
     const auto peer=state->ModelPeerIndex(remote);
     const int socket=native.owned_id.value_or(-1);const Role role=native.role==model::NativeOwnerRole::Dial?Role::Outbound:Role::Accepted;
     const ByteSpan bytes{data,size};
-#ifdef MDDS_EXPERIMENT_RX_DROP
+#ifdef FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
     if(state->MaybeDrop(bytes,diagnostic.correlation,socket,role,control))return;
 #endif
     state->LogSpan("FastDDS_receiver_enter",diagnostic.correlation,socket,role,0,&bytes,true,diagnostic.identity.receiver_incarnation,peer);
@@ -1180,7 +1180,7 @@ void Application::OnDataReceived(const std::uint8_t* data,std::uint32_t size,con
     try{receiver->OnDataReceived(data,size,state->config.local_locator,PeerLocator(state->config,peer));}catch(...){Update([](Stats& v){v.fatal=true;});throw;}
     state->LogSpan("FastDDS_receiver_return",diagnostic.correlation,socket,role,0,&bytes,true,diagnostic.identity.receiver_incarnation,peer);
     const auto seen=ObserveRtps(data,size);Update([&](Stats& v){++v.receiver_returns;v.rx_spdp+=seen.spdp;v.rx_sedp+=seen.sedp;v.rx_sedp_publications+=seen.sedp_publications;v.rx_sedp_subscriptions+=seen.sedp_subscriptions;v.rx_user+=seen.user;v.rx_data_frag+=seen.fragments.size();});
-#ifdef MDDS_EXPERIMENT_RX_DROP
+#ifdef FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
     state->ObserveDeliveredRange(bytes,diagnostic.correlation,socket,role,seen,control);
 #endif
 }
@@ -1254,7 +1254,7 @@ std::shared_ptr<Application> RuntimeCore::Attach(const Config& config,const std:
         if(control->before_app_allocate_)control->before_app_allocate_();
         app=std::make_shared<Application>(control);app->claim=*created.value;app->runtime=shared_from_this();app->state=state.get();const auto identity=process->ObserveApplication(app->claim);app->id=identity.application_incarnation;app->token=identity.logical_token;
         {std::lock_guard<std::mutex> lock(control->mutex_);if(control->stats_.application_incarnation){process->BeginDetach(app->claim);process->ProgressDetach(app->claim);done();return {};}control->instance_name_=config.instance_name.empty()?"single":config.instance_name;control->native_control_=state->control;control->stats_.runtime_id=id;control->stats_.application_incarnation=identity.application_incarnation;control->stats_.logical_token=identity.logical_token;
-#ifdef MDDS_EXPERIMENT_RX_DROP
+#ifdef FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
         control->rx_drop_enabled_=config.enable_rx_drop;
 #endif
         }
@@ -1420,4 +1420,4 @@ void ExperimentalTransport::shutdown(){
     if(application_&&runtime_){runtime_->impl_->core->Detach(application_);application_.reset();}
     if(implicit_runtime_&&runtime_)runtime_->Finalize();
 }
-} // namespace mdds::experiment
+} // namespace fastdds_dsoftbus::experiment

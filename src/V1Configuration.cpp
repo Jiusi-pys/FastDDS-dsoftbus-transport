@@ -1,11 +1,11 @@
-#include <mdds/dsoftbus/V1Configuration.hpp>
+#include <fastdds_dsoftbus/dsoftbus/V1Configuration.hpp>
 #include <limits>
 #include <map>
 #include <new>
 #include <tuple>
 #include <utility>
 
-namespace mdds::dsoftbus::v1 {
+namespace fastdds_dsoftbus::dsoftbus::v1 {
 namespace {
 ConfigurationResult Reject(ConfigurationStatus status, std::optional<std::size_t> index = {},
         std::optional<std::size_t> prior = {})
@@ -114,4 +114,4 @@ ConfigurationResult ConfigurationValidator::Validate(const ConfigurationInput& i
         return Reject(ConfigurationStatus::AllocationFailure);
     }
 }
-} // namespace mdds::dsoftbus::v1
+} // namespace fastdds_dsoftbus::dsoftbus::v1

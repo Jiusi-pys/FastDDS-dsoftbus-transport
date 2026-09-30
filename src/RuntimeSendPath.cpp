@@ -1,11 +1,11 @@
-#include <mdds/dsoftbus/RuntimeSendPath.hpp>
+#include <fastdds_dsoftbus/dsoftbus/RuntimeSendPath.hpp>
 
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <utility>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace detail { struct RuntimeIdentity {}; }
 
 EgressPlan::EgressPlan(EndpointDirectory::Snapshot directory, const std::vector<Route>& routes,
@@ -190,4 +190,4 @@ void RuntimeSendPath::Close() noexcept
     if (hooks_.after_close_request) hooks_.after_close_request();
     queue_->Close();
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

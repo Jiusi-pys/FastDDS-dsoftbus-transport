@@ -6,7 +6,7 @@
 #include <condition_variable>
 #include <map>
 #include <stdexcept>
-using namespace mdds::dsoftbus::runtime_probe;
+using namespace fastdds_dsoftbus::dsoftbus::runtime_probe;
 static void Check(bool x,const char* why){if(!x)throw std::runtime_error(why);}
 int main(int argc,char**argv){
  try {

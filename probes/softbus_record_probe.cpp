@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 namespace {
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 using namespace OHOS::Security::AccessToken;
 using Clock = std::chrono::steady_clock;
 constexpr char process_name[] = "fastdds_dsoftbus_probe";

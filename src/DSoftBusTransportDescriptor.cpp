@@ -1,9 +1,9 @@
-#include <mdds/dsoftbus/DSoftBusTransportDescriptor.hpp>
-#include <mdds/dsoftbus/DSoftBusTransport.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransportDescriptor.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <cstdio>
 #include <limits>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 DSoftBusTransportDescriptor::DSoftBusTransportDescriptor(std::uint32_t bound)
     : TransportDescriptorInterface(bound, 1),
       directory{std::vector<LocalBinding>(std::size_t{0}), std::vector<Route>(std::size_t{0})},
@@ -13,7 +13,7 @@ eprosima::fastdds::rtps::TransportInterface* DSoftBusTransportDescriptor::create
 {
     try { return new DSoftBusTransport(*this); }
     catch (const std::bad_alloc&) {
-        std::fputs("MDDS DSoftBus factory: AllocationFailure\n", stderr); std::fflush(stderr); return nullptr;
+        std::fputs("Fast DDS DSoftBus factory: AllocationFailure\n", stderr); std::fflush(stderr); return nullptr;
     }
 }
 std::uint32_t DSoftBusTransportDescriptor::min_send_buffer_size() const
@@ -21,4 +21,4 @@ std::uint32_t DSoftBusTransportDescriptor::min_send_buffer_size() const
     return send_limits.max_record_bytes <= (std::numeric_limits<std::uint32_t>::max)()
             ? static_cast<std::uint32_t>(send_limits.max_record_bytes) : 0;
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

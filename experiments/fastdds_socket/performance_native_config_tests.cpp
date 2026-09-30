@@ -1,7 +1,7 @@
 #include "PerformanceNativeConfig.hpp"
 #include <cstdio>
 #include <stdexcept>
-using namespace mdds::experiment;
+using namespace fastdds_dsoftbus::experiment;
 static unsigned checks=0;
 static void Need(bool b,const char* why){++checks;if(!b)throw std::runtime_error(why);}
 int main(){try{
@@ -14,8 +14,8 @@ int main(){try{
             Need(ParsePerformanceRequest(6,av,run,a,request)==allowed,"exact finite mode/repeat policy");
             if(!allowed)continue;
             Config c;c.run_id=run;c.peer_network_id=std::string(64,'a');
-            mdds::dsoftbus::EndpointId local{},peer{};local[0]=1;peer[0]=2;
-            using C=mdds::dsoftbus::v1::AddressCodec;using P=mdds::dsoftbus::v1::Profile;
+fastdds_dsoftbus::dsoftbus::EndpointId local{},peer{};local[0]=1;peer[0]=2;
+using C=fastdds_dsoftbus::dsoftbus::v1::AddressCodec;using P=fastdds_dsoftbus::dsoftbus::v1::Profile;
             Need(C::EncodeLocator({local,a?1u:2u,P::BytesNative},c.local_locator),"local");
             Need(C::EncodeLocator({peer,a?2u:1u,P::BytesNative},c.peer_locator),"peer");
             Need(EncodeNativeServiceName({"exp-"+run,73,a?1u:2u,P::BytesNative},c.local_service),"local service");

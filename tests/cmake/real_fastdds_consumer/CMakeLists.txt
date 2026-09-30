@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 project(mdds_real_fastdds_consumer LANGUAGES C CXX)
 
-get_filename_component(MDDS_CONSUMER_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
-set(MDDS_FASTDDS_MODE CONFIG CACHE STRING "Binding exercised by this fixture")
+get_filename_component(FASTDDS_DSOFTBUS_CONSUMER_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set(FASTDDS_DSOFTBUS_FASTDDS_MODE CONFIG CACHE STRING "Binding exercised by this fixture")
 set(BUILD_TESTING OFF CACHE BOOL "External consumer" FORCE)
 set(BUILD_INTERFACE_PROBE ON CACHE BOOL "Exercise real base implementation" FORCE)
 set(BUILD_SOFTBUS_CAPABILITY_PROBE OFF CACHE BOOL "No Socket provider" FORCE)
@@ -18,23 +18,23 @@ if(BINDING_CONFLICTING_IMPORT)
     endforeach()
     # Negative fixture only: a parent's conflicting import must not be accepted
     # just because the matching package file returns FOUND on its second load.
-    set_property(TARGET fastdds PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${MDDS_CONSUMER_ROOT}/include")
+    set_property(TARGET fastdds PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${FASTDDS_DSOFTBUS_CONSUMER_ROOT}/include")
 endif()
-add_subdirectory("${MDDS_CONSUMER_ROOT}" mdds)
+add_subdirectory("${FASTDDS_DSOFTBUS_CONSUMER_ROOT}" mdds)
 
 # Assertions precede compilation: old CMake silently ignores the requested mode.
-if(NOT TARGET mdds_fastdds_binding OR NOT TARGET fastdds)
+if(NOT TARGET fastdds_dsoftbus_fastdds_binding OR NOT TARGET fastdds)
     message(FATAL_ERROR "BINDING_CONTRACT: CONFIG did not supply the actual imported binding")
 endif()
 # Upstream's TARGET_EXISTS-based public DLL definition also requires target
 # visibility at this external consumer, not just a successful child find_package.
-get_target_property(binding_links mdds_fastdds_binding INTERFACE_LINK_LIBRARIES)
+get_target_property(binding_links fastdds_dsoftbus_fastdds_binding INTERFACE_LINK_LIBRARIES)
 if(NOT "fastdds" IN_LIST binding_links)
     message(FATAL_ERROR "BINDING_CONTRACT: no transitive real Fast DDS target")
 endif()
-foreach(target IN ITEMS mdds_fastdds_binding mdds_dsoftbus_directory
-        mdds_dsoftbus_send_queue mdds_dsoftbus_input_channels
-        mdds_dsoftbus_runtime_send_path fastdds_interface_probe)
+foreach(target IN ITEMS fastdds_dsoftbus_fastdds_binding fastdds_dsoftbus_directory
+        fastdds_dsoftbus_send_queue fastdds_dsoftbus_input_channels
+        fastdds_dsoftbus_runtime_send_path fastdds_interface_probe)
     foreach(property IN ITEMS INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES
             COMPILE_DEFINITIONS INTERFACE_COMPILE_DEFINITIONS)
         get_target_property(value "${target}" "${property}")
@@ -51,7 +51,7 @@ endif()
 add_executable(real_fastdds_consumer main.cpp)
 # Deliberately no manual upstream include directory, link library, standard or ABI macro.
 target_link_libraries(real_fastdds_consumer PRIVATE
-    mdds_dsoftbus_runtime_send_path mdds_dsoftbus_input_channels)
+    fastdds_dsoftbus_runtime_send_path fastdds_dsoftbus_input_channels)
 enable_testing()
 add_test(NAME binding.real_consumer COMMAND real_fastdds_consumer)
 add_test(NAME binding.real_interface COMMAND fastdds_interface_tests)

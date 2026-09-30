@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cstring>
 // Exact parser body extracted from reviewed ExperimentalTransport.cpp at6943b6c.
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 RtpsObservation ObserveRtps(const void* pointer, std::size_t size) noexcept
 {
     try {

@@ -632,7 +632,7 @@ N3 之后仍不得宣称：生产 Transport、真实 SendBytes、SDK callback �
 
 ## 18. SRT-1 共享 service-record 表管理冻结契约（2026-09-24 CST；IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED，限定范围）
 
-本节冻结 `docs/MDDS_V1_IMPLEMENTATION_PLAN.md` 已批准设计（DESIGN_APPROVED / NOT_IMPLEMENTED）的**有界实现**范围与验收合同。它不发布生产 backend，不改变 `NativeUnavailable`、P0 `BLOCKED / NOT QUALIFIED`、无 QualificationProfile 与设备未验证边界。
+本节冻结 `docs/FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md` 中已批准设计（DESIGN_APPROVED / NOT_IMPLEMENTED）的**有界实现**范围与验收合同。该计划文件是历史设计合同的重命名；本节不重写其历史事实。它不发布生产 backend，不改变 `NativeUnavailable`、P0 `BLOCKED / NOT QUALIFIED`、无 QualificationProfile 与设备未验证边界。
 
 ### 18.1 设计单位与责任边界
 

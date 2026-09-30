@@ -7,7 +7,7 @@
 #include <vector>
 
 namespace {
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 
 #define CHECK(condition) do { if (!(condition)) throw std::runtime_error( \
         std::string("line ") + std::to_string(__LINE__) + ": " #condition); } while (false)

@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-using namespace mdds::experiment;
-namespace mdds::experiment {
+using namespace fastdds_dsoftbus::experiment;
+namespace fastdds_dsoftbus::experiment {
 class ContractTestAccess {
 public:
     static void AfterRx(Control& c,std::function<void()> f){c.after_rx_settle_=std::move(f);}
@@ -29,8 +29,8 @@ int Send(int,const void*,std::uint32_t){return -1;}
 void Shutdown(int socket){++fake.closes[socket];fake.server.OnShutdown(socket,static_cast<ShutdownReason>(0));}
 Config MakeConfig(bool enabled){
     Config c;c.run_id="rx-drop-contract";c.peer_network_id=std::string(64,'a');c.enable_rx_drop=enabled;
-    using Codec=mdds::dsoftbus::v1::AddressCodec;using Profile=mdds::dsoftbus::v1::Profile;
-    mdds::dsoftbus::EndpointId local{},peer{};local[0]=1;peer[0]=2;
+using Codec=fastdds_dsoftbus::dsoftbus::v1::AddressCodec;using Profile=fastdds_dsoftbus::dsoftbus::v1::Profile;
+fastdds_dsoftbus::dsoftbus::EndpointId local{},peer{};local[0]=1;peer[0]=2;
     Require(Codec::EncodeLocator({local,7,Profile::BytesNative},c.local_locator),"local locator");
     Require(Codec::EncodeLocator({peer,9,Profile::BytesNative},c.peer_locator),"peer locator");
     Require(EncodeNativeServiceName({"experiment",7,7,Profile::BytesNative},c.local_service),"local service");
@@ -57,7 +57,7 @@ struct Settlements {
 void Run(const std::string& mode){
     auto control=std::make_shared<Control>();auto config=MakeConfig(true);
     ExperimentalTransport transport(ExperimentalDescriptor(config,{Create,Listen,Bind,Send,Shutdown},control));
-#ifndef MDDS_EXPERIMENT_RX_DROP
+#ifndef FASTDDS_DSOFTBUS_EXPERIMENT_RX_DROP
     const bool started=transport.init();
     if(started)transport.shutdown();
     Require(!started&&fake.creates==0,"disabled build rejects requested injection before SDK create");

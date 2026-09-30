@@ -4,7 +4,7 @@
 #include <iosfwd>
 #include <string>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 
 constexpr const char* native_probe_process_name = "fastdds_dsoftbus_probe";
 constexpr const char* native_probe_apl = "normal";
@@ -72,4 +72,4 @@ struct NativePermissionResult
 NativePermissionResult RunNativePermissionProbe(const NativePermissionOptions& options,
         NativePermissionApi& api, std::ostream& log);
 
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

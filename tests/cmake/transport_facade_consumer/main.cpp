@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/DSoftBusTransport.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <fastdds/utils/IPLocator.hpp>
 
 #include <iostream>
@@ -18,7 +18,7 @@
 int main()
 try
 {
-    using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
     namespace rtps = eprosima::fastdds::rtps;
     const auto check = [](bool condition, const char* reason) {
         if (!condition) throw std::runtime_error(reason);

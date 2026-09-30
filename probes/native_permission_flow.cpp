@@ -3,7 +3,7 @@
 #include <ostream>
 #include <stdexcept>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 
 NativePermissionResult RunNativePermissionProbe(const NativePermissionOptions& options,
         NativePermissionApi& api, std::ostream& log)
@@ -203,4 +203,4 @@ NativePermissionResult RunNativePermissionProbe(const NativePermissionOptions& o
     return result;
 }
 
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

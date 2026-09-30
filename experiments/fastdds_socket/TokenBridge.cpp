@@ -23,12 +23,12 @@ int32_t MddsTokenBridgeVerify(uint32_t expectedToken, MddsTokenBridgeResult* out
     out->normalApl = static_cast<int32_t>(APL_NORMAL);
     out->permissionGranted = static_cast<int32_t>(PERMISSION_GRANTED);
     try {
-        out->called |= MDDS_TOKEN_LOOKUP_CALLED;
+        out->called |= FASTDDS_DSOFTBUS_TOKEN_LOOKUP_CALLED;
         out->lookupToken = AccessTokenKit::GetNativeTokenId("fastdds_dsoftbus_probe");
-        out->called |= MDDS_TOKEN_TYPE_CALLED;
+        out->called |= FASTDDS_DSOFTBUS_TOKEN_TYPE_CALLED;
         out->type = static_cast<int32_t>(AccessTokenKit::GetTokenTypeFlag(expectedToken));
         NativeTokenInfo info{};
-        out->called |= MDDS_TOKEN_INFO_CALLED;
+        out->called |= FASTDDS_DSOFTBUS_TOKEN_INFO_CALLED;
         out->infoRc = AccessTokenKit::GetNativeTokenInfo(expectedToken, info);
         if (info.processName.size() >= sizeof(out->processName) ||
                 info.processName.find('\0') != std::string::npos) {
@@ -40,7 +40,7 @@ int32_t MddsTokenBridgeVerify(uint32_t expectedToken, MddsTokenBridgeResult* out
         out->identityMatch = out->infoRc == 0 && info.processName == "fastdds_dsoftbus_probe" &&
                 info.apl == APL_NORMAL;
         std::vector<int32_t> states;
-        out->called |= MDDS_TOKEN_PERMISSION_CALLED;
+        out->called |= FASTDDS_DSOFTBUS_TOKEN_PERMISSION_CALLED;
         out->permissionRc = AccessTokenKit::VerifyAccessToken(expectedToken,
                 std::vector<std::string>{"ohos.permission.DISTRIBUTED_DATASYNC"}, states, true);
         if (states.size() > std::numeric_limits<uint32_t>::max()) {

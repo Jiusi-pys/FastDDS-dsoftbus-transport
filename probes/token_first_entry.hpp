@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vector>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 
 enum class TokenEntryMode { Record, ListNodes };
 
@@ -83,4 +83,4 @@ private:
     bool restored_ = true;
 };
 
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

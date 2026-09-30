@@ -1,10 +1,10 @@
-#ifndef MDDS_PROCESS_RECEIVE_INTERNAL_HPP
-#define MDDS_PROCESS_RECEIVE_INTERNAL_HPP
-#include <mdds/dsoftbus/ProcessReceiveInvocation.hpp>
+#ifndef FASTDDS_DSOFTBUS_PROCESS_RECEIVE_INTERNAL_HPP
+#define FASTDDS_DSOFTBUS_PROCESS_RECEIVE_INTERNAL_HPP
+#include <fastdds_dsoftbus/dsoftbus/ProcessReceiveInvocation.hpp>
 #include "ApplicationAttachmentsInternal.hpp"
 #include "NativeReceiveInternal.hpp"
-namespace mdds::dsoftbus {class ProcessCoordinator;class ProcessReceiveTestAccess;class ServiceRecordBinding;}
-namespace mdds::dsoftbus::detail {
+namespace fastdds_dsoftbus::dsoftbus {class ProcessCoordinator;class ProcessReceiveTestAccess;class ServiceRecordBinding;}
+namespace fastdds_dsoftbus::dsoftbus::detail {
 struct ProcessReceiveExecution final
 {
     ~ProcessReceiveExecution();
@@ -30,12 +30,12 @@ struct ProcessReceiveExecution final
 };
 class ProcessReceiveBridge final
 {
-    friend class ::mdds::dsoftbus::ProcessCoordinator;
-    friend class ::mdds::dsoftbus::ProcessReceiveTestAccess;
+friend class ::fastdds_dsoftbus::dsoftbus::ProcessCoordinator;
+friend class ::fastdds_dsoftbus::dsoftbus::ProcessReceiveTestAccess;
     // The record/native-owner/attachments composition uses the same pin-based
     // admission and delivery path instead of reimplementing it.
-    friend class ::mdds::dsoftbus::ServiceRecordBinding;
-    friend class ::mdds::dsoftbus::ProcessReceiveInvocation;
+friend class ::fastdds_dsoftbus::dsoftbus::ServiceRecordBinding;
+friend class ::fastdds_dsoftbus::dsoftbus::ProcessReceiveInvocation;
     static ReceiveAdmissionResult Admit(ApplicationAttachments&,NativeOwnerTable&,const ApplicationClaim&,
             const NativeIdentityConstraint&,const void*,std::size_t,ProcessClock::Clock::time_point,
             const ProcessClock&,std::uint64_t correlation=0,

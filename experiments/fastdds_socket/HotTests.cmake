@@ -1,6 +1,6 @@
 add_executable(experiment_hot_scenario_tests hot_scenario_tests.cpp)
 target_compile_features(experiment_hot_scenario_tests PRIVATE cxx_std_17)
-target_link_libraries(experiment_hot_scenario_tests PRIVATE mdds_fastdds_binding)
+target_link_libraries(experiment_hot_scenario_tests PRIVATE fastdds_dsoftbus_fastdds_binding)
 foreach(_hot_case IN ITEMS HID1 HID2 HID3 HID4 HID5 SNAPSHOT OPTIONS FIXTURE LEDGER READY FAILURE EXCEPTION)
     add_test(NAME experiment.hot_${_hot_case} COMMAND experiment_hot_scenario_tests ${_hot_case})
     set_tests_properties(experiment.hot_${_hot_case} PROPERTIES TIMEOUT 10)

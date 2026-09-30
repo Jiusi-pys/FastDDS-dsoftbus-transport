@@ -1,6 +1,6 @@
 #include "softbus_probe_profile.hpp"
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 bool ParseProbeProfile(std::string_view text, ProbeProfile& result) noexcept
 {
     if (text == "bytes") result = ProbeProfile::Bytes;
@@ -51,4 +51,4 @@ ProbeIdentityObservation ObserveProbeIdentity(int native_result, const void* byt
     }
     return {};
 }
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

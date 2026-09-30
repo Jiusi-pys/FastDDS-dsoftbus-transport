@@ -1,0 +1,29 @@
+{
+  "project": "eProsima/Fast-DDS",
+  "version": "2.14.5",
+  "commit": "ebcb5c05e9da9e262041e8616bbaff61ab40a296",
+  "files": [
+    {
+      "path": "src/cpp/fastdds/domain/DomainParticipantFactory.cpp",
+      "base_sha256": "179a1b3d6df18288a303ea0f946668d2329479c7aa72883ad0dab1a9832c71e5",
+      "patched_sha256": "261bbfae2c260a1d633159f08b8f2e798f849afe0a6d965949bd1cd5b5220220"
+    },
+    {
+      "path": "src/cpp/fastdds/publisher/PublisherImpl.cpp",
+      "base_sha256": "7d4fab1b1d8b4e0b33e7362fe25b7ca7d65b1d8b2242a97ed7e3ac5cec1e7ae9",
+      "patched_sha256": "ca738227681a910ce5eabe7edb0082d02b0b324b54ba3d15cfd17dfd5d51f701"
+    },
+    {
+      "path": "src/cpp/fastdds/subscriber/SubscriberImpl.cpp",
+      "base_sha256": "e231bc81278db4cfe718ca5b4f796bf11fa8303bcb015c91593d2cfd914c2509",
+      "patched_sha256": "7726c48e84544256fa2dfdbe7dd983f116ec6a8d52a239d5cde3ad19039a9a56"
+    },
+    {
+      "path": "src/cpp/rtps/xmlparser/XMLProfileManager.cpp",
+      "base_sha256": "c708850baa26180cb5ef4c4299cd46813c415974d6ed08246a52eccb396971b0",
+      "patched_sha256": "9fb4b757b84c281b9fd8815d836c9f58361b8ef9e08586839c33ffc656e6af2f"
+    }
+  ],
+  "hook_sha256": "559a16263db0afcf689e572500dcb548c4eeef75520d41e94ecdf8fd30d32948",
+  "scope": "EXPERIMENTAL_ROS2_HOST_FACTORY_ENDPOINT_AND_XML_DEFAULT_CONFIGURATION_NOT_PROTOCOL_CHANGE"
+}

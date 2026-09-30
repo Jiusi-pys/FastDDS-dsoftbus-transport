@@ -14,7 +14,7 @@ $disabled = @('BUILD_INTERFACE_PROBE','BUILD_DSOFTBUS_DIRECTORY','BUILD_DSOFTBUS
     'BUILD_DSOFTBUS_SEND_QUEUE','BUILD_DSOFTBUS_INPUT_CHANNELS','BUILD_DSOFTBUS_APPLICATION_ATTACHMENTS',
     'BUILD_DSOFTBUS_RUNTIME_SEND_PATH','BUILD_DSOFTBUS_NATIVE_SEND_EXECUTION','BUILD_DSOFTBUS_PROCESS',
     'BUILD_DSOFTBUS_TRANSPORT_FACADE','BUILD_SOFTBUS_CAPABILITY_PROBE','BUILD_NATIVE_PERMISSION_PROBE','BUILD_TESTING')
-$common = @('-S',$root,'-G','Visual Studio 17 2022','-A','x64','-DMDDS_FASTDDS_MODE=SOURCE_PROBE') +
+$common = @('-S',$root,'-G','Visual Studio 17 2022','-A','x64','-DFASTDDS_DSOFTBUS_FASTDDS_MODE=SOURCE_PROBE') +
     @($disabled | ForEach-Object { '-D' + $_ + '=OFF' })
 & cmake @common -B (Join-Path $out 'default') *> (Join-Path $out 'default.log')
 if ($LASTEXITCODE -ne 0) { throw 'Default configure failed' }
@@ -30,7 +30,7 @@ try {
     $rejectedExit = $LASTEXITCODE
 } finally { $ErrorActionPreference = $savedErrorPreference }
 if ($rejectedExit -eq 0) { throw 'Experiment accepted SOURCE_PROBE fake binding' }
-if ([IO.File]::ReadAllText((Join-Path $out 'source-rejected.log')) -notmatch 'requires MDDS_FASTDDS_MODE=CONFIG') {
+if ([IO.File]::ReadAllText((Join-Path $out 'source-rejected.log')) -notmatch 'requires FASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG') {
     throw 'Wrong failure: real Fast DDS requirement was not enforced'
 }
 'PASS: default OFF; no experimental target without opt-in; SOURCE_PROBE explicitly rejected'

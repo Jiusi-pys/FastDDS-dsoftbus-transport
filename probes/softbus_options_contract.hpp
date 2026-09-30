@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 inline constexpr std::int64_t options_worker_budget_us = 1500000;
 
 struct OptionsQueryObservation {

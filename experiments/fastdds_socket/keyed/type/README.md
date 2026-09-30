@@ -1,6 +1,6 @@
 # Experimental bounded keyed type
 
-`MddsKeyedSample.idl` is the source of this generated DDS type. Only the uint32
+`DSoftBusKeyedSample.idl` is the source of this generated DDS type. Only the uint32
 `key` member contributes to the instance key. `run`, `writer`, `ordinal`, and
 the 32-byte payload are ordinary non-key fields. The type is final and bounded.
 

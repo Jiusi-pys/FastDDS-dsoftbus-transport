@@ -16,7 +16,7 @@
 #include <vector>
 
 namespace {
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 using namespace OHOS::Security::AccessToken;
 
 void PermissionUsage()

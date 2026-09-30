@@ -1,6 +1,6 @@
 #pragma once
 #include "ExperimentalTransport.hpp"
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 // Dedicated keyed fixture admission; it does not inspect or route by business key.
 inline bool NativeKeyedCase(const std::string& id) {
     for(const char* allowed:{"K1","K2","K3","K4_TRUE","K4_FALSE","H1","H2","H3","R2","R3"})

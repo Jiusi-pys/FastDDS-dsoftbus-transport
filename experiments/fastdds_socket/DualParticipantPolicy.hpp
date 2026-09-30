@@ -1,6 +1,6 @@
 #pragma once
 #include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 inline constexpr char ignore_local_endpoints_property[]="fastdds.ignore_local_endpoints";
 inline void ApplyDualParticipantPolicy(eprosima::fastdds::dds::DomainParticipantQos& qos) {
     // 3.6.2 EDP reads this public property at Participant construction. It

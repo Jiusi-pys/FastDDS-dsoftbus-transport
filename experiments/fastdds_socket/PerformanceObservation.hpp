@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 // Observation only: owns no application, native handle, lease or payload.
 struct PerformanceErrorRecord {
     std::uint64_t invocation=0, instance=0, receiver=0, bytes=0;

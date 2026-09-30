@@ -156,6 +156,10 @@ def analyze_records(config,records_by_side,control_events,matrix_document,*,matr
     if not need(bool(re.fullmatch('[0-9a-f]{16}',run)),'run_identity') or not need(spec is not None,'unknown_case'):
         return {'pass':False,'errors':errors,'native':{'errors':['core_failed']},'core_pass':False,'native_proof_pass':False,'status':'FAIL'}
     need(config.get('matrix_sha256',matrix_sha256)==matrix_sha256,'matrix_identity')
+    # Sealed historical contracts default to their original registered type. New
+    # naming requires an explicit contract selection; never accept mixed types.
+    registered_type=config.get('registered_type','MddsKeyedSample')
+    need(registered_type in ('MddsKeyedSample','DSoftBusKeyedSample'),'registered_type_contract')
     mode=config.get('mode');need(mode in ('HOST_REFERENCE_UDP','BYTES_NATIVE'),'unknown_mode')
     need(case!='R1' or mode=='HOST_REFERENCE_UDP','R1_host_only_not_device_pass')
     rows={s:list(records_by_side.get(s,[])) for s in 'AB'}
@@ -246,7 +250,7 @@ def analyze_records(config,records_by_side,control_events,matrix_document,*,matr
         for match in matches:need(match.get('peer_guid') in peers and (integer(match,'change')>0 or integer(match,'order')>integer(done.get((side,'OBSERVE'),{}),'order')),'unexpected_match:'+endpoint)
     for side in 'AB':
         for row in [r for r in own[side] if r.get('event')=='DISCOVERY']:
-            need(row.get('guid') in guids.values() and row.get('type')=='MddsKeyedSample' and row.get('topic')==f'mdds-keyed-{run}-T','discovery_type_identity:'+side)
+            need(row.get('guid') in guids.values() and row.get('type')==registered_type and row.get('topic')==f'mdds-keyed-{run}-T','discovery_type_identity:'+side)
     planned=expected_writes(case);write_rows=[r for r in own['A'] if r.get('event')=='WRITE_RETURN'];writes={};sequences=set()
     registrations=[r for r in own['A'] if r.get('event')=='REGISTER_RETURN'];handles={}
     for row in registrations:

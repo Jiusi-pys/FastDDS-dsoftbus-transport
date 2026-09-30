@@ -1,6 +1,6 @@
 #include "softbus_local_pair.hpp"
 #include <utility>
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 LocalPairProbeContract::LocalPairProbeContract(std::string listen, std::string dial,
         std::string network, int type)
     : server_(true, std::move(dial), network, type),

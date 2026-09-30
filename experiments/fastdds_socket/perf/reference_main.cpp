@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 int main(int argc,char** argv) {
-    using namespace mdds::experiment::perf;
+using namespace fastdds_dsoftbus::experiment::perf;
     if(argc!=8 || (std::string(argv[2])!="A" && std::string(argv[2])!="B") ||
         (std::string(argv[4])!="TRACE" && std::string(argv[4])!="MEASURE") ||
         (std::string(argv[7])!="HOST_CONTRACT" && std::string(argv[7])!="FULL")) return 64;

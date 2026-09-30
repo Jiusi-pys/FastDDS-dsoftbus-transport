@@ -3,7 +3,7 @@
 #include "matrix/CaseTable.hpp"
 #include <map>
 #include <set>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 struct MatrixDomainKeys {unsigned domain=0;dsoftbus::EndpointId local{},peer{};};
 inline const matrix::CaseSpec* MatrixCase(const std::string& id){for(const auto& c:matrix::Cases())if(c.id==id)return &c;return nullptr;}
 inline bool MatrixRunId(const std::string& run){

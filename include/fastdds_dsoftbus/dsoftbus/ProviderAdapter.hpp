@@ -1,0 +1,90 @@
+#ifndef FASTDDS_DSOFTBUS_PROVIDER_ADAPTER_HPP
+#define FASTDDS_DSOFTBUS_PROVIDER_ADAPTER_HPP
+
+#include <fastdds_dsoftbus/dsoftbus/NativeBackend.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ServiceRecordBinding.hpp>
+namespace fastdds_dsoftbus::dsoftbus { class NativeSendProvider; }
+namespace fastdds_dsoftbus::dsoftbus::host_test { class HostProviderLoop; }
+
+namespace fastdds_dsoftbus::dsoftbus::phase0 {
+namespace detail { struct ProviderDomainState; }
+enum class AdapterPhase { Constructed, Deploying, Connected, Published, Closing, Closed, Failed };
+enum class SdkDrain { Unproven };
+enum class AcceptedPhase { Empty, Preparing, Prepared, Committing, Active, Stopping, Closed, Failed };
+struct BackendCloseResult {
+    BackendStatus status = BackendStatus::InvalidState;
+    bool adapter_drained = false;
+    SdkDrain sdk_drain = SdkDrain::Unproven;
+    BackendStatus cleanup_status = BackendStatus::None; // separate from the first work failure
+};
+struct AdapterObservation {
+    AdapterPhase phase = AdapterPhase::Constructed;
+    bool provider_stopped = false;
+    bool outgoing_stopped=false,listener_stopped=false;
+    bool input_open = false;
+    std::size_t ingress_active = 0, ingress_rejected = 0, provider_exceptions = 0;
+    BackendStatus provider_status = BackendStatus::None;
+    std::optional<std::int32_t> first_callback_error;
+    std::size_t send_calls = 0;
+    std::int32_t last_priority = 0;
+    BindingObservation binding;
+    BindingObservation listener,accepted;
+    AcceptedPhase accepted_phase=AcceptedPhase::Empty;
+    std::size_t accepted_rejected=0;
+    std::size_t accepted_activation_count=0; // historical outer-admission publications, not current count
+    std::optional<std::int32_t> accepted_id;
+    bool accepted_closing=false;
+    BackendStatus accepted_last_rejection=BackendStatus::None;
+    NativeStatus accepted_last_native_rejection=NativeStatus::None;
+};
+// Explicit bounded Host registration domain (8 live declarations), no singleton,
+// SDK object or future-application queue. Outlives no native resource by itself.
+class ProviderAdapterDomain final {
+public:
+    ProviderAdapterDomain();
+private:
+    friend class ProviderAdapter;
+    std::shared_ptr<detail::ProviderDomainState> state_;
+};
+class ProviderAdapter;
+struct AdapterBuildResult {
+    BackendStatus status = BackendStatus::NotImplemented;
+    std::unique_ptr<ProviderAdapter> adapter;
+};
+// Explicit HostMock-only prototype. No production factory uses it. The optional
+// Host facade controller alone can obtain its private ticketed-send bridge.
+// Control methods
+// and destruction are externally serialized and outside receiver callbacks.
+// Native table, attachments and receiver outlive this adapter. Callback handles
+// may outlive it and reject; they cannot acquire a future registration.
+class ProviderAdapter final {
+public:
+    static AdapterBuildResult Build(ProviderAdapterDomain&, ServiceRecordTable&,
+            NativeOwnerTable&, ApplicationAttachments&, std::shared_ptr<NativeBackend>,
+            const BindingRequest&);
+    ~ProviderAdapter();
+    ProviderAdapter(const ProviderAdapter&) = delete;
+    ProviderAdapter& operator=(const ProviderAdapter&) = delete;
+    BackendStatus Initialize() noexcept;
+    BackendStatus Publish() noexcept;
+    BackendStatus DispatchOne() noexcept;
+    BackendStatus CloseAccepted() noexcept;
+    static bool IsProviderCallbackContext() noexcept;
+    BackendStatus CloseInput() noexcept;
+    BackendStatus ReopenInput(InputChannels::Receiver*) noexcept;
+    NativeResult<BindingInput> AttachSharedInput(InputChannels::Receiver*) noexcept;
+    BackendCloseResult Close() noexcept;
+    AdapterObservation Observe() const noexcept;
+private:
+friend class ::fastdds_dsoftbus::dsoftbus::host_test::HostProviderLoop;
+    friend class RuntimeProbeAccess;
+    static AdapterBuildResult BuildImpl(ProviderAdapterDomain&, ServiceRecordTable&,
+            NativeOwnerTable&, ApplicationAttachments&, std::shared_ptr<NativeBackend>,
+            const BindingRequest&, bool);
+    std::shared_ptr<NativeSendProvider> BindSendProvider(NativeOwnerTable&) const noexcept;
+    void SealIngress() noexcept;
+    explicit ProviderAdapter(std::shared_ptr<detail::ProviderAdapterState>) noexcept;
+    std::shared_ptr<detail::ProviderAdapterState> state_;
+};
+} // namespace fastdds_dsoftbus::dsoftbus::phase0
+#endif

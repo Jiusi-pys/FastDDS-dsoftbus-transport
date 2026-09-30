@@ -9,7 +9,7 @@ int main(int argc, char **argv)
     const auto port = std::strtoul(argv[5], &end, 10);
     if (!end || *end || port < 1024 || port > 65000)
         return 64;
-    mdds::experiment::keyed::KeyedFixture f({argv[1], argv[2], std::string(argv[3]) == "A", argv[4]});
+fastdds_dsoftbus::experiment::keyed::KeyedFixture f({argv[1], argv[2], std::string(argv[3]) == "A", argv[4]});
     const bool good = f.OpenReference(static_cast<std::uint16_t>(port)) && f.Run();
     const bool clean = f.Close();
     const bool pass = good && clean && f.FirstFailure().empty() && f.CleanupFailure().empty();

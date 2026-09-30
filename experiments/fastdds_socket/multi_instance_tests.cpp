@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-using namespace mdds::experiment;
-namespace mdds::experiment {
+using namespace fastdds_dsoftbus::experiment;
+namespace fastdds_dsoftbus::experiment {
 // Hooks expose adapter scheduling stages, never a fake SDK generation/context.
 class ContractTestAccess {
 public:
@@ -78,9 +78,9 @@ public:
     const std::vector<Locator>& values;std::size_t position;
 };
 Config MakeConfig(unsigned slot){
-    using Codec=mdds::dsoftbus::v1::AddressCodec;using Profile=mdds::dsoftbus::v1::Profile;
+using Codec=fastdds_dsoftbus::dsoftbus::v1::AddressCodec;using Profile=fastdds_dsoftbus::dsoftbus::v1::Profile;
     Config c;c.run_id="multi-"+std::to_string(slot);c.peer_network_id=std::string(64,'a');
-    mdds::dsoftbus::EndpointId local{},peer{};local[0]=1;peer[0]=2;
+fastdds_dsoftbus::dsoftbus::EndpointId local{},peer{};local[0]=1;peer[0]=2;
     Require(Codec::EncodeLocator({local,slot,Profile::BytesNative},c.local_locator),"local locator");
     Require(Codec::EncodeLocator({peer,slot+10,Profile::BytesNative},c.peer_locator),"peer locator");
     Require(EncodeNativeServiceName({"experiment",7,slot,Profile::BytesNative},c.local_service),"local service");

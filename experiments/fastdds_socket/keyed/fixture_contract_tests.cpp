@@ -21,7 +21,7 @@ int main(int argc, char **argv)
     if (!end || *end || port < 1024 || port > 65000)
         return 64;
     const bool pass =
-        mdds::experiment::keyed::KeyedFixture::ContractTest(argv[1], static_cast<std::uint16_t>(port));
+fastdds_dsoftbus::experiment::keyed::KeyedFixture::ContractTest(argv[1], static_cast<std::uint16_t>(port));
     std::printf("KEYED_CONTRACT test=%s result=%s\n", argv[1], pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

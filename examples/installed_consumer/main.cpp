@@ -1,6 +1,6 @@
-#include <mdds/dsoftbus/DSoftBusTransportDescriptor.hpp>
-#include <mdds/dsoftbus/SendQueue.hpp>
-#include <mdds/examples/MddsKeyedSamplePubSubTypes.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransportDescriptor.hpp>
+#include <fastdds_dsoftbus/dsoftbus/SendQueue.hpp>
+#include <fastdds_dsoftbus/examples/DSoftBusKeyedSamplePubSubTypes.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -16,7 +16,7 @@
 #include <thread>
 
 namespace fd = eprosima::fastdds::dds;
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 int main()
 {
@@ -37,7 +37,7 @@ int main()
         // Host DDS API example uses Fast DDS built-in transports, not a fake DSoftBus provider.
         participant=factory->create_participant(177,fd::PARTICIPANT_QOS_DEFAULT);
         require(participant,"participant");
-        fd::TypeSupport type(new MddsKeyedSamplePubSubType());
+        fd::TypeSupport type(new DSoftBusKeyedSamplePubSubType());
         require(type.register_type(participant)==fd::RETCODE_OK,"register type");
         auto* topic=participant->create_topic("mdds_installed_sample",type.get_type_name(),fd::TOPIC_QOS_DEFAULT);
         auto* publisher=participant->create_publisher(fd::PUBLISHER_QOS_DEFAULT);
@@ -46,9 +46,9 @@ int main()
         auto* reader=subscriber->create_datareader(topic,fd::DATAREADER_QOS_DEFAULT);
         auto* writer=publisher->create_datawriter(topic,fd::DATAWRITER_QOS_DEFAULT);
         require(reader && writer,"endpoints");
-        MddsKeyedSample sent; sent.key(7); sent.ordinal(1);
+        DSoftBusKeyedSample sent; sent.key(7); sent.ordinal(1);
         require(writer->write(&sent)==fd::RETCODE_OK,"write");
-        MddsKeyedSample received; fd::SampleInfo info;
+        DSoftBusKeyedSample received; fd::SampleInfo info;
         auto until=std::chrono::steady_clock::now()+std::chrono::seconds(5); bool taken=false;
         while(std::chrono::steady_clock::now()<until) {
             if(reader->take_next_sample(&received,&info)==fd::RETCODE_OK && info.valid_data) {taken=true;break;}

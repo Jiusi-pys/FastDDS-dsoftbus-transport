@@ -1,5 +1,9 @@
 # Host-only facade / provider loop
 
+This is a historical Host fixture record. Any legacy MDDS option or target spelling
+below binds that original run and is not a current public package recipe; see
+[NAMING](NAMING.md) and [INSTALL](INSTALL.md) for current names.
+
 Status: **HOST_FACADE_PROVIDER_LOOP_HOST_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED**
 (2026-09-26; artifact run `20260925T202407Z`). The final independent Host run
 passed focused `16/16` and full CONFIG `323/323`; both opt-in flags remain OFF by

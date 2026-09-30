@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <exception>
 #include <string>
-namespace mdds::experiment {
+namespace fastdds_dsoftbus::experiment {
 enum class DualStage {FirstWorking,SecondCreate,SecondMatch,OverlapData,OverlapAck,PreDeleteValidate,PreDeleteReady,P1Delete,PostDeleteData,PostDeleteAck,PostDeleteValidate,FinalReady,FinalCleanup};
 inline const char* DualStageName(DualStage s) {
     switch(s) {

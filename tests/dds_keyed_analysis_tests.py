@@ -89,6 +89,25 @@ class KeyedAnalysisTests(unittest.TestCase):
         r = self.run_case(self.case('K1'), native=True)
         self.assertFalse(r['pass']); self.assertFalse(r['native_proof_pass'])
 
+    def test_explicit_renamed_type_contract(self):
+        c=self.case('K1');c['config']['registered_type']='DSoftBusKeyedSample'
+        for side in 'AB':
+            for row in c['records'][side]:
+                if row.get('event')=='DISCOVERY':row['type']='DSoftBusKeyedSample'
+        self.assertTrue(self.run_case(c)['pass'])
+
+    def test_renamed_contract_rejects_legacy_type(self):
+        c=self.case('K1');c['config']['registered_type']='DSoftBusKeyedSample';self.reject(c)
+
+    def test_renamed_contract_rejects_mixed_type(self):
+        c=self.case('K1');c['config']['registered_type']='DSoftBusKeyedSample'
+        for row in c['records']['A']:
+            if row.get('event')=='DISCOVERY':row['type']='DSoftBusKeyedSample'
+        self.reject(c)
+
+    def test_unsupported_registered_type_contract(self):
+        c=self.case('K1');c['config']['registered_type']='UnrelatedType';self.reject(c)
+
     def test_keyed_type_kind(self):
         c=self.case('K1');self.rows(c,'ENTITY_CREATED','A')[0]['entity_kind']='3';self.reject(c)
 

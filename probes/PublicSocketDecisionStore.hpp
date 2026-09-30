@@ -1,9 +1,9 @@
 #pragma once
-#include <mdds/dsoftbus/ReceiveAdmissionDiagnostic.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ReceiveAdmissionDiagnostic.hpp>
 #include <array>
 #include <mutex>
 
-namespace mdds::dsoftbus::dds_experiment {
+namespace fastdds_dsoftbus::dsoftbus::dds_experiment {
 // Append-only experiment observations. No payload, authority, routing or queue.
 template<std::size_t Capacity> class DecisionStore {
 public:

@@ -3,7 +3,7 @@
 #include <functional>
 #include <iostream>
 #include <stdexcept>
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 namespace {
 const std::string network(64, 'a');
 void Check(bool yes, const char* why) { if (!yes) throw std::runtime_error(why); }
