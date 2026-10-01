@@ -1,8 +1,15 @@
 #include <fastdds_dsoftbus/dsoftbus/ProviderAdapter.hpp>
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
 #include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+#include "../probes/PublicSocketRuntimeTrace.hpp"
+#define STARTUP_LOCAL(event,value) runtime_probe::TraceEvent(event,UINT64_MAX,-1,-1,int(value),0)
+#endif
 #endif
 #include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
+#ifndef STARTUP_LOCAL
+#define STARTUP_LOCAL(event,value) ((void)0)
+#endif
 #include <stdexcept>
 #include <array>
 #include <condition_variable>
@@ -472,13 +479,14 @@ BackendStatus ProviderAdapter::Initialize() noexcept {
             auto q=state_->request;q.service_name=state_->listener_identity.service_name;q.role=RecordRole::Server;q.has_route=false;
             state_->listener_request=q;
             auto candidate=ServiceRecordBinding::Build(state_->records,state_->native,state_->attachments,state_->listener_bridge,q);
+            STARTUP_LOCAL("ListenerBuild_NativeStatus_result",candidate.issue.code);
             if(candidate) {
                 auto listener=std::shared_ptr<ServiceRecordBinding>(std::move(*candidate.value));
                 {std::lock_guard<std::mutex> lock(state_->gate);state_->listener=listener;}
-                setup=listener->Prepare();
-                if(setup==NativeStatus::None&&state_->backend->ConfigureEntrance(listener->RoleEntrance(RecordRole::Server))!=BackendStatus::None)setup=NativeStatus::InvalidConfiguration;
-                if(setup==NativeStatus::None)setup=listener->Connect();
-                if(setup==NativeStatus::None)setup=listener->Publish();
+                setup=listener->Prepare();STARTUP_LOCAL("ListenerPrepare_NativeStatus_result",setup);
+                if(setup==NativeStatus::None){const auto configured=state_->backend->ConfigureEntrance(listener->RoleEntrance(RecordRole::Server));STARTUP_LOCAL("ListenerEntrance_BackendStatus_result",configured);if(configured!=BackendStatus::None)setup=NativeStatus::InvalidConfiguration;}
+                if(setup==NativeStatus::None){setup=listener->Connect();STARTUP_LOCAL("ListenerConnect_NativeStatus_result",setup);}
+                if(setup==NativeStatus::None){setup=listener->Publish();STARTUP_LOCAL("ListenerPublish_NativeStatus_result",setup);}
             }
         }catch(...){state_->Fault(BackendStatus::ProviderException);}
         {std::lock_guard<std::mutex> lock(state_->gate);

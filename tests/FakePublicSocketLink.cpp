@@ -13,6 +13,8 @@ struct Row {int id=0,side=0,role=0,peer=-1;bool active=false,bound=false,pending
 struct Record {int from=0,to=0,target_id=0;const ISocketListener* callback=nullptr;std::vector<std::uint8_t> bytes;host_dds::DetailStamp observation;};
 struct Link {std::mutex gate;std::condition_variable changed;std::array<Row,6> rows{};std::array<bool,2> binding{};Snapshot counts;bool backpressure=false,forwarding=true,delay_bind=false,release_bind=false;std::deque<Record> queue;std::shared_ptr<host_dds::Trace> trace;std::function<void(int,int)> send_observer;};
 std::shared_ptr<Link> link;
+std::array<std::int32_t,3> injected{};std::function<void()> shutdown_barrier;
+int Failure(InjectedOperation op){const auto i=static_cast<std::size_t>(op);const auto rc=injected[i];injected[i]=0;return rc;}
 std::string Name(int side,const char* role){return std::string("host.public.")+(side?"B.":"A.")+role;}
 std::string Network(int side){return side?"model.net.B":"model.net.A";}
 int Index(int id){for(int side=0;side<2;++side)for(int role=0;role<3;++role)if(id==100+side*100+role)return side*3+role;return -1;}
@@ -22,8 +24,10 @@ int Invalid(const char* why){++link->counts.invalid;link->trace->Add({"TRACE_ERR
 void Configure(std::shared_ptr<host_dds::Trace> trace,bool forwarding){
     auto p=std::make_shared<Link>();p->trace=std::move(trace);p->forwarding=forwarding;
     for(int i=0;i<2;++i)for(int role=0;role<3;++role){auto& r=p->rows[i*3+role];r.side=i;r.role=role;r.id=100+i*100+role;r.name=Name(i,role==0?"listener":role==1?"outgoing":"accepted");}
-    link=std::move(p);
+    link=std::move(p);injected={};shutdown_barrier={};
 }
+void FailNext(InjectedOperation op,std::int32_t rc){std::lock_guard<std::mutex> lock(link->gate);injected[static_cast<std::size_t>(op)]=rc;}
+void SetShutdownBarrier(std::function<void()> fn){std::lock_guard<std::mutex> lock(link->gate);shutdown_barrier=std::move(fn);}
 void UseBoundedBackpressure(){std::lock_guard<std::mutex> lock(link->gate);link->backpressure=true;}
 void SetSendObserver(std::function<void(int,int)> f){std::lock_guard<std::mutex> lock(link->gate);link->send_observer=std::move(f);}
 void SetFrameDetail(bool on){link->trace->SetDetail(on);}
@@ -55,6 +59,7 @@ bool UnsupportedNegotiation2(int side){const ISocketListener* callback=nullptr;{
 }
 extern "C" {
 int32_t Socket(SocketInfo info){using namespace public_socket_fake;std::lock_guard<std::mutex> lock(link->gate);
+    if(const auto rc=Failure(InjectedOperation::Socket))return rc;
     if(!info.name||!info.pkgName||info.dataType!=DATA_TYPE_BYTES)return Invalid("Fake Socket invalid config");
     for(auto& row:link->rows)if(row.role!=2&&row.name==info.name){
         if(row.active)return Invalid("Fake duplicate active Socket");
@@ -64,12 +69,12 @@ int32_t Socket(SocketInfo info){using namespace public_socket_fake;std::lock_gua
     }return Invalid("unknown static Socket name");
 }
 int32_t Listen(int32_t id,const QosTV* q,uint32_t n,const ISocketListener* cb){using namespace public_socket_fake;{
-    std::lock_guard<std::mutex> lock(link->gate);const auto k=Index(id);if(k<0||link->rows[k].role!=0||!link->rows[k].active||!q||!n||!cb||!cb->OnBind||!cb->OnNegotiate||!cb->OnBytes||!cb->OnShutdown)return Invalid("Fake Listen invalid");if(n>8)return Invalid("Fake QoS capture bound");auto& observed=link->counts.listen_qos[link->rows[k].side];observed.count=n;for(unsigned i=0;i<n;++i){observed.type[i]=q[i].qos;observed.value[i]=q[i].value;}link->rows[k].listener=cb;link->rows[k].bound=true;++link->counts.listens[link->rows[k].side];}
+    std::lock_guard<std::mutex> lock(link->gate);if(const auto rc=Failure(InjectedOperation::Listen))return rc;const auto k=Index(id);if(k<0||link->rows[k].role!=0||!link->rows[k].active||!q||!n||!cb||!cb->OnBind||!cb->OnNegotiate||!cb->OnBytes||!cb->OnShutdown)return Invalid("Fake Listen invalid");if(n>8)return Invalid("Fake QoS capture bound");auto& observed=link->counts.listen_qos[link->rows[k].side];observed.count=n;for(unsigned i=0;i<n;++i){observed.type[i]=q[i].qos;observed.value[i]=q[i].value;}link->rows[k].listener=cb;link->rows[k].bound=true;++link->counts.listens[link->rows[k].side];}
     link->changed.notify_all();Event("FAKE_C_LISTEN",(id-100)/100,"id="+std::to_string(id));return 0;
 }
 int32_t Bind(int32_t id,const QosTV* q,uint32_t n,const ISocketListener* cb){using namespace public_socket_fake;int side=0,destination=0,accepted_id=0;const ISocketListener* server=nullptr;
     {
-        std::unique_lock<std::mutex> lock(link->gate);const auto k=Index(id);if(k<0||link->rows[k].role!=1||!link->rows[k].active||!q||!n||!cb||!cb->OnShutdown)return Invalid("Fake Bind invalid");
+        std::unique_lock<std::mutex> lock(link->gate);if(const auto rc=Failure(InjectedOperation::Bind))return rc;const auto k=Index(id);if(k<0||link->rows[k].role!=1||!link->rows[k].active||!q||!n||!cb||!cb->OnShutdown)return Invalid("Fake Bind invalid");
         auto& outgoing=link->rows[k];side=outgoing.side;if(n>8)return Invalid("Fake QoS capture bound");auto& observed=link->counts.bind_qos[side];observed.count=n;for(unsigned i=0;i<n;++i){observed.type[i]=q[i].qos;observed.value[i]=q[i].value;}destination=1-side;outgoing.listener=cb;link->binding[side]=true;++link->counts.binds[side];link->changed.notify_all();
         if(!link->changed.wait_for(lock,std::chrono::seconds(3),[&]{return link->binding[0]&&link->binding[1]&&link->rows[destination*3].listener;}))return Invalid("Fake bounded two-Bind setup barrier");
         auto& accepted=link->rows[destination*3+2];if(accepted.active)return Invalid("Fake duplicate normal accepted");accepted.active=true;accepted.listener=link->rows[destination*3].listener;accepted.peer=id;outgoing.peer=accepted.id;server=accepted.listener;accepted_id=accepted.id;
@@ -93,7 +98,7 @@ int32_t SendBytes(int32_t id,const void* data,uint32_t size){using namespace pub
         if(!alive())return -704;
         if(!capacity())return Invalid("bounded Fake byte queue exhausted");Record r;r.from=side;r.to=to;r.target_id=target;r.callback=callback;r.observation=observation;r.bytes.assign(p,p+size);link->queue.push_back(std::move(r));link->counts.bytes+=size;link->counts.record_peak=std::max(link->counts.record_peak,link->queue.size());link->counts.byte_peak=std::max(link->counts.byte_peak,link->counts.bytes);}return 0;
 }
-void Shutdown(int32_t id){using namespace public_socket_fake;const ISocketListener* notify=nullptr;int peer=-1,side=0,peer_side=0;
+void Shutdown(int32_t id){using namespace public_socket_fake;std::function<void()> barrier;{std::lock_guard<std::mutex> lock(link->gate);barrier=shutdown_barrier;}if(barrier)barrier();const ISocketListener* notify=nullptr;int peer=-1,side=0,peer_side=0;
     {std::lock_guard<std::mutex> lock(link->gate);const auto k=Index(id);if(k<0||!link->rows[k].active){Invalid("Fake unknown/duplicate Shutdown");return;}auto& r=link->rows[k];side=r.side;r.active=false;++link->counts.shutdowns[side];const auto pi=Index(r.peer);if(pi>=0&&link->rows[pi].active){auto& other=link->rows[pi];other.active=false;peer=other.id;peer_side=other.side;notify=other.listener;++link->counts.notified[peer_side];}}
     link->changed.notify_all();Event("FAKE_C_SHUTDOWN",side,"original_owned_id="+std::to_string(id));if(notify){Event("FAKE_TERMINAL_NOTIFICATION",peer_side,"id="+std::to_string(peer));notify->OnShutdown(peer,SHUTDOWN_REASON_PEER);}
 }

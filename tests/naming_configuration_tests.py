@@ -16,12 +16,14 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument('--source', type=Path, required=True)
     p.add_argument('--work', type=Path, required=True)
+    p.add_argument('--fastdds-source', type=Path)
     a=p.parse_args();a.work.mkdir(parents=True,exist_ok=True)
     a.work=Path(tempfile.mkdtemp(prefix='run-',dir=a.work))
     results=[]
     common=['-DBUILD_TESTING=OFF','-DBUILD_INTERFACE_PROBE=OFF',
             '-DBUILD_SOFTBUS_CAPABILITY_PROBE=OFF',
-            '-DBUILD_DSOFTBUS_TRANSPORT_FACADE=OFF']
+            '-DBUILD_DSOFTBUS_TRANSPORT_FACADE=OFF',
+            '-DFASTDDS_SOURCE_DIR='+str((a.fastdds_source or a.source/'Fast-DDS').resolve())]
     for index,option in enumerate((*LEGACY_OPTIONS,'MDDS_UNRELATED_PARENT_SENTINEL')):
         value='CONFIG' if option=='MDDS_FASTDDS_MODE' else 'ON'
         argv=['cmake','-S',str(a.source.resolve()),'-B',str(a.work/('case-'+str(index))),*common,

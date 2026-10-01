@@ -2,6 +2,12 @@
 #include <algorithm>
 #include <cstdio>
 #include <utility>
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+#include "../probes/PublicSocketRuntimeTrace.hpp"
+#define FACADE_STARTUP(event,code) runtime_probe::TraceEvent(event,UINT64_MAX,-1,-1,int(code),0)
+#else
+#define FACADE_STARTUP(event,code) ((void)0)
+#endif
 
 namespace fastdds_dsoftbus::dsoftbus {
 DSoftBusTransport::DSoftBusTransport(const DSoftBusTransportDescriptor& descriptor)
@@ -26,9 +32,10 @@ FacadeMode DSoftBusTransport::mode() const noexcept { return mode_; }
 FacadeState DSoftBusTransport::state() const { std::lock_guard<std::mutex> lock(lifecycle_); return state_; }
 FacadeDiagnostic DSoftBusTransport::last_error() const { std::lock_guard<std::mutex> lock(lifecycle_); return diagnostic_; }
 void DSoftBusTransport::Diagnose(FacadeDiagnostic value) const
-{ std::lock_guard<std::mutex> lock(lifecycle_); diagnostic_ = value; }
+{ {std::lock_guard<std::mutex> lock(lifecycle_); diagnostic_ = value;} FACADE_STARTUP("FacadeDecision_FacadeError_result",value.error); }
 bool DSoftBusTransport::InitFailure(FacadeDiagnostic value)
 {
+    FACADE_STARTUP("FacadeInit_FacadeError_result",value.error);
     {
         std::lock_guard<std::mutex> lock(lifecycle_); diagnostic_ = value;
         if (state_ == FacadeState::Initializing) state_ = FacadeState::Failed;

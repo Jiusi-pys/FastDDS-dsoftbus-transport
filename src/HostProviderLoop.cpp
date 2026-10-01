@@ -1,11 +1,20 @@
 #include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
 #include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+#include "../probes/PublicSocketRuntimeTrace.hpp"
+#define STARTUP_CAPTURE(...) runtime_probe::TraceEvent(__VA_ARGS__)
+#else
+#define STARTUP_CAPTURE(...) ((void)0)
+#endif
 #endif
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
+#ifndef STARTUP_CAPTURE
+#define STARTUP_CAPTURE(...) ((void)0)
+#endif
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
 namespace fastdds_dsoftbus::dsoftbus::phase0 {
 namespace { thread_local const std::function<bool()>* armed_pre_connect = nullptr; }
@@ -15,7 +24,7 @@ namespace { thread_local const std::function<bool()>* armed_pre_connect = nullpt
 bool InvokeArmedPreConnectGate() noexcept {
     const auto* gate=armed_pre_connect;
     if(!gate||!*gate)return true;
-    try{return (*gate)();}catch(...){return false;}
+    try{const bool result=(*gate)();STARTUP_CAPTURE("GateDecision_result",UINT64_MAX,-1,-1,result?0:1,0);return result;}catch(...){STARTUP_CAPTURE("GateException_result",UINT64_MAX,-1,-1,1,0);return false;}
 }
 ArmedPreConnectGate::ArmedPreConnectGate(std::function<bool()> gate) noexcept
         :gate_(std::move(gate)),previous_(armed_pre_connect) {
@@ -261,7 +270,7 @@ bool HostProviderLoop::SetPreConnectGate(std::function<bool()> gate) {
 }
 bool HostProviderLoop::StartRuntime(const DSoftBusTransportDescriptor& d) noexcept {
     auto& s=*state_;
-    {std::lock_guard<std::mutex> lock(s.gate);if(s.attempted||s.closed)return false;s.attempted=true;}
+    {std::lock_guard<std::mutex> lock(s.gate);if(s.attempted||s.closed){STARTUP_CAPTURE("LoopStart_StateRefused_result",UINT64_MAX,-1,-1,1,(s.attempted?1:0)|(s.closed?2:0));return false;}s.attempted=true;}
     // Only the attempt that changed attempted owns failure cleanup. A second
     // facade rejected above must never stop the first facade's live backend.
     struct Rollback {HostProviderLoop& loop;bool done=false;~Rollback(){if(!done)loop.ShutdownRuntime();}} rollback{*this};
@@ -271,21 +280,21 @@ bool HostProviderLoop::StartRuntime(const DSoftBusTransportDescriptor& d) noexce
 #else
     constexpr auto admitted_kind=BackendKind::HostMock;
 #endif
-    if(!s.backend||s.backend->Kind()!=admitted_kind||d.directory.locals.size()!=1||d.directory.routes.size()!=1) return false;
+    if(!s.backend||s.backend->Kind()!=admitted_kind||d.directory.locals.size()!=1||d.directory.routes.size()!=1){STARTUP_CAPTURE("LoopStart_ConfigRefused_result",UINT64_MAX,-1,-1,1,0);return false;}
     s.config.directory=d.directory;s.config.directions={s.backend->Topology()==BackendTopology::ListenerAndOutgoing?RouteDirection::Both:RouteDirection::Dial};s.config.service_pkg_name="mdds.host.loop";
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
     s.config.service_pkg_name="com.kaihong.mdds";
 #endif
     s.config.dial_only_egress=s.backend->Topology()==BackendTopology::ListenerAndOutgoing;
-    auto native=NativeOwnerTable::Build(s.config);if(!native)return false;s.native=std::move(*native.value);
+    auto native=NativeOwnerTable::Build(s.config);if(!native){STARTUP_CAPTURE("LoopStart_NativeStatus_result",UINT64_MAX,-1,-1,int(native.issue.code),0);return false;}s.native=std::move(*native.value);
     AttachmentLimits receive_limits;
     receive_limits.max_record_bytes=d.maxMessageSize;
     s.attachments=std::make_unique<ApplicationAttachments>(std::vector<Locator>{d.directory.locals[0].local_locator},receive_limits);
     s.execution=std::make_unique<NativeSendExecution>(*s.native);
-    auto reg=s.execution->CreateRuntime(s.config,d.egress_selections,d.send_limits);if(!reg)return false;
+    auto reg=s.execution->CreateRuntime(s.config,d.egress_selections,d.send_limits);if(!reg){STARTUP_CAPTURE("LoopStart_RegistrationRefused_result",UINT64_MAX,-1,-1,1,0);return false;}
     s.registration=std::move(*reg.value);
     std::lock_guard<std::mutex> lock(s.gate);s.started=true;rollback.done=true;return true;
-    } catch (...) {return false;}
+    } catch (...) {STARTUP_CAPTURE("LoopStart_Exception_result",UINT64_MAX,-1,-1,1,0);return false;}
 }
 InputOpenResult HostProviderLoop::Open(const Locator& local, InputChannels::Receiver* receiver) noexcept {
     return state_->shared?OpenShared(local,receiver):OpenRuntime(local,receiver);
@@ -294,11 +303,11 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
     auto& s=*state_;
     {std::lock_guard<std::mutex> lock(s.gate);
         ++s.open_calls;
-        if(!s.started||s.stopping)return InputOpenResult::Disabled;
-        if(s.input_closing)return InputOpenResult::Closing;
-        if(s.failed_open_cleanup)return InputOpenResult::Disabled;
-        if(local!=s.config.directory.locals[0].local_locator)return InputOpenResult::InvalidLocal;
-        if(!receiver&&!s.shared)return InputOpenResult::NullReceiver;
+        if(!s.started||s.stopping){STARTUP_CAPTURE("LoopOpen_Disabled_result",UINT64_MAX,-1,-1,int(InputOpenResult::Disabled),0);return InputOpenResult::Disabled;}
+        if(s.input_closing){STARTUP_CAPTURE("LoopOpen_Closing_result",UINT64_MAX,-1,-1,int(InputOpenResult::Closing),0);return InputOpenResult::Closing;}
+        if(s.failed_open_cleanup){STARTUP_CAPTURE("LoopOpen_Disabled_result",UINT64_MAX,-1,-1,int(InputOpenResult::Disabled),0);return InputOpenResult::Disabled;}
+        if(local!=s.config.directory.locals[0].local_locator){STARTUP_CAPTURE("LoopOpen_InvalidLocal_result",UINT64_MAX,-1,-1,int(InputOpenResult::InvalidLocal),0);return InputOpenResult::InvalidLocal;}
+        if(!receiver&&!s.shared){STARTUP_CAPTURE("LoopOpen_NullReceiver_result",UINT64_MAX,-1,-1,int(InputOpenResult::NullReceiver),0);return InputOpenResult::NullReceiver;}
         if(s.input_open)return s.receiver==receiver?InputOpenResult::AlreadyOpen:InputOpenResult::Conflict;
     }
     if(s.adapter) {
@@ -309,7 +318,15 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
     std::unique_ptr<ProviderAdapter> pending;
     const auto settle_pending=[&]() noexcept {
         if(pending) {
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
+            STARTUP_CAPTURE("LocalCleanup_enter",UINT64_MAX,-1,-1,0,0);
+#endif
             const auto receipt=pending->Close();
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
+            STARTUP_CAPTURE("Close_primary_BackendStatus_result",UINT64_MAX,-1,-1,int(receipt.status),0);
+            STARTUP_CAPTURE("Close_cleanup_BackendStatus_result",UINT64_MAX,-1,-1,int(receipt.cleanup_status),0);
+            STARTUP_CAPTURE("Close_adapter_drained_result",UINT64_MAX,-1,-1,receipt.adapter_drained?0:1,0);
+#endif
             std::lock_guard<std::mutex> lock(s.gate);s.failed_open_cleanup=receipt;
         }
     };
@@ -327,6 +344,9 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
 #else
     auto result=ProviderAdapter::Build(s.domain,ServiceRecordTable::Process(),*s.native,*s.attachments,s.backend,request);
 #endif
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
+    STARTUP_CAPTURE("AdapterBuild_BackendStatus_result",UINT64_MAX,-1,-1,int(result.status),0);
+#endif
     if(result.status!=BackendStatus::None)return InputOpenResult::Conflict;
     // Unpublished ownership stays local until all steps succeed. Every failure
     // releases only this pending binding before false reaches the receiver owner.
@@ -339,7 +359,15 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
         {std::lock_guard<std::mutex> lock(s.gate);gate=s.pre_connect;}
         ArmedPreConnectGate armed(std::move(gate));
 #endif
-        if(pending->Initialize()!=BackendStatus::None||pending->Publish()!=BackendStatus::None) {
+        const auto initialized=pending->Initialize();
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
+        STARTUP_CAPTURE("Initialize_BackendStatus_result",UINT64_MAX,-1,-1,int(initialized),0);
+#endif
+        const auto published=initialized==BackendStatus::None?pending->Publish():initialized;
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
+        if(initialized==BackendStatus::None)STARTUP_CAPTURE("Publish_BackendStatus_result",UINT64_MAX,-1,-1,int(published),0);
+#endif
+        if(initialized!=BackendStatus::None||published!=BackendStatus::None) {
             settle_pending();return InputOpenResult::Disabled;
         }
     }

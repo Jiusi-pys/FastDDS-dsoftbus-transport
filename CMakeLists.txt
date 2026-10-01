@@ -803,7 +803,8 @@ if(BUILD_TESTING)
     if(Python3_Interpreter_FOUND)
         add_test(NAME dsoftbus.naming.configuration
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/naming_configuration_tests.py"
-                --source "${CMAKE_CURRENT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/naming-options")
+                --source "${CMAKE_CURRENT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/naming-options"
+                --fastdds-source "${FASTDDS_SOURCE_DIR}")
         set_tests_properties(dsoftbus.naming.configuration PROPERTIES TIMEOUT 180)
     endif()
 endif()

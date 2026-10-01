@@ -39,3 +39,5 @@ block=block.replace(needle,'                fastdds_dsoftbus_hook::destructor_no
 s=s[:start]+block+s[end:]
 factory.write_text(s)
 shutil.copyfile(Path(__file__).with_name('FastddsHook.hpp'),factory.with_name('FastddsHook.hpp'))
+shutil.copyfile(Path(__file__).with_name('PlatformModule.hpp'),factory.with_name('PlatformModule.hpp'))
+shutil.copyfile(Path(__file__).with_name('StartupDiagnostics.hpp'),factory.with_name('StartupDiagnostics.hpp'))

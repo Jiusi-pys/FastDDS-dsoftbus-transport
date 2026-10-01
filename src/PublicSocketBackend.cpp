@@ -86,7 +86,7 @@ struct PublicSocketState {
     std::uint32_t qos_count=0;
     PublicSocketObservation observation;
     PublicSocketCall& Op(PublicSocketOperation op){return observation.operations[static_cast<std::size_t>(op)];}
-    void Reject(PublicSocketOperation op,BackendStatus status){auto& r=Op(op);++r.attempts;r.last=BackendCallResult{status};}
+    void Reject(PublicSocketOperation op,BackendStatus status){FASTDDS_DSOFTBUS_PROBE_EVENT("BackendReject_BackendStatus_result",UINT64_MAX,-1,-1,int(status),static_cast<unsigned>(op));auto& r=Op(op);++r.attempts;r.last=BackendCallResult{status};}
     void Enter(PublicSocketOperation op){auto& r=Op(op);++r.attempts;++r.calls;r.last={BackendStatus::None,true,false,std::nullopt};r.last_call=r.last;r.handle.reset();}
     BackendCallResult Returned(PublicSocketOperation op,std::optional<std::int32_t> code,std::optional<std::int32_t> handle={}){
         auto& r=Op(op);++r.returns;
@@ -96,7 +96,7 @@ struct PublicSocketState {
         if(code&&*code!=0&&!observation.first_api_error)observation.first_api_error=PublicSocketError{op,*code};
         return r.last;
     }
-    BackendCallResult Exception(PublicSocketOperation op){++observation.exceptions;if(!observation.first_exception)observation.first_exception=op;auto& r=Op(op);r.last={BackendStatus::ProviderException,true,false,std::nullopt};r.last_call=r.last;return r.last;}
+    BackendCallResult Exception(PublicSocketOperation op){FASTDDS_DSOFTBUS_PROBE_EVENT("SdkException_BackendStatus_result",UINT64_MAX,-1,-1,int(BackendStatus::ProviderException),static_cast<unsigned>(op));++observation.exceptions;if(!observation.first_exception)observation.first_exception=op;auto& r=Op(op);r.last={BackendStatus::ProviderException,true,false,std::nullopt};r.last_call=r.last;return r.last;}
     static bool PeerValue(PeerSocketInfo in,BackendPeer& out) {
         const auto copy=[](const char* p,std::size_t limit,std::string& dst){if(!p)return false;std::size_t n=0;while(n<=limit&&p[n])++n;if(!n||n>limit)return false;dst.assign(p,n);return true;};
         if(in.dataType!=DATA_TYPE_BYTES||!copy(in.name,255,out.name)||!copy(in.networkId,64,out.network_id)||!copy(in.pkgName,64,out.package_name))return false;

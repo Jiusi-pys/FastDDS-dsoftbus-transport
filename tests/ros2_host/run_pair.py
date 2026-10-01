@@ -1,7 +1,7 @@
 """Actual independent ROS processes; no HDC, device driver or synthesized result."""
 import argparse,json,os,subprocess,time,secrets,socket,re,hashlib
 from pathlib import Path
-p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort','dual'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');a=p.parse_args()
 a.output.mkdir(parents=True,exist_ok=False);run=secrets.token_hex(8);domain=201
 ports=[]
 for _ in range(2):
@@ -30,30 +30,22 @@ for x in processes.values():x.wait(timeout=5)
 for pair in streams.values():
  for f in pair:f.close()
 result={'run':run,'mode':a.mode,'forward':a.forward,'timed_out':timed,'processes':{s:{'pid':x.pid,'exit_code':x.returncode,'argv':commands[s]} for s,x in processes.items()},'device_tested':False,'inputs':input_hashes}
-for s in 'AB':
- text=(a.output/(s+'.stdout')).read_text(errors='replace');result[s]={'writes':text.count('ROS_WRITE '),'takes':text.count('ROS_TAKE '),'graph':text.count('ROS_GRAPH '),'context_closed':text.count('ROS_CONTEXT_CLOSED ')}
-result['pass']=not timed and all(x.returncode==0 for x in processes.values()) and all(result[s]['writes']==5 and result[s]['takes']==5 and result[s]['graph']==1 and result[s]['context_closed']==1 for s in 'AB')
-errors=[];publisher={}
+import importlib.util
+spec=importlib.util.spec_from_file_location('formal_ros_analysis',Path(__file__).resolve().parents[2]/'scripts/public_socket/analyze_ros2.py')
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+phases=['reliable','best_effort'] if a.mode=='dual' else [a.mode]
+texts={s:(a.output/(s+'.stdout')).read_text(errors='replace') for s in 'AB'}
+ledger=module.analyze(texts,run,phases);result['ledger']=ledger
+errors=list(ledger['errors'])
 if any(hashlib.sha256(Path(f).read_bytes()).hexdigest()!=h for f,h in input_hashes.items()):errors.append('input_mutated_during_run')
 for s in 'AB':
- text=(a.output/(s+'.stdout')).read_text(errors='replace');err=(a.output/(s+'.stderr')).read_text(errors='replace')
- pub=re.findall(r'ROS_PUBLISHER run='+run+r' side='+s+r' gid=([0-9a-f]+) intra_process=0',text)
- if len(pub)!=1:errors.append('publisher_identity:'+s)
- else:publisher[s]=pub[0]
- if err.count('FDDST_ROS_CLOSED run='+run)!=1 or 'FDDST_CLOSE_INCOMPLETE' in err or 'Failed to delete participant' in err or 'FDDST_PUMP_ERROR_OBSERVED' in err:errors.append('runtime_close:'+s)
+ if ledger['boards'].get(s,{}).get('pid')!=str(processes[s].pid):errors.append('actual_process_pid:'+s)
+ err=(a.output/(s+'.stderr')).read_text(errors='replace')
+ if err.count('FDDST_ROS_CLOSED run='+run)!=1 or any(x in err for x in ['FDDST_CLOSE_INCOMPLETE','Failed to delete participant','FDDST_PUMP_ERROR_OBSERVED','FDDST_UNPUBLISHED_OWNER_RETAINED_INCOMPLETE']):errors.append('runtime_close:'+s)
  if not re.search(r'FDDST_HOST_IO run='+run+r' side=\d+ sends=[1-9][0-9]* ingress=[1-9][0-9]* send_errors=0 fake_sdk=1',err):errors.append('host_path:'+s)
  expected_load=str((a.fastdds_prefix/'bin/fastrtps-2.14.dll').resolve()).lower()
  loaded=re.findall(r'FDDST_LOADED module=fastrtps-2.14.dll path=([^\r\n]+)',err)
  if len(loaded)!=1 or str(Path(loaded[0]).resolve()).lower()!=expected_load:errors.append('fastdds_load:'+s)
- result[s]['stderr_errors']=errors[:]
-for s,other in [('A','B'),('B','A')]:
- text=(a.output/(s+'.stdout')).read_text(errors='replace')
- for event in ['WRITE','TAKE']:
-  rows=re.findall(r'ROS_'+event+r' run='+run+r' side='+s+r' ordinal=([1-5])(?: gid=([0-9a-f]+))? payload=([^\s]+)',text)
-  if len(rows)!=5 or {r[0] for r in rows}!=set('12345'):errors.append('sample_ordinals:'+s+':'+event)
-  for ordinal,gid,payload in rows:
-   if payload!=run+':'+(s if event=='WRITE' else other)+':'+ordinal:errors.append('payload:'+s)
-   if event=='TAKE' and gid!=publisher.get(other):errors.append('peer_writer:'+s)
-result['errors']=errors;result['pass']=result['pass'] and not errors
-if (a.output/'A.stdout').read_text(errors='replace').count('ROS_SERVICE_RESPONSE run='+run+' sum=7')!=1 or (a.output/'B.stdout').read_text(errors='replace').count('ROS_SERVICE_REQUEST run='+run+' a=3 b=4 sum=7')!=1:result['errors'].append('service_actual_request_response');result['pass']=False
+ result[s]={'writes':sum(x.get('ROS_WRITE',0) for x in ledger['boards'].get(s,{}).get('phases',{}).values()),'takes':sum(x.get('ROS_TAKE',0) for x in ledger['boards'].get(s,{}).get('phases',{}).values())}
+result['errors']=errors;result['pass']=not timed and all(x.returncode==0 for x in processes.values()) and not errors
 (a.output/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result));raise SystemExit(0 if result['pass'] else 1)

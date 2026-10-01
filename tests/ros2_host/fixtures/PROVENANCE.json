@@ -1,0 +1,9 @@
+{
+  "kind": "ACTUAL_HOST_STDOUT_FIXTURE_NOT_DEVICE",
+  "run": "42ba5e959d97d571",
+  "source": ".artifacts\\ros2-device-acceptance\\run-20260930-local\\host-dual-tester\\dual-r1",
+  "files": {
+    "A.stdout": "d068457684ff036813e2e28ea3e98478ef3c4b71d3c8dce4adbc2e23ef561c60",
+    "B.stdout": "5346c06f86a03072ca427e74f87dd25969689b7547078adcee0066394eb3e71d"
+  }
+}

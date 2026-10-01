@@ -1,4 +1,6 @@
 #include "HostSocket.hpp"
+#include "BridgeOwner.hpp"
+#include "target/NativeObservation.hpp"
 #define NOMINMAX
 #include <windows.h>
 #include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
@@ -37,13 +39,7 @@ unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsign
 Locator logical(unsigned side) {
     Locator l{};l.kind=LocatorCodec::kind;l.port=LocatorCodec::port;l.address[0]=0x31;l.address[15]=static_cast<unsigned char>(side+1);return l;
 }
-struct Owner {
-    std::unique_ptr<experimental::Runtime> runtime;
-    std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface> descriptor;
-    std::atomic<bool> stop{false},failed{false};
-    std::thread pump;
-    std::string run;unsigned side=0;
-};
+using Owner = fastdds_dsoftbus::ros2_integration::BridgeOwner;
 }
 extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookVersion(){return 21405;}
 extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsigned domain,void* raw,void** out) {
@@ -66,6 +62,9 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         const auto prefix="host.ros."+m.at("run");
         auto name=[&](unsigned s,const char* role){return prefix+"."+std::to_string(s)+"."+role;};
         auto* owner=new Owner;*out=owner;owner->run=m.at("run");owner->side=side;
+        fastdds_dsoftbus::ros2_target_observation::Begin(owner->run,side);
+        fastdds_dsoftbus::ros2_target_observation::SetSourceForHostInjection();
+        owner->diagnostic_control=[] {(void)fastdds_dsoftbus::ros2_target_observation::ExportPending();};
         fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",name(side,"listener"),name(1-side,"listener"),name(1-side,"outgoing"),forward});
         phase0::PublicSocketConfiguration b;
         b.identity={name(side,"outgoing"),{910+side*4},{1010+side*4}};
@@ -91,22 +90,21 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         eprosima::fastrtps::LibrarySettingsAttributes settings;settings.intraprocess_delivery=eprosima::fastrtps::INTRAPROCESS_OFF;
         eprosima::fastrtps::xmlparser::XMLProfileManager::library_settings(settings);
         if(eprosima::fastrtps::xmlparser::XMLProfileManager::library_settings().intraprocess_delivery!=eprosima::fastrtps::INTRAPROCESS_OFF)throw std::runtime_error("intraprocess disable");
-        owner->pump=std::thread([owner]{while(!owner->stop.load()) {
-            const auto send=owner->runtime->PumpSend();if(send.outcome==NativeSendOutcome::ReturnedInvalidCode||send.outcome==NativeSendOutcome::ReturnedByException||(send.actual_return_code&&*send.actual_return_code!=0))owner->failed=true;
-            auto recv=owner->runtime->PumpReceive();if(recv!=phase0::BackendStatus::None&&recv!=phase0::BackendStatus::NoWork&&recv!=phase0::BackendStatus::InvalidState)owner->failed=true;
-            std::this_thread::yield();
-        }});
+        owner->StartPump();
         std::fprintf(stderr,"FDDST_ROS_PRE_PARTICIPANT run=%s side=%u builtin=0 intraprocess=0 mode=HOST_OPAQUE_BYTES_TEST_ONLY\n",owner->run.c_str(),side);std::fflush(stderr);return 0;
     }catch(const std::exception& e){std::fprintf(stderr,"FDDST_REQUIRED_ERROR %s\n",e.what());std::fflush(stderr);return 1;}
 }
 extern "C" __declspec(dllexport) int FastddsDsoftbusClose(void* value) {
     auto* p=static_cast<Owner*>(value);if(!p)return 1;
-    p->stop=true;if(p->pump.joinable())p->pump.join();
-    if(!p->runtime||!p->runtime->Close()) {std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr);return 1;}
+    const int close_result=p->CloseLocal();
+    if(close_result==1) {std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr);return 1;}
     fastdds_dsoftbus::ros2_host::StopLink();
     const auto io=fastdds_dsoftbus::ros2_host::ObserveLink();const auto native=p->runtime->ObserveSocket();
     std::fprintf(stderr,"FDDST_HOST_IO run=%s side=%u sends=%llu ingress=%llu send_errors=%llu fake_sdk=%d rejected_callbacks=%llu\n",p->run.c_str(),p->side,static_cast<unsigned long long>(io.sends),static_cast<unsigned long long>(io.ingress),static_cast<unsigned long long>(io.send_errors),int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));
     const bool failed=p->failed.load();if(failed)std::fputs("FDDST_PUMP_ERROR_OBSERVED\n",stderr);
     p->descriptor.reset();p->runtime.reset();
     std::fprintf(stderr,"FDDST_ROS_CLOSED run=%s side=%u pump_joined=1 runtime_closed=1 local_only=1\n",p->run.c_str(),p->side);std::fflush(stderr);delete p;return failed?2:0;
+}
+extern "C" __declspec(dllexport) int FastddsDsoftbusCaptureStartup(fastdds_dsoftbus::ros2_diagnostics::Snapshot* output) noexcept {
+    return output&&fastdds_dsoftbus::ros2_target_observation::Capture(*output)?0:1;
 }

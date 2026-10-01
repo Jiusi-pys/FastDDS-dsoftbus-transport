@@ -14,33 +14,40 @@ set(DSOFTBUS_SOURCE_DIR "" CACHE PATH "Explicit authorized public Socket source 
 if(NOT IS_ABSOLUTE "${DSOFTBUS_SOURCE_DIR}" OR NOT EXISTS "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport/socket.h")
     message(FATAL_ERROR "An explicit existing public Socket source header tree is required")
 endif()
-get_filename_component(_transport_root "../.." ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(_runtime_sources EndpointDirectory V1Address V1Configuration NativeOwnerTable
-    ServiceRecordTable ServiceRecordBinding SendQueue InputChannels ApplicationAttachments
-    RuntimeSendPath DSoftBusSenderResource NativeSendExecution ProcessReceivePath ProcessCoordinator
-    DSoftBusTransport DSoftBusTransportDescriptor HostProviderLoop ProviderAdapter
-    PublicSocketBackend ExperimentalRuntime)
-set(_files)
-foreach(_source IN LISTS _runtime_sources)
-    list(APPEND _files "${_transport_root}/src/${_source}.cpp")
-endforeach()
+include(RuntimeSources.cmake)
 add_library(fastdds_dsoftbus_ros2_214_runtime STATIC ${_files})
 target_include_directories(fastdds_dsoftbus_ros2_214_runtime PUBLIC
     "$<BUILD_INTERFACE:${_transport_root}/include>" "$<INSTALL_INTERFACE:include>")
 target_include_directories(fastdds_dsoftbus_ros2_214_runtime PRIVATE
     "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
 target_compile_definitions(fastdds_dsoftbus_ros2_214_runtime PUBLIC FASTDDS_DSOFTBUS_FASTDDS_214=1
-    PRIVATE FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1
+    PRIVATE FASTDDS_DSOFTBUS_STARTUP_OBSERVATION=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1
         FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM=1)
 target_link_libraries(fastdds_dsoftbus_ros2_214_runtime PUBLIC fastrtps fastcdr Threads::Threads)
 set_property(TARGET fastdds_dsoftbus_ros2_214_runtime PROPERTY INTERFACE_FASTDDS_DSOFTBUS_FACADE_VARIANT ros2-214-host-experiment)
 set_property(TARGET fastdds_dsoftbus_ros2_214_runtime APPEND PROPERTY COMPATIBLE_INTERFACE_STRING FASTDDS_DSOFTBUS_FACADE_VARIANT)
-add_library(fastdds_dsoftbus_ros2_host_bridge SHARED Bridge.cpp HostSocket.cpp Observation.cpp)
+add_library(fastdds_dsoftbus_ros2_host_bridge SHARED Bridge.cpp HostSocket.cpp target/NativeObservation.cpp "${_transport_root}/probes/PublicSocketRtpsObservation.cpp")
+target_compile_definitions(fastdds_dsoftbus_ros2_host_bridge PRIVATE FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST=1)
 target_link_libraries(fastdds_dsoftbus_ros2_host_bridge PRIVATE fastdds_dsoftbus_ros2_214_runtime ws2_32)
 target_include_directories(fastdds_dsoftbus_ros2_host_bridge PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
 target_compile_features(fastdds_dsoftbus_ros2_host_bridge PRIVATE cxx_std_17)
 include(CTest)
 if(BUILD_TESTING)
+    add_library(ros2_hook_config_library SHARED "${_transport_root}/tests/ros2_host/hook_config_library.cpp")
+    add_executable(ros2_hook_close_tests "${_transport_root}/tests/ros2_host/hook_close_tests.cpp")
+    target_compile_options(ros2_hook_close_tests PRIVATE /UNDEBUG)
+    add_test(NAME ros2_hook_close COMMAND ros2_hook_close_tests)
+    add_executable(ros2_hook_config_tests "${_transport_root}/tests/ros2_host/hook_config_tests.cpp")
+    target_compile_options(ros2_hook_config_tests PRIVATE /UNDEBUG)
+    add_test(NAME ros2_hook_config_lf COMMAND ros2_hook_config_tests $<TARGET_FILE:ros2_hook_config_library> "${CMAKE_CURRENT_BINARY_DIR}/hook-lf.conf" lf)
+    add_test(NAME ros2_hook_config_crlf COMMAND ros2_hook_config_tests $<TARGET_FILE:ros2_hook_config_library> "${CMAKE_CURRENT_BINARY_DIR}/hook-crlf.conf" crlf)
+    add_library(ros2_platform_test_library SHARED "${_transport_root}/tests/ros2_host/platform_test_library.cpp")
+    add_executable(ros2_platform_module_tests "${_transport_root}/tests/ros2_host/platform_module_tests.cpp")
+    target_compile_options(ros2_platform_module_tests PRIVATE /UNDEBUG)
+    add_test(NAME ros2_platform_module COMMAND ros2_platform_module_tests $<TARGET_FILE:ros2_platform_test_library>)
+    add_executable(ros2_hook_capture_tests "${_transport_root}/tests/ros2_host/hook_capture_tests.cpp")
+    target_compile_options(ros2_hook_capture_tests PRIVATE /UNDEBUG)
+    add_test(NAME ros2_hook_capture COMMAND ros2_hook_capture_tests $<TARGET_FILE:ros2_platform_test_library>)
     add_executable(ros2_hook_lifecycle_tests "${_transport_root}/tests/ros2_host/hook_lifecycle_tests.cpp")
     # Assertions remain execution checks in the Release-only ROS ABI profile.
     target_compile_options(ros2_hook_lifecycle_tests PRIVATE /UNDEBUG)
@@ -58,6 +65,7 @@ install(DIRECTORY "${_transport_root}/include/fastdds_dsoftbus/" DESTINATION inc
     FILES_MATCHING PATTERN "*.hpp" PATTERN "DSoftBusTransport.hpp" EXCLUDE PATTERN "Host*.hpp" EXCLUDE
     PATTERN "ProviderAdapter.hpp" EXCLUDE PATTERN "RuntimeProbeAccess.hpp" EXCLUDE)
 install(FILES FactoryAbiProbe.cpp DESTINATION share/FastDDSDSoftBusTransportRos2Host)
+install(FILES StartupDiagnostics.hpp DESTINATION share/FastDDSDSoftBusTransportRos2Host)
 install(DIRECTORY "${_transport_root}/examples/ros2_transport" DESTINATION share/FastDDSDSoftBusTransportRos2Host/examples)
 install(EXPORT Ros2HostTargets NAMESPACE FastDDSDSoftBusTransportRos2Host:: DESTINATION lib/cmake/FastDDSDSoftBusTransportRos2Host)
 configure_package_config_file(Ros2HostConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/FastDDSDSoftBusTransportRos2HostConfig.cmake"

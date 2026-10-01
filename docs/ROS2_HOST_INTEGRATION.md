@@ -262,3 +262,28 @@ Windows 不提供 LSan，因此这些结果不包含外部依赖的插桩泄漏�
 默认 `NativeBackendUnavailable`、生产 backend 禁用、`QualificationProfile` 未生成。
 目标设备上的 DSoftBus 加载、权限、平台库来源和跨设备 ROS 2 通信必须另行按设备合同
 验证，不能由本 Host 结果推断。
+
+## 当前 Host 集成收据（2026-10-02）
+
+本轮范围限定为 Host 集成与安装消费，设备验证为 `N/A_HOST_ONLY`。候选基于
+`8077386403b81cd75cf691bf883ec0769bf6a1b0`，包含 38 个经选择收据绑定的源码/测试文件；独立
+review 结论为 `NO_ACTIONABLE_SOURCE_FINDINGS_IN_HOST_SCOPE`。公开项目和安装包名为
+`FastDDSDSoftBusTransport`，C++ 命名空间为 `fastdds_dsoftbus`；原版 `rmw_fastrtps` 未修改，Fast DDS 2.14.5
+隔离前端与默认 3.6 依赖分开核对。
+
+最新 Host 双进程运行 `bf9a3fe141ababbe` 实际完成 Reliable 与 Best Effort 双向各 5 条，合计
+20 writes/20 takes；真实 ROS graph、service request/reply、应用及 Runtime 正常关闭均有原始收据。
+独立安装 prefix 外部消费者完成构建，prefix relocation 为 10/10；builtin/XML、DataSharing
+冲突拒绝、required 缺失/错误/bridge 不可用 fail-closed、禁转发 0/0 等边界通过。默认无
+required 配置的测试确认 Node 可创建并可关闭，但因没有隔离 peer 退出 4，不能作为应用成功。
+
+完整 CONFIG 原始执行为 540/543、退出码 8；两个环境问题后续 2/2 修复通过，子依赖路径修复
+1/1 通过，原始失败收据保持不变。ASan 使用同源码范围的既有 53 项映射复用，Fast DDS、Fast
+CDR 和 foonathan 依赖未插桩。上述 Host 结果不证明 OpenHarmony 设备、DSoftBus SDK、SDK
+epoch/drain/cancellation 或生产资格；默认 `NativeBackendUnavailable`、P0/PF/P4 和
+`QualificationProfile` 状态不变。
+
+历史 ROS 设备 attempts 仍为 `FAIL`，其查询/数据额度账本保持 `0`，未因本轮 Host 验证改变。
+
+证据入口：[当前 Host 集成收据](../.artifacts/ros2-host-integration/run-20261002-current/FINAL_REVIEW.md)。
+构建依赖、安装目录和外部输入属于本机只读材料，不随项目 clone 提供。

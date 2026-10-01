@@ -26,4 +26,7 @@ void LateBytes(int side);
 bool UnsupportedNegotiation2(int side);
 void DelayBindCallbacks();
 void ReleaseBindCallbacks();
+enum class InjectedOperation {Socket,Listen,Bind};
+void FailNext(InjectedOperation,std::int32_t);
+void SetShutdownBarrier(std::function<void()>);
 }

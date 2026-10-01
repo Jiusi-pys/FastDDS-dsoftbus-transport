@@ -25,6 +25,8 @@ def main():
     for item in identity['files']:
         assert hashlib.sha256(originals[item['path']]).hexdigest() == item['base_sha256']
     assert hashlib.sha256((integration / 'FastddsHook.hpp').read_bytes()).hexdigest() == identity['hook_sha256']
+    assert hashlib.sha256((integration / 'PlatformModule.hpp').read_bytes()).hexdigest() == identity['platform_sha256']
+    assert hashlib.sha256((integration / 'StartupDiagnostics.hpp').read_bytes()).hexdigest() == identity['startup_diagnostics_sha256']
     with tempfile.TemporaryDirectory(prefix='fdds-ros2-patch-') as directory:
         target = Path(directory)
         for name, content in originals.items():

@@ -44,6 +44,25 @@ if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME OR FASTDDS_DSOFTBUS_BUILD_EXPERIM
         add_executable(experimental_runtime_tests tests/experimental_runtime_tests.cpp tests/FakePublicSocketLink.cpp)
         target_include_directories(experimental_runtime_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
         target_link_libraries(experimental_runtime_tests PRIVATE ${_entry})
+        include("${CMAKE_CURRENT_SOURCE_DIR}/integrations/ros2/RuntimeSources.cmake")
+        add_library(fastdds_dsoftbus_startup_diagnostic_host STATIC ${_files})
+        target_include_directories(fastdds_dsoftbus_startup_diagnostic_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+        target_compile_definitions(fastdds_dsoftbus_startup_diagnostic_host PRIVATE FASTDDS_DSOFTBUS_STARTUP_OBSERVATION=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1)
+        target_link_libraries(fastdds_dsoftbus_startup_diagnostic_host PUBLIC fastdds_dsoftbus_fastdds_binding)
+        add_executable(ros2_startup_diagnostics_tests tests/ros2_host/startup_diagnostics_tests.cpp tests/FakePublicSocketLink.cpp
+            integrations/ros2/target/NativeObservation.cpp probes/PublicSocketRtpsObservation.cpp)
+        target_include_directories(ros2_startup_diagnostics_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+        target_link_libraries(ros2_startup_diagnostics_tests PRIVATE fastdds_dsoftbus_startup_diagnostic_host)
+        target_compile_definitions(ros2_startup_diagnostics_tests PRIVATE FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST=1)
+        if(MSVC)
+            target_compile_options(ros2_startup_diagnostics_tests PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(ros2_startup_diagnostics_tests PRIVATE -UNDEBUG)
+        endif()
+        foreach(_case normal local socket listen gate gate_throw bind match cleanup capacity capacity_reject null_receiver)
+            add_test(NAME dsoftbus.ros2_startup.${_case} COMMAND ros2_startup_diagnostics_tests ${_case})
+            set_tests_properties(dsoftbus.ros2_startup.${_case} PROPERTIES TIMEOUT 20)
+        endforeach()
         # One Runtime lifecycle per process: the installed entry documents that
         # contract and the process-global service-record table is not reusable
         # across two live pairs, so each case runs as its own process.
