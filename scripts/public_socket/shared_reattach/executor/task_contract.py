@@ -15,11 +15,382 @@ def read_private_config():
 PRIVATE=read_private_config()
 TARGETS=PRIVATE['targets']
 TOKENS=PRIVATE['tokens']
+def repo_root():return Path(PRIVATE.get('repo_root',str(TASK_ROOT.parents[2]))).resolve()
 def verify_private_binding(c):
  sha=digest(TASK_ROOT/'PRIVATE_CONFIG.json')
  need(c.get('private_config_sha256')==sha and c.get('hdc_path')==PRIVATE['hdc_path'] and c.get('permission_baseline_sha256')==PRIVATE['permission_baseline_sha256'],'Private task input changed')
 
-CASES=['SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME']
+CASES=['SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME','ROS2_DSOFTBUS','DDS214_LAYER_BASELINE']
+def layered():
+ spec=importlib.util.spec_from_file_location('bound_layered_contract',Path(__file__).with_name('layered_contract.py'))
+ module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
+def this_contract():
+ from types import SimpleNamespace
+ return SimpleNamespace(**globals())
+def is_dds214(c):return isinstance(c,dict) and c.get('scenario')=='DDS214_LAYER_BASELINE'
+ROS_SCENARIO='ROS2_DSOFTBUS'
+ROS_SCOPE='ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_ACCEPTANCE'
+ROS_AUTHORIZATION='ROS2_TARGET_BUILD_BOUNDED_DEVICE_ACCEPTANCE_AND_LOCAL_COMMIT'
+ROS_OBSERVED_AUTHORIZATION='ONE_ROS2_DIAGNOSTIC_DEVICE_WINDOW_AND_SUCCESSFUL_LOCAL_COMMIT'
+ROS_SERVICE_NAME_AUTHORIZATION='ONE_ROS2_SERVICE_NAME_DEVICE_VALIDATION_AND_SUCCESSFUL_LOCAL_COMMIT'
+ROS_PRIOR_CONSUMED_LEDGER_SHA256='00ca1a2928ca8d082c7bcf9bb1ddc18fa21596e2fd34e934f82d9dafbce8f00c'
+ROS_LAYERED_AUTHORIZATION='ONE_CONDITIONAL_ROS_AFTER_DDS214_DEVICE_VALIDATION'
+ROS_TASK_AUTHORIZATION='TASK_SCOPED_ROS2_DEVICE_VALIDATION'
+ROS_TASK_GRANT_RELATIVE='.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/AUTHORIZATION.json'
+ROS_TASK_GRANT_PATH=None
+ROS_TASK_GRANT_SHA256='1dbadad0591bad3f76ef98a6bab09ff80ee6b75491e54c447410c841b39bea51'
+ROS_TASK_WINDOW_LIMITS=dict(timeout_seconds=300,per_side_writes=10,per_side_takes=10,record_count=20,stdout_budget=25165824,max_record_bytes=8192,stages=7)
+ROS_ONE_WINDOW_AUTHORIZATIONS=(ROS_OBSERVED_AUTHORIZATION,ROS_SERVICE_NAME_AUTHORIZATION,ROS_LAYERED_AUTHORIZATION)
+ROS_STAGES=['LISTENER_READY','RELIABLE_READY','RELIABLE_DONE','BEST_EFFORT_READY','BEST_EFFORT_DONE','TEARDOWN_READY','DDS_DELETED']
+ROS_LIMITS=dict(canonical_windows=1,repair_retries=1,total_attempts=2,query_pairs_per_attempt=1,
+                total_query_pairs=2,max_record_bytes=8192,per_side_writes=10,per_side_takes=10,stages=7)
+ROS_LIMITS_ONCE=dict(ROS_LIMITS,repair_retries=0,total_attempts=1,total_query_pairs=1)
+
+def verify_ros_authorization(frozen):
+ if frozen.get('authorization')==ROS_TASK_AUTHORIZATION:return verify_ros_task_grant(frozen)
+ if frozen.get('authorization') in ROS_ONE_WINDOW_AUTHORIZATIONS:
+  limits=frozen.get('limits')
+  need(limits==ROS_LIMITS_ONCE and all(type(v) is int for v in limits.values()),'ROS observed exact one-window limits')
+  need(isinstance(frozen.get('new_quota_id'),str) and re.fullmatch('[A-Z0-9_]{1,80}',frozen['new_quota_id']),'ROS new quota identity missing')
+  need(not any(k in frozen for k in ('previous_ros_data_attempt','retry_evidence','supplemental_query_authorization','resume_authorization')),'ROS observed grant cannot inherit repair/resume')
+ else:need(frozen.get('authorization')==ROS_AUTHORIZATION and frozen.get('limits')==ROS_LIMITS,'ROS authorization/limits mismatch')
+
+def ros_task_mode(frozen=None):
+ if frozen is None:
+  p=TASK_ROOT/'DEVICE_CONTRACT.json'
+  frozen=json.loads(p.read_text(encoding='utf-8-sig')) if p.is_file() else {}
+ return frozen.get('authorization')==ROS_TASK_AUTHORIZATION
+
+def verify_ros_task_grant(frozen):
+ need(frozen.get('scope')==ROS_SCOPE and frozen.get('authorization')==ROS_TASK_AUTHORIZATION,'Task authorization purpose mismatch')
+ need(frozen.get('local_contract_test') is not True and frozen.get('simulated') is not True and frozen.get('device_authorized') is True,'Task grant is not local/simulated authority')
+ expected=Path(ROS_TASK_GRANT_PATH).resolve() if ROS_TASK_GRANT_PATH is not None else (repo_root()/ROS_TASK_GRANT_RELATIVE).resolve()
+ binding=frozen.get('authorization_record');need(isinstance(binding,dict),'Task original grant missing')
+ path=Path(binding.get('path','')).resolve()
+ need(path==expected and binding.get('sha256')==ROS_TASK_GRANT_SHA256 and digest(path)==ROS_TASK_GRANT_SHA256,'Task original source anchor drift')
+ grant=json.loads(path.read_text(encoding='utf-8-sig'))
+ authority=Path(grant.get('task_root','')).resolve();iteration=frozen.get('execution_iteration_id')
+ need(grant.get('authorization')==ROS_TASK_AUTHORIZATION and frozen.get('task_authority_root')==str(authority) and frozen.get('task_root')==str(TASK_ROOT),'Task grant root binding mismatch')
+ need(type(iteration) is int and iteration>=1,'Task execution iteration identity')
+ expected_execution=authority/'iterations'/f'iteration-{iteration}'
+ need(TASK_ROOT==expected_execution.resolve() or (iteration==1 and TASK_ROOT==authority),'Task execution root must be exact immutable child')
+ need(grant.get('task_id')==frozen.get('task_id') and isinstance(grant.get('task_id'),str) and re.fullmatch('[A-Z0-9_]{1,80}',grant['task_id']),'Task identity mismatch')
+ need(grant.get('purpose')=='ROS2_PARTICIPANT_DELETE_AND_FINAL_DUAL_BOARD_ACCEPTANCE' and grant.get('scenario')==ROS_SCENARIO and grant.get('targets')==TARGETS,'Task registered pair/purpose mismatch')
+ need(grant.get('per_window_limits')==ROS_TASK_WINDOW_LIMITS and frozen.get('limits')==ROS_TASK_WINDOW_LIMITS and all(type(v) is int for v in frozen['limits'].values()),'Task per-window limits changed')
+ need(grant.get('historical_refund') is False and grant.get('git_authorized') is False,'Task cannot refund or authorize Git')
+ if grant.get('historical_ledger'):
+  old=grant['historical_ledger'];need(digest(old['path'])==old['sha256'],'Task historical ledger changed')
+ if grant.get('predecessor_restore'):
+  old=grant['predecessor_restore'];w=Path(old['window']).resolve();need(digest(w/'INDEPENDENT_ACCEPTANCE.json')==old['independent_acceptance_sha256'],'Original predecessor acceptance drift')
+  accepted=json.loads((w/'INDEPENDENT_ACCEPTANCE.json').read_text(encoding='utf-8-sig'))
+  need(accepted.get('run')==old['run'] and accepted.get('environment_restored') is True,'Previous real environment not restored')
+  need(digest(w/'window.json')==accepted.get('window_sha256'),'Original predecessor window drift')
+  prior=json.loads((w/'window.json').read_text(encoding='utf-8-sig'))
+  need(PRIVATE.get('ros2_package_name')==prior.get('package_name') and TARGETS==prior.get('targets') and TOKENS==prior.get('token'),'Task changed existing device/permission identity scheme')
+  _require_normal_restored(w)
+ return grant
+
+def ros_task_authority_root():
+ frozen=json.loads((TASK_ROOT/'DEVICE_CONTRACT.json').read_text(encoding='utf-8-sig'))
+ return Path(verify_ros_task_grant(frozen)['task_root']).resolve()
+
+def ros_task_claim_rows():
+ rows=[]
+ for kind in ('query','data'):
+  for p in (ros_task_authority_root()/'ros2/task-ledger').glob(kind+'-*.json'):
+   m=re.fullmatch(kind+r'-([1-9][0-9]*)\.json',p.name);need(m is not None,'Task ledger filename')
+   row=json.loads(p.read_text(encoding='utf-8-sig'));need(row.get('scope')==ROS_SCOPE and row.get('attempt')==int(m[1]),'Task ledger row identity')
+   rows.append((int(m[1]),kind,p,row))
+ return sorted(rows,key=lambda r:(r[0],r[1]))
+
+def ros_task_data_outcome(window,config):
+ # The recovery summary precedes postrun analysis. It is not a functional PASS.
+ window=Path(window);evidence={}
+ def record(name):
+  p=window/name;need(p.is_file(),'Task terminal evidence incomplete: '+name)
+  evidence[name]=digest(p);value=json.loads(p.read_text(encoding='utf-8-sig'))
+  need(isinstance(value,dict),'Task terminal evidence object: '+name);return value
+ def failed(reason):return dict(status='FAIL',first_failure=reason,evidence=evidence)
+ summary=record('window-summary.json')
+ runner=record('result.json');need(runner.get('run')==config['run'] and type(runner.get('pass')) is bool,'Task runner terminal identity/result')
+ if runner.get('timedOut') is True:
+  recovery=window/'remaining-resource-recovery/attempt-1/APPENDED_WINDOW_RESOURCE_RECOVERY.json'
+  if recovery.exists():
+   validated_window_resource_recovery(window);evidence[str(recovery.relative_to(window))]=digest(recovery)
+   return failed(summary.get('first_failure') or 'ORIGINAL_HOST_COLLECTION_TIMEOUT_RESOURCE_RECOVERED')
+ need(runner.get('timedOut') is False and runner.get('collectionCleanup')=='HDC_STREAMS_CLOSED' and runner.get('activeCollectors')==[],'Task child/collector completion unconfirmed')
+ for side in ('A','B'):
+  child=runner.get(side);need(isinstance(child,dict) and child.get('closed') is True and child.get('exited') is True,'Task child exit/close missing: '+side)
+ if summary.get('first_failure'):return failed(summary['first_failure'])
+ if runner['pass'] is False:return failed('ROS_RUNNER_FAILED')
+ loads=record('load-collection-summary.json')
+ need('first_failure' in loads and isinstance(loads.get('failures'),list),'Task load terminal result missing')
+ if loads['first_failure'] or loads['failures']:return failed(loads['first_failure'] or 'ROS_LOAD_ORIGIN_FAILED')
+ for name in ('ros-analysis','ros-native-analysis'):
+  failure=window/'ANALYSIS_FAILURE.json'
+  if failure.is_file():
+   value=record('ANALYSIS_FAILURE.json');need(value.get('run')==config['run'] and bool(value.get('first_failure')),'Task analysis failure identity')
+   return failed(value['first_failure'])
+  value=record(name+'.json');need(value.get('run')==config['run'] and type(value.get('pass')) is bool,'Task analysis terminal identity/result')
+  rc=window/(name+'.rc');need(rc.is_file(),'Task analysis exit receipt missing');evidence[rc.name]=digest(rc)
+  code=rc.read_text(encoding='utf-8-sig').strip();need(re.fullmatch(r'-?[0-9]+',code) is not None,'Task analysis exit receipt invalid')
+  if value['pass'] is False or int(code)!=0:return failed('ROS_ANALYSIS_FAILED' if name=='ros-analysis' else 'ROS_NATIVE_SAMPLE_CORRELATION_FAILED')
+ return dict(status='PASS',first_failure=None,evidence=evidence)
+
+def pregrant_module():
+ p=TASK_ROOT/'recovery/pregrant_recovery.py';record=json.loads((TASK_ROOT/'MATERIALIZATION.json').read_text(encoding='utf-8-sig'))
+ rows=[e for e in record['files'] if e['destination']=='recovery/pregrant_recovery.py']
+ need(len(rows)==1 and digest(p)==rows[0]['sha256'],'Bound recovery verifier missing or changed')
+ spec=importlib.util.spec_from_file_location('bound_pregrant_recovery',p);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
+
+def appended_pregrant_recovery(window):
+ window=Path(window).resolve();paths=list((window/'recovery').glob('attempt-*'))
+ need(paths and all(p.is_dir() and re.fullmatch('attempt-[1-9][0-9]*',p.name) for p in paths),'Appended recovery absent or malformed')
+ latest=max(paths,key=lambda p:int(p.name.split('-')[1]));result=latest/'RECOVERY_RESULT.json'
+ receipt=pregrant_module().verify_result(result,require_acceptance=True)
+ need(Path(receipt['window']).resolve()==window,'Foreign appended recovery')
+ return dict(receipt=receipt,result_path=str(result),result_sha256=digest(result),acceptance_sha256=digest(latest/'INDEPENDENT_ACCEPTANCE.json'))
+
+def task_preparation_failures(authority,exclude_window=None):
+ result=[];roots=[authority]+[p for p in (authority/'iterations').glob('iteration-*') if re.fullmatch('iteration-[1-9][0-9]*',p.name)]
+ for root in roots:
+  for marker in (root/'windows').glob('*/EXECUTION_STARTED'):
+   window=marker.parent
+   if exclude_window is not None and window.resolve()==Path(exclude_window).resolve():continue
+   cfg=json.loads((window/'window.json').read_text(encoding='utf-8-sig'))
+   if cfg.get('scenario')!=ROS_SCENARIO or (window/'DATA_ATTEMPT_STARTED').exists():continue
+   need(cfg.get('ros_authorization_mode')==ROS_TASK_AUTHORIZATION,'Foreign task preparation authority')
+   recovery=appended_pregrant_recovery(window)
+   result.append((cfg['ros_attempt'],'preparation',window/'window-summary.json',dict(window=str(window),run=cfg['run']),recovery))
+ return result
+
+def ros_task_next_attempt(exclude_window=None):
+ frozen=json.loads((TASK_ROOT/'DEVICE_CONTRACT.json').read_text(encoding='utf-8-sig'));grant=verify_ros_task_grant(frozen)
+ rows=ros_task_claim_rows();preparations=task_preparation_failures(Path(grant['task_root']).resolve(),exclude_window)
+ if not rows:return 1
+ latest=max(r[0] for r in rows)
+ for attempt,kind,path,row in rows:
+  need(row.get('task_id')==grant['task_id'],'Foreign task ledger')
+  window=Path(row.get('window','')).resolve();execution=window.parent.parent;authority=Path(grant['task_root']).resolve()
+  need(window.parent.name=='windows' and (execution==authority or execution.parent==authority/'iterations' and re.fullmatch(r'iteration-[1-9][0-9]*',execution.name)),'Task previous window location')
+  need((window/'EXECUTION_STARTED').is_file() and (window/'window-summary.json').is_file(),'Task pending/crashed execution has incomplete receipts')
+  config=json.loads((window/'window.json').read_text(encoding='utf-8-sig'));original=config.get('task_contract',{})
+  contract_path=Path(original.get('freeze_path','')).resolve()
+  need(contract_path.parent==execution and original.get('task_root')==str(execution) and digest(contract_path)==original.get('freeze_sha256'),'Task original contract identity drift')
+  original_frozen=json.loads(contract_path.read_text(encoding='utf-8-sig'))
+  need(original_frozen.get('authorization')==ROS_TASK_AUTHORIZATION and original_frozen.get('task_id')==grant['task_id'] and original_frozen.get('task_authority_root')==str(authority) and original_frozen.get('authorization_record',{}).get('sha256')==ROS_TASK_GRANT_SHA256,'Task original grant/source mismatch')
+  need(config.get('run')==row.get('run') and config.get('ros_attempt')==attempt and config.get('targets')==TARGETS and config.get('ros_task_id')==grant['task_id'] and Path(config.get('window_root','')).resolve()==window,'Task original window/run/targets mismatch')
+  if kind=='query':need(row==ros_query_claim_row(config,False),'Task query claim fields drift')
+  else:need(row.get('kind')=='DATA_DISPATCH_INTENT' and row.get('side')=='A' and row.get('simulated') is False and row.get('authorization')==ROS_TASK_AUTHORIZATION and row.get('authorization_record_sha256')==ROS_TASK_GRANT_SHA256,'Task real data intent identity')
+  if kind=='data':need((window/'DATA_ATTEMPT_STARTED').is_file() and json.loads((window/'DATA_ATTEMPT_STARTED').read_text(encoding='utf-8-sig'))==row,'Task data intent/marker mismatch')
+  _require_normal_restored(window) # The local NO_STATE_CHANGE branch is never authority here.
+  summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'))
+  if kind=='data':
+   outcome=ros_task_data_outcome(window,config)
+   need(outcome['status']!='PASS','Successful task data window ends further dispatch')
+ current=[r for r in rows if r[0]==latest]
+ query=next((r for r in current if r[1]=='query'),None);data=next((r for r in current if r[1]=='data'),None)
+ prep=next((r for r in preparations if r[0]==latest),None)
+ if query and not data and not prep:
+  window=Path(query[3]['window']);summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'))
+  if not summary.get('first_failure'):
+   result=window/'ROUTE_QUERY_RESULT.json';need(result.is_file() and json.loads(result.read_text(encoding='utf-8-sig')).get('pass') is True,'Task query derived result incomplete')
+   return latest # Own consumed query is available for data, never another query dispatch.
+ continuation=Path(grant['task_root'])/'ros2/task-ledger'/f'continuation-{latest}.json'
+ need(continuation.is_file(),'Task failure needs new verified continuation evidence')
+ proof=json.loads(continuation.read_text(encoding='utf-8-sig'));previous=data or prep or query
+ current_contract_sha=digest(TASK_ROOT/'DEVICE_CONTRACT.json')
+ if proof.get('binding',{}).get('after_contract_sha256')!=current_contract_sha:
+  successor=continuation.with_name(f'continuation-{latest}-for-{current_contract_sha}.json')
+  need(successor.is_file(),'Current source revision needs exact append-only continuation successor')
+  selected=json.loads(successor.read_text(encoding='utf-8-sig'))
+  need(selected.get('base_continuation')==dict(path=str(continuation),sha256=digest(continuation)),'Continuation successor base identity')
+  proof=selected
+ predecessor_key='previous_preparation_summary_sha256' if previous and previous[1]=='preparation' else 'previous_claim_sha256'
+ need(previous is not None and proof.get('task_id')==grant['task_id'] and proof.get('previous_attempt')==latest and proof.get('previous_window')==previous[3]['window'] and proof.get(predecessor_key)==digest(previous[2]),'Task continuation predecessor mismatch')
+ need(proof.get('decision')=='RESUME_WITH_NEW_EVIDENCE_OR_VALIDATED_FIX' and proof.get('owner_payload_receiver_safe') is True,'Task safety/continuation not confirmed')
+ need(proof.get('verified_change') is True or proof.get('new_direct_evidence') is True,'Repeated failure without new evidence or verified repair')
+ need(proof.get('source_or_configuration_delta') or proof.get('new_evidence_description'),'Task requires a concrete verifiable change, not renamed run')
+ previous_window=Path(previous[3]['window']);previous_cfg=json.loads((previous_window/'window.json').read_text(encoding='utf-8-sig'))
+ previous_freeze=Path(previous_cfg['task_contract']['freeze_path']);old_frozen=json.loads(previous_freeze.read_text(encoding='utf-8-sig'))
+ outcome=ros_task_data_outcome(previous_window,previous_cfg) if previous[1]=='data' else dict(first_failure=json.loads((previous_window/'window-summary.json').read_text(encoding='utf-8-sig')).get('first_failure'),evidence={})
+ binding=dict(previous_window_sha256=digest(previous_window/'window.json'),previous_summary_sha256=digest(previous_window/'window-summary.json'),previous_terminal_evidence_sha256=outcome['evidence'],before_contract_sha256=digest(previous_freeze),after_contract_sha256=digest(TASK_ROOT/'DEVICE_CONTRACT.json'))
+ binding[predecessor_key]=digest(previous[2])
+ if previous[1]=='preparation':binding.update(previous_recovery_result_sha256=previous[4]['result_sha256'],previous_recovery_acceptance_sha256=previous[4]['acceptance_sha256'])
+ need(proof.get('binding')==binding,'Task continuation failure/source binding mismatch')
+ old_sources={e['path']:e['sha256'] for e in old_frozen.get('source',[])+old_frozen.get('execution_files',[])}
+ new_sources={e['path']:e['sha256'] for e in frozen.get('source',[])+frozen.get('execution_files',[])}
+ deltas=proof.get('delta_files',[])
+ for delta in deltas:
+  name=delta.get('path');need(name in new_sources and delta.get('before_sha256')==old_sources.get(name) and delta.get('after_sha256')==new_sources[name] and delta.get('before_sha256')!=delta.get('after_sha256'),'Task claimed source delta not present in actual selected inputs')
+  need(digest(repo_root()/name)==new_sources[name],'Task changed file does not match current tested source')
+ old_private=json.loads((previous_freeze.parent/'PRIVATE_CONFIG.json').read_text(encoding='utf-8-sig'))
+ config_deltas=proof.get('configuration_delta',[])
+ for delta in config_deltas:
+  key=delta.get('field');need(key in ('ros2_service_prefix',) and delta.get('before')==old_private.get(key) and delta.get('after')==PRIVATE.get(key) and delta['before']!=delta['after'],'Task configuration delta must be a real permitted change')
+ evidence=proof.get('direct_evidence_files',[])
+ for item in evidence:
+  p=Path(item.get('path','')).resolve();need(p.is_relative_to(previous_window) and digest(p)==item.get('sha256'),'Task direct evidence must belong to the actual failed predecessor')
+ need((proof.get('verified_change') is True and bool(deltas or config_deltas)) or (proof.get('new_direct_evidence') is True and bool(evidence)),'Task continuation has no real source/config/evidence delta')
+ for key in ('analysis','validation','review'):
+  item=proof.get(key);need(isinstance(item,dict),'Task continuation evidence missing')
+  p=Path(item.get('path','')).resolve();need(p.is_relative_to(Path(grant['task_root'])) and digest(p)==item.get('sha256'),'Task continuation evidence drift')
+  value=json.loads(p.read_text(encoding='utf-8-sig'))
+  need(value.get('task_id')==grant['task_id'] and value.get('continuation_binding')==binding,'Unrelated analysis/validation/review cannot permit continuation')
+  if key=='analysis':need(value.get('first_failure')==outcome['first_failure'] and value.get('root_cause_or_new_evidence'),'Task analysis must identify this actual first failure/evidence')
+  if key=='validation':need(value.get('result')=='PASS' or value.get('overall')=='PASS','Affected validation not PASS')
+  if key=='review':need(value.get('verdict') in ('PASS','NO_ACTIONABLE_FINDINGS_IN_FINAL_OFFLINE_DIFF') and value.get('blocking') is not True,'Continuation independent review not closed')
+ return latest+1
+
+def verify_ros_observed_grant(frozen):
+ if frozen.get('authorization') not in ROS_ONE_WINDOW_AUTHORIZATIONS:return
+ if frozen.get('authorization')==ROS_LAYERED_AUTHORIZATION:
+  layered().grant(this_contract(),frozen,'ROS2');return
+ binding=frozen.get('authorization_record');need(isinstance(binding,dict),'ROS observed original grant required')
+ path=Path(binding['path']).resolve();need(digest(path)==binding['sha256'],'ROS observed grant drift')
+ grant=json.loads(path.read_text(encoding='utf-8'))
+ need(grant.get('authorization')==frozen['authorization'] and grant.get('task_root')==str(TASK_ROOT) and grant.get('quota_id')==frozen['new_quota_id'],'ROS observed grant/task mismatch')
+ limits=grant.get('new_limits')
+ need(limits=={'query_pair':1,'data_attempt':1,'repair_retry':0} and all(type(v) is int for v in limits.values()),'ROS observed original grant expansion')
+ old=grant['historical_ledger'];need(digest(old['path'])==old['sha256'],'Historical consumed ledger drift')
+ if frozen['authorization']==ROS_SERVICE_NAME_AUTHORIZATION:
+  expected=(TASK_ROOT.parent/'observed-device-20261002/FINAL_ACTUAL_CONSUMPTION_LEDGER.json').resolve()
+  need(grant.get('work_package')=='ROS2_SERVICE_NAME_DEVICE_VALIDATION' and Path(old['path']).resolve()==expected and old['sha256']==ROS_PRIOR_CONSUMED_LEDGER_SHA256,'ROS latest consumed ledger identity')
+  prior=json.loads(expected.read_text(encoding='utf-8'))
+  zero={'query_pair':0,'data_attempt':0,'repair_retry':0}
+  used={'query_pair':4,'data_attempt':3}
+  need(prior.get('authorization')==ROS_OBSERVED_AUTHORIZATION and prior.get('quota_id')!=frozen['new_quota_id'] and
+       prior.get('new_used')=={'query_pair':1,'data_attempt':1,'repair_retry':0} and prior.get('new_remaining')==zero and
+       all(type(v) is int for v in prior['new_remaining'].values()) and prior.get('cumulative_used')==used and prior.get('refund') is False and
+       grant.get('historical_used')==used and type(grant.get('historical_remaining')) is int and grant['historical_remaining']==0 and
+       grant.get('refund') is False,'ROS predecessor consumed quota mismatch')
+def is_ros(c):return isinstance(c,dict) and c.get('scenario')==ROS_SCENARIO
+def ros_shape(c):
+ need(c.get('work_package')==ROS_SCOPE and c.get('main_member')=='ordinary_ros2_transport_consumer','ROS scope/main mismatch')
+ need(c.get('main_prefix')=='ROS_MAIN' and c.get('main_mode')=='dual','ROS main output/mode mismatch')
+ need(not any(k in c for k in ('cycles','delete_first','shared','shared_receipts')),'ROS is not a shared/cycle alias')
+ assert_fresh_run(c['run'])
+ need(c['targets']==TARGETS and c['token']==TOKENS,'ROS board/token mismatch')
+ need(c['remote']=={s:f"/data/local/tmp/mdds_dds_{c['run']}_{s}" for s in ['A','B']},'ROS remote path mismatch')
+ need(c.get('expected_writes')=={'A':10,'B':10} and c.get('record_count')==20,'ROS directional/aggregate sample contract')
+ need(c.get('stages')==ROS_STAGES and c.get('timeout_seconds')==300 and c.get('stdout_budget')==25165824,'ROS frozen stage/budget mismatch')
+ need(c['system_library_dirs']==LIBDIRS and c.get('max_record_bytes')==8192,'ROS loader/log budget mismatch')
+ need(type(c.get('ros_attempt')) is int and (c['ros_attempt']>=1 if ros_task_mode() else c['ros_attempt'] in (1,2)),'ROS attempt identity')
+ names=[x['name'] for x in c['package_artifacts']]
+ need(len(names)==len(set(names)) and len(names)<=128 and c['main_member'] in names,'ROS package identity/size')
+ need(all(Path(x['source']).name==x['name'] and digest(x['source'])==x['sha256'] for x in c['package_artifacts']),'ROS package drift')
+ need(set(c['peer'])=={'A','B'} and all(re.fullmatch('[0-9a-f]{64}',v) for v in c['peer'].values()),'ROS current guarded route missing')
+ if c.get('rmw_debugger') is not None:
+  frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text(encoding='utf-8-sig'));spec=c['rmw_debugger']
+  need(ros_task_mode(frozen) and spec==frozen.get('rmw_debugger') and c.get('require_residual_snapshot') is True,'Debugger observation must belong to reviewed task contract')
+  need(set(spec)=={'client','server','script','ports','hit_limit','seconds'} and set(spec['ports'])=={'A','B'},'Debugger input shape')
+  need(type(spec['hit_limit']) is int and 1<=spec['hit_limit']<=256 and type(spec['seconds']) is int and 1<=spec['seconds']<=260,'Debugger bounded observation')
+  need(all(type(v) is int and 1024<=v<=65535 for v in spec['ports'].values()) and len(set(spec['ports'].values()))==2,'Debugger port identity')
+  for key in ('client','server','script'):
+   row=spec[key];need(set(row)=={'path','sha256'} and Path(row['path']).is_absolute() and digest(row['path'])==row['sha256'],'Debugger frozen tool changed')
+  need(Path(spec['server']['path']).name=='lldb-server' and Path(spec['client']['path']).name=='lldb.exe' and Path(spec['script']['path']).resolve()==TASK_ROOT/'executor/rmw_lldb_trace.py','Debugger exact tool/script binding')
+def ros_claim_path(kind,attempt):
+ need(kind in ('query','data') and type(attempt) is int and (attempt>=1 if ros_task_mode() else attempt in (1,2)),'ROS claim purpose')
+ if ros_task_mode():return ros_task_authority_root()/'ros2/task-ledger'/f'{kind}-{attempt}.json'
+ return TASK_ROOT/'ros2/attempt-ledger'/f'{kind}-{attempt}.json'
+def ros_previous_attempt():
+ p=TASK_ROOT/'DEVICE_CONTRACT.json'
+ if not p.exists():return None
+ frozen=json.loads(p.read_text());binding=frozen.get('previous_ros_data_attempt')
+ if ros_task_mode(frozen):return None
+ if binding is None:return None
+ need(frozen.get('scope')==ROS_SCOPE and frozen.get('local_contract_test') is not True,'ROS predecessor requires real scope')
+ contract=Path(binding['contract_path']).resolve();oldroot=contract.parent
+ need(oldroot!=TASK_ROOT and oldroot.parent==TASK_ROOT.parent and contract.name=='DEVICE_CONTRACT.json','ROS predecessor location')
+ need(digest(contract)==binding['contract_sha256'],'ROS predecessor contract drift')
+ old=json.loads(contract.read_text())
+ need(old.get('scope')==ROS_SCOPE and old.get('device_authorized') is True and old.get('local_contract_test') is not True,'ROS predecessor is not real authority')
+ need(bool(frozen.get('original_data_quota_id')) and old.get('original_data_quota_id')==frozen['original_data_quota_id'],'ROS predecessor quota mismatch')
+ claim=oldroot/'ros2/attempt-ledger/data-1.json'
+ need(digest(claim)==binding['claim_sha256'],'ROS predecessor claim drift')
+ previous=json.loads(claim.read_text());window=Path(previous['window']).resolve()
+ need(previous.get('scope')==ROS_SCOPE and previous.get('attempt')==1 and previous.get('simulated') is False and window.parent==oldroot/'windows','ROS predecessor dispatch identity')
+ need(json.loads((window/'DATA_ATTEMPT_STARTED').read_text())==previous,'ROS predecessor dispatch marker')
+ need(bool(binding.get('receipts')),'ROS predecessor receipts absent')
+ for name,expected in binding['receipts'].items():
+  relative=Path(name);need(not relative.is_absolute() and '..' not in relative.parts,'ROS predecessor receipt path')
+  need(digest(window/relative)==expected,'ROS predecessor receipt drift')
+ need({'window.json','window-summary.json','result.json','DATA_ATTEMPT_STARTED'}<=set(binding['receipts']),'ROS predecessor required receipts absent')
+ _require_normal_restored(window)
+ need(bool(json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig')).get('first_failure')),'Successful predecessor forbids repair')
+ need(not (oldroot/'ros2/attempt-ledger/data-2.json').exists(),'ROS predecessor repair already used')
+ return claim
+
+def ros_next_attempt(exclude_window=None):
+ if ros_task_mode():return ros_task_next_attempt(exclude_window)
+ claims=list((TASK_ROOT/'ros2/attempt-ledger').glob('data-*.json'))
+ freeze=TASK_ROOT/'DEVICE_CONTRACT.json'
+ if freeze.is_file():
+  frozen=json.loads(freeze.read_text())
+  if frozen.get('authorization') in ROS_ONE_WINDOW_AUTHORIZATIONS:
+   verify_ros_authorization(frozen)
+   if frozen['authorization'] in (ROS_SERVICE_NAME_AUTHORIZATION,ROS_LAYERED_AUTHORIZATION):verify_ros_observed_grant(frozen)
+   need(not claims,'ROS observed data quota exhausted');return 1
+ predecessor=ros_previous_attempt()
+ if predecessor is not None:
+  need(not claims,'ROS repair data quota consumed')
+  return 2
+ need(len(claims)<2,'ROS data quota exhausted')
+ if not claims:return 1
+ need(len(claims)==1 and claims[0]==ros_claim_path('data',1),'ROS prior claim sequence')
+ previous=json.loads(claims[0].read_text());window=Path(previous['window']).resolve()
+ need(previous.get('scope')==ROS_SCOPE and previous.get('attempt')==1 and window.parent==TASK_ROOT/'windows','ROS prior claim identity')
+ need(json.loads((window/'DATA_ATTEMPT_STARTED').read_text())==previous,'ROS dispatch intent/marker mismatch')
+ require_restored(window)
+ summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'))
+ need(bool(summary.get('first_failure')),'A successful ROS window forbids another attempt')
+ return 2
+def verify_ros_budget(c,query=False):
+ attempt=c.get('ros_attempt');need(type(attempt) is int and attempt==ros_next_attempt(None if query else c['window_root']),'ROS attempt sequence/quota')
+ if attempt==2 and not ros_task_mode():
+  row=c.get('retry_evidence');need(isinstance(row,dict),'ROS reviewed repair required')
+  path=Path(row['path']).resolve();need(path.is_relative_to(TASK_ROOT) and digest(path)==row['sha256'],'ROS repair evidence drift')
+  repair=json.loads(path.read_text());need(all(repair.get(k) for k in ('root_cause','fix','affected_validation','review')),'ROS repair is not validated')
+ frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text())
+ if ros_task_mode(frozen):
+  verify_ros_task_grant(frozen);need(c.get('ros_task_id')==frozen.get('task_id') and c.get('ros_authorization_mode')==ROS_TASK_AUTHORIZATION and c.get('task_authority_root')==frozen['task_authority_root'] and frozen['execution_iteration_id']>=attempt,'Task window authorization identity')
+ if frozen.get('authorization') in ROS_ONE_WINDOW_AUTHORIZATIONS:need('retry_evidence' not in c and attempt==1,'ROS observed retry forbidden')
+ if query:need(not ros_claim_path('query',attempt).exists(),'ROS query quota consumed')
+ else:
+  route=c.get('route_binding');need(isinstance(route,dict),'ROS guarded route missing')
+  receipt=json.loads(ros_claim_path('query',attempt).read_text());need(receipt.get('scope')==ROS_SCOPE and receipt.get('run')==route.get('query_run'),'ROS query purpose binding')
+def verify_ros_query_claim(c):
+ receipt=json.loads(ros_claim_path('query',c['ros_attempt']).read_text())
+ need(receipt==ros_query_claim_row(c,False),'ROS completed query/claim mismatch')
+
+def ros_query_claim_row(c,local):
+ frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text())
+ row=dict(scope=ROS_SCOPE,run=c['run'],window=str(Path(c['window_root']).resolve()),
+          purpose=ROS_SCENARIO,targets=c['targets'],contract_sha256=c['task_contract']['freeze_sha256'],
+          materialization_sha256=frozen['materialization_sha256'],source_state_sha256=frozen['build_binding']['source_state_sha256'])
+ if local:row.update(local_contract_test=True,kind='LOCAL_QUERY_DISPATCH_INTENT',device_authority=False)
+ else:row.update(attempt=c['ros_attempt'],kind='ROS_QUERY_DISPATCH_INTENT',authorization=frozen['authorization'],supplemental_authorization=frozen.get('supplemental_query_authorization'))
+ if frozen.get('authorization') in ROS_ONE_WINDOW_AUTHORIZATIONS:row['quota_id']=frozen['new_quota_id']
+ if ros_task_mode(frozen):row.update(task_id=frozen['task_id'],authorization_record_sha256=frozen['authorization_record']['sha256'])
+ return row
+
+def admit_ros_query_dispatch(c,side):
+ # Existing receipt validation has no new claim or quota-refund capability.
+ verify_query_context(c)
+ frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text())
+ if frozen['scope']==layered().SCOPE:return layered().dispatch(this_contract(),c,side)
+ need(frozen['scope']==ROS_SCOPE and c.get('query_for_scenario')==ROS_SCENARIO,'ROS dispatch purpose')
+ local=frozen.get('local_contract_test') is True
+ claim=TASK_ROOT/'local-test-claims'/('query-'+c['run']+'.json') if local else ros_claim_path('query',c['ros_attempt'])
+ need(json.loads(claim.read_text())==ros_query_claim_row(c,local),'ROS dispatch original claim mismatch')
+ predecessor=ros_previous_attempt() if not local else None
+ if predecessor is not None:
+  need(json.loads((predecessor.parent/'repair-continuation.json').read_text())==ros_query_claim_row(c,False),'ROS repair reservation mismatch')
+ need(side in ('A','B'),'ROS dispatch side')
+ path=Path(c['window_root']).resolve()/('QUERY_DISPATCH_INTENT_'+side+'.json')
+ row=dict(run=c['run'],side=side,target=c['targets'][side],purpose=ROS_SCENARIO,claim_path=str(claim),claim_sha256=digest(claim),
+          contract_sha256=c['task_contract']['freeze_sha256'],driver_path=c['hdc_path'],remote_execution='UNOBSERVED_AT_INTENT')
+ with path.open('x',encoding='utf-8') as stream:json.dump(row,stream)
 # First-class scenario for the installed public-Socket runtime consumer. It is not
 # a SHARED_*/F1M alias: no cycle, shared-rebuild, P/Q or deletion-order semantics
 # exist for it, and it is validated by its own contract instead of the old schema.
@@ -68,7 +439,10 @@ def claim_path(kind,cycles):
  need(kind in ('data','query') and type(cycles) is int and cycles in (10,100),'Invalid claim purpose')
  return TASK_ROOT/'observed-retry'/'attempt-ledger'/f'{kind}-N{cycles}.json'
 
-MATERIALIZED_FILES=('executor-route-query/launch.ps1', 'executor-route-query/prepare-query.py', 'executor-route-query/query_receipt.py', 'executor-route-query/route_query.py', 'executor-route-query/run-window.ps1', 'executor/bounded-output.cjs', 'executor/capture-load.sh', 'executor/load_origin.py', 'executor/observe-native.cjs', 'executor/prepare-window.py', 'executor/private_config.py', 'executor/record-pair.cjs', 'executor/route_binding.py', 'executor/run-window.ps1', 'executor/runner-template.cjs', 'executor/shared-control.cjs', 'executor/task_contract.py')
+LEGACY_MATERIALIZED_FILES=('executor-route-query/launch.ps1', 'executor-route-query/prepare-query.py', 'executor-route-query/query_receipt.py', 'executor-route-query/route_query.py', 'executor-route-query/run-window.ps1', 'executor/bounded-output.cjs', 'executor/capture-load.sh', 'executor/load_origin.py', 'executor/observe-native.cjs', 'executor/prepare-window.py', 'executor/private_config.py', 'executor/record-pair.cjs', 'executor/route_binding.py', 'executor/run-window.ps1', 'executor/runner-template.cjs', 'executor/shared-control.cjs', 'executor/task_contract.py', 'executor/ros-control.cjs')
+PRIOR_MATERIALIZED_FILES=LEGACY_MATERIALIZED_FILES+('executor/dds214-control.cjs','executor/layered_contract.py')
+RECOVERY_MATERIALIZED_FILES=PRIOR_MATERIALIZED_FILES+('recovery/pregrant_recovery.py','recovery/recovery-guard.ps1','recovery/readonly_preflight.py')
+MATERIALIZED_FILES=RECOVERY_MATERIALIZED_FILES+('executor/rmw_debugger.py','executor/rmw-debugger.cjs','executor/rmw_lldb_trace.py')
 def verify_local_driver(x):
  # Shared local-mode binding. These are exactly the fields the PowerShell bootstrap
  # reads, so both layers validate and bind one frozen contract instead of keeping
@@ -87,7 +461,7 @@ def verify_local_driver(x):
  return d
 
 def verify_installed_device_mode(x,c=None):
- need(x.get('scope')==INSTALLED_SCOPE and x.get('device_authorized') is True,'Installed device authorization missing')
+ need(x.get('scope') in (INSTALLED_SCOPE,ROS_SCOPE,layered().SCOPE) and x.get('device_authorized') is True,'Runtime device authorization missing')
  for key in ('local_contract_test','local_driver','local_test_basis','device_evidence'):
   need(key not in x,'Device contract contains local-test field: '+key)
  d=x.get('device_driver');need(isinstance(d,dict),'Explicit real device-tool binding required')
@@ -132,26 +506,39 @@ def verify_installed_query_claim(c):
 
 def materialization_record(frozen):
  p=TASK_ROOT/'MATERIALIZATION.json';need(digest(p)==frozen.get('materialization_sha256'),'Materialization descriptor missing/changed')
- record=json.loads(p.read_text(encoding='utf-8'));need(record.get('scope')=='LOCAL_MATERIALIZATION_ONLY_NO_EXECUTION_AUTHORITY' and record.get('task')==str(TASK_ROOT) and record.get('repo')==str(TASK_ROOT.parents[2]) and record.get('private_config_sha256')==frozen.get('private_config_sha256'),'Materialization identity mismatch')
- rows=record.get('files',[]);names=[e['destination'].replace(chr(92),'/') for e in rows];need(len(names)==len(set(names)) and set(names)==set(MATERIALIZED_FILES),'Materialized dependency membership mismatch')
- entries=frozen.get('execution_files',[]);mapped={str((TASK_ROOT.parents[2]/e['path']).resolve()):e['sha256'] for e in entries};need(len(mapped)==len(entries),'Duplicate executor binding')
+ record=json.loads(p.read_text(encoding='utf-8'));need(record.get('scope')=='LOCAL_MATERIALIZATION_ONLY_NO_EXECUTION_AUTHORITY' and record.get('task')==str(TASK_ROOT) and record.get('repo')==str(repo_root()) and record.get('private_config_sha256')==frozen.get('private_config_sha256'),'Materialization identity mismatch')
+ rows=record.get('files',[]);names=[e['destination'].replace(chr(92),'/') for e in rows]
+ current_members=set(names) in (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES),set(PRIOR_MATERIALIZED_FILES))
+ strict=frozen.get('scope')==layered().SCOPE or frozen.get('authorization')==ROS_LAYERED_AUTHORIZATION
+ need(len(names)==len(set(names)) and (current_members or (not strict and set(names)==set(LEGACY_MATERIALIZED_FILES))),'Materialized dependency membership mismatch')
+ if frozen.get('authorization')==ROS_TASK_AUTHORIZATION:need(set(names) in ((set(MATERIALIZED_FILES),) if frozen.get('rmw_debugger') else (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES))),'Task recovery-capable execution requires current complete materialization')
+ entries=frozen.get('execution_files',[]);mapped={str((repo_root()/e['path']).resolve()):e['sha256'] for e in entries};need(len(mapped)==len(entries),'Duplicate executor binding')
  required={str((TASK_ROOT/e['destination']).resolve()):e['sha256'] for e in rows}
- task_entries={p for p in mapped if Path(p).is_relative_to(TASK_ROOT/'executor') or Path(p).is_relative_to(TASK_ROOT/'executor-route-query')}
+ task_entries={p for p in mapped if any(Path(p).is_relative_to(TASK_ROOT/folder) for folder in ('executor','executor-route-query','recovery'))}
  need(task_entries==set(required) and all(mapped.get(p)==sha for p,sha in required.items()),'Required materialized executor omitted or changed')
- external=record.get('external_files',[]);names=[e.get('path') for e in external];need(len(names)==2 and set(names)=={'scripts/NativePermissionGuard.ps1','scripts/public_socket/analyze_shared.py'},'Required external execution membership mismatch')
+ external=record.get('external_files',[]);names=[e.get('path') for e in external]
+ legacy={'scripts/NativePermissionGuard.ps1','scripts/public_socket/analyze_shared.py'}
+ current=legacy|{'scripts/public_socket/analyze_ros2.py'}
+ native=current|{'scripts/public_socket/analyze_ros2_native.py'}
+ direct=native|{'scripts/public_socket/analyze_dds214.py'}
+ need(len(names)==len(set(names)) and set(names) in (legacy,current,native,direct) and
+      (not current_members or set(names)==direct) and (frozen.get('scope')!=ROS_SCOPE or set(names) in (native,direct)) and (frozen.get('scope')!=layered().SCOPE or set(names)==direct),'Required external execution membership mismatch')
  for e in external:
-  path=str(TASK_ROOT.parents[2]/e['path']);need(mapped.get(path)==e.get('sha256') and isinstance(e.get('sha256'),str),'Required external execution dependency omitted or changed');required[path]=e['sha256']
+  path=str(repo_root()/e['path']);need(mapped.get(path)==e.get('sha256') and isinstance(e.get('sha256'),str),'Required external execution dependency omitted or changed');required[path]=e['sha256']
  return required
 
 def verify_shared_guard(c,frozen):
  required=materialization_record(frozen)
- need(c.get('shared_script_sha256')=={'NativePermissionGuard.ps1':required[str(TASK_ROOT.parents[2]/'scripts/NativePermissionGuard.ps1')]},'Window must bind the exact reviewed external guard')
- need(c.get('analyzer_sha256')==required[str(TASK_ROOT.parents[2]/'scripts/public_socket/analyze_shared.py')],'Window formal analyzer not bound')
+ need(c.get('shared_script_sha256')=={'NativePermissionGuard.ps1':required[str(repo_root()/'scripts/NativePermissionGuard.ps1')]},'Window must bind the exact reviewed external guard')
+ analyzer='analyze_dds214.py' if is_dds214(c) else 'analyze_ros2.py' if is_ros(c) else 'analyze_shared.py'
+ need(c.get('analyzer_sha256')==required[str(repo_root()/'scripts/public_socket'/analyzer)],'Window formal analyzer not bound')
+ if is_ros(c) and frozen.get('local_contract_test') is not True:
+  need(c.get('native_analyzer_sha256')==required[str(repo_root()/'scripts/public_socket/analyze_ros2_native.py')],'ROS native analyzer not bound')
 
 def verify_materialized_execution(frozen):
  for p,sha in materialization_record(frozen).items():need(digest(p)==sha,'Materialized execution bytes changed')
  spec=importlib.util.spec_from_file_location('bound_private_config',TASK_ROOT/'executor/private_config.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
- module.validate_profile(PRIVATE,TASK_ROOT,TASK_ROOT.parents[2])
+ module.validate_profile(PRIVATE,TASK_ROOT,repo_root())
 
 def require_accepted_n10(frozen,proof):
  need(frozen.get('final_n100_authorization')==FINAL_N100_AUTH and not frozen.get('resume_authorization'),'Invalid final N100 authorization')
@@ -241,6 +628,20 @@ def verify_observed_budget(c,frozen,query=False):
 def claim_query(c):
  execution_admission(c['task_contract']);verify_query(c)
  frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text())
+ if frozen.get('scope')==layered().SCOPE:return layered().claim(this_contract(),c)
+ if frozen.get('scope')==ROS_SCOPE:
+  if frozen.get('local_contract_test') is True:
+   verify_local_driver(frozen);p=TASK_ROOT/'local-test-claims'/('query-'+c['run']+'.json')
+   row=ros_query_claim_row(c,True)
+  else:
+   verify_installed_device_mode(frozen,c);p=ros_claim_path('query',c['ros_attempt'])
+   row=ros_query_claim_row(c,False)
+   predecessor=ros_previous_attempt()
+   if predecessor is not None:
+    with (predecessor.parent/'repair-continuation.json').open('x',encoding='utf-8') as stream:json.dump(row,stream)
+  p.parent.mkdir(parents=True,exist_ok=True)
+  with p.open('x',encoding='utf-8') as stream:json.dump(row,stream)
+  return
  if frozen.get('scope')==INSTALLED_SCOPE and frozen.get('local_contract_test') is True:
   verify_local_driver(frozen)
   p=TASK_ROOT/'local-test-claims'/('query-'+c['run']+'.json');p.parent.mkdir(parents=True,exist_ok=True)
@@ -259,6 +660,8 @@ def need(value,message):
  if not value:raise ValueError(message)
 def assert_fresh_run(run):need(isinstance(run,str) and re.fullmatch('[0-9a-f]{16}',run),'Invalid run')
 def validate_shape(c):
+ if is_dds214(c):return layered().shape(this_contract(),c)
+ if is_ros(c):return ros_shape(c)
  verify_private_binding(c)
  if is_installed(c):return installed_shape(c)
  need(c.get('scenario') in CASES,'Unknown scenario')
@@ -273,8 +676,22 @@ def validate_shape(c):
  need(set(c['peer'])=={'A','B'} and all(re.fullmatch('[0-9a-f]{64}',v) for v in c['peer'].values()),'No current peer binding')
 def load(path=None):
  p=(Path(path) if path else TASK_ROOT/'DEVICE_CONTRACT.json').resolve();need(p.parent==TASK_ROOT and re.fullmatch(r'DEVICE_CONTRACT(?:-r(?:[2-9]|[1-9][0-9]+))?\.json',p.name),'Foreign contract')
- x=json.loads(p.read_text());need(x.get('private_config_sha256')==digest(TASK_ROOT/'PRIVATE_CONFIG.json'),'Private configuration not bound by contract');need(x['task_root']==str(TASK_ROOT) and x['scope'] in ('SHARED_LIFECYCLE_EGRESS_AND_CAPTURE_CLOSURE','NEW_PATH_EXACT_ONCE_AND_BOUNDED_REBUILD_REPETITION',OBSERVED_SCOPE,INSTALLED_SCOPE),'Wrong task')
+ x=json.loads(p.read_text());need(x.get('private_config_sha256')==digest(TASK_ROOT/'PRIVATE_CONFIG.json'),'Private configuration not bound by contract');need(x['task_root']==str(TASK_ROOT) and x['scope'] in ('SHARED_LIFECYCLE_EGRESS_AND_CAPTURE_CLOSURE','NEW_PATH_EXACT_ONCE_AND_BOUNDED_REBUILD_REPETITION',OBSERVED_SCOPE,INSTALLED_SCOPE,ROS_SCOPE,layered().SCOPE),'Wrong task')
  verify_materialized_execution(x)
+ if x['scope']==layered().SCOPE:
+  need(x.get('limits')==layered().LIMITS and x['plan_sha256']==digest(TASK_ROOT/'DDS214_CONTRACT.md'),'DDS214 frozen limits/plan')
+  if x.get('local_contract_test') is True:verify_local_driver(x)
+  else:
+   need(x.get('execution_admitted') is True,'DDS214 final gates incomplete');layered().grant(this_contract(),x,'DDS214');verify_installed_device_mode(x)
+  return {'task_root':str(TASK_ROOT),'freeze_path':str(p),'freeze_sha256':digest(p),'plan_sha256':x['plan_sha256']}
+ if x['scope']==ROS_SCOPE:
+  verify_ros_authorization(x);verify_ros_observed_grant(x)
+  need(x['plan_sha256']==digest(TASK_ROOT/'ROS2_CONTRACT.md'),'ROS frozen plan drift')
+  if x.get('local_contract_test') is True:verify_local_driver(x)
+  else:
+   need(x.get('execution_admitted') is True,'ROS final independent gates incomplete')
+   verify_installed_device_mode(x)
+  return {'task_root':str(TASK_ROOT),'freeze_path':str(p),'freeze_sha256':digest(p),'plan_sha256':x['plan_sha256']}
  if x['scope']==INSTALLED_SCOPE:
   need(x.get('limits')==INSTALLED_LIMITS,'Wrong installed limits')
   need(x['plan_sha256']==digest(TASK_ROOT/'INSTALLED_RUNTIME_CONTRACT.md'),'Installed plan drift')
@@ -298,6 +715,11 @@ def load(path=None):
  return {'task_root':str(TASK_ROOT),'freeze_path':str(p),'freeze_sha256':digest(p),'plan_sha256':x['plan_sha256']}
 def execution_admission(proof):
  need(proof==load(proof['freeze_path']),'Contract drift');x=json.loads(Path(proof['freeze_path']).read_text())
+ if x.get('scope')==layered().SCOPE:
+  if x.get('local_contract_test') is True:verify_local_driver(x);return
+  layered().grant(this_contract(),x,'DDS214');verify_installed_device_mode(x)
+ if x.get('scope')==ROS_SCOPE and x.get('local_contract_test') is True:
+  verify_local_driver(x);return
  if x.get('scope')==INSTALLED_SCOPE:
   need(x.get('limits')==INSTALLED_LIMITS,'Wrong installed limits')
   if x.get('local_contract_test') is True:
@@ -308,6 +730,9 @@ def execution_admission(proof):
   need(x['execution_admitted'] is True,'Independent gates incomplete')
   need(x.get('device_authorized') is True,'Installed device window not authorized by its contract')
  need(x['execution_admitted'] is True,'Independent gates incomplete')
+ if x.get('scope')==ROS_SCOPE:
+  verify_ros_authorization(x);verify_ros_observed_grant(x);need(x.get('device_authorized') is True,'ROS actual device grant missing')
+  verify_installed_device_mode(x)
  need({e['role'] for e in x['admission_evidence']} >= {'host','asan','review','target','executor_tests'},'Missing evidence roles')
  for row in x['admission_evidence']:
   p=Path(row['path']).resolve();need(p.is_relative_to(TASK_ROOT) and digest(p)==row['sha256'],'Admission evidence changed')
@@ -318,16 +743,31 @@ def execution_admission(proof):
   expected=e['sha256']
   if e['path'] in docs:
    need(docs[e['path']]['original_sha256']==expected,'Original documentation hash mismatch');expected=docs[e['path']]['current_sha256']
-  need(digest(TASK_ROOT.parents[2]/e['path'])==expected,'Source drift')
+  need(digest(repo_root()/e['path'])==expected,'Source drift')
  if x['scope']==OBSERVED_SCOPE:
   need(bool(x.get('execution_files')),'Missing current executor selection')
-  for e in x['execution_files']:need(digest(TASK_ROOT.parents[2]/e['path'])==e['sha256'],'Executor selection drift')
+  for e in x['execution_files']:need(digest(repo_root()/e['path'])==e['sha256'],'Executor selection drift')
   binding=x['build_binding'];need(digest(binding['build_manifest'])==binding['build_manifest_sha256'],'Build manifest drift')
   for e in binding['package_artifacts']:need(digest(e['source'])==e['sha256'],'Package member drift')
   need(next(e['sha256'] for e in binding['package_artifacts'] if e['name']=='public_socket_dds_experiment')==binding['main_sha256'],'Main identity drift')
   need(bool(x.get('compiled_inputs')),'Missing compile input closure')
   for e in x['compiled_inputs']:need(digest(e['path'])==e['sha256'],'Compile input drift')
+def validated_window_resource_recovery(window):
+ p=Path(__file__).parent/'rmw_debugger.py'
+ spec=importlib.util.spec_from_file_location('current_bound_resource_recovery',p);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+ return module.verify_bound_resource_recovery(window)
+
 def _require_normal_restored(window):
+ if (window/'remaining-resource-recovery/attempt-1/APPENDED_WINDOW_RESOURCE_RECOVERY.json').exists():
+  validated_window_resource_recovery(window);return
+ if (window/'window.json').is_file():
+  cfg=json.loads((window/'window.json').read_text(encoding='utf-8-sig'))
+  if cfg.get('rmw_debugger'):require_debugger_restored(window,cfg)
+ _require_window_guards_restored(window)
+
+def _require_window_guards_restored(window):
+ # The normal device restoration checks remain independent of auxiliary
+ # debugger closure. Neither can substitute for the other.
  summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'));need(summary['cleanup_failures']==[],'Prior cleanup incomplete')
  if (window/'result.json').exists():
   result=json.loads((window/'result.json').read_text());need(not result.get('timedOut') and result.get('collectionCleanup')!='UNCONFIRMED','Prior runtime/collector termination uncertain')
@@ -336,6 +776,125 @@ def _require_normal_restored(window):
   for phase in ['before','after']:need(Path(g['metadata_'+phase]['evidence']).resolve()==(window/side/('metadata-'+phase)).resolve(),'Foreign prior metadata receipt')
   need(digest(window/side/'baseline.json')==digest(window/side/'after.json'),'Prior raw permission bytes differ')
   for role in ['ownership-guard.json','final-snapshot-guard.json']:need(json.loads((window/side/role).read_text(encoding='utf-8-sig'))['Passed'] is True,'Prior ownership/JSON incomplete')
+
+def require_debugger_restored(window,cfg):
+ # No target actions. Validate each support command's saved bytes independently
+ # before the normal permission/process guards can permit a later window.
+ if (window/'remaining-resource-recovery/attempt-1/APPENDED_WINDOW_RESOURCE_RECOVERY.json').exists():
+  validated_window_resource_recovery(window);return
+ manager=Path(cfg['task_contract']['task_root'])/'executor/rmw_debugger.py'
+ frozen=json.loads(Path(cfg['task_contract']['freeze_path']).read_text(encoding='utf-8-sig'))
+ expected={str(Path(repo_root()/e['path']).resolve()):e['sha256'] for e in frozen['execution_files']}
+ need(expected.get(str(manager.resolve()))==digest(manager),'Prior debugger source binding changed')
+ for side in ('A','B'):
+  root=window/side/'debugger'
+  if not root.exists():continue # No manager action; normal business guards still required.
+  if not (root/'RESULT.json').is_file():
+   # Missing historical terminal receipts are never reconstructed in place.
+   # A separately reviewed, fully inventoried read-only support closure may
+   # discharge only this auxiliary obligation; normal device guards follow.
+   recovery=Path(__file__).parent/'rmw_debugger.py'
+   recovery_spec=importlib.util.spec_from_file_location('debugger_recovery_protocol',recovery)
+   recovery_module=importlib.util.module_from_spec(recovery_spec);recovery_spec.loader.exec_module(recovery_module)
+   recovery_module.verify_bound_readonly_failure_closure(window,side)
+   continue
+  row=json.loads((root/'RESULT.json').read_text())
+  if row.get('support_closed') is False:
+   need((root/'recovery/attempt-1/DEBUGGER_FORWARD_RECOVERY.json').is_file(),'Prior debugger forward recovery missing')
+   recovery=Path(__file__).parent/'rmw_debugger.py'
+   recovery_spec=importlib.util.spec_from_file_location('debugger_forward_recovery_protocol',recovery)
+   recovery_module=importlib.util.module_from_spec(recovery_spec);recovery_spec.loader.exec_module(recovery_module)
+   recovery_module.verify_bound_forward_recovery(window,side)
+   continue
+  need(row.get('run')==cfg['run'] and row.get('side')==side and type(row.get('pid')) is int and row['pid']>0 and row.get('manager_sha256')==digest(manager) and row.get('support_closed') is True,'Prior debugger recovery not confirmed')
+  receipts=row.get('receipts');need(isinstance(receipts,dict) and receipts,'Prior debugger action evidence missing')
+  for name,checksum in receipts.items():
+   path=(root/name).resolve();need(path.is_relative_to(root.resolve()) and path.is_file() and digest(path)==checksum,'Prior debugger receipt drift')
+  need(all(p.name in receipts for p in root.glob('*.started.json')),'Prior debugger dispatch omitted')
+  labels={p.name[:-len('.started.json')] for p in root.glob('*.started.json')}
+  intents={p.name[:-len('.intent.json')] for p in root.glob('*.intent.json')}
+  allowed={'pid-before-attach','pid-before-tracer-proof','tracer-proof-status','tracer-proof-identity','forward-before','forward','forward-after','server','client','detach-client','inferior-status','pid-before-os-resume','owned-os-resume','inferior-after-os-resume','pid-after-detach','server-identity','server-cleanup','server-absent','forward-remove-before','forward-remove','forward-removed-check'}
+  need(labels<=allowed,'Prior debugger unknown dispatch')
+  need(intents==labels and all(label+'.intent.json' in receipts and (root/(label+'.result.json')).is_file() for label in intents),'Prior debugger intent incomplete')
+  spec=importlib.util.spec_from_file_location('prior_debugger_protocol',manager);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+  live=window/side/'load-pre-release-analysis.json';need(row.get('load_origin_phase')=='PRE_RELEASE' and digest(live)==row.get('load_origin_sha256') and digest(window/side/'load-pre-release-summary.json')==row.get('load_summary_sha256'),'Prior debugger original PID source changed')
+  origin=module.prerelease_origin(window,side,row['pid'],cfg['run']);pid=row['pid'];remote=cfg['remote'][side];port=cfg['rmw_debugger']['ports'][side];node='tcp:'+str(port)
+  need(origin.get('complete') is True and origin.get('run')==cfg['run'] and origin.get('board')==side and str(origin.get('pid'))==str(pid),'Prior debugger PID source identity')
+  base=[cfg['hdc_path'],'-t',cfg['targets'][side]]
+  server_started=(root/'server.started.json').is_file();forward_started=(root/'forward.started.json').is_file()
+  need(row.get('server_started') is server_started and row.get('forward_owned') is forward_started,'Prior debugger action flags contradict dispatch')
+  if row.get('status')=='INPUT_REJECTED':
+   need(not server_started and not forward_started and row.get('failure') and not (root/'UNAVAILABLE.json').exists(),'Rejected debugger incorrectly admitted')
+   module.readonly_failure_facts(window,side)
+   continue
+  def output(label,argv,remote_exit=False,allow_nonzero=False):
+   for suffix in ('started.json','result.json','stdout','stderr'):need(label+'.'+suffix in receipts,'Prior debugger command evidence missing')
+   intent=json.loads((root/(label+'.intent.json')).read_text());started=json.loads((root/(label+'.started.json')).read_text());r=json.loads((root/(label+'.result.json')).read_text());text=(root/(label+'.stdout')).read_text()
+   need(intent.get('argv')==argv and intent.get('cwd')==str(root) and intent.get('purpose')=='RMW_DEBUGGER_SUPPORT_NOT_BUSINESS','Prior debugger dispatch intent object mismatch')
+   need(started.get('argv')==argv and r.get('argv')==argv and started.get('cwd')==str(root) and type(started.get('local_pid')) is int and started['local_pid']>0 and r.get('local_pid')==started['local_pid'] and started.get('purpose')=='RMW_DEBUGGER_SUPPORT_NOT_BUSINESS','Prior debugger executed object mismatch')
+   need((type(r.get('exit_code')) is int if allow_nonzero else r.get('exit_code')==0) and r.get('capture_complete') is True and r.get('overflow') is False and r.get('timed_out') is False and r.get('stdout_sha256')==digest(root/(label+'.stdout')) and r.get('stderr_sha256')==digest(root/(label+'.stderr')),'Prior debugger command incomplete')
+   if remote_exit:need(re.findall(r'^MDDS_REMOTE_EXIT=([0-9]+)\r?$',text,re.M)==['0'],'Prior debugger remote exit unconfirmed')
+   return text
+  before=output('pid-before-attach',base+['shell',module.process_command(pid)],True)
+  module.process_identity(before,pid,remote+'/'+cfg['main_member'],origin['starttime'])
+  selected_rows=lambda text:module.owned_forward_rows(text,cfg['targets'][side]) if hasattr(module,'owned_forward_rows') else module.forward_rows(text)
+  previous_text=output('forward-before',base+['fport','ls']);previous=selected_rows(previous_text)
+  if server_started:
+   server=output('server',base+['shell',module.start_command(remote,port,pid)]);need(len(re.findall(r'^MDDS_REMOTE_EXIT=([0-9]+)\r?$',server,re.M))==1,'Prior debugger server exit unconfirmed')
+   ids=re.findall(r'^MDDS_DEBUG_SERVER_PID=([1-9][0-9]*)\r?$',server,re.M)
+   proof_file=root/'OWNED_TRACER.json'
+   if proof_file.is_file():
+    need('OWNED_TRACER.json' in receipts,'Prior debugger tracer proof omitted');proof=json.loads(proof_file.read_text())
+    need(proof.get('run')==cfg['run'] and proof.get('side')==side and proof.get('pid')==pid and type(proof.get('server_pid')) is int,'Prior debugger tracer proof identity')
+    main=output('pid-before-tracer-proof',base+['shell',module.process_command(pid)],True);module.process_identity(main,pid,remote+'/'+cfg['main_member'],origin['starttime'])
+    tracer_status=output('tracer-proof-status',base+['shell',module.status_command(pid)],True)
+    need(re.findall(r'^TracerPid:\s+([1-9][0-9]*)\s*$',tracer_status,re.M)==[str(proof['server_pid'])] and re.search(r'^State:\s+t\b',tracer_status,re.M),'Prior debugger actual tracing stop missing')
+    tracer_text=output('tracer-proof-identity',base+['shell',module.process_command(proof['server_pid'])],True);identity=module.process_fields(tracer_text,proof['server_pid'])
+    need(identity['exe']==remote+'/lldb-server' and identity['argv']==[remote+'/lldb-server','gdbserver','127.0.0.1:'+str(port),'--attach',str(pid)] and identity['starttime']==proof['server_starttime'] and (not ids or ids==[str(proof['server_pid'])]),'Prior debugger actual tracer not owned')
+    ids=[str(proof['server_pid'])]
+   need(len(ids)==1,'Prior debugger server PID unconfirmed');server_pid=int(ids[0])
+   if 'server-identity' in labels:
+    identity=output('server-identity',base+['shell',module.process_command(server_pid)],True)
+    birth=row.get('server_starttime')
+    if re.search(r'^MDDS_DEBUG_PROCESS_ABSENT=1\r?$',identity,re.M):
+     need(birth==(proof['server_starttime'] if proof_file.is_file() else None),'Absent debugger birth/source contradiction')
+    else:
+     observed=module.process_fields(identity,server_pid)
+     need(observed['exe']==remote+'/lldb-server' and observed['argv']==[remote+'/lldb-server','gdbserver','127.0.0.1:'+str(port),'--attach',str(pid)] and observed['starttime']==birth,'Prior debugger server identity mismatch')
+     if proof_file.is_file():need(birth==proof['server_starttime'],'Prior debugger captured server birth changed')
+    output('server-cleanup',base+['shell',module.cleanup_command(remote,port,pid,server_pid,birth)],True)
+   else:
+    # Historical managers retain their original cleanup command identity.
+    need('server_starttime' not in row,'Current debugger missing guarded cleanup identity')
+    output('server-cleanup',base+['shell',module.cleanup_command(remote,port,pid,server_pid)],True)
+   output('server-absent',base+['shell',module.absent_command(server_pid)],True)
+   status=output('inferior-status',base+['shell',module.status_command(pid)],True)
+   if 'owned-os-resume' in labels:
+    need(re.search(r'^TracerPid:\s+0\s*$',status,re.M) and re.search(r'^State:\s+T\b',status,re.M),'Prior debugger unnecessary OS resume')
+    identity_text=output('pid-before-os-resume',base+['shell',module.process_command(pid)],True);module.process_identity(identity_text,pid,remote+'/'+cfg['main_member'],origin['starttime']);values=module.process_fields(identity_text,pid)
+    output('owned-os-resume',base+['shell',module.resume_command(pid,values['exe'],values['starttime'],values['argv'])],True)
+    status=output('inferior-after-os-resume',base+['shell',module.status_command(pid)],True)
+   need(re.search(r'^MDDS_DEBUG_MAIN_ABSENT=1\r?$',status,re.M) or (re.search(r'^TracerPid:\s+0\s*$',status,re.M) and re.search(r'^State:\s+[RSIDZ]\b',status,re.M)),'Prior debugger inferior not resumed')
+   if not re.search(r'^MDDS_DEBUG_MAIN_ABSENT=1\r?$',status,re.M):
+    after=output('pid-after-detach',base+['shell',module.process_command(pid)],True);module.process_identity(after,pid,remote+'/'+cfg['main_member'],origin['starttime'])
+  if forward_started:
+   need(all(node not in r[:2] for r in previous),'Prior debugger forward was preexisting')
+   if hasattr(module,'forward_entries'):need(all(node not in r[1:3] for r in module.forward_entries(previous_text)),'Prior debugger global forward selector conflict')
+   need(output('forward',base+['fport',node,node]).strip()=='Forwardport result:OK','Prior debugger forward not owned')
+   after_text=output('forward-after',base+['fport','ls'])
+   need(selected_rows(after_text).count((node,node,'Forward'))==1,'Prior debugger forward not confirmed')
+   if hasattr(module,'forward_entries'):need(all(r==(cfg['targets'][side],node,node,'Forward') for r in module.forward_entries(after_text) if node in r[1:3]),'Prior debugger foreign forward selector')
+   if hasattr(module,'forward_remove_argv'):
+    before_remove=output('forward-remove-before',base+['fport','ls'])
+    rows=module.forward_entries(before_remove);owned=(cfg['targets'][side],node,node,'Forward')
+    need(rows.count(owned)==1 and all(r==owned for r in rows if node in r[1:3]),'Prior debugger deletion selector ownership unconfirmed')
+   argv=module.forward_remove_argv(base,node) if hasattr(module,'forward_remove_argv') else base+['fport','rm',node+' '+node]
+   output('forward-remove',argv);text=output('forward-removed-check',base+['fport','ls'])
+   need(all(node not in r[:2] for r in selected_rows(text)),'Prior debugger forward still present')
+   if hasattr(module,'forward_entries'):need(all(node not in r[1:3] for r in module.forward_entries(text)),'Prior debugger global selector remains')
+  for label,filename in [('client','commands.lldb'),('detach-client','detach.lldb')]:
+   if label in labels:
+    output(label,[cfg['rmw_debugger']['client']['path'],'--batch','--source',str(root/filename)],allow_nonzero=True)
 def _local_recovery_facts(window,journal_bytes=None):
  # Evidence inspection only: never spawn a driver, acquire a claim, or restore data.
  window=Path(window).resolve();c=json.loads((window/'window.json').read_text(encoding='utf-8-sig'))
@@ -453,17 +1012,46 @@ def validate_local_no_state_change(window):
 def require_restored(window):
  try:return _require_normal_restored(window)
  except (OSError,ValueError,KeyError,TypeError) as original:
-  # Device behavior stays on the original path, including its original failure.
+  # A separately accepted real pregrant recovery is not a local NO_STATE receipt.
   try:
    c=json.loads((Path(window)/'window.json').read_text(encoding='utf-8-sig'))
    f=json.loads(Path(c['task_contract']['freeze_path']).read_text(encoding='utf-8-sig'))
   except (OSError,ValueError,KeyError,TypeError):raise original
+  if (Path(window)/'recovery').is_dir() and c.get('scenario')==ROS_SCENARIO:
+   return appended_pregrant_recovery(window)
   if f.get('local_contract_test') is not True or not (Path(window)/'NO_STATE_CHANGE_RECOVERY.json').exists():raise original
   return validate_local_no_state_change(window)
 
 def verify_window(c):
  validate_shape(c);need(c['task_contract']==load(c['task_contract']['freeze_path']),'Contract changed')
  frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text());verify_shared_guard(c,frozen)
+ if is_dds214(c):
+  need(frozen['scope']==layered().SCOPE,'DDS214 work package mismatch')
+  layered().budget(this_contract(),c)
+  for key in ['build_manifest','build_manifest_sha256','source_state','source_state_sha256','main_sha256']:need(c[key]==frozen['build_binding'][key],'DDS214 build drift:'+key)
+  need(c['package_artifacts']==frozen['build_binding']['package_artifacts'] and c['permission_helper']==frozen['permission_helper'],'DDS214 input drift')
+  pre=Path(c['preflight_config']).resolve();need(pre.is_relative_to(TASK_ROOT) and digest(pre)==c['preflight_config_sha256'],'DDS214 preflight drift');expected=json.loads(pre.read_text(encoding='utf-8-sig'))
+  need(c['platform']==expected['platform'] and c['required_platform_paths']==expected['required_platform_paths'],'DDS214 platform allowlist drift')
+  need(Path(c['window_root']).resolve().parent==TASK_ROOT/'windows','DDS214 window root')
+  for marker in (TASK_ROOT/'windows').glob('*/EXECUTION_STARTED'):
+   if marker.parent!=Path(c['window_root']).resolve():require_restored(marker.parent)
+  return
+ if is_ros(c):
+  need(frozen['scope']==ROS_SCOPE,'ROS work package mismatch')
+  need(type(frozen.get('paired_runtime_close',False)) is bool and type(c.get('paired_runtime_close',False)) is bool and
+       c.get('paired_runtime_close',False)==frozen.get('paired_runtime_close',False),'ROS paired shutdown contract drift')
+  if frozen.get('local_contract_test') is True:
+   verify_local_driver(frozen);need(c.get('simulated') is True,'ROS local simulation marker missing')
+  else:
+   need('simulated' not in c,'ROS real window contains simulation')
+   verify_installed_device_mode(frozen,c);verify_ros_budget(c)
+  for key in ['build_manifest','build_manifest_sha256','source_state','source_state_sha256','main_sha256']:
+   need(c[key]==frozen['build_binding'][key],'ROS build/source drift:'+key)
+  need(c['package_artifacts']==frozen['build_binding']['package_artifacts'],'ROS package member drift')
+  need(c['permission_helper']==frozen['permission_helper'],'ROS permission helper drift')
+  for marker in (TASK_ROOT/'windows').glob('*/EXECUTION_STARTED'):
+   if marker.parent!=Path(c['window_root']).resolve():require_restored(marker.parent)
+  return
  if is_installed(c):
   need(c.get('work_package')==INSTALLED_SCOPE and frozen['scope']==INSTALLED_SCOPE,'Wrong installed work package')
   need(c.get('simulated') is True if frozen.get('local_contract_test') is True else c.get('simulated') is not True,'Installed window must match its contract mode')
@@ -514,7 +1102,7 @@ def verify_window(c):
   path=Path(row['path']).resolve();need(path.is_relative_to(TASK_ROOT) and digest(path)==row['sha256'],'Repair receipt drift')
   repair=json.loads(path.read_text());need(repair.get('root_cause') and repair.get('fix') and repair.get('affected_validation') and repair.get('review'),'Unsubstantiated repair')
   need(sum('retry_evidence' in x for _,x in prior)<frozen['limits']['repair_retries'],'Repair retry limit reached')
-def verify_query(c):
+def verify_query_context(c):
  verify_private_binding(c)
  need(c['task_contract']==load(c['task_contract']['freeze_path']),'Query contract drift');assert_fresh_run(c['run'])
  frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text());verify_shared_guard(c,frozen);need(not frozen.get('resume_authorization'),'No new query permitted by resume authorization');pre=Path(c['preflight_config']).resolve()
@@ -523,17 +1111,31 @@ def verify_query(c):
  need(c['scenario']=='readonly-directory-query' and c['targets']==TARGETS and c['token']==TOKENS,'Query identity')
  need(c['remote']=={s:f"/data/local/tmp/mdds_dds_{c['run']}_{s}" for s in ['A','B']} and c['system_library_dirs']==LIBDIRS,'Query paths')
  need(Path(c['window_root']).resolve().parent==TASK_ROOT/'windows','Foreign query')
+ if frozen['scope']==ROS_SCOPE:
+  need(c.get('work_package')==ROS_SCOPE and c.get('query_for_scenario')==ROS_SCENARIO,'ROS query purpose mismatch')
+ if frozen['scope']==layered().SCOPE:need(c.get('work_package')==layered().SCOPE and c.get('query_for_scenario')==layered().SCENARIO,'DDS214 query purpose mismatch')
+ for p in (TASK_ROOT/'windows').glob('*/EXECUTION_STARTED'):
+  if p.parent!=Path(c['window_root']).resolve():require_restored(p.parent)
+
+def verify_query(c):
+ verify_query_context(c)
+ frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text())
+ if frozen['scope']==layered().SCOPE:layered().budget(this_contract(),c,query=True)
  if frozen['scope']==OBSERVED_SCOPE:verify_observed_budget(c,frozen,query=True)
  if frozen['scope']==INSTALLED_SCOPE and frozen.get('local_contract_test') is not True:
   verify_installed_device_mode(frozen,c);verify_installed_budget(c,query=True)
- for p in (TASK_ROOT/'windows').glob('*/EXECUTION_STARTED'):
-  if p.parent!=Path(c['window_root']).resolve():require_restored(p.parent)
+ if frozen['scope']==ROS_SCOPE and frozen.get('local_contract_test') is not True:
+  verify_installed_device_mode(frozen,c);verify_ros_budget(c,query=True)
 if __name__=='__main__':
  p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True)
  g.add_argument('--check-query');g.add_argument('--check-window');g.add_argument('--claim-query')
+ g.add_argument('--admit-ros-query-dispatch');p.add_argument('--side',choices=['A','B'])
  g.add_argument('--seal-local-actions');g.add_argument('--recover-local-no-state-change');a=p.parse_args()
  if a.seal_local_actions or a.recover_local_no_state_change:
   result=(seal_local_actions if a.seal_local_actions else recover_local_no_state_change)(a.seal_local_actions or a.recover_local_no_state_change)
   print(json.dumps(result,indent=2))
  else:
-  c=json.loads(Path(a.check_query or a.check_window or a.claim_query).read_text(encoding='utf-8-sig'));execution_admission(c['task_contract']);(claim_query if a.claim_query else verify_query if a.check_query else verify_window)(c);print('PASS frozen DDS execution receipt')
+  c=json.loads(Path(a.check_query or a.check_window or a.claim_query or a.admit_ros_query_dispatch).read_text(encoding='utf-8-sig'));execution_admission(c['task_contract'])
+  if a.admit_ros_query_dispatch:admit_ros_query_dispatch(c,a.side)
+  else:(claim_query if a.claim_query else verify_query if a.check_query else verify_window)(c)
+  print('PASS frozen DDS execution receipt')

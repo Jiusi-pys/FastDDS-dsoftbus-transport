@@ -27,8 +27,22 @@ bool ControlStage(const std::string& run,const std::string& side,long pid,const 
     const std::string expected="ROS_RELEASE run="+run+" side="+side+" stage="+stage;
     const auto end=std::chrono::steady_clock::now()+90s;
     while(std::chrono::steady_clock::now()<end) {
+        std::ifstream cleanup(std::string(prefix)+".CLEANUP");std::string cleanup_line;
+        if(std::getline(cleanup,cleanup_line)){
+            if(!cleanup_line.empty()&&cleanup_line.back()=='\r')cleanup_line.pop_back();
+            const auto base="ROS_CLEANUP schema=1 run="+run+" side="+side+" pid="+std::to_string(pid)+" stage=CLEANUP reason=";
+            if(cleanup_line==base+"WINDOW_FAILED"){
+                std::cout<<"ROS_CLEANUP_ENTERED schema=1 run="<<run<<" side="<<side<<" pid="<<pid<<" stage=CLEANUP reason=WINDOW_FAILED"<<std::endl;
+                ros_failure_protocol::Report(run,side,pid,"CLEANUP","PEER_WINDOW_FAILED",true);
+                throw ros_failure_protocol::PeerCleanup();
+            }
+            if(stage=="TEARDOWN_READY"&&cleanup_line==base+"NORMAL_COMPLETION"){
+                std::cout<<"ROS_CLEANUP_ENTERED schema=1 run="<<run<<" side="<<side<<" pid="<<pid<<" stage=CLEANUP reason=NORMAL_COMPLETION"<<std::endl;return true;
+            }
+            return false;
+        }
         std::ifstream file(std::string(prefix)+"."+stage);std::string line;
-        if(std::getline(file,line)){if(!line.empty()&&line.back()=='\r')line.pop_back();return line==expected;}
+        if(std::getline(file,line)){if(!line.empty()&&line.back()=='\r')line.pop_back();return stage!="TEARDOWN_READY"&&line==expected;}
         std::this_thread::sleep_for(2ms);
     }
     return false;
@@ -91,31 +105,41 @@ int main(int argc,char** argv) {
         std::cout<<"ROS_GRAPH run="<<run<<" side="<<side<<" peer="<<peer_name<<" visible=1 subscription_count="<<pub->get_subscription_count()<<" phase="<<phase<<std::endl;
         const auto stage_prefix=phase=="reliable"?"RELIABLE":"BEST_EFFORT";
         if(!ControlStage(run,side,pid,std::string(stage_prefix)+"_READY"))ros_failure_protocol::Fail(run,side,pid,"PHASE_READY","PHASE_RELEASE_MISSING");
+        // Discovery and externally coordinated load admission precede business.
+        // Their elapsed time must not consume the service/receive budget.
+        const auto business_deadline=std::chrono::steady_clock::now()+30s;
         active_stage="PUBLISH";
         for(unsigned i=1;i<=5;++i){std_msgs::msg::String m;m.data=payload_prefix+side+":"+std::to_string(i);pub->publish(m);std::cout<<"ROS_WRITE run="<<run<<" side="<<side<<" ordinal="<<i<<" payload="<<m.data<<" phase="<<phase<<" topic="<<pub->get_topic_name()<<std::endl;}
         active_stage="SERVICE";
         bool service_done=false;
         if(side=="A") {
-            while(!client->service_is_ready()&&std::chrono::steady_clock::now()<deadline){rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);}
+            while(!client->service_is_ready()&&std::chrono::steady_clock::now()<business_deadline){rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);}
             if(!client->service_is_ready())ros_failure_protocol::Fail(run,side,pid,"SERVICE","SERVICE_DISCOVERY_MISSING");
             auto q=std::make_shared<example_interfaces::srv::AddTwoInts::Request>();q->a=3;q->b=4;auto future=client->async_send_request(q);
             const auto request_id=future.request_id;
             std::cout<<"ROS_SERVICE_SENT run="<<run<<" phase="<<phase<<" request_id="<<request_id<<" a=3 b=4"<<std::endl;
-            while(future.wait_for(0s)!=std::future_status::ready&&std::chrono::steady_clock::now()<deadline){rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);}
+            while(future.wait_for(0s)!=std::future_status::ready&&std::chrono::steady_clock::now()<business_deadline){rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);}
             if(future.wait_for(0s)!=std::future_status::ready)ros_failure_protocol::Fail(run,side,pid,"SERVICE","SERVICE_RESULT_MISSING");
             const auto response=future.get();if(response->sum!=7)ros_failure_protocol::Fail(run,side,pid,"SERVICE","SERVICE_RESULT_WRONG");
             service_done=true;std::cout<<"ROS_SERVICE_RESPONSE run="<<run<<" sum="<<response->sum<<" phase="<<phase<<" request_id="<<request_id<<std::endl;
         }
-        while((taken.size()<5||(side=="B"&&requests!=1))&&std::chrono::steady_clock::now()<deadline){rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);}
+        while((taken.size()<5||(side=="B"&&requests!=1))&&std::chrono::steady_clock::now()<business_deadline){rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);}
         if(bad||taken.size()!=5||(side=="A"&&!service_done)||(side=="B"&&requests!=1))ros_failure_protocol::Fail(run,side,pid,"LEDGER","SAMPLE_SERVICE_INCOMPLETE");
         std::cout<<"ROS_BUSINESS_DONE run="<<run<<" side="<<side<<" writes=5 takes="<<taken.size()<<" phase="<<phase<<std::endl;
         if(!ControlStage(run,side,pid,std::string(stage_prefix)+"_DONE"))ros_failure_protocol::Fail(run,side,pid,"PHASE_DONE","PHASE_COMPLETION_RELEASE_MISSING");
+        FastddsDsoftbusTeardownCheckpoint("BEFORE_PHASE_ENTITY_DELETE");
         }
+        if(!ControlStage(run,side,pid,"TEARDOWN_READY"))ros_failure_protocol::Fail(run,side,pid,"TEARDOWN_READY","CLEANUP_CONTROL_MISSING");
+        FastddsDsoftbusTeardownCheckpoint("BEFORE_NODE_DELETE");
         result=0;
-    }catch(const std::exception& e){(void)e;ros_failure_protocol::Report(run,side,pid,active_stage,"ROS_OPERATION_EXCEPTION");}
+    }catch(const ros_failure_protocol::PeerCleanup&){result=4;}
+    catch(const std::exception& e){(void)e;ros_failure_protocol::Report(run,side,pid,active_stage,"ROS_OPERATION_EXCEPTION");}
+    FastddsDsoftbusTeardownCheckpoint("AFTER_NODE_ENTITY_DELETE");
     bool shutdown_return=false;
     try {shutdown_return=rclcpp::shutdown();if(!shutdown_return)ros_failure_protocol::Report(run,side,pid,"CONTEXT_SHUTDOWN","SHUTDOWN_RETURNED_FALSE",true);}
     catch(...){ros_failure_protocol::Report(run,side,pid,"CONTEXT_SHUTDOWN","SHUTDOWN_EXCEPTION",true);}
     if(!shutdown_return&&result==0)result=4;
+    FastddsDsoftbusTeardownCheckpoint("AFTER_CONTEXT_CLEANUP");
+    if(FastddsDsoftbusTeardownResult()!=0){ros_failure_protocol::Report(run,side,pid,"TEARDOWN","DELETE_OR_CLOSE_NOT_COMPLETE",true);result=4;}
     std::cout<<"ROS_CONTEXT_CLOSED run="<<run<<" side="<<side<<" result="<<result<<" result_scope=APPLICATION_EXIT_STATUS shutdown_return="<<int(shutdown_return)<<std::endl;return result;
 }

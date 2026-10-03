@@ -1,6 +1,8 @@
 #include "HostSocket.hpp"
 #include "BridgeOwner.hpp"
+#include "ShutdownCoordination.hpp"
 #include "target/NativeObservation.hpp"
+extern "C" __declspec(dllimport) void FastddsDsoftbusFactoryFlushTeardownPending() noexcept;
 #define NOMINMAX
 #include <windows.h>
 #include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
@@ -29,7 +31,7 @@ std::map<std::string,std::string> read(const char* path) {
         auto p=line.find('=');if(p==std::string::npos)throw std::runtime_error("configuration syntax");
         if(!m.emplace(line.substr(0,p),line.substr(p+1)).second)throw std::runtime_error("duplicate key");
     }
-    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward")throw std::runtime_error("unknown key");
+    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release")throw std::runtime_error("unknown key");
     return m;
 }
 unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsigned max) {
@@ -39,7 +41,7 @@ unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsign
 Locator logical(unsigned side) {
     Locator l{};l.kind=LocatorCodec::kind;l.port=LocatorCodec::port;l.address[0]=0x31;l.address[15]=static_cast<unsigned char>(side+1);return l;
 }
-using Owner = fastdds_dsoftbus::ros2_integration::BridgeOwner;
+struct Owner:fastdds_dsoftbus::ros2_integration::BridgeOwner {bool host_close_error=false;};
 }
 extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookVersion(){return 21405;}
 extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsigned domain,void* raw,void** out) {
@@ -62,9 +64,14 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         const auto prefix="host.ros."+m.at("run");
         auto name=[&](unsigned s,const char* role){return prefix+"."+std::to_string(s)+"."+role;};
         auto* owner=new Owner;*out=owner;owner->run=m.at("run");owner->side=side;
+        // Explicit Host injection only. Execute the actual resource-complete
+        // Runtime close, then report its existing execution-error outcome.
+        if(m.count("host_close_error")&&integer(m,"host_close_error",1)){
+            owner->host_close_error=true;std::fputs("FDDST_HOST_TEARDOWN_INJECTION source=HOST_FAKE cause=RESOURCE_COMPLETE_ERROR\n",stderr);
+        }
         fastdds_dsoftbus::ros2_target_observation::Begin(owner->run,side);
         fastdds_dsoftbus::ros2_target_observation::SetSourceForHostInjection();
-        owner->diagnostic_control=[] {(void)fastdds_dsoftbus::ros2_target_observation::ExportPending();};
+        owner->diagnostic_control=[] {(void)fastdds_dsoftbus::ros2_target_observation::ExportPending();FastddsDsoftbusFactoryFlushTeardownPending();};
         fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",name(side,"listener"),name(1-side,"listener"),name(1-side,"outgoing"),forward});
         phase0::PublicSocketConfiguration b;
         b.identity={name(side,"outgoing"),{910+side*4},{1010+side*4}};
@@ -77,6 +84,10 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         config.default_metatraffic_unicast={logical(side)};config.default_user_unicast={logical(side)};
         owner->runtime=std::make_unique<experimental::Runtime>(b);
         if(!owner->runtime->SetPreConnectGate([]{return fastdds_dsoftbus::ros2_host::WaitPeerListener(15000);}))throw std::runtime_error("gate installation");
+        if(m.count("runtime_close_release")) {
+            if(!std::filesystem::path(m.at("runtime_close_release")).is_absolute())throw std::runtime_error("absolute close control required");
+            fastdds_dsoftbus::ros2_integration::InstallShutdownCoordination(*owner,owner,m.at("runtime_close_release"));
+        }
         owner->descriptor=owner->runtime->MakeDescriptor(config);if(!owner->descriptor)throw std::runtime_error("descriptor issuance");
         auto& qos=*static_cast<fd::DomainParticipantQos*>(raw);
         qos.transport().use_builtin_transports=false;qos.transport().user_transports.clear();qos.transport().user_transports.push_back(owner->descriptor);
@@ -103,8 +114,12 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusClose(void* value) {
     std::fprintf(stderr,"FDDST_HOST_IO run=%s side=%u sends=%llu ingress=%llu send_errors=%llu fake_sdk=%d rejected_callbacks=%llu\n",p->run.c_str(),p->side,static_cast<unsigned long long>(io.sends),static_cast<unsigned long long>(io.ingress),static_cast<unsigned long long>(io.send_errors),int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));
     const bool failed=p->failed.load();if(failed)std::fputs("FDDST_PUMP_ERROR_OBSERVED\n",stderr);
     p->descriptor.reset();p->runtime.reset();
-    std::fprintf(stderr,"FDDST_ROS_CLOSED run=%s side=%u pump_joined=1 runtime_closed=1 local_only=1\n",p->run.c_str(),p->side);std::fflush(stderr);delete p;return failed?2:0;
+    const bool injected=p->host_close_error;
+    std::fprintf(stderr,"FDDST_ROS_CLOSED run=%s side=%u pump_joined=1 runtime_closed=1 local_only=1\n",p->run.c_str(),p->side);std::fflush(stderr);delete p;return failed||injected?2:0;
 }
 extern "C" __declspec(dllexport) int FastddsDsoftbusCaptureStartup(fastdds_dsoftbus::ros2_diagnostics::Snapshot* output) noexcept {
     return output&&fastdds_dsoftbus::ros2_target_observation::Capture(*output)?0:1;
+}
+extern "C" __declspec(dllexport) int FastddsDsoftbusCaptureNativePrefix(fastdds_dsoftbus::ros2_diagnostics::NativePrefix* output) noexcept {
+    return output&&fastdds_dsoftbus::ros2_target_observation::CapturePrefix(*output)?0:1;
 }

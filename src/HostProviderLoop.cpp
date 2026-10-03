@@ -36,6 +36,18 @@ ArmedPreConnectGate::~ArmedPreConnectGate(){armed_pre_connect=previous_;}
 namespace fastdds_dsoftbus::dsoftbus::host_test {
 using namespace phase0;
 namespace {
+struct ShutdownObserverFrame {
+    const void* state;
+    ShutdownObserverFrame* previous;
+    static thread_local ShutdownObserverFrame* current;
+    explicit ShutdownObserverFrame(const void* value) noexcept:state(value),previous(current){current=this;}
+    ~ShutdownObserverFrame(){current=previous;}
+    static bool Contains(const void* value) noexcept {
+        for(auto* p=current;p;p=p->previous)if(p->state==value)return true;
+        return false;
+    }
+};
+thread_local ShutdownObserverFrame* ShutdownObserverFrame::current=nullptr;
 // The same contract the shared input release enforces, for the path that has no input to
 // refuse on: a member view released from a context that cannot close an input never gives
 // its membership back, so the surviving views would compute a non-last departure, report
@@ -86,6 +98,8 @@ struct HostProviderLoop::State {
     std::unique_ptr<ProviderAdapter> adapter;
     // Owned by this loop, so only this runtime's connect can consult it.
     std::function<bool()> pre_connect;
+    std::function<void(const RuntimeShutdownPoint&)> before_native_close;
+    bool shutdown_observer_installed=false,shutdown_observer_fault=false;
     std::shared_ptr<NativeSendProvider> send_provider;
     InputChannels::Receiver* receiver=nullptr;
     BackendCloseResult close;
@@ -500,14 +514,21 @@ BackendStatus HostProviderLoop::PumpReceive() noexcept {
 bool HostProviderLoop::Shutdown() noexcept {
     return state_->shared?ShutdownShared():ShutdownRuntime();
 }
+bool HostProviderLoop::SetBeforeNativeClose(std::function<void(const RuntimeShutdownPoint&)> observer) {
+    auto& s=*state_;std::lock_guard<std::mutex> lock(s.gate);
+    if(!observer||s.shared||s.attempted||s.stopping||s.closed||s.shutdown_observer_installed)return false;
+    s.before_native_close=std::move(observer);s.shutdown_observer_installed=true;return true;
+}
 bool HostProviderLoop::ShutdownRuntime(bool owns_stop) noexcept {
     if(!InputCloseAllowedOnThisThread())return false;
-    auto& s=*state_;
+    const auto pin=state_;auto& s=*pin;
     {
         std::unique_lock<std::mutex> lock(s.gate);
         ++s.shutdown_calls;if(!s.first_shutdown_order)s.first_shutdown_order=++s.control_order;
-        if(s.closed)return s.close.status==BackendStatus::None;
-        if(s.stopping&&!owns_stop){s.changed.wait(lock,[&]{return s.closed;});return s.close.status==BackendStatus::None;}
+        // Before stopping->wait: detect direct and A->B->A observer reentry.
+        if(ShutdownObserverFrame::Contains(&s)){s.shutdown_observer_fault=true;return false;}
+        if(s.closed)return s.close.status==BackendStatus::None&&!s.shutdown_observer_fault;
+        if(s.stopping&&!owns_stop){s.changed.wait(lock,[&]{return s.closed;});return s.close.status==BackendStatus::None&&!s.shutdown_observer_fault;}
         s.stopping=true;
     }
     if(s.execution&&s.registration) {
@@ -515,14 +536,23 @@ bool HostProviderLoop::ShutdownRuntime(bool owns_stop) noexcept {
         if(revoke)revoke.value->Progress();
     }
     if(s.adapter)s.adapter->SealIngress();
+    RuntimeShutdownPoint point;
     {
         std::unique_lock<std::mutex> lock(s.gate);s.sealed=true;s.changed.notify_all();
         s.changed.wait(lock,[&]{return s.active==0;});
+        point={s.stopping,s.sealed,s.active};
+    }
+    if(s.before_native_close) {
+        ShutdownObserverFrame frame(&s);
+        // The callable is immutable after installation; do not allocate a copy
+        // in this noexcept path. No loop/adapter/ownership lock held here.
+        try{s.before_native_close(point);}
+        catch(...){std::lock_guard<std::mutex> lock(s.gate);s.shutdown_observer_fault=true;}
     }
     const auto result=s.adapter?s.adapter->Close():
         s.failed_open_cleanup.value_or(BackendCloseResult{BackendStatus::None,true});
-    {std::lock_guard<std::mutex> lock(s.gate);s.close=result;s.input_open=false;s.closed=true;s.changed.notify_all();}
-    return result.status==BackendStatus::None&&result.adapter_drained;
+    {std::lock_guard<std::mutex> lock(s.gate);s.close=result;s.input_open=false;s.closed=true;s.changed.notify_all();
+        return result.status==BackendStatus::None&&result.adapter_drained&&!s.shutdown_observer_fault;}
 }
 bool HostProviderLoop::InputCloseAllowedOnThisThread() const noexcept {
     return !ServiceRecordBinding::IsCallbackContext()&&!ProviderAdapter::IsProviderCallbackContext();
@@ -534,7 +564,7 @@ BackendStatus HostProviderLoop::CloseAccepted() noexcept {
 HostLoopObservation HostProviderLoop::Observe() const noexcept {
     auto& s=*state_;HostLoopObservation v;
     {std::lock_guard<std::mutex> lock(s.gate);v.started=s.started;v.input_open=s.input_open;v.input_closing=s.input_closing;v.sealed=s.sealed;v.closed=s.closed;v.active_pumps=s.active;v.close=s.close;v.failed_open_cleanup=s.failed_open_cleanup;
-        v.open_calls=s.open_calls;v.close_calls=s.close_calls;v.shutdown_calls=s.shutdown_calls;v.first_close_order=s.first_close_order;v.first_shutdown_order=s.first_shutdown_order;}
+        v.open_calls=s.open_calls;v.close_calls=s.close_calls;v.shutdown_calls=s.shutdown_calls;v.first_close_order=s.first_close_order;v.first_shutdown_order=s.first_shutdown_order;v.shutdown_observer_fault=s.shutdown_observer_fault;}
     // A shared runtime moves its original registration into the first view, so this
     // state-level handle is deliberately empty there: it must never be published as
     // a per-view zero. Each shared view reports its own registration below.

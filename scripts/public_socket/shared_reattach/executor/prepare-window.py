@@ -13,8 +13,12 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
     if {e['name'] for e in artifacts}!={q.name for q in package.iterdir()}:raise ValueError('Package members differ')
     if len(artifacts)!=len({e['name'] for e in artifacts}):raise ValueError('Duplicate package member')
     installed=mode==contract.INSTALLED_SCENARIO
-    if not installed and len(artifacts)!=6:raise ValueError('Package members differ')
-    main_member=manifest.get('main') if installed else 'public_socket_dds_experiment'
+    ros=mode==contract.ROS_SCENARIO
+    dds214=mode==contract.layered().SCENARIO
+    if not installed and not ros and not dds214 and len(artifacts)!=6:raise ValueError('Package members differ')
+    main_member=manifest.get('main') if installed or ros or dds214 else 'public_socket_dds_experiment'
+    if dds214 and main_member!=contract.layered().MAIN:raise ValueError('DDS214 scene requires its installed direct DDS app')
+    if ros and main_member!='ordinary_ros2_transport_consumer':raise ValueError('ROS scenario requires its installed ordinary app')
     if installed and (not isinstance(main_member,str) or main_member not in {e['name'] for e in artifacts}):raise ValueError('Installed package needs an explicit main member')
     if installed and main_member!=contract.INSTALLED_MAIN:raise ValueError('Installed scenario requires the installed consumer as main member')
     for e in artifacts:
@@ -38,7 +42,31 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
          'stdout_budget':25165824,
          'analyzer_sha256':digest(repo/'scripts/public_socket/analyze_shared.py'),'shared_script_sha256':{'NativePermissionGuard.ps1':digest(repo/'scripts/NativePermissionGuard.ps1')},
          'executor_sha256':{n:digest(here/n) for n in ['run-window.ps1','runner-template.cjs','shared-control.cjs','record-pair.cjs','bounded-output.cjs','capture-load.sh','observe-native.cjs','load_origin.py','route_binding.py','task_contract.py','private_config.py','prepare-window.py']}}
-    if installed:
+    if dds214:
+        if cycles!=1:raise ValueError('DDS214 scene has no cycles')
+        cfg.pop('cycles',None);cfg.pop('delete_first',None)
+        cfg.update(main_member=main_member,main_prefix='DDS214_MAIN',main_mode='normal',stages=list(contract.layered().STAGES),
+                   service_prefix=contract.PRIVATE['ros2_service_prefix'],package_name=contract.PRIVATE['ros2_package_name'],
+                   expected_writes={'A':5,'B':5},record_count=10,payload_bytes=32,max_record_bytes=8192,timeout_seconds=240)
+        cfg['analyzer_sha256']=digest(repo/'scripts/public_socket/analyze_dds214.py')
+        if frozen.get('local_contract_test') is True:cfg['simulated']=True
+    elif ros:
+        if cycles!=1:raise ValueError('ROS scene has no cycle dimension')
+        cfg.pop('cycles',None);cfg.pop('delete_first',None)
+        cfg['analyzer_sha256']=digest(repo/'scripts/public_socket/analyze_ros2.py')
+        cfg['native_analyzer_sha256']=digest(repo/'scripts/public_socket/analyze_ros2_native.py')
+        cfg.update(scenario=mode,work_package=contract.ROS_SCOPE,main_member=main_member,main_prefix='ROS_MAIN',main_mode='dual',
+                   ros_attempt=1 if frozen.get('local_contract_test') is True else contract.ros_next_attempt(),
+                   stages=list(contract.ROS_STAGES),service_prefix=contract.PRIVATE['ros2_service_prefix'],
+                   package_name=contract.PRIVATE['ros2_package_name'],expected_writes={'A':10,'B':10},record_count=20,
+                   payload_bytes=128,max_record_bytes=8192,timeout_seconds=300)
+        if frozen.get('local_contract_test') is True:cfg['simulated']=True
+        if contract.ros_task_mode(frozen):cfg.update(ros_task_id=frozen['task_id'],ros_authorization_mode=contract.ROS_TASK_AUTHORIZATION,task_authority_root=frozen['task_authority_root'])
+        if frozen.get('paired_runtime_close') is True:cfg['paired_runtime_close']=True
+        if frozen.get('rmw_debugger'):
+            cfg['rmw_debugger']=frozen['rmw_debugger'];cfg['require_residual_snapshot']=True
+            cfg['executor_sha256'].update({n:digest(here/n) for n in ('rmw-debugger.cjs','rmw_debugger.py','rmw_lldb_trace.py')})
+    elif installed:
         if cycles!=1:raise ValueError('Installed runtime window takes no cycles')
         if frozen.get('local_contract_test') is not True:cfg['installed_attempt']=contract.installed_next_attempt()
         cfg.pop('cycles',None);cfg.pop('delete_first',None)
@@ -63,12 +91,31 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
         acceptance=Path(frozen['n10_acceptance_path']);cfg['n10_acceptance']={'path':str(acceptance.resolve()),'sha256':digest(acceptance)}
     if route_proof:cfg['route_binding']=route_proof
     if retry:cfg['retry_evidence']={'path':str(Path(retry).resolve()),'sha256':digest(retry)}
+    cfg['executor_sha256'].update({n:digest(here/n) for n in ('dds214-control.cjs','layered_contract.py')})
     contract.verify_window(cfg)
     destination.mkdir(parents=True,exist_ok=False)
-    for source,name in [('runner-template.cjs','runner.cjs'),('shared-control.cjs','shared-control.cjs'),('observe-native.cjs','observe-native.cjs'),('record-pair.cjs','record-pair.cjs'),('bounded-output.cjs','bounded-output.cjs')]:shutil.copyfile(here/source,destination/name)
+    for source,name in [('runner-template.cjs','runner.cjs'),('dds214-control.cjs','dds214-control.cjs'),('ros-control.cjs','ros-control.cjs'),('shared-control.cjs','shared-control.cjs'),('observe-native.cjs','observe-native.cjs'),('record-pair.cjs','record-pair.cjs'),('bounded-output.cjs','bounded-output.cjs'),('rmw-debugger.cjs','rmw-debugger.cjs')]:shutil.copyfile(here/source,destination/name)
     for side in ['A','B']:
         aux=destination/side/'aux';aux.mkdir(parents=True)
         shutil.copyfile(here/'capture-load.sh',aux/'capture-load.sh');shutil.copyfile(pre['permission_helper']['path'],aux/'native_permission_probe')
+        if cfg.get('rmw_debugger'):shutil.copyfile(cfg['rmw_debugger']['server']['path'],aux/'lldb-server')
+        if ros or dds214:
+            platform=[x for x in cfg['required_platform_paths'] if Path(x).name=='libsoftbus_client.z.so']
+            if len(platform)!=1:raise ValueError('ROS requires exactly one declared real Socket library source')
+            # The private profile carries a name stem, as for the installed
+            # consumer. TargetBridge appends only run/side/role, so its config
+            # needs the full package namespace. Socket.pkgName does not add it.
+            # This selects names under the existing policy; it grants nothing.
+            values={'bridge_library':cfg['remote'][side]+'/libfastdds_dsoftbus_ros2_target_bridge.so',
+                    'fastdds_module':cfg['remote'][side]+'/libfastrtps.so.2.14',
+                    'fastcdr_module':cfg['remote'][side]+'/libfastcdr.so.2',
+                    'softbus_module':platform[0],'backend':'OHOS_PUBLIC_SOCKET_EXPERIMENTAL',
+                    'run':run,'side':'0' if side=='A' else '1','domain':'201',
+                    'authorized_package':cfg['package_name'],'peer_network_id':cfg['peer'][side],
+                    'service_prefix':cfg['package_name']+'.'+cfg['service_prefix'],'connect_release':cfg['remote'][side]+'/control.LISTENER_READY'}
+            if ros and cfg.get('paired_runtime_close') is True:
+                values['runtime_close_release']=cfg['remote'][side]+'/control.RUNTIME_CLOSE'
+            (aux/('dds214.conf' if dds214 else 'ros.conf')).write_text(''.join(k+'='+v+'\n' for k,v in values.items()),encoding='utf-8',newline='\n')
         (aux/'required-load-paths.txt').write_text('\n'.join([cfg['remote'][side]+'/'+e['name'] for e in artifacts]+cfg['required_platform_paths'])+'\n',newline='\n')
     cfg['auxiliary_sha256']={s:{p.name:digest(p) for p in (destination/s/'aux').iterdir()} for s in ['A','B']}
     (destination/'window.json').write_text(json.dumps(cfg,indent=2));return {'run':run,'window':str(destination),'status':'PREPARED_NOT_EXECUTED'}

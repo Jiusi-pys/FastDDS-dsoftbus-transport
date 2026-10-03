@@ -8,10 +8,11 @@ from pathlib import Path
 HERE=Path(__file__).resolve().parent;REPO=HERE.parents[2]
 FAULTS=['wrong_main','wrong_run','wrong_side','wrong_pid','b_not_ready','missing_query_output','missing_take','wrong_writer','missing_runtime_close','empty_hash','missing_recv','wrong_load','early_collector','metadata_not_restored']
 def read(p):return json.loads(Path(p).read_text(encoding='utf-8-sig'))
-def one(fault,verify_existing=False):
- root=REPO/'.artifacts/installed-runtime-device'/('local-negative-20260930-'+fault);evidence=root.with_suffix('.test.json');cmds=[]
+def one(fault,verify_existing=False,scenario='INSTALLED_RUNTIME'):
+ ros=scenario=='ROS2_DSOFTBUS'
+ root=REPO/('.artifacts/ros2-device-acceptance' if ros else '.artifacts/installed-runtime-device')/(('local-negative-20261001-ros-' if ros else 'local-negative-20260930-')+fault);evidence=root.with_suffix('.test.json');cmds=[]
  def invoke(phase):
-  argv=[sys.executable,str(HERE/'run.py'),'--root',str(root),'--phase',phase]
+  argv=[sys.executable,str(HERE/'run.py'),'--root',str(root),'--phase',phase,'--scenario',scenario]
   if phase=='init':argv+=['--fault',fault]
   p=subprocess.run(argv,capture_output=True,cwd=REPO,timeout=150)
   receipt={'argv':argv,'exit':p.returncode,'stdout':p.stdout.decode(errors='replace'),'stderr':p.stderr.decode(errors='replace')};cmds.append(receipt);return p.returncode
@@ -34,8 +35,8 @@ def one(fault,verify_existing=False):
   if fault in ('wrong_main','wrong_run','wrong_side','wrong_pid'):
    result=read(w/'result.json');assert result['B'] is None,'Invalid A main started B'
   if fault=='b_not_ready':assert not read(w/'result.json')['controller']['released'],'B not ready released connect'
-  if fault=='missing_take':assert 'INCOMPLETE_SAMPLE' in read(w/'result.json')['controller']['first_failure']
-  if fault=='wrong_writer':assert 'SAMPLE_SOURCE' in read(w/'result.json')['controller']['first_failure']
+  if fault=='missing_take':assert ('ROS_PHASE_LEDGER_INCOMPLETE' if ros else 'INCOMPLETE_SAMPLE') in read(w/'result.json')['controller']['first_failure']
+  if fault=='wrong_writer':assert ('ROS_PHASE_LEDGER_INCOMPLETE' if ros else 'SAMPLE_SOURCE') in read(w/'result.json')['controller']['first_failure']
   if fault=='missing_runtime_close':assert 'LIFECYCLE' in read(w/'result.json')['controller']['first_failure']
   if fault=='early_collector':assert read(w/'result.json')['controller']['first_failure']
   if fault in ('empty_hash','missing_recv','wrong_load'):assert summary['first_failure'] or read(w/'load-collection-summary.json')['first_failure']
@@ -44,7 +45,7 @@ def one(fault,verify_existing=False):
  if evidence.exists():raise ValueError('Never overwrite completed test verdict')
  evidence.write_text(json.dumps(dict(fault=fault,status='PASS_EXPECTED_FAILURE',root=str(root),commands=cmds,verification_of_existing_execution=verify_existing),indent=2));return fault
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--fault',choices=FAULTS);p.add_argument('--verify-existing',action='store_true');a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--fault',choices=FAULTS);p.add_argument('--verify-existing',action='store_true');p.add_argument('--scenario',choices=['INSTALLED_RUNTIME','ROS2_DSOFTBUS'],default='INSTALLED_RUNTIME');a=p.parse_args()
  faults=[a.fault] if a.fault else FAULTS
  with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-  for name in pool.map(lambda f:one(f,a.verify_existing),faults):print('PASS '+name,flush=True)
+  for name in pool.map(lambda f:one(f,a.verify_existing,a.scenario),faults):print('PASS '+name,flush=True)

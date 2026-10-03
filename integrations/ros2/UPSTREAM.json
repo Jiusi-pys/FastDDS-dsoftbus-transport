@@ -6,7 +6,7 @@
     {
       "path": "src/cpp/fastdds/domain/DomainParticipantFactory.cpp",
       "base_sha256": "179a1b3d6df18288a303ea0f946668d2329479c7aa72883ad0dab1a9832c71e5",
-      "patched_sha256": "261bbfae2c260a1d633159f08b8f2e798f849afe0a6d965949bd1cd5b5220220"
+      "patched_sha256": "ede5897b5f3499ce52a5fbc3eba8028370eab6b233cd481586e22fda5739f659"
     },
     {
       "path": "src/cpp/fastdds/publisher/PublisherImpl.cpp",
@@ -24,8 +24,15 @@
       "patched_sha256": "9fb4b757b84c281b9fd8815d836c9f58361b8ef9e08586839c33ffc656e6af2f"
     }
   ],
-  "hook_sha256": "fe205422ecb7302f3393742043e5e416c5d1124df7d18f78f94a7b46e163224c",
+  "hook_sha256": "5840409f6fe7be25706c80845fd52548895e56098f2f0a9aac969d4a4cd87899",
   "scope": "EXPERIMENTAL_ROS2_HOST_FACTORY_ENDPOINT_AND_XML_DEFAULT_CONFIGURATION_NOT_PROTOCOL_CHANGE",
   "platform_sha256": "bd9d9870b5bebff94570870b2d6e5a332f5f150af5fa09339bfb0ec05bbf7213",
-  "startup_diagnostics_sha256": "62e4d64bc0a4b01588ae33063d19adb8a2bb0850f642d63c703b9d980dfe6473"
+  "startup_diagnostics_sha256": "62e4d64bc0a4b01588ae33063d19adb8a2bb0850f642d63c703b9d980dfe6473",
+  "teardown_diagnostics_sha256": "a77df036b46f8be678eb2a9da1ba028635a84eefec42ab4ddfee11119ae1957c",
+  "teardown_source_observation": {
+    "tool": "apply_teardown_observation.py",
+    "patch": "fastdds-2.14.5-teardown.patch",
+    "scope": "PUBLIC_RETURN_OBSERVATION_PLUS_EXISTING_FACTORY_MAPPING_NOT_PROTOCOL_CHANGE",
+    "factory_after_combined_patch_sha256": "b019cfbed737fdb80d152f41b01387e53d31f54485b58953493d80ac19bfa273"
+  }
 }

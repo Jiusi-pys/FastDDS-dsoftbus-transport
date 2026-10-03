@@ -11,6 +11,46 @@ MDDS 中间件或新的 DDS/RMW 实现。公开命名已迁移为 `fastdds_dsoft
 3.6 基线，也不构成设备或生产资格。构建、安装、外部 `find_package` 和已验证的
 Host 范围见 [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)。
 
+> **当前限定 ROS 2 双板验收摘要（2026-10-04）**：SDK23/AArch64 的
+> `build/ros2-target/r2` 已在登记双板上完成限定功能范围验证：query
+> `d1c2cb4097279214`、data `be8cb2d90f287223`，RELIABLE/BEST_EFFORT 双向各 5/5，
+> Topic 合计 20/20，并完成 graph、service、实体/Participant 删除、Runtime close、
+> 正常退出和环境恢复。该结果不等于生产资格；P0/PF/P4 原状态、默认
+> `NativeBackendUnavailable`、SDK epoch/drain/cancellation 和 `QualificationProfile`
+> 边界保持不变。设备验收记录产生时 HEAD 为
+> `4807765f53826ed0b882cac32610acb17ee30b4f` 且尚未提交；后续本地提交状态以 Git
+> 历史为准，不预写推送结果。详见 [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)
+> 的当前摘要和 paired-close 证据入口。
+
+> **ROS 2 device acceptance final stop（2026-10-01）**：补充 query
+> `cdd5bbe62d49a8a6` 与修复 query `5b1d035fb8e6ae66` 均仅达到 `PASS_QUERY_ONLY`。
+> canonical data `9b301c516da4d1eb` 保持初始化失败；修复 data
+> `a6b0948bf98c9a78` 失败，A/B remote exit 均为 `4`，无正式 Topic write/take、graph、
+> service 或正常 DDS/Runtime close。环境 guard 在其测量范围内通过，但不等于 SDK drain。
+> 当前 verdict 为 `FAIL_CONFIRMED_AND_STOP_REQUIRED`，query 使用 3、data 使用 2，
+> 剩余额度为 0；不再重试、不再提交成功基线。此前 `762fe826e929da8c` 缺原始 claim
+> 的失败事实保持不变。详见 [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)
+> 与 [supplemental stop report](.artifacts/ros2-device-acceptance/run-20260930-local/SUPPLEMENTAL_RESUME_FINAL_REPORT.md)。
+
+> **ROS 2 dual-board acceptance stop（2026-10-01）**：本次真实双板只完成了目录
+> query `762fe826e929da8c` 及两端恢复/guard；数据程序未启动，Topic、graph、service
+> 和 ROS 数据关闭保持 `NOT_RUN`。query postrun 因缺少原始执行 claim 被正式拒绝，
+> 原 claim 不可回填或退款；当前状态为 `BLOCKED / DEVICE_ROS2_DATA_NOT_RUN /
+> NOT_COMMITTED`。随后对未来 ROS real claim 分支的两项本地测试通过，不改变这次
+> 历史 query 结果，也不授权重新查询或继续设备运行。Host/本地模拟证据仍按各自范围
+> 记录，不能当作设备 ROS 证据。详见 [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)
+> 和本次 [device stop evidence](.artifacts/ros2-device-acceptance/run-20260930-local/OBSERVED_REAL_BUDGET_AND_STOP.json)。
+
+> **Offline ROS startup diagnostics（2026-10-01）**：当前离线诊断已达到
+> `ROS2_STARTUP_OBSERVABILITY_VERIFIED / ROS2_FAILURE_CLASSIFICATION_REPAIR_VERIFIED /
+> INDEPENDENT_REVIEW_CLOSED / DEVICE_NOT_ADMITTED / NOT_COMMITTED`。R2 受影响 Host
+> 与 ASan 各 `53/53`，安装版 hook 测试 `6/6`，本地正确依赖前缀 pipe `2/2`；Host
+> ROS 双 QoS/graph/service 记录 `20/20` 仍是 Host 证据。启动观测现在区分 primary、
+> cleanup、capture 和 remote exit，并保留首个错误；有限元数据容量不等于阻塞 I/O
+> 硬期限或 SDK cancellation 保证。历史设备失败 `9b301c516da4d1eb` 与
+> `a6b0948bf98c9a78` 仍为 FAIL，第二次启动根因 UNKNOWN；本轮无 HDC、设备、Git
+> 或新额度操作。详见 [离线诊断收据](.artifacts/ros2-device-acceptance/run-20260930-local/offline-startup-diagnostics/FINAL_REPORT.md)。
+
 > **Installed Runtime dual-board acceptance（2026-09-30）**：安装版公开消费者的
 > 双板窗口 `data-2`（run `73ff0560343b4afb`）通过独立原始收据复核；配套
 > `query-3` 为 `52093e521faf0dcb`。A/B 各完成 5 writes 与 5 Reader takes，
@@ -493,3 +533,28 @@ epoch/drain/cancellation 或生产资格；默认 `NativeBackendUnavailable`、P
 
 证据入口：[当前 Host 集成收据](.artifacts/ros2-host-integration/run-20261002-current/FINAL_REVIEW.md)。
 构建依赖、安装目录和外部输入属于本机只读材料，不随项目 clone 提供。
+
+## 最新 ROS 2 双板收尾验收（2026-10-04）
+
+最新受限设备窗口已完成：`ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_VERIFIED`。
+查询 `d1c2cb4097279214` 和数据窗口 `be8cb2d90f287223` 使用 DevEco/OpenHarmony SDK23
+构建的 `build/ros2-target/r2` 包，通过 SDK23 HDC 部署到登记的两块 RK3588A。普通
+`rclcpp` → 未修改 `rmw_fastrtps` → Fast DDS 2.14.5 → `FastDDSDSoftBusTransport`
+→ DSoftBus Socket/Binding → 对端 ROS 回调路径完成了 RELIABLE 和 BEST_EFFORT 双向各
+5 条、合计 20/20 Topic 交付；graph 和 service request/reply 分开验收，正常
+rclcpp/RMW/DDS/Runtime 关闭、进程退出和环境恢复均有独立收据。两端原始 Topic、
+Publisher/Subscriber、Writer/Reader 删除及 Participant 删除均返回 0；native 记录与
+20 条接收建立了同 run 的结构关联，但不证明 SDK 内部 event epoch 或物理包逐一因果。
+
+本结果是限定双板功能范围的 `DEVICE_TESTED` / `VERIFIED`，不是全项目生产完成。实际
+目标为 Fast DDS 2.14.5、Fast CDR 2.2.5、RMW 8.4.3、rcl 9.2.11、rclcpp 28.1.22，
+构建与临时输出均在仓库 `build/ros2-target` 内。目标包含 109 个成员，原版 RMW
+未修改；paired pre-native-close 协调、creation-complete 识别和串行控制修复均有源码与
+独立测试收据。设备验收记录产生时 HEAD 为
+`4807765f53826ed0b882cac32610acb17ee30b4f`，当时尚未提交或推送；后续提交状态以 Git
+历史为准。
+
+仍未证明 SDK epoch/drain/cancellation、任意故障安全、异构 OpenHarmony/非 OpenHarmony
+互通或完整 ROS 工具链兼容性；P0/PF/P4、默认 `NativeBackendUnavailable` 和生产资格不变，
+未生成 `QualificationProfile`。完整证据见 [paired-close 最终报告](.artifacts/ros2-topic-rtti-repair-20261004/paired-close/FINAL_REPORT.md)
+和 [证据索引](.artifacts/ros2-topic-rtti-repair-20261004/paired-close/EVIDENCE_INDEX.json)。

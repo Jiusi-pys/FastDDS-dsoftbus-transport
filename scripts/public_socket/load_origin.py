@@ -31,8 +31,12 @@ def analyze(directory, config, side):
           status.get('scope') != 'LOCAL_MODELED_CAPTURE', 'LOAD_CAPTURE_MODE_SCOPE_MISMATCH')
     remote = config['remote'][side]
     installed = config.get('scenario') == 'INSTALLED_RUNTIME'
-    member = config.get('main_member') if installed else 'public_socket_dds_experiment'
+    ros = config.get('scenario') == 'ROS2_DSOFTBUS'
+    dds214 = config.get('scenario') == 'DDS214_LAYER_BASELINE'
+    member = config.get('main_member') if installed or ros or dds214 else 'public_socket_dds_experiment'
     check(not installed or member == 'mdds_installed_consumer', 'INSTALLED_MAIN_MEMBER_MISMATCH')
+    check(not ros or member == 'ordinary_ros2_transport_consumer', 'ROS_MAIN_MEMBER_MISMATCH')
+    check(not dds214 or member == 'fastdds_dsoftbus_dds214_baseline','DDS214_MAIN_MEMBER_MISMATCH')
     expected_exe = remote+'/'+str(member)
     check(status.get('status') == 'COMPLETE', 'SAMPLER_NOT_COMPLETE')
     check(status.get('run') == config['run'], 'SAMPLER_RUN_MISMATCH')
@@ -67,13 +71,35 @@ def analyze(directory, config, side):
             environment[key]=value
     check(environment.get('PATH') == '/system/bin:/system/xbin','PATH_MISMATCH')
     check(environment.get('LD_LIBRARY_PATH') == remote+':'+':'.join(config['system_library_dirs']),'LD_LIBRARY_PATH_MISMATCH')
-    check(set(environment).issubset({'PATH','LD_LIBRARY_PATH','SKIP_DEFAULT_XML','PWD','OLDPWD','SHLVL','_'}),'UNDECLARED_ENVIRONMENT_KEY')
+    allowed_environment={'PATH','LD_LIBRARY_PATH','SKIP_DEFAULT_XML','PWD','OLDPWD','SHLVL','_'}
+    if ros:
+        expected_ros_environment={
+            'ROS_LOG_DIR':remote+'/ros-log',
+            'RMW_IMPLEMENTATION':'rmw_fastrtps_cpp','ROS_DOMAIN_ID':'201',
+            'ROS_AUTOMATIC_DISCOVERY_RANGE':'SUBNET',
+            'FASTDDS_DSOFTBUS_REQUIRED_CONFIG':remote+'/ros.conf',
+            'FASTDDS_DSOFTBUS_NATIVE_TOKEN':config['token'][side],
+            'FASTDDS_DSOFTBUS_IDENTITY_ADMITTED':'1',
+            'FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX':remote+'/control'}
+        allowed_environment.update(expected_ros_environment)
+        for name,value in expected_ros_environment.items():
+            check(environment.get(name)==value,'ROS_ENVIRONMENT_MISMATCH:'+name)
+    if dds214:
+        expected_dds_environment={'FASTDDS_DSOFTBUS_REQUIRED_CONFIG':remote+'/dds214.conf','FASTDDS_DSOFTBUS_NATIVE_TOKEN':config['token'][side],
+            'FASTDDS_DSOFTBUS_IDENTITY_ADMITTED':'1','FASTDDS_DSOFTBUS_DDS214_CONTROL_PREFIX':remote+'/control'}
+        allowed_environment.update(expected_dds_environment)
+        for name,value in expected_dds_environment.items():check(environment.get(name)==value,'DDS214_ENVIRONMENT_MISMATCH:'+name)
+    check(set(environment).issubset(allowed_environment),'UNDECLARED_ENVIRONMENT_KEY')
     check(environment.get('SKIP_DEFAULT_XML') == '1','DEFAULT_XML_NOT_DISABLED')
     command = vector('load-cmdline.txt')
     check(bool(command) and command[0] == expected_exe,'ARGV0_MISMATCH')
     if installed:
         expected=[expected_exe,'0' if side=='A' else '1',config['peer'][side],config['package_name'],config['service_prefix'],config['run'],config['token'][side],remote+'/control']
         check(command == expected, 'INSTALLED_ARGV_MISMATCH')
+    elif ros:
+        check(command==[expected_exe,side,config['run'],'dual'],'ROS_ARGV_MISMATCH')
+    elif dds214:
+        check(command==[expected_exe,side,config['run'],'normal'],'DDS214_ARGV_MISMATCH')
     else:
         check(command.count('--run') == 1 and '--run' in command and
               command[command.index('--run')+1:command.index('--run')+2] == [config['run']], 'ARGV_RUN_MISMATCH')

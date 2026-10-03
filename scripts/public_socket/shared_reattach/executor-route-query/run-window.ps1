@@ -77,7 +77,7 @@ $bootstrapDeviceA = Read-ContractBool $bootstrapFreeze 'device_authorized'
 if ($null -eq $bootstrapLocal -or $bootstrapLocal -eq $false) {
     # Device mode. The admission rule is unchanged from the reviewed contract.
     if ($bootstrapDeviceE -eq $true) {throw 'Device contract may not carry local-test authority fields'}
-    if ($bootstrapFreeze.scope -ceq 'INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER') {
+    if ($bootstrapFreeze.scope -in @('INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER','ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_ACCEPTANCE','DDS214_LAYER_BASELINE_ACCEPTANCE')) {
         if ($bootstrapDeviceA -ne $true -or $bootstrapFreeze.PSObject.Properties['local_driver'] -or $bootstrapFreeze.PSObject.Properties['local_test_basis']) {throw 'Installed device authorization/driver boundary'}
     } elseif ($bootstrapDeviceA -eq $true) {throw 'Device contract may not carry local-test authority fields'}
     if ($bootstrapAdmit -ne $true) {throw 'Execution contract not admitted'}
@@ -156,7 +156,7 @@ foreach ($artifact in $cfg.package_artifacts) {
 
 # Load project code only after contract, dependency and guard hashes pass.
 . (Join-Path $repoRoot 'scripts\NativePermissionGuard.ps1')
-if ($bootstrapLocal -eq $true -or $bootstrapFreeze.scope -ceq 'INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER') {
+if ($bootstrapLocal -eq $true -or $bootstrapFreeze.scope -in @('INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER','ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_ACCEPTANCE','DDS214_LAYER_BASELINE_ACCEPTANCE')) {
     & python $contractValidator --claim-query (Join-Path $windowRoot 'window.json')
     if ($LASTEXITCODE -ne 0) {throw 'Local test query claim refused'}
 }
@@ -165,6 +165,11 @@ if ($bootstrapLocal -eq $true -or $bootstrapFreeze.scope -ceq 'INSTALLED_RUNTIME
 
 
 function Invoke-HdcLogged([string]$Board, [string]$Step, [string[]]$NativeArguments) {
+
+    if ($Step -ceq 'directory-query' -and $bootstrapFreeze.scope -in @('ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_ACCEPTANCE','DDS214_LAYER_BASELINE_ACCEPTANCE')) {
+        & python $contractValidator --admit-ros-query-dispatch (Join-Path $windowRoot 'window.json') --side $Board | Out-Null
+        if ($LASTEXITCODE -ne 0) {throw 'Original ROS query claim refused at driver boundary; no dispatch'}
+    }
 
     if ($NativeArguments.Count -lt 1) {throw 'Missing HDC subcommand'}
 

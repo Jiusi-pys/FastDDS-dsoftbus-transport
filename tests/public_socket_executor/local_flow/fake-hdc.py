@@ -146,7 +146,7 @@ def _handle_shell(command, unsupported):
             raise DriverRejected(67, 'PATH_NOT_ALLOWED')
         if not local.is_file():
             return "", 1  # supported remote sha256sum failure, NOT driver 68
-        if model.fault(SANDBOX)=='empty_hash' and '/mdds_dds_' in remote and remote.endswith('/mdds_installed_consumer'):return '',0
+        if model.fault(SANDBOX)=='empty_hash' and '/mdds_dds_' in remote and Path(remote).name==model.config().get('main_member'):return '',0
         return "%s  %s\n" % (hashlib.sha256(local.read_bytes()).hexdigest(), remote), 0
     m = re.fullmatch(r"param[ ]+get[ ]+([A-Za-z0-9_.]+)", core)
     if m:
@@ -195,6 +195,13 @@ def _handle_file(rest, unsupported):
     return "", 66
 
 
+def _inventory(record):
+    # Host-local fixed inventory seam; never invokes any device executable.
+    if not SANDBOX.is_dir(): return 68
+    record.update(target='HOST_INVENTORY',action_class='READ_ONLY',driver_status='DRIVER_ACCEPTED_INVOCATION',driver_exit=0,remote_rc=None,completed=True,model_mutations=[],mutation_intents=[])
+    with LOG.open('a',encoding='utf-8') as stream:stream.write(json.dumps(record)+'\n')
+    sys.stdout.write('SIM-A\nSIM-B\n');return 0
+
 def main(argv):
     record = {"schema": 2, "ts_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
               "pid": os.getpid(), "cwd": os.getcwd(),
@@ -205,6 +212,7 @@ def main(argv):
               "argv": argv, "raw_tail": _raw_tail(),
               "driver_source": str(Path(__file__).resolve()),
               "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    if argv==['list','targets']:return _inventory(record)
     stdout, stderr, driver_rc, remote_rc, detail, unsupported = "", "", 0, None, "", []
     try:
         if not SANDBOX.is_dir():
@@ -234,7 +242,12 @@ def main(argv):
         model.event(SANDBOX,dict(journal_identity,event='DISPATCH_INTENT',possible_mutation=True,result='PENDING'))
         if _escape_check(argv):
             raise DriverRejected(67, 'PATH_ESCAPES_SANDBOX')
-        if rest[0] == 'shell' and len(rest) == 2:
+        if rest[0] == 'shell' and len(rest) == 2 and target=='SIM-B' and model.fault(SANDBOX) in ('recovery_offline','recovery_offline_once') and rest[1].startswith('sha256sum /system/'):
+            # Deliberate transport-capture fault fixture, not a simulated remote rc.
+            stdout='[Fail][E001005] Device not found or connected\n';stderr='[Fail]ExecuteCommand need connect-key\n'
+            record['action_class']='READ_ONLY';record['fault']='INJECTED_MISSING_REMOTE_ENVELOPE'
+            if model.fault(SANDBOX)=='recovery_offline_once':model.write(SANDBOX/'fault.json',dict(fault='',consumed_test_transport_fault=True))
+        elif rest[0] == 'shell' and len(rest) == 2:
             if EXIT_WRAPPER_RE.search(rest[1]):
                 stdout, remote_rc = _handle_shell(rest[1], unsupported)
                 stdout += 'MDDS_REMOTE_EXIT=%d\n' % remote_rc

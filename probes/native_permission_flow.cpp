@@ -41,11 +41,12 @@ NativePermissionResult RunNativePermissionProbe(const NativePermissionOptions& o
         const bool grant = options.mode == NativePermissionMode::Grant;
         const bool socket = options.mode == NativePermissionMode::SocketCheck;
         const bool revoke = options.mode == NativePermissionMode::Revoke;
-        require(grant || socket || revoke, "invalid_mode");
+        const bool verify_denied = options.mode == NativePermissionMode::VerifyDenied;
+        require(grant || socket || revoke || verify_denied, "invalid_mode");
         require(grant || options.expected_token != 0, "expected_token_required");
         require(!options.recover_unregistered || (revoke && options.expected_token != 0),
                 "unregistered_recovery_requires_revoke_and_owned_token");
-        stage(std::string("begin mode=") + (grant ? "grant" : (socket ? "socket-check" : "revoke")) +
+        stage(std::string("begin mode=") + (grant ? "grant" : (socket ? "socket-check" : (revoke ? "revoke" : "verify-denied"))) +
                 " expected_token=" + std::to_string(options.expected_token) +
                 " recover_unregistered=" + (options.recover_unregistered ? "true" : "false"));
 
@@ -78,6 +79,19 @@ NativePermissionResult RunNativePermissionProbe(const NativePermissionOptions& o
             const int permission = api.VerifyDatasync(before.token);
             stage("preflight_permission=" + std::to_string(permission));
             require(permission == 0 || permission == -1, "preflight_permission_query_error");
+            if (verify_denied)
+            {
+                require(permission == -1, "permission_not_denied");
+                require(api.GetSelfToken() == original, "readonly_identity_changed");
+                result.token = before.token;
+                result.restored = true; // No switch: readback confirms unchanged identity.
+                result.reason = "readonly_denied_external_snapshot_required";
+                result.success = emit("verification_permission=" + std::to_string(permission) +
+                        " writes=NOT_PERFORMED token_switch=NOT_PERFORMED communication=NOT_RUN" ) &&
+                        emit("result=PASS persistent_state=UNCONFIRMED identity_unchanged=true");
+                result.exit_code = result.success ? 0 : 1;
+                return result;
+            }
         }
 
         result.token = options.expected_token;

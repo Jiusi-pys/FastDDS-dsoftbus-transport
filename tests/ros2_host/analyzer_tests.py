@@ -24,6 +24,27 @@ class ActualReplay(unittest.TestCase):
         self.assertTrue(result['pass'], result['errors'])
         self.assertEqual((result['observed_writes'], result['observed_takes']), (20, 20))
 
+    def test_application_failure_is_not_shutdown_failure(self):
+        self.texts['B'] = self.texts['B'].replace('side=B result=0','side=B result=4 result_scope=APPLICATION_EXIT_STATUS shutdown_return=1')
+        result = MOD.analyze(self.texts, RUN, ['reliable', 'best_effort'])
+        self.assertFalse(result['pass'])
+        self.assertIn('application_exit:B', result['errors'])
+        self.assertNotIn('context_close:B', result['errors'])
+
+    def test_joined_delete_keeps_close_status_and_failure(self):
+        self.texts['A'] = self.texts['A'].replace('ROS_CONTEXT_CLOSED ', 'Failed to delete participantROS_CONTEXT_CLOSED ')
+        # The known joined form uses the actual current context-close schema.
+        self.texts['A'] = self.texts['A'].replace('side=A result=0', 'side=A result=0 result_scope=APPLICATION_EXIT_STATUS shutdown_return=1')
+        result = MOD.analyze(self.texts, RUN, ['reliable', 'best_effort'])
+        self.assertFalse(result['pass'])
+        self.assertIn('participant_delete_failed:A', result['errors'])
+        self.assertNotIn('context_close:A', result['errors'])
+
+    def test_joined_close_malformed_does_not_recover_identity(self):
+        text = 'Failed to delete participantROS_CONTEXT_CLOSED run='+RUN+' side=A result=4 result_scope=APPLICATION_EXIT_STATUS shutdown_return=1 extra=1'
+        with self.assertRaises(ValueError):
+            MOD.rows(text, 'ROS_CONTEXT_CLOSED')
+
     def test_missing_take(self):
         self.texts['A'] = '\n'.join(x for x in self.texts['A'].splitlines() if not (x.startswith('ROS_TAKE ') and 'ordinal=3 ' in x and 'phase=reliable' in x))
         self.check_failure()

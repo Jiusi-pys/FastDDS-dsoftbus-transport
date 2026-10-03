@@ -4,10 +4,16 @@ import json
 import re
 from pathlib import Path
 
+JOINED_CLOSE_PREFIX = 'Failed to delete participant'
+JOINED_CLOSE = re.compile(r'ROS_CONTEXT_CLOSED run=[0-9a-f]{16} side=[AB] result=(?:0|[1-9][0-9]{0,9}) result_scope=APPLICATION_EXIT_STATUS shutdown_return=[01]')
 
 def rows(text, event):
     result = []
     for line in text.splitlines():
+        if event == 'ROS_CONTEXT_CLOSED' and line.startswith(JOINED_CLOSE_PREFIX + event + ' '):
+            line = line[len(JOINED_CLOSE_PREFIX):]
+            if not JOINED_CLOSE.fullmatch(line):
+                raise ValueError('Malformed joined ' + event)
         if not line.startswith(event + ' '):
             continue
         record = {}
@@ -38,6 +44,8 @@ def analyze(texts, run, phases):
               'ROS_SERVICE_REQUEST', 'ROS_SERVICE_RESPONSE')
     for side in ('A', 'B'):
         captured[side] = {}
+        if any(line.startswith(JOINED_CLOSE_PREFIX + 'ROS_CONTEXT_CLOSED ') for line in texts[side].splitlines()):
+            errors.append('participant_delete_failed:' + side)
         for event in events:
             try:
                 captured[side][event] = rows(texts[side], event)
@@ -51,7 +59,14 @@ def analyze(texts, run, phases):
             if len(main) != 1 or main[0].get('run') != run or main[0].get('side') != side or not main[0].get('pid', '').isdigit():
                 errors.append('main_identity:' + side)
             closed = captured[side]['ROS_CONTEXT_CLOSED']
-            if len(closed) != 1 or closed[0].get('run') != run or closed[0].get('side') != side or closed[0].get('result') != '0':
+            if len(closed) != 1 or closed[0].get('run') != run or closed[0].get('side') != side:
+                errors.append('context_close:' + side)
+            elif closed[0].get('result_scope') == 'APPLICATION_EXIT_STATUS':
+                if closed[0].get('shutdown_return') != '1':
+                    errors.append('context_close:' + side)
+                if closed[0].get('result') != '0':
+                    errors.append('application_exit:' + side)
+            elif closed[0].get('result') != '0':
                 errors.append('context_close:' + side)
             board = result['boards'][side] = {'phases': {}, 'pid': main[0].get('pid') if len(main) == 1 else None}
             for phase in phases:

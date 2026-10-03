@@ -1,11 +1,19 @@
 #!/system/bin/sh
 # Bounded read-only observer. No signals, native APIs, or application delay.
+[ "$#" -ge 4 ] && [ "$#" -le 5 ] || exit 2
 run=$1
 target_pid=$2
 root=$3
 side=$4
 main_member=${5:-public_socket_dds_experiment}
-case "$main_member" in public_socket_dds_experiment|mdds_installed_consumer) ;; *) exit 2 ;; esac
+[ "${#run}" -eq 16 ] || exit 2
+case "$run" in ''|*[!0-9a-f]*) exit 2 ;; esac
+case "$target_pid" in ''|0*|*[!0-9]*) exit 2 ;; esac
+[ "${#target_pid}" -le 10 ] || exit 2
+case "$side" in A|B) ;; *) exit 2 ;; esac
+[ "$root" = "/data/local/tmp/mdds_dds_${run}_${side}" ] || exit 2
+[ -d "$root" ] && [ -w "$root" ] || exit 2
+case "$main_member" in public_socket_dds_experiment|mdds_installed_consumer|ordinary_ros2_transport_consumer|fastdds_dsoftbus_dds214_baseline) ;; *) exit 2 ;; esac
 set -f
 read_starttime() {
     IFS= read -r stat_line < "$1" || return 1

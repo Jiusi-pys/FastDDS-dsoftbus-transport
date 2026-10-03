@@ -16,14 +16,18 @@ $expectedHash = @{A=[string]$cfg.permission_baseline_sha256.A; B=[string]$cfg.pe
 if (Test-Path -LiteralPath (Join-Path $windowRoot 'EXECUTION_STARTED')) {throw 'Refusing to reuse a window'}
 if ($cfg.run -notmatch '^[0-9a-f]{16}$') {throw 'Invalid run'}
 if ($cfg.eligible_for_executor_gate -ne $true) {throw 'Current two-board preflight not eligible'}
-if ($cfg.scenario -notin @('SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME')) {throw 'Unauthorized scenario'}
+if ($cfg.scenario -notin @('SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME','ROS2_DSOFTBUS','DDS214_LAYER_BASELINE')) {throw 'Unauthorized scenario'}
 foreach ($binding in @(@($cfg.build_manifest,$cfg.build_manifest_sha256),@($cfg.source_state,$cfg.source_state_sha256),@($cfg.preflight_config,$cfg.preflight_config_sha256),@($cfg.permission_helper.path,$cfg.permission_helper.sha256))) {
     if ((Get-FileHash -LiteralPath $binding[0]).Hash.ToLowerInvariant() -cne $binding[1]) {throw 'Frozen input changed'}
 }
 $currentPreflight = Get-Content -Raw -LiteralPath $cfg.preflight_config | ConvertFrom-Json
 if ($currentPreflight.eligible_for_executor_gate -ne $true) {throw 'Current baseline not eligible'}
 $frozenManifest=Get-Content -Raw -LiteralPath $cfg.build_manifest | ConvertFrom-Json
-if ($cfg.scenario -ceq 'INSTALLED_RUNTIME') {
+if ($cfg.scenario -ceq 'ROS2_DSOFTBUS') {
+    if ($frozenManifest.scenario -cne 'ROS2_DSOFTBUS' -or $frozenManifest.main -cne 'ordinary_ros2_transport_consumer' -or $frozenManifest.abi.fastrtps -cne '2.14.5' -or $frozenManifest.abi.cpp_runtime -cne 'c++_shared') {throw 'ROS target build/ABI identity mismatch'}
+} elseif ($cfg.scenario -ceq 'DDS214_LAYER_BASELINE') {
+    if ($frozenManifest.scenario -cne 'DDS214_LAYER_BASELINE' -or $frozenManifest.main -cne 'fastdds_dsoftbus_dds214_baseline' -or $frozenManifest.abi.fastrtps -cne '2.14.5' -or $frozenManifest.abi.cpp_runtime -cne 'c++_shared') {throw 'Direct DDS target build/ABI identity mismatch'}
+} elseif ($cfg.scenario -ceq 'INSTALLED_RUNTIME') {
     # The installed-runtime window must be backed by the experimental-runtime
     # library build, not by the isolated probe experiment.
     if (@($frozenManifest.configureArguments | Where-Object {$_ -ceq '-DFASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME=ON'}).Count -ne 1) {throw 'Not the installed experimental-runtime build'}
@@ -67,7 +71,7 @@ $bootstrapDeviceA = Read-ContractBool $bootstrapFreeze 'device_authorized'
 if ($null -eq $bootstrapLocal -or $bootstrapLocal -eq $false) {
     # Device mode. The admission rule is unchanged from the reviewed contract.
     if ($bootstrapDeviceE -eq $true) {throw 'Device contract may not carry local-test authority fields'}
-    if ($bootstrapFreeze.scope -ceq 'INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER') {
+    if ($bootstrapFreeze.scope -in @('INSTALLED_RUNTIME_DUAL_BOARD_CONSUMER','ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_ACCEPTANCE','DDS214_LAYER_BASELINE_ACCEPTANCE')) {
         if ($bootstrapDeviceA -ne $true -or $bootstrapFreeze.PSObject.Properties['local_driver'] -or $bootstrapFreeze.PSObject.Properties['local_test_basis']) {throw 'Installed device authorization/driver boundary'}
     } elseif ($bootstrapDeviceA -eq $true) {throw 'Device contract may not carry local-test authority fields'}
     if ($bootstrapAdmit -ne $true) {throw 'Execution contract not admitted'}
@@ -114,7 +118,7 @@ foreach ($name in @('record-pair.cjs','bounded-output.cjs','shared-control.cjs')
 }
 if ((Get-FileHash -LiteralPath (Join-Path $windowRoot 'runner.cjs')).Hash.ToLowerInvariant() -cne $cfg.executor_sha256.'runner-template.cjs') {throw 'Runner changed after window freeze'}
 if ((Get-FileHash -LiteralPath (Join-Path $windowRoot 'observe-native.cjs')).Hash.ToLowerInvariant() -cne $cfg.executor_sha256.'observe-native.cjs') {throw 'Collector changed after window freeze'}
-if ($cfg.scenario -in @('SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME')) {
+if ($cfg.scenario -in @('SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME','ROS2_DSOFTBUS','DDS214_LAYER_BASELINE')) {
 foreach ($name in @('route-binding-check.stdout.log','route-binding-check.stderr.log')) {
     if (Test-Path -LiteralPath (Join-Path $windowRoot $name)) {throw 'Refusing route check evidence overwrite'}
 }
@@ -150,6 +154,15 @@ function Invoke-HdcLogged([string]$Board, [string]$Step, [string[]]$NativeArgume
     } finally {$ErrorActionPreference = $savedErrorPreference}
     [IO.File]::WriteAllText((Join-Path $stepRoot 'exit-code.txt'), [string]$nativeExit, $utf8)
     if ($nativeExit -ne 0) {throw "HDC failure: $Board/$Step rc=$nativeExit"}
+    if ($NativeArguments.Count -ge 2 -and $NativeArguments[0] -ceq 'file' -and $NativeArguments[1] -in @('send','recv')) {
+        $transferOut=Get-Content -Raw -LiteralPath (Join-Path $stepRoot 'stdout.log')
+        $transferErr=Get-Content -Raw -LiteralPath (Join-Path $stepRoot 'stderr.log')
+        if ($transferOut -match '(?m)^\[Fail\]' -or $transferErr -match '(?m)^\[Fail\]' -or $transferOut -match '(?m)^E001005\b' -or $transferErr -match '(?m)^E001005\b') {
+            [IO.File]::WriteAllText((Join-Path $stepRoot 'file-transfer-result.json'),(@{status='REJECTED';scope='HDC_FILE_TRANSFER_DIAGNOSTIC';local_exit=$nativeExit;remote_command_exit='NOT_APPLICABLE';content_verified=$false}|ConvertTo-Json),$utf8)
+            throw "HDC_FILE_TRANSFER_REJECTED: $Board/$Step; outer rc0 is not transfer success"
+        }
+        # Only the following remote hash/received-content checks prove delivery.
+    }
     return [pscustomobject]@{ Root=$stepRoot; Text=(Get-Content -Raw -LiteralPath (Join-Path $stepRoot 'stdout.log')); LocalExitCode=$nativeExit; OutputBytes=(Get-Item -LiteralPath (Join-Path $stepRoot 'stdout.log')).Length }
 }
 function Test-RemoteCommandReceipt([AllowNull()][object]$Record) {
@@ -211,7 +224,7 @@ function Read-Metadata([string]$Board, [string]$Step) {
 }
 function Assert-ProcessAbsent([string]$Board, [string]$Step) {
     $record = Invoke-Remote -Board $Board -Step $Step -CommandText 'ps -A'
-    if ($record.Text -match 'fastdds_socket|public_socket|mdds_installed|native_permiss') {throw "Experiment or permission process still present on $Board"}
+    if ($record.Text -match 'fastdds_socket|public_socket|mdds_installed|ordinary_ros2|fastdds_dsoftb|native_permiss|softbus_recor') {throw "Experiment or permission process still present on $Board"}
 }
 function Assert-Platform([string]$Board, [string]$Phase) {
     $index=0
@@ -232,6 +245,21 @@ function Assert-Platform([string]$Board, [string]$Phase) {
     $record=Invoke-Remote -Board $Board -Step ($Phase+'-platform-server') -CommandText ('sha256sum '+$server.path)
     if ($record.Text -notmatch ('(?m)^'+$server.sha256+'\s+'+[regex]::Escape($server.path)+'\s*$')) {throw "Platform service changed: $Board"}
 }
+function Assert-PairReady {
+    # Exact registered target selection occurs in Invoke-Remote. Check both
+    # platforms before any owned mkdir/send/chmod, then keep full per-side
+    # baseline checks below: this cannot guarantee later HDC replies.
+    foreach ($board in @('A','B')) {
+        foreach ($name in @('kernel','const.product.name')) {
+            $expected=@($cfg.platform.$board.parameters | Where-Object { $_.name -ceq $name })
+            if ($expected.Count -ne 1) {throw "Pair platform identity not uniquely frozen: $board/$name"}
+            $command=if ($name -ceq 'kernel') {'uname -a'} else {'param get '+$name}
+            $record=Invoke-Remote -Board $board -Step ('pair-ready-'+$name) -CommandText $command
+            $value=($record.Text -replace '(?m)^MDDS_REMOTE_EXIT=0\s*$','').Trim()
+            if ($value -cne $expected[0].value) {throw "Pair platform identity mismatch: $board/$name"}
+        }
+    }
+}
 function Invoke-Permission([string]$Board,[string]$Step,[string]$Action) {
     $root=[string]$cfg.remote.$Board
     $loader=$root+':'+($cfg.system_library_dirs -join ':')
@@ -240,6 +268,7 @@ function Invoke-Permission([string]$Board,[string]$Step,[string]$Action) {
 
 $baselines = @{}; $beforeMetadata = @{}
 try {
+Assert-PairReady
 foreach ($board in @('A','B')) {
     Assert-Platform -Board $board -Phase 'baseline'
     Invoke-Remote -Board $board -Step 'tools-before' -CommandText 'env -i PATH=/system/bin:/system/xbin /system/bin/sh -c ''for mdds_tool in cat readlink stat sha256sum mv env timeout; do command -v "$mdds_tool" || exit 3; done''' | Out-Null
@@ -266,6 +295,9 @@ foreach ($board in @('A','B')) {
         if ($record.Text -notmatch ('(?m)^'+$property.Value+'\s+'+[regex]::Escape($remoteAux)+'\s*$')) {throw 'Auxiliary deployment mismatch'}
     }
     Invoke-Remote -Board $board -Step 'helper-executable' -CommandText ('chmod 700 '+$cfg.remote.$board+'/native_permission_probe') | Out-Null
+    if ($cfg.PSObject.Properties['rmw_debugger']) {
+        Invoke-Remote -Board $board -Step 'debugger-executable' -CommandText ('chmod 700 '+$cfg.remote.$board+'/lldb-server && test -x '+$cfg.remote.$board+'/lldb-server') | Out-Null
+    }
     $mainMember = if ($cfg.PSObject.Properties['main_member']) {[string]$cfg.main_member} else {'public_socket_dds_experiment'}
     Invoke-Remote -Board $board -Step 'executable' -CommandText ('chmod 700 '+$cfg.remote.$board+'/'+$mainMember+' && test -x '+$cfg.remote.$board+'/'+$mainMember) | Out-Null
     foreach ($file in $packageFiles) {
@@ -276,8 +308,21 @@ foreach ($board in @('A','B')) {
     }
 }
 } catch {
+    $pregrantFailure=$_
     [IO.File]::WriteAllText((Join-Path $windowRoot 'window-summary.json'),(@{first_failure=$_.Exception.Message;failure_stage='PREFLIGHT_OR_DEPLOY';cleanup_failures=@();attempted_grants=@();permission_restore='NOT_REQUIRED_NO_GRANT';process_outcome='NO_BUSINESS_PROCESS_STARTED'} | ConvertTo-Json -Depth 8),$utf8)
-    throw
+    # This is the same append-only recovery-only path used after an interrupted
+    # setup. It never re-enters launch, and success does not replace this failure.
+    if ($cfg.scenario -ceq 'ROS2_DSOFTBUS') {
+        $recoveryExit=$null
+        $savedErrorPreference=$ErrorActionPreference
+        try {
+            $ErrorActionPreference='Continue'
+            & python (Join-Path $taskRoot 'recovery/pregrant_recovery.py') --auto-window $windowRoot 1> (Join-Path $windowRoot 'recovery-auto.stdout.log') 2> (Join-Path $windowRoot 'recovery-auto.stderr.log')
+            $recoveryExit=$LASTEXITCODE
+        } finally {$ErrorActionPreference=$savedErrorPreference}
+        [IO.File]::WriteAllText((Join-Path $windowRoot 'RECOVERY_PENDING.json'),(@{run=$cfg.run;original_first_failure=$pregrantFailure.Exception.Message;recovery_tool_exit=$recoveryExit;status='INDEPENDENT_RECOVERY_ACCEPTANCE_REQUIRED';business_allowed=$false}|ConvertTo-Json),$utf8)
+    }
+    throw $pregrantFailure
 }
 $attempted = [Collections.Generic.List[string]]::new()
 $runResult = $null; $windowFailure = $null; $cleanupFailures = [Collections.Generic.List[string]]::new()
@@ -287,7 +332,7 @@ try {
         $adjacent = Invoke-Remote -Board $board -Step 'adjacent-baseline-hash' -CommandText ('sha256sum '+$tokenFile)
         if ($adjacent.Text -notmatch $expectedHash[$board]) {throw "Baseline changed before grant $board"}
         Assert-ProcessAbsent -Board $board -Step 'processes-pregrant'
-        if ($cfg.scenario -in @('SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME')) {
+        if ($cfg.scenario -in @('SHARED_W1','SHARED_W2','F1M','INSTALLED_RUNTIME','ROS2_DSOFTBUS','DDS214_LAYER_BASELINE')) {
         $attempted.Add($board)
         $grant = Invoke-Permission -Board $board -Step 'grant' -Action 'grant'
         if ($grant.Text -notmatch 'verification_permission=0' -or $grant.Text -notmatch 'result=PASS') {throw "Grant verification failed $board"}
@@ -345,14 +390,16 @@ if ($cleanupFailures.Count -gt 0) {
     [IO.File]::WriteAllText((Join-Path $windowRoot 'load-collection-summary.json'),(@{status='NOT_RUN_GUARD_RESTORATION_FAILED';failures=@();permission_cleanup_failed=$true;first_failure=$windowFailure;cleanup_failures=@($cleanupFailures.ToArray());device_operations_after_failed_cleanup=0;load_scope='UNOBSERVED';sdk_internal_settlement='UNOBSERVED'} | ConvertTo-Json -Depth 8),$utf8)
     exit 1
 }
-if ($runResult -and ($runResult.collectionCleanup -ceq 'UNCONFIRMED' -or @($runResult.loads.PSObject.Properties | Where-Object {$_.Value.PSObject.Properties['collectorClosed'] -and $_.Value.collectorClosed -ne $true}).Count -gt 0 -or @($runResult.controls | Where-Object {$_.collector_closed -ne $true}).Count -gt 0)) {
+if ($runResult -and ($runResult.collectionCleanup -ceq 'UNCONFIRMED' -or @($runResult.loads.PSObject.Properties | Where-Object {($_.Value.PSObject.Properties['collectorClosed'] -and $_.Value.collectorClosed -ne $true) -or ($_.Value.PSObject.Properties['loadChainClosed'] -and $_.Value.loadChainClosed -ne $true) -or $_.Value.collectionCleanup -ceq 'UNCONFIRMED'}).Count -gt 0 -or @($runResult.controls | Where-Object {$_.collector_closed -ne $true}).Count -gt 0)) {
     [IO.File]::WriteAllText((Join-Path $windowRoot 'load-collection-summary.json'),(@{status='NOT_RUN_COLLECTION_UNCONFIRMED';first_failure=$windowFailure;device_operations_after_failed_cleanup=0} | ConvertTo-Json),$utf8)
     exit 1
 }
 $loadFailures=[Collections.Generic.List[string]]::new()
 foreach ($board in @('A','B')) {
     $loadRoot=Join-Path $windowRoot ($board+'/load')
-    New-Item -ItemType Directory -Path $loadRoot -ErrorAction Stop | Out-Null
+    $captureNames=@('load-status.txt','load-exe.txt','load-cwd.txt','load-cmdline.txt','load-environ.txt','load-stat-before.txt','load-stat-after.txt','load-uptime.txt','load-maps.txt')
+    $reusePreRelease=($cfg.scenario -in @('ROS2_DSOFTBUS','DDS214_LAYER_BASELINE') -and (Test-Path -LiteralPath $loadRoot -PathType Container))
+    if (-not $reusePreRelease) {New-Item -ItemType Directory -Path $loadRoot -ErrorAction Stop | Out-Null}
     foreach ($artifact in $cfg.package_artifacts) {
         try {
             $remoteFile=$cfg.remote.$board+'/'+$artifact.name
@@ -361,12 +408,32 @@ foreach ($board in @('A','B')) {
         } catch {$loadFailures.Add($board+': '+$_.Exception.Message)}
     }
     try {Assert-Platform -Board $board -Phase 'postrun'} catch {$loadFailures.Add($board+': '+$_.Exception.Message)}
-    foreach ($name in @('load-status.txt','load-exe.txt','load-cwd.txt','load-cmdline.txt','load-environ.txt','load-stat-before.txt','load-stat-after.txt','load-uptime.txt','load-maps.txt')) {
-        try {Invoke-HdcLogged -Board $board -Step ('collect-'+$name) -NativeArguments @('file','recv',($cfg.remote.$board+'/'+$name),(Join-Path $loadRoot $name)) | Out-Null}
-        catch {$loadFailures.Add($board+'/'+$name+': '+$_.Exception.Message)}
+    if ($reusePreRelease) {
+        # The ROS controller already needed these exact live files before it
+        # released business. Preserve and revalidate them; do not overwrite.
+        try {
+            $pre=Get-Content -Raw -LiteralPath (Join-Path $windowRoot ($board+'/load-pre-release-summary.json')) | ConvertFrom-Json
+            if ($pre.pass -ne $true -or $pre.run -cne $cfg.run -or $pre.side -cne $board) {throw 'Pre-release load admission was not complete'}
+            if (@($pre.transfer).Count -ne $captureNames.Count) {throw 'Pre-release load file count mismatch'}
+            foreach ($name in $captureNames) {
+                $row=@($pre.transfer | Where-Object {$_.name -ceq $name})
+                $local=Join-Path $loadRoot $name
+                if ($row.Count -ne 1 -or $row[0].pass -ne $true -or -not (Test-Path -LiteralPath $local -PathType Leaf) -or
+                    (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash.ToLowerInvariant() -cne $row[0].sha256) {throw ('Pre-release load file drift: '+$name)}
+            }
+        } catch {$loadFailures.Add($board+': '+$_.Exception.Message)}
+    } else {
+        foreach ($name in $captureNames) {
+            try {Invoke-HdcLogged -Board $board -Step ('collect-'+$name) -NativeArguments @('file','recv',($cfg.remote.$board+'/'+$name),(Join-Path $loadRoot $name)) | Out-Null}
+            catch {$loadFailures.Add($board+'/'+$name+': '+$_.Exception.Message)}
+        }
     }
     $collectorReceipt=Join-Path $windowRoot ($board+'/load-collector.json')
-    if (Test-Path -LiteralPath $collectorReceipt) {Copy-Item -LiteralPath $collectorReceipt -Destination (Join-Path $loadRoot 'load-collector.json') -ErrorAction Stop}
+    if ($reusePreRelease) {
+        if (-not (Test-Path -LiteralPath $collectorReceipt -PathType Leaf) -or
+            -not (Test-Path -LiteralPath (Join-Path $loadRoot 'load-collector.json') -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $collectorReceipt -Algorithm SHA256).Hash -cne (Get-FileHash -LiteralPath (Join-Path $loadRoot 'load-collector.json') -Algorithm SHA256).Hash) {$loadFailures.Add($board+': pre-release collector receipt drift')}
+    } elseif (Test-Path -LiteralPath $collectorReceipt) {Copy-Item -LiteralPath $collectorReceipt -Destination (Join-Path $loadRoot 'load-collector.json') -ErrorAction Stop}
     & python (Join-Path $PSScriptRoot 'load_origin.py') $windowRoot $board 1> (Join-Path $windowRoot ($board+'/load-analysis.stdout.log')) 2> (Join-Path $windowRoot ($board+'/load-analysis.stderr.log'))
     if ($LASTEXITCODE -ne 0) {$loadFailures.Add($board+': load identity incomplete')}
 }
@@ -374,6 +441,39 @@ $finalFirstFailure=if ($windowFailure) {$windowFailure} elseif ($loadFailures.Co
 $loadScope = if ($cfg.PSObject.Properties['simulated'] -and $cfg.simulated -is [bool] -and $cfg.simulated) {'LOCAL_MODELED_CAPTURE_NOT_DEVICE_EVIDENCE'} else {'LIVE_PROC_SNAPSHOT'}
 [IO.File]::WriteAllText((Join-Path $windowRoot 'load-collection-summary.json'),(@{failures=@($loadFailures.ToArray());permission_cleanup_failed=($cleanupFailures.Count -ne 0);first_failure=$finalFirstFailure;business_first_failure=$windowFailure;load_scope=$loadScope;sdk_internal_settlement='UNOBSERVED'} | ConvertTo-Json -Depth 8),$utf8)
 if ($windowFailure -or $cleanupFailures.Count -or $loadFailures.Count) {exit 1}
+if ($cfg.scenario -ceq 'DDS214_LAYER_BASELINE') {
+    $analysisTool=Join-Path $repoRoot 'scripts/public_socket/analyze_dds214.py'
+    if ((Get-FileHash -LiteralPath $analysisTool).Hash.ToLowerInvariant() -cne $cfg.analyzer_sha256) {throw 'DDS214 analyzer drift'}
+    $evidenceScope=if ($cfg.PSObject.Properties['simulated'] -and $cfg.simulated -is [bool] -and $cfg.simulated) {'local_model'} else {'device'}
+    & python $analysisTool --run $cfg.run --scope $evidenceScope --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --a-stderr (Join-Path $windowRoot 'A.raw.stderr.log') --b-stderr (Join-Path $windowRoot 'B.raw.stderr.log') --output (Join-Path $windowRoot 'dds214-analysis.json') 1> (Join-Path $windowRoot 'dds214-analysis.stdout.log') 2> (Join-Path $windowRoot 'dds214-analysis.stderr.log')
+    $ddsAnalysisExit=$LASTEXITCODE
+    [IO.File]::WriteAllText((Join-Path $windowRoot 'dds214-analysis.rc'),[string]$ddsAnalysisExit,$utf8)
+    if ($ddsAnalysisExit -ne 0) {
+        [IO.File]::WriteAllText((Join-Path $windowRoot 'ANALYSIS_FAILURE.json'),(@{first_failure='DDS214_ANALYSIS_FAILED';run=$cfg.run;analyzer_exit=$ddsAnalysisExit;scope=$evidenceScope} | ConvertTo-Json),$utf8)
+        exit 1
+    }
+}
+if ($cfg.scenario -ceq 'ROS2_DSOFTBUS') {
+    $rosAnalyzer=Join-Path $repoRoot 'scripts/public_socket/analyze_ros2.py'
+    if ((Get-FileHash -LiteralPath $rosAnalyzer).Hash.ToLowerInvariant() -cne $cfg.analyzer_sha256) {throw 'Formal ROS analyzer changed after admission'}
+    & python $rosAnalyzer --run $cfg.run --mode dual --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --output (Join-Path $windowRoot 'ros-analysis.json') 1> (Join-Path $windowRoot 'ros-analysis.stdout.log') 2> (Join-Path $windowRoot 'ros-analysis.stderr.log')
+    $rosAnalysisExit=$LASTEXITCODE
+    [IO.File]::WriteAllText((Join-Path $windowRoot 'ros-analysis.rc'),[string]$rosAnalysisExit,$utf8)
+    if ($rosAnalysisExit -ne 0) {exit 1}
+    if ($cfg.PSObject.Properties['simulated'] -and $cfg.simulated -is [bool] -and $cfg.simulated) {
+        [IO.File]::WriteAllText((Join-Path $windowRoot 'ros-native-status.json'),'{"status":"NOT_RUN_LOCAL_MODEL","device_evidence":false}',$utf8)
+    } else {
+        $nativeAnalyzer=Join-Path $repoRoot 'scripts/public_socket/analyze_ros2_native.py'
+        if ((Get-FileHash -LiteralPath $nativeAnalyzer).Hash.ToLowerInvariant() -cne $cfg.native_analyzer_sha256) {throw 'ROS native analyzer changed after admission'}
+        & python $nativeAnalyzer --run $cfg.run --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --a-stderr (Join-Path $windowRoot 'A.raw.stderr.log') --b-stderr (Join-Path $windowRoot 'B.raw.stderr.log') --output (Join-Path $windowRoot 'ros-native-analysis.json') 1> (Join-Path $windowRoot 'ros-native-analysis.stdout.log') 2> (Join-Path $windowRoot 'ros-native-analysis.stderr.log')
+        $nativeExit=$LASTEXITCODE
+        [IO.File]::WriteAllText((Join-Path $windowRoot 'ros-native-analysis.rc'),[string]$nativeExit,$utf8)
+        if ($nativeExit -ne 0) {
+            [IO.File]::WriteAllText((Join-Path $windowRoot 'ANALYSIS_FAILURE.json'),(@{first_failure='ROS_NATIVE_SAMPLE_CORRELATION_FAILED';phase='POSTRUN_ANALYSIS';run=$cfg.run;analyzer_exit=$nativeExit;original_window_summary=(Join-Path $windowRoot 'window-summary.json')} | ConvertTo-Json -Depth 4),$utf8)
+            exit 1
+        }
+    }
+}
 if ($cfg.PSObject.Properties['cycles'] -and $cfg.cycles -gt 1) {
     if ((Get-FileHash -LiteralPath (Join-Path $repoRoot 'scripts/public_socket/analyze_shared.py')).Hash.ToLowerInvariant() -cne $cfg.analyzer_sha256) {throw 'Formal analyzer changed after admission'}
     & python (Join-Path $repoRoot 'scripts/public_socket/analyze_shared.py') --case $cfg.scenario --cycles $cfg.cycles --require-send-policy selected_retirement_v1 --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --output (Join-Path $windowRoot 'cycle-analysis.json') 1> (Join-Path $windowRoot 'cycle-analysis.stdout.log') 2> (Join-Path $windowRoot 'cycle-analysis.stderr.log')

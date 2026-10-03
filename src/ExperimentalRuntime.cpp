@@ -57,3 +57,11 @@ phase0::BackendStatus Runtime::PumpReceive() noexcept { return impl_->loop->Pump
 bool Runtime::Close() noexcept { return impl_->loop->Shutdown(); }
 phase0::PublicSocketObservation Runtime::ObserveSocket() const { return impl_->backend->Observe(); }
 }
+namespace fastdds_dsoftbus::dsoftbus::phase0 {
+bool RuntimeProbeAccess::BeforeNativeClose(experimental::Runtime& runtime,
+        std::function<void(const host_test::RuntimeShutdownPoint&)> observer) {
+    // Assembly and MakeDescriptor belong to the same external control thread.
+    if(runtime.impl_->issued.load())return false;
+    return runtime.impl_->loop->SetBeforeNativeClose(std::move(observer));
+}
+}

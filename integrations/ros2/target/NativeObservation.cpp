@@ -6,28 +6,47 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <memory>
+#include <stdexcept>
 
 namespace {
 constexpr std::size_t capacity = 8192;
 struct Frame { std::uint64_t observation; bool sending; std::int32_t socket;
     std::array<std::uint8_t,16> writer; std::int32_t high; std::uint32_t low; };
-std::array<Frame,capacity> frames;
-std::size_t count=0;
-std::mutex mutex;
-std::string run;
-unsigned side=0;
-std::atomic<std::uint64_t> observations{0},send_enter{0},send_return{0},send_error{0},ingress{0},overflow{0},malformed{0};
-std::mutex startup_mutex;
-fastdds_dsoftbus::ros2_diagnostics::Snapshot startup;
-std::atomic<std::uint64_t> capture_faults{0},exported_failure{0},output_errors{0};
-bool cleanup_started=false;
+struct ObserverState {
+    std::array<Frame,capacity> frames{};
+    std::size_t count=0;
+    std::mutex mutex;
+    std::string run;
+    unsigned side=0;
+    std::atomic<std::uint64_t> observations{0},send_enter{0},send_return{0},send_error{0},ingress{0},overflow{0},malformed{0};
+    std::mutex startup_mutex;
+    fastdds_dsoftbus::ros2_diagnostics::Snapshot startup;
+    std::atomic<std::uint64_t> capture_faults{0},exported_failure{0},output_errors{0};
+    bool cleanup_started=false;
+};
+// Begin publishes one fully initialized, fixed-capacity metadata store. It owns
+// no Runtime, payload, receiver, SDK handle or thread. A failed public deletion
+// may retain the pump/callback module until process exit, so this store must not
+// register a static destructor. Callback paths never allocate or initialize it.
+std::atomic<ObserverState*> published{nullptr};
+std::atomic<bool> begin_claimed{false};
+std::atomic<std::uint64_t> prebegin_faults{0};
+ObserverState* trace_state() noexcept {
+    auto* state=published.load(std::memory_order_acquire);
+    if(!state)++prebegin_faults;
+    return state;
+}
 bool suffix(const char* text,const char* ending) {
     const auto n=std::strlen(text),m=std::strlen(ending);return n>=m&&!std::strcmp(text+n-m,ending);
 }
 void capture(const char* name,std::uint64_t entry,int role,std::int32_t socket,std::int64_t value,std::uint64_t length) noexcept {
     using namespace fastdds_dsoftbus::ros2_diagnostics;
+    auto* state=trace_state();if(!state)return;
+    auto& startup=state->startup;
+    auto& cleanup_started=state->cleanup_started;
     try {
-        std::lock_guard<std::mutex> lock(startup_mutex);
+        std::lock_guard<std::mutex> lock(state->startup_mutex);
         if(!name){++startup.omitted;return;}
         Event e;e.seq=++startup.last_seq;e.entry=entry;e.role=role;e.socket=socket;e.length=length;e.value=value;
         std::size_t n=0;while(n<sizeof(e.operation)-1&&name[n]){const char ch=name[n];e.operation[n]=(ch>='A'&&ch<='Z')||(ch>='a'&&ch<='z')||(ch>='0'&&ch<='9')||ch=='_'?ch:'_';++n;}
@@ -52,85 +71,113 @@ void capture(const char* name,std::uint64_t entry,int role,std::int32_t socket,s
         const bool ordinary_data=!std::strcmp(name,"OnBytes")||!std::strncmp(name,"SendBytes_",10);
         if(ordinary_data&&!failed){++startup.omitted;return;}
         if(startup.count<startup_capacity)startup.events[startup.count++]=e;else ++startup.overflow;
-    }catch(...){++capture_faults;}
+    }catch(...){++state->capture_faults;}
 }
 }
 namespace fastdds_dsoftbus::dsoftbus::runtime_probe {
 void TraceEvent(const char* event,std::uint64_t entry,int role,std::int32_t socket,std::int64_t value,std::uint64_t length) noexcept {
-    if(!event){++capture_faults;return;}
-    if(!std::strcmp(event,"SendBytes_enter"))++send_enter;
-    else if(!std::strcmp(event,"SendBytes_return")){++send_return;if(value!=0)++send_error;}
+    auto* state=trace_state();if(!state)return;
+    if(!event){++state->capture_faults;return;}
+    if(!std::strcmp(event,"SendBytes_enter"))++state->send_enter;
+    else if(!std::strcmp(event,"SendBytes_return")){++state->send_return;if(value!=0)++state->send_error;}
     capture(event,entry,role,socket,value,length);
 }
 void TraceText(const char* key,const char* borrowed) noexcept {
     // The interface supplies a valid borrowed C string. Do not retain pointers,
     // peer identities or arbitrary text; bounded scanning records only truncation.
+    auto* state=trace_state();if(!state)return;
+    auto& startup=state->startup;
     try {
-        std::lock_guard<std::mutex> lock(startup_mutex);ros2_diagnostics::Event e;
-        e.seq=++startup.last_seq;e.type=ros2_diagnostics::ValueType::RedactedText;e.redacted=true;e.returned=true;e.cleanup=cleanup_started;
+        std::lock_guard<std::mutex> lock(state->startup_mutex);ros2_diagnostics::Event e;
+        e.seq=++startup.last_seq;e.type=ros2_diagnostics::ValueType::RedactedText;e.redacted=true;e.returned=true;e.cleanup=state->cleanup_started;
         std::strcpy(e.operation,"TraceText_redacted");
         std::size_t n=0;if(borrowed){while(n<64&&borrowed[n])++n;e.truncated=n==64&&borrowed[n]!='\0';}else e.truncated=false;
         e.length=n;if(e.truncated)++startup.text_truncated;
         if(!key||!borrowed){++startup.omitted;std::strcpy(e.operation,"TraceText_unknown");e.type=ros2_diagnostics::ValueType::NotObserved;e.returned=false;}
         if(startup.count<ros2_diagnostics::startup_capacity)startup.events[startup.count++]=e;else ++startup.overflow;
-    }catch(...){++capture_faults;}
+    }catch(...){++state->capture_faults;}
 }
 }
 namespace fastdds_dsoftbus::dsoftbus::dds_experiment {
 std::uint64_t SocketFrame(const char* event,std::int32_t socket,const std::uint8_t* data,std::size_t size) noexcept {
-    const auto observation=++observations;
+    auto* state=trace_state();if(!state)return 0;
+    const auto observation=++state->observations;
     const bool sending=!std::strcmp(event,"SDK_SEND");
-    if(!sending)++ingress;
+    if(!sending)++state->ingress;
     const auto decoded=fastdds_dsoftbus::experiment::ObserveRtps(data,size);
-    if(!decoded.valid){++malformed;return observation;}
+    if(!decoded.valid){++state->malformed;return observation;}
     // Bounded structural metadata only. Never store payload or alter/forward it.
-    std::lock_guard<std::mutex> lock(mutex);
+    std::lock_guard<std::mutex> lock(state->mutex);
     for(const auto& item:decoded.data) {
-        if(count==capacity){++overflow;continue;}
-        frames[count++]={observation,sending,socket,item.writer_guid,item.sequence_hi,item.sequence_lo};
+        if(state->count==capacity){++state->overflow;continue;}
+        state->frames[state->count++]={observation,sending,socket,item.writer_guid,item.sequence_hi,item.sequence_lo};
     }
     return observation;
 }
 }
 namespace fastdds_dsoftbus::ros2_target_observation {
 void Begin(const std::string& identifier,unsigned board) {
-    std::lock_guard<std::mutex> lock(mutex);run=identifier;side=board;
-    std::lock_guard<std::mutex> startup_lock(startup_mutex);
-    startup={};startup.side=board;startup.source=ros2_diagnostics::Source::RealTarget;
-    startup.initialized=identifier.size()==16&&board<2&&identifier.find_first_not_of("0123456789abcdef")==std::string::npos;
-    if(startup.initialized)std::memcpy(startup.run,identifier.data(),16);
-    cleanup_started=false;capture_faults=0;exported_failure=0;output_errors=0;
+    if(identifier.size()!=16||board>1||identifier.find_first_not_of("0123456789abcdef")!=std::string::npos)
+        throw std::invalid_argument("Invalid observer identity");
+    bool expected=false;
+    if(!begin_claimed.compare_exchange_strong(expected,true))throw std::logic_error("Observer already initialized");
+    try {
+        std::unique_ptr<ObserverState> candidate(new ObserverState);
+        candidate->run=identifier;candidate->side=board;
+        candidate->startup.side=board;candidate->startup.source=ros2_diagnostics::Source::RealTarget;
+        candidate->startup.initialized=true;
+        std::memcpy(candidate->startup.run,identifier.c_str(),17);
+        published.store(candidate.release(),std::memory_order_release);
+    }catch(...){begin_claimed=false;throw;}
 }
 #ifdef FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST
-void SetSourceForHostInjection() noexcept {try{std::lock_guard<std::mutex> lock(startup_mutex);startup.source=ros2_diagnostics::Source::HostInjected;}catch(...){++capture_faults;}}
+void SetSourceForHostInjection() noexcept {auto* state=trace_state();if(!state)return;try{std::lock_guard<std::mutex> lock(state->startup_mutex);state->startup.source=ros2_diagnostics::Source::HostInjected;}catch(...){++state->capture_faults;}}
 #endif
 bool Capture(ros2_diagnostics::Snapshot& output) noexcept {
-    try{std::unique_lock<std::mutex> lock(startup_mutex,std::try_to_lock);if(!lock.owns_lock())return false;output=startup;output.overflow+=capture_faults.load();output.output_errors=output_errors.load();return output.initialized;}catch(...){++capture_faults;return false;}
+    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
+    try{std::unique_lock<std::mutex> lock(state->startup_mutex,std::try_to_lock);if(!lock.owns_lock())return false;output=state->startup;output.overflow+=state->capture_faults.load()+prebegin_faults.load();output.output_errors=state->output_errors.load();return output.initialized;}catch(...){++state->capture_faults;return false;}
 }
 bool ExportPending(ros2_diagnostics::Writer writer,void* context) noexcept {
+    // Control-side prefix export is separate from this first-error exporter.
+    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
     ros2_diagnostics::Snapshot snapshot;
     if(!Capture(snapshot)||!snapshot.first_present)return true;
-    auto previous=exported_failure.load();if(previous>=snapshot.first.seq)return output_errors.load()==0;
-    if(!exported_failure.compare_exchange_strong(previous,snapshot.first.seq))return true;
-    if(!ros2_diagnostics::Write(snapshot,writer,context)||(writer==ros2_diagnostics::Stdout&&std::fflush(stdout))){++output_errors;return false;}
+    auto previous=state->exported_failure.load();if(previous>=snapshot.first.seq)return state->output_errors.load()==0;
+    if(!state->exported_failure.compare_exchange_strong(previous,snapshot.first.seq))return true;
+    if(!ros2_diagnostics::Write(snapshot,writer,context)||(writer==ros2_diagnostics::Stdout&&std::fflush(stdout))){++state->output_errors;return false;}
     return true;
 }
+bool CapturePrefix(ros2_diagnostics::NativePrefix& output) noexcept {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
+    try {
+        std::unique_lock<std::mutex> lock(state->mutex,std::try_to_lock);if(!lock.owns_lock())return false;
+        output={};std::memcpy(output.run,state->run.c_str(),17);output.side=state->side;output.valid=true;
+        output.send_enter=state->send_enter;output.send_return=state->send_return;output.send_error=state->send_error;
+        output.ingress=state->ingress;output.overflow=state->overflow;output.malformed=state->malformed;
+        output.total_stored=state->count;output.stored=(std::min)(state->count,ros2_diagnostics::prefix_capacity);
+        output.first_index=state->count-output.stored;
+        for(std::size_t i=0;i<output.stored;++i){const auto& frame=state->frames[output.first_index+i];
+            output.frames[i]={frame.observation,frame.sending,frame.socket,frame.writer,frame.high,frame.low};}
+        return true;
+    }catch(...){++state->capture_faults;return false;}
+}
 bool Flush() {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
     // Snapshot under the leaf observation mutex, release before any I/O. A late
     // SDK callback is not declared physically drained by this local snapshot.
     std::array<Frame,capacity> snapshot;
     std::size_t stored;
-    {std::lock_guard<std::mutex> lock(mutex);stored=count;std::copy_n(frames.begin(),stored,snapshot.begin());}
+    {std::lock_guard<std::mutex> lock(state->mutex);stored=state->count;std::copy_n(state->frames.begin(),stored,snapshot.begin());}
     for(std::size_t i=0;i<stored;++i) {
         char guid[33]{};for(std::size_t j=0;j<16;++j)std::snprintf(guid+2*j,3,"%02x",snapshot[i].writer[j]);
         std::fprintf(stdout,"ROS_NATIVE_DATA run=%s side=%c observation=%llu direction=%s socket=%d writer=%s sequence_hi=%d sequence_lo=%u scope=STRUCTURAL_APP_OBSERVER\n",
-            run.c_str(),side?'B':'A',static_cast<unsigned long long>(snapshot[i].observation),snapshot[i].sending?"SDK_SEND":"SDK_INGRESS",snapshot[i].socket,guid,snapshot[i].high,snapshot[i].low);
+            state->run.c_str(),state->side?'B':'A',static_cast<unsigned long long>(snapshot[i].observation),snapshot[i].sending?"SDK_SEND":"SDK_INGRESS",snapshot[i].socket,guid,snapshot[i].high,snapshot[i].low);
     }
     std::fprintf(stdout,"ROS_NATIVE_SUMMARY run=%s side=%c send_enter=%llu send_return=%llu send_error=%llu ingress=%llu detailed_stored=%zu metadata_limit=%zu overflow=%llu malformed=%llu sdk_epoch=NOT_PROVEN\n",
-        run.c_str(),side?'B':'A',static_cast<unsigned long long>(send_enter.load()),static_cast<unsigned long long>(send_return.load()),static_cast<unsigned long long>(send_error.load()),static_cast<unsigned long long>(ingress.load()),stored,capacity,static_cast<unsigned long long>(overflow.load()),static_cast<unsigned long long>(malformed.load()));
+        state->run.c_str(),state->side?'B':'A',static_cast<unsigned long long>(state->send_enter.load()),static_cast<unsigned long long>(state->send_return.load()),static_cast<unsigned long long>(state->send_error.load()),static_cast<unsigned long long>(state->ingress.load()),stored,capacity,static_cast<unsigned long long>(state->overflow.load()),static_cast<unsigned long long>(state->malformed.load()));
     std::fflush(stdout);
     ros2_diagnostics::Snapshot startup_copy;
     const bool startup_ok=Capture(startup_copy)&&ros2_diagnostics::Write(startup_copy,ros2_diagnostics::Stdout,nullptr);
-    return startup_ok&&!startup_copy.overflow&&!startup_copy.output_errors&&overflow.load()==0&&malformed.load()==0&&send_error.load()==0&&send_enter.load()==send_return.load();
+    return startup_ok&&!startup_copy.overflow&&!startup_copy.output_errors&&state->overflow.load()==0&&state->malformed.load()==0&&state->send_error.load()==0&&state->send_enter.load()==state->send_return.load();
 }
 }

@@ -10,7 +10,7 @@ constexpr const char* native_probe_process_name = "fastdds_dsoftbus_probe";
 constexpr const char* native_probe_apl = "normal";
 constexpr const char* native_probe_permission = "ohos.permission.DISTRIBUTED_DATASYNC";
 
-enum class NativePermissionMode { Grant, SocketCheck, Revoke };
+enum class NativePermissionMode { Grant, SocketCheck, Revoke, VerifyDenied };
 // Explicit external JSON/ownership proof, while the service name is unregistered.
 // This is not a successful service lookup and never proves DENIED.
 constexpr int native_lookup_owned_unregistered = 1;

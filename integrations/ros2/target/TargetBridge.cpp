@@ -1,0 +1,193 @@
+#include "../BridgeOwner.hpp"
+#include "../ShutdownCoordination.hpp"
+extern "C" void FastddsDsoftbusFactoryFlushTeardownPending() noexcept;
+#include "../PlatformModule.hpp"
+#include "NativeObservation.hpp"
+#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
+#include <fastrtps/attributes/LibrarySettingsAttributes.h>
+#include <fastrtps/xmlparser/XMLProfileManager.h>
+#include <link.h>
+#include <unistd.h>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <regex>
+#include <set>
+#include <stdexcept>
+#include <chrono>
+#include <tinyxml2.h>
+static_assert(TIXML2_MAJOR_VERSION == 6, "Target requires the pinned TinyXML2 ABI");
+
+namespace {
+using namespace fastdds_dsoftbus::dsoftbus;
+using Owner = fastdds_dsoftbus::ros2_integration::BridgeOwner;
+using Values = std::map<std::string, std::string>;
+Values read(const char* path) {
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("configuration missing");
+    const std::set<std::string> keys{"bridge_library", "fastdds_module", "fastcdr_module", "softbus_module",
+        "backend", "run", "side", "domain", "authorized_package", "peer_network_id", "service_prefix", "connect_release"};
+    Values values;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        const auto equals = line.find('=');
+        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release") ||
+                !values.emplace(line.substr(0, equals), line.substr(equals + 1)).second)
+            throw std::runtime_error("configuration syntax/duplicate/unknown key");
+    }
+    for (const auto& key : keys) if (!values.count(key) || values.at(key).empty())
+        throw std::runtime_error("required configuration field missing");
+    return values;
+}
+unsigned integer(const Values& v, const char* key, unsigned limit) {
+    const auto& text = v.at(key);
+    if (!std::regex_match(text, std::regex("[0-9]+"))) throw std::runtime_error("integer syntax");
+    const auto value = std::stoul(text);
+    if (value > limit) throw std::runtime_error("integer range");
+    return static_cast<unsigned>(value);
+}
+Locator logical(unsigned side) {
+    Locator value{};
+    value.kind = LocatorCodec::kind; value.port = LocatorCodec::port;
+    value.address[0] = 0x31; value.address[15] = static_cast<unsigned char>(side + 1);
+    return value;
+}
+struct Origins { const Values* config; bool fastdds=false, fastcdr=false, softbus=false, mixed=false; };
+int loaded(dl_phdr_info* info, size_t, void* context) {
+    auto& origins = *static_cast<Origins*>(context);
+    const std::string path = info->dlpi_name ? info->dlpi_name : "";
+    if (path.empty()) return 0;
+    const auto name = std::filesystem::path(path).filename().string();
+    if (name.find("libfastdds.so") == 0) origins.mixed = true;
+    for (const auto& item : {std::make_pair("libfastrtps.so", "fastdds_module"),
+            std::make_pair("libfastcdr.so", "fastcdr_module"),
+            std::make_pair("libsoftbus_client", "softbus_module")}) {
+        if (name.find(item.first) != 0) continue;
+        std::error_code error;
+        const bool same = std::filesystem::equivalent(path, origins.config->at(item.second), error);
+        if (error || !same) { origins.mixed = true; continue; }
+        if (std::string(item.second) == "fastdds_module") origins.fastdds = true;
+        else if (std::string(item.second) == "fastcdr_module") origins.fastcdr = true;
+        else origins.softbus = true;
+        std::fprintf(stderr, "FDDST_LOADED module=%s path=%s\n", item.first, path.c_str());
+    }
+    return 0;
+}
+bool await_connect(Owner* owner, const std::string& path) {
+    const auto native = owner->runtime->ObserveSocket();
+    if (!native.listener_configured || !native.listener_socket || native.fake_sdk) return false;
+    std::fprintf(stdout, "ROS_LISTENER_READY run=%s side=%c pid=%ld listener=%d fake_sdk=0\n",
+            owner->run.c_str(), owner->side ? 'B' : 'A', static_cast<long>(getpid()), *native.listener_socket);
+    std::fprintf(stdout,"ROS_STAGE run=%s side=%c pid=%ld stage=LISTENER_READY\n",owner->run.c_str(),owner->side?'B':'A',static_cast<long>(getpid()));
+    std::fflush(stdout);
+    const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    while (std::chrono::steady_clock::now() < end) {
+        std::ifstream input(path); std::string line;
+        if (std::getline(input, line)) {
+            if(!line.empty()&&line.back()=='\r')line.pop_back();
+            const auto expected = "ROS_RELEASE run=" + owner->run + " side=" + (owner->side ? "B" : "A") + " stage=LISTENER_READY";
+            if (line != expected) return false;
+            std::fprintf(stdout, "ROS_CONNECT_ALLOWED run=%s side=%c pid=%ld\n", owner->run.c_str(),
+                    owner->side ? 'B' : 'A', static_cast<long>(getpid()));
+            std::fflush(stdout); return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    return false; // Control deadline is not an SDK invocation cancellation.
+}
+}
+
+extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT unsigned FastddsDsoftbusHookVersion() { return 21405; }
+extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
+        const char* path, unsigned domain, void* raw, void** output) {
+    *output = nullptr;
+    try {
+        const auto values = read(path);
+        if (values.at("backend") != "OHOS_PUBLIC_SOCKET_EXPERIMENTAL") throw std::runtime_error("target backend selection");
+        if (!std::regex_match(values.at("run"), std::regex("[0-9a-f]{16}")) ||
+                !std::regex_match(values.at("peer_network_id"), std::regex("[0-9a-f]{64}")))
+            throw std::runtime_error("run/peer identity");
+        const auto side = integer(values, "side", 1);
+        if (integer(values, "domain", 232) != domain) throw std::runtime_error("domain mismatch");
+        for (const auto* key : {"fastdds_module", "fastcdr_module", "softbus_module", "connect_release"})
+            if (!std::filesystem::path(values.at(key)).is_absolute()) throw std::runtime_error("absolute input required");
+        Origins origins{&values}; dl_iterate_phdr(loaded, &origins);
+        if (origins.mixed || !origins.fastdds || !origins.fastcdr || !origins.softbus)
+            throw std::runtime_error("loaded dependency origin mismatch");
+        auto* owner = new Owner; *output = owner; owner->run = values.at("run"); owner->side = side;
+        fastdds_dsoftbus::ros2_target_observation::Begin(owner->run,side);
+        owner->diagnostic_control=[] { (void)fastdds_dsoftbus::ros2_target_observation::ExportPending(); FastddsDsoftbusFactoryFlushTeardownPending(); };
+        const auto prefix = values.at("service_prefix") + "." + owner->run;
+        auto name = [&](unsigned index, const char* role) { return prefix + "." + std::to_string(index) + "." + role; };
+        phase0::PublicSocketConfiguration backend;
+        backend.identity = {name(side,"outgoing"),{910+side*4},{1010+side*4}};
+        backend.listener_identity = {name(side,"listener"),{911+side*4},{1011+side*4}};
+        backend.package_name = values.at("authorized_package"); backend.peer_network_id = values.at("peer_network_id");
+        backend.peer_name = name(1-side,"listener"); backend.max_message_size = 65536;
+        backend.bind_qos = {{0,80},{1,2000}}; backend.listen_qos = backend.bind_qos;
+        DSoftBusTransportDescriptor config(65536);
+        config.directory.locals = {{logical(side),prefix+".ns",backend.listener_identity.service_name}};
+        config.directory.routes = {{{logical(side),logical(1-side)},
+            {backend.peer_network_id,backend.peer_name,backend.identity.service_name,{name(1-side,"outgoing")},RecordDataType::Bytes},1}};
+        config.default_metatraffic_unicast = {logical(side)}; config.default_user_unicast = {logical(side)};
+        owner->runtime = std::make_unique<experimental::Runtime>(backend);
+        if (!owner->runtime->SetPreConnectGate([owner, release=values.at("connect_release")] { return await_connect(owner,release); }))
+            throw std::runtime_error("gate installation failed");
+        if(values.count("runtime_close_release")) {
+            const auto expected="/data/local/tmp/mdds_dds_"+owner->run+"_"+(side?"B":"A")+"/control.RUNTIME_CLOSE";
+            if(values.at("runtime_close_release")!=expected)throw std::runtime_error("close control window path");
+            fastdds_dsoftbus::ros2_integration::InstallShutdownCoordination(*owner,owner,expected);
+        }
+        owner->descriptor = owner->runtime->MakeDescriptor(config);
+        if (!owner->descriptor) throw std::runtime_error("descriptor issuance failed");
+        auto& qos = *static_cast<eprosima::fastdds::dds::DomainParticipantQos*>(raw);
+        qos.transport().use_builtin_transports = false; qos.transport().user_transports.clear();
+        qos.transport().user_transports.push_back(owner->descriptor);
+        qos.wire_protocol().builtin.initialPeersList.clear(); qos.wire_protocol().builtin.initialPeersList.push_back(logical(1-side));
+        qos.wire_protocol().builtin.metatrafficMulticastLocatorList.clear();
+        qos.wire_protocol().builtin.metatrafficUnicastLocatorList.clear();
+        qos.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(logical(side));
+        qos.wire_protocol().default_unicast_locator_list.clear(); qos.wire_protocol().default_unicast_locator_list.push_back(logical(side));
+        qos.wire_protocol().default_multicast_locator_list.clear();
+        eprosima::fastrtps::LibrarySettingsAttributes settings;
+        settings.intraprocess_delivery = eprosima::fastrtps::INTRAPROCESS_OFF;
+        eprosima::fastrtps::xmlparser::XMLProfileManager::library_settings(settings);
+        owner->StartPump();
+        std::fprintf(stderr,"FDDST_ROS_PRE_PARTICIPANT run=%s side=%u builtin=0 intraprocess=0 mode=OHOS_PUBLIC_SOCKET_EXPERIMENTAL\n",owner->run.c_str(),side);
+        return 0;
+    } catch (const std::exception& error) {
+        std::fprintf(stderr,"FDDST_REQUIRED_ERROR %s\n",error.what()); return 1;
+    }
+}
+extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT void FastddsDsoftbusAfterPublicDelete(void* value) {
+    auto* owner = static_cast<Owner*>(value); if (!owner) return;
+    // Called by the patched factory only after the original public deletion
+    // path actually disabled/deleted/removed the Participant successfully.
+    owner->public_delete_completed=true;
+    std::fprintf(stdout,"ROS_DDS_DELETED run=%s side=%c pid=%ld dds_component_result=0 api_return=NOT_OBSERVED scope=FACTORY_POST_DELETE\n",
+        owner->run.c_str(),owner->side?'B':'A',static_cast<long>(getpid()));std::fflush(stdout);
+}
+extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCaptureStartup(
+        fastdds_dsoftbus::ros2_diagnostics::Snapshot* output) noexcept {
+    return output&&fastdds_dsoftbus::ros2_target_observation::Capture(*output)?0:1;
+}
+extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusClose(void* value) {
+    // The normal final summary remains separate from pre-delete value prefixes.
+    auto* owner = static_cast<Owner*>(value); if (!owner) return 1;
+    const auto result = owner->CloseLocal();
+    if (result == 1) { std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr); return 1; }
+    const auto native = owner->runtime->ObserveSocket();
+    const bool observation_complete = fastdds_dsoftbus::ros2_target_observation::Flush();
+    std::fprintf(stderr,"FDDST_REAL_SOCKET run=%s side=%u fake_sdk=%d rejected_callbacks=%llu\n",owner->run.c_str(),owner->side,
+        int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));
+    owner->descriptor.reset(); owner->runtime.reset();
+    std::fprintf(stderr,"FDDST_ROS_CLOSED run=%s side=%u pump_joined=1 runtime_closed=1 local_only=1\n",owner->run.c_str(),owner->side);
+    if(result==0&&observation_complete&&owner->public_delete_completed){std::fprintf(stdout,"ROS_STAGE run=%s side=%c pid=%ld stage=DDS_DELETED\n",owner->run.c_str(),owner->side?'B':'A',static_cast<long>(getpid()));std::fflush(stdout);}
+    std::fflush(stderr); delete owner; return observation_complete ? result : 2;
+}
+extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCaptureNativePrefix(
+        fastdds_dsoftbus::ros2_diagnostics::NativePrefix* output) noexcept {
+    return output&&fastdds_dsoftbus::ros2_target_observation::CapturePrefix(*output)?0:1;
+}

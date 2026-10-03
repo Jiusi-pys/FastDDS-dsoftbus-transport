@@ -1,0 +1,21 @@
+{
+  "scope": "ACTUAL_HOST_DDS214_TEXT_EXCERPT_NOT_DEVICE",
+  "run": "71997f4878cde186",
+  "selection": "Exact DDS214_ records and three Host factory/IO/close record prefixes; module path lines omitted.",
+  "members": [
+    {
+      "side": "A",
+      "source": ".artifacts\\ros2-device-acceptance\\layer-gap-validation-20261002\\initial-tester\\r3-normal\\A.raw.log",
+      "source_sha256": "ba7af6cb4fe6812d75ce87ddb5bdef5ad14505ad5d216f119ff14ccacd85d83c",
+      "fixture": "A.stdout",
+      "sha256": "8f415df396755bfb8c596dbea68b7ae6cf428d621ceeb19e9a4f8a459b3f1e54"
+    },
+    {
+      "side": "B",
+      "source": ".artifacts\\ros2-device-acceptance\\layer-gap-validation-20261002\\initial-tester\\r3-normal\\B.raw.log",
+      "source_sha256": "180b19bbd359c770da006274832c6ffd01bdd199cf6cf8e2907e67c51087cc02",
+      "fixture": "B.stdout",
+      "sha256": "ba1303b832ae3b9b779e15aeb1021bd967a0654610b5f0b1ba5775aeb2bf1c61"
+    }
+  ]
+}

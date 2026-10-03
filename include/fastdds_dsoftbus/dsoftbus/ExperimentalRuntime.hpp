@@ -4,6 +4,7 @@
 #include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
 #include <functional>
 #include <memory>
+namespace fastdds_dsoftbus::dsoftbus::phase0 { class RuntimeProbeAccess; }
 
 namespace fastdds_dsoftbus::dsoftbus::experimental {
 // Opt-in, unqualified, one Participant per runtime. No worker threads are created.
@@ -38,6 +39,7 @@ public:
     bool Close() noexcept;
     phase0::PublicSocketObservation ObserveSocket() const;
 private:
+    friend class phase0::RuntimeProbeAccess;
     struct Impl;
     struct Descriptor;
     std::shared_ptr<Impl> impl_;

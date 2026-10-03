@@ -1,0 +1,9 @@
+{
+  "commit": "ebcb5c05e9da9e262041e8616bbaff61ab40a296",
+  "version": "2.14.5",
+  "scope": "VERSION_BOUND_TOPICDESCRIPTION_RTTI_KEY_FUNCTION_NO_PROTOCOL_CHANGE",
+  "files": [
+    {"path": "include/fastdds/dds/topic/TopicDescription.hpp", "base_sha256": "9cd7118479c25d4ce43c5be9cc8d1ca8b7b829fa004d542c6838c19a89b3bc6f"},
+    {"path": "src/cpp/fastdds/topic/Topic.cpp", "base_sha256": "59919ec48543fe1350c2c37874d9aec1a5f282b769b2faabc2716bdd31f7b04a"}
+  ]
+}

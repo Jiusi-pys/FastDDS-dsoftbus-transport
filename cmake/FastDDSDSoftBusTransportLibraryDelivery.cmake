@@ -63,6 +63,14 @@ if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME OR FASTDDS_DSOFTBUS_BUILD_EXPERIM
             add_test(NAME dsoftbus.ros2_startup.${_case} COMMAND ros2_startup_diagnostics_tests ${_case})
             set_tests_properties(dsoftbus.ros2_startup.${_case} PROPERTIES TIMEOUT 20)
         endforeach()
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        set(FASTDDS_DSOFTBUS_OBSERVER_EXIT_WSL_DISTRO "Ubuntu-20.04" CACHE STRING
+            "Existing Linux WSL environment for the observer finalization component test")
+        add_test(NAME dsoftbus.ros2_startup.exit_lifetime
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/ros2_host/observer_exit_lifetime_tests.py"
+                --output-root "${CMAKE_CURRENT_BINARY_DIR}/observer-exit-evidence"
+                --wsl-distro "${FASTDDS_DSOFTBUS_OBSERVER_EXIT_WSL_DISTRO}")
+        set_tests_properties(dsoftbus.ros2_startup.exit_lifetime PROPERTIES TIMEOUT 180 SKIP_RETURN_CODE 77)
         # One Runtime lifecycle per process: the installed entry documents that
         # contract and the process-global service-record table is not reusable
         # across two live pairs, so each case runs as its own process.

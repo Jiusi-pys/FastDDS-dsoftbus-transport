@@ -18,6 +18,107 @@ Host 验证使用 `HOST_OPAQUE_BYTES_TEST_ONLY` 桥接和两个独立进程。�
 不透明字节，不解析 ROS/RTPS，也不伪造发现、匹配或 Reader 结果；运行记录中的
 `fake_sdk=1` 是 Host 测试边界标识，不是设备或 SDK 证据。
 
+## 当前限定双板验收摘要（2026-10-04）
+
+在 SDK23/AArch64 的 `build/ros2-target/r2` 包上，登记的两块 RK3588A 已完成限定范围
+的 ROS 2 双板验收：query `d1c2cb4097279214`、data `be8cb2d90f287223`；普通
+`rclcpp` → 未修改 `rmw_fastrtps` → Fast DDS 2.14.5 → `FastDDSDSoftBusTransport`
+→ DSoftBus Socket/Binding → 对端 ROS 回调路径实际运行。RELIABLE 和 BEST_EFFORT
+分别双向 5/5，合计 Topic 20/20；graph、service request/reply、实体删除、Participant
+删除、Runtime close、正常进程退出和环境恢复均有独立原始收据。
+
+该摘要只覆盖上述限定双板功能范围。目标构建、安装消费和 Host 使用方式见
+[构建、安装和外部消费](#构建安装和外部消费)。SDK epoch/drain/cancellation、任意故障
+安全、异构端点和生产资格仍未证明；P0/PF/P4 原状态、默认
+`NativeBackendUnavailable` 和 `QualificationProfile` 状态保持项目既有边界。设备验收
+记录产生时 HEAD 为 `4807765f53826ed0b882cac32610acb17ee30b4f` 且尚未提交；后续
+本地提交状态以 Git 历史为准，本摘要不预写推送结果。
+
+## 历史快照：ROS 双板验收停止状态（2026-10-01）
+
+独立 tester/reviewer 已确认 `FAIL_CONFIRMED_AND_STOP_REQUIRED`。补充 query
+`cdd5bbe62d49a8a6` 和 repair query `5b1d035fb8e6ae66` 均为
+`PASS_QUERY_ONLY`，不能证明 Socket、DDS、ROS 数据或生产成功。canonical data
+`9b301c516da4d1eb` 保持 `FAIL_LOGGING_INITIALIZATION`；repair data
+`a6b0948bf98c9a78` 远端 A/B 均退出 `4`，controller 首个失败为
+`ROS_CONTEXT_CLOSE`，两侧均未释放 listener/stage，正式 Topic writes/takes 为
+`0/0`（合同期望 `20/20`），没有 graph、service 或正常 DDS/Runtime close。
+
+原始输出观察到 publisher、缺少 unicast locator/remote match、删除 Participant
+失败和 factory destructor incomplete；这些是症状，根因仍 `NOT_CONFIRMED`。两端
+正式环境 ownership、snapshot、metadata、DENIED 和 process guards 在测量范围内
+通过，且 collector 已关闭；这不替代正常业务关闭、SDK drain 或 native completion。
+两端 live load 均为 `NO_NATIVE_PID_RECORD`，native 结果不通过。历史
+`762fe826e929da8c` 缺原始 claim 的失败仍保持原样，不能由后续 query 或 data 改写。
+
+累计实际账本为 query 使用 `3`、data 使用 `2`，剩余 query/data/repair 均为 `0`。
+因此设备操作停止、未创建成功基线提交；当前状态为
+`FAIL_CONFIRMED_AND_STOP_REQUIRED / DEVICE_ROS2_DATA_NOT_RUN_AS_PASS /
+NOT_COMMITTED`。本地修复、Host 和 LOCAL_MODEL 结果仍按各自证据范围记录，不能
+升级为设备 ROS/SDK 通过。默认 `NativeBackendUnavailable`、P0/PF/P4、SDK
+epoch/drain/cancellation 和 `QualificationProfile` 状态不变。
+
+## 历史快照：ROS 双板观察窗口（2026-10-02）
+
+在上述历史结果之外，新增 query run `9a55d8c042a1741a` 已按本次独立
+授权完成并通过 `PASS_QUERY_ONLY`；其 claim、两端原始查询输出及恢复事实
+单独保留。随后唯一数据 run `75c5b5e6159dccd8` 已实际启动，因此数据额度
+已消费；独立原始数据审计结果为 `FAIL_FUNCTIONAL`，commit gate 为 `FAIL`。
+该窗口不产生成功提交，也不启动重试。
+
+本次 A/B 均观察到实际 Socket 返回 `-426442743`；`Listen` 和 `Bind` 均为
+`NotCalled`，不能据此解码 SDK 根因，也不能把该值解释成权限或某个命名的
+平台错误。两端正式应用首错均为 `MATCH / REMOTE_MATCH_MISSING`，远端退出码
+均为 `4`；Topic 正式 writes/takes 为 `0/0`，graph、service 和后续阶段未完成。
+原始日志同时包含 `Failed to delete participant`；关闭失败与业务首错分开记录，
+不能由 `ROS_CONTEXT_CLOSED` 或 guard 通过覆盖。权限/进程恢复 guard 在测量范围
+内通过，但 live load identity 未捕获，SDK 内部结算仍未观察，故不等同于正常
+ROS/RMW/DDS/Runtime 关闭。
+
+本次新账本为 query 使用 `1`、data 使用 `1`、repair 使用 `0`；历史 query `3`
+和 data `2` 的账本保持不变，累计剩余均为 `0`。历史 `a6b0948bf98c9a78`
+及旧 query 失败仍保持原状态，旧启动根因继续为 `UNKNOWN`。当前结论为
+`ROS2_DEVICE_ACCEPTANCE_FAIL / NOT_COMMITTED / NOT_PRODUCTION_QUALIFIED`；
+不得把本窗口的 Socket 返回或关闭症状写成已确认 SDK/权限根因。
+
+本窗口原始审计入口见
+[observed-device evidence](../.artifacts/ros2-device-acceptance/observed-device-20261002/)。
+其设备执行与失败收据不改变 Host 验证、默认 `NativeBackendUnavailable`、
+P0/PF/P4 或 `QualificationProfile` 状态。
+
+## 历史快照：离线启动诊断状态（2026-10-01）
+
+在上述设备停止状态之外，当前启动诊断源码差异已经完成实现、初测、review 修复
+和 R2 复测，独立 review verdict 为 `INDEPENDENT_REVIEW_CLOSED`。R2 受影响 Host
+与 ASan 各为 `53/53`，安装版 hook/unload 测试 `6/6`，正确依赖前缀的本地 pipe
+测试 `2/2`；ROS 双 QoS、graph、service 和关闭的 `20/20` 记录仍属于 Host 证据。
+目标端 109 成员的静态包结果来自独立 tester 收据，未在本次 review 中重新执行，
+也不构成设备或 SDK 运行证明。
+
+本轮修复使启动阶段的本地拒绝、SDK/Socket 操作、primary、cleanup、capture 和
+remote exit 分层记录，并在 capture 不完整时保留原始首错。异常终止、输出背压和
+有限 metadata 存储的边界仍存在：它们不证明有界 wall-clock 输出、SDK drain 或
+cancellation。历史真实失败 `9b301c516da4d1eb`、`a6b0948bf98c9a78` 保持 FAIL，
+启动根因仍为 `UNKNOWN`；本轮未执行 HDC、设备、查询或 Git 状态变更。下一次设备
+申请仍是草案、未授权，不能由离线结果自动启动。
+
+## 历史快照：ROS 双板验收状态（2026-10-01）
+
+当前 ROS 设备验收为 `BLOCKED / DEVICE_ROS2_DATA_NOT_RUN / NOT_COMMITTED`。
+真实 query run `762fe826e929da8c` 的 A/B 目录查询命令均返回本地退出码 0，
+并保留了两端 grant、ownership、final-snapshot、final-guard 及撤权/恢复证据；
+这些是查询窗口的事实，不是 ROS 数据窗口通过。查询流程在 postrun 阶段因缺少
+原始执行 claim 被正式拒绝，原件不可事后补写或退款，因此本次没有启动、部署或
+执行 ROS 数据程序，Topic、graph、service 和正常 ROS 数据关闭均保持未验证。
+
+当前修订已将 `ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_ACCEPTANCE` 接入正式查询
+claim 分支，并由两项本地 PowerShell 定向测试验证该分支在首个执行效果前调用
+claim 校验；这改善未来执行路径，不能回填上述历史 query 的缺失 claim。离线重放
+仍为失败，数据额度未消费但当前设备流程停止；不允许通过新 run、重新查询或本地
+模拟收据继续推进。既有 Host 和本地模型结果仍按各自范围保留，不能升级为设备
+ROS/SDK 证据。默认 `NativeBackendUnavailable`、P0/PF/P4、SDK epoch/drain/
+cancellation 和 `QualificationProfile` 状态不变。
+
 ## 构建、安装和外部消费
 
 以下命令展示流程，路径应替换为本机已安装的 ROS 2 Jazzy、Fast DDS 2.14.5、
@@ -196,10 +297,41 @@ if ($a.ExitCode -ne 0 -or $b.ExitCode -ne 0) {
 }
 ```
 
-对于实际双进程验证，应同时启动 A/B 并使用 `tests/ros2_host/run_pair.py`，它会
-为每个 fresh run 生成唯一 run/端口和两份 config，保存 stdout/stderr、输入 hash、
-实际 loaded DLL、Writer GUID、payload、graph、service、close 和 pump 收据。将
-`reliable` 改为 `best_effort` 可验证另一种 QoS；示例中的输出不能手工填写 PASS。
+### DSoftBus Socket 服务名配置
+
+ROS 目标配置中的服务名前缀分为两层。私有 profile 中的
+`ros2_service_prefix` 只保存项目配置的 name stem，例如 `ros`；写入每端
+`ros.conf` 时，执行器会将它序列化为
+`authorized_package + "." + ros2_service_prefix`，例如
+`org.example.transport.ros`。其中 `authorized_package` 必须与实际授权的
+Socket package 一致，不能使用与授权身份无关的裸 stem。`TargetBridge` 随后在
+该完整前缀后追加当前 `run`、`side` 和 `role`，以生成 listener、outgoing 及对端
+匹配所用的服务名。这样可以保持服务名处于已授权的 package 命名空间内，也避免
+通过启发式改写或扩大权限通配符来“修复”名称。
+
+下面仅展示脱敏后的形状；`org.example.transport` 是示例 package，实际部署值
+必须来自当前授权配置：
+
+```text
+authorized_package=org.example.transport
+service_prefix=org.example.transport.ros
+run=<current-run-id>
+side=0
+```
+
+当前配置修复经过正式 materializer、local query/restore、window preparation
+和命名空间测试验证；该验证没有执行新的设备操作，也不能替代目标板上的
+Socket/Listen/Bind 或权限策略验证。详见
+[本次配置审查报告](../.artifacts/ros2-device-acceptance/dsoftbus-call-review-20261002/FINAL_REPORT.md)、
+[配置差异审查](../.artifacts/ros2-device-acceptance/dsoftbus-call-review-20261002/FINAL_DIFF_REVIEW.md)
+及其[独立测试收据](../.artifacts/ros2-device-acceptance/dsoftbus-call-review-20261002/independent-test/TEST_RESULT.json)。
+
+对于既有 Host 双进程验证，应同时启动 A/B 并使用
+`tests/ros2_host/run_pair.py`。该入口为每个 fresh run 生成唯一 run/端口和两份
+Host config，保存 stdout/stderr、输入 hash、实际 loaded DLL、Writer GUID、payload、
+graph、service、close 和 pump 收据。将 `reliable` 改为 `best_effort` 可验证另一种
+QoS；示例中的输出不能手工填写 PASS。该 Host 夹具不代表目标板部署、设备权限或
+真实 DSoftBus Socket/Listen/Bind 已经验证。
 每个进程只创建一个 Participant、一个 Runtime/descriptor 和一组 ROS 实体，
 由集成装配管理 pump；业务节点不自行启动或销毁 DSoftBus Runtime。
 
@@ -287,3 +419,245 @@ epoch/drain/cancellation 或生产资格；默认 `NativeBackendUnavailable`、P
 
 证据入口：[当前 Host 集成收据](../.artifacts/ros2-host-integration/run-20261002-current/FINAL_REVIEW.md)。
 构建依赖、安装目录和外部输入属于本机只读材料，不随项目 clone 提供。
+
+## 三项离线故障修复状态（2026-10-02）
+
+本轮离线修复已通过限定范围的最终 tester 和独立 review：业务期限在
+`READY` 阶段释放后重新起算；加载/分析子进程的未确认关闭会阻止后续非必要采集
+和阶段释放；已知的 `Failed to delete participantROS_CONTEXT_CLOSED` 拼接行只按
+严格格式解析，并分别保留 participant 删除失败与应用状态。实际 Host 延迟
+31 秒释放测试和修正配置后的 ASan 等价延迟测试均完成 20/20 Topic 交付、graph、
+service 和正常 Runtime 关闭。相关脚本、控制器和分析器测试均通过；这些结果仍是
+Host/WSL 或本地夹具证据。
+
+本轮目标消费者重新构建并产生 109 个成员，其中旧包的 108 个未变；该目标配置
+构建的部分命令记录由最终缓存和原始输出重构，不能当作原始完整准入审计。没有执行
+HDC、设备查询、部署或设备程序；历史设备窗口 `f389bce8e0d13d5c` 仍为 FAIL，
+A 端退出码 139 的原因仍 UNKNOWN。当前状态为实现和限定 Host 验证 PRESENT/PASS，
+设备验证 BLOCKED，未获得生产资格，也未创建提交。
+
+本轮证据入口：[三项修复最终报告](../.artifacts/ros2-device-acceptance/three-bug-repair-20261002/FINAL_REPORT.md)、
+[最终 tester 收据](../.artifacts/ros2-device-acceptance/three-bug-repair-20261002/final-tester/TEST_RESULT.md)、
+[独立 review](../.artifacts/ros2-device-acceptance/three-bug-repair-20261002/REVIEW.md)。
+
+## Fast DDS 2.14 direct-DDS 层补齐状态（2026-10-02）
+
+本层新增的是安装包消费的 direct DDS 2.14.5 基线示例，不是 ROS/RMW 实现，也不是
+设备验收。示例通过已安装的 `factory_configuration` target 创建 Participant、
+Topic、Writer 和 Reader，使用两个方向独立的 run-scoped Topic；应用不 include
+Transport 私有头、不直接调用 Socket/SendBytes，也不创建第二套 Runtime 或 pump。
+
+| 项目 | 当前证据状态 |
+| --- | --- |
+| 安装后 Host consumer、CDR round-trip/bounds | PASS；CTest 1/1，CDR 五项检查 |
+| direct DDS normal | PASS；run `71997f4878cde186`，两端各 5 writes/5 takes，合计 10/10，peer GUID/SN、DDS wait rc=0、公开删除 rc=0 |
+| Host delete-refusal 对照 | PASS；run `0af25762d43a13cf`，公开 owned endpoint 列表证明仍有 1 writer/1 reader，公开 Participant 删除返回 PRECONDITION=4，随后继续数据并正常清理 10/10 |
+| forwarding disabled / missing bridge | PASS（预期失败）；均无阶段释放、0/0 业务数据 |
+| 修复后的 analyzer 与历史 raw replay | PASS；5 个 analyzer 测试，重复/倒序 DDS writer SN 均被拒绝；raw replay 的规范化文本 hash 与原始字节 hash 由 `RAW_REPLAY_HASH_MAPPING.json` 分开绑定 |
+| ASan | PASS；direct DDS normal/refusal 各 10/10；Fast DDS、Fast CDR 和其它预置依赖未插桩 |
+| API23/AArch64 target static package | PASS（静态）；8 个成员，含 `libfastrtps.so.2.14`、`libfastcdr.so.2`、目标 bridge 和 token bridge；不含 `rclcpp`、`rmw`、3.6 或 Fake |
+| 目标加载、Socket 调用、双板运行 | NOT_RUN / NOT_ADMITTED；本层没有 HDC、query、deploy 或 target execution |
+
+这些 Host normal/refusal 结果使用明确标记的 `HOST_OPAQUE_BYTES_TEST_ONLY` 设施；它们
+证明 direct DDS 2.14 的安装消费、实体身份、样本账本和公开关闭顺序在 Host 范围内成立，
+不证明 OpenHarmony DSoftBus 设备加载或 SDK 内部 drain/epoch/cancellation。日志中的
+`FDDST_ROS_CLOSED` 出现在公开 `delete_participant` 调用期间，随后公开调用返回 0；文档
+不将其描述为 API 返回后的关闭。
+
+本层冻结收据入口为
+[最终 tester](../.artifacts/ros2-device-acceptance/layer-gap-validation-20261002/final-tester/TEST_RESULT.md)、
+[最终差异 review](../.artifacts/ros2-device-acceptance/layer-gap-validation-20261002/FINAL_DIFF_REVIEW.md)、
+[静态选择收据](../.artifacts/ros2-device-acceptance/layer-gap-validation-20261002/STATIC_SELECTION_RECEIPT.json)以及
+[raw replay hash 映射](../.artifacts/ros2-device-acceptance/layer-gap-validation-20261002/final-tester/RAW_REPLAY_HASH_MAPPING.json)。
+旧 ROS 设备失败、A 端 139 的 UNKNOWN 原因、历史 query/data 额度 0 均保持不变。
+“下一步设备请求仍是未授权草案”属于本节所引用的离线/预设备证据时点；它不覆盖
+下面已经保存的分层设备窗口结果。
+
+## ROS teardown 离线闭合状态（2026-10-02）
+
+本轮只完成离线 Host/ASan 诊断与收尾修复，未执行 HDC、设备、查询、部署或 Git
+提交。新观察将 Fast DDS 原始删除返回、项目 Close ABI 结果和映射后的公开返回分开
+保存；删除前快照、逐项删除返回和清理结果不再依赖正常 Close 才能导出。诊断缓存为
+进程生命周期的 metadata-only 存储，不持有 Participant、Runtime、owner、payload
+或 SDK 资源。
+
+最终 Host 正例使用 rclcpp/rmw_fastrtps，完成双 QoS 20/20、graph、service 和正常
+关闭（run `6378fc65ca11f50a`）；Host-only 注入的 Close 负例保留原始 DDS 删除值
+`0`、项目 Close 值 `2`、映射公开返回 `1` 和应用退出 `4`。另有实际实体仍存活时的
+公开删除拒绝对照：Topic 删除返回 `4`，随后由原责任方完成合法清理。上述负例用于
+验证首错和责任记录，不是历史设备故障的根因证明。
+
+控制器现在将业务阶段和 cleanup 分开；A 侧失败时允许 B 进入有限合法清理，且不把
+cleanup 结果改写成业务成功。跨语言七阶段合同、collector 尾部排空、失败导出和
+物化依赖检查均通过最终受影响测试。完整 Host CONFIG 的 346 项运行发生在最后两项
+跨语言修复之前，结果为 344 通过、2 项 PowerShell 环境失败；两项随后在显式 PS5
+模块路径下通过，因此不标记为最终源码的 346/346。ASan 只覆盖本项目重建的 runtime、
+bridge、consumer 和 metadata cache，预置 ROS/RMW/Fast DDS 依赖未插桩。
+
+历史 ROS 设备窗口 `34d9a4ba979667d9` 仍为 FAIL，原始 Participant 删除数值未被
+保存，继续为 UNKNOWN；Host 负例不回填该设备原因。直接 DDS 设备 PASS、ROS 设备
+20/20 业务记录及 graph/service 记录均保持原修订归属，ROS 设备缺少最终 native
+结构化链，不能升级为 ROS 设备通过。设备额度仍为零，`DEVICE_NOT_ADMITTED`、默认
+`NativeBackendUnavailable`、P0/PF/P4、SDK epoch/drain/cancellation 和
+`QualificationProfile` 状态不变。
+
+证据入口：[离线 teardown 收据](../.artifacts/ros2-device-acceptance/offline-teardown-20261002/)、
+[对象责任差异](../.artifacts/ros2-device-acceptance/offline-teardown-20261002/OBJECT_RESPONSIBILITY_DIFFERENCE.md)、
+[最终 tester](../.artifacts/ros2-device-acceptance/offline-teardown-20261002/final-tester/TEST_RESULT-r3.md)、
+[独立 review](../.artifacts/ros2-device-acceptance/offline-teardown-20261002/REVIEW.md)。
+
+## 分层设备验收（2026-10-02）
+
+本轮新增的两类设备窗口必须分开解释。直接 Fast DDS 2.14 窗口
+`a5542422e96f4508` / `058f528038f39cc6` 已在登记双板上完成限定范围验证：两端各
+5 次写入和 5 次对端读取，结构化 SDK 观察各为 5 条，公开 DDS wait、实体删除和
+Participant 删除均返回 0，加载映射与恢复 guard 通过。该结果只覆盖 direct DDS
+2.14 层，不覆盖 ROS、`rmw_fastrtps`、graph 或 service。
+
+随后独立 ROS 窗口查询 `f7ba02faa5713877` 通过并正常恢复，数据窗口
+`34d9a4ba979667d9` **FAIL**。原始应用文本支持 20 writes/20 takes、四条 graph
+记录和两组 service 记录，且两端加载了 109 成员的 ROS/2.14 链；但控制器在
+`ABEST_EFFORT_DONE` 后没有发出 `BBEST_EFFORT_DONE`，B 侧产生
+`PHASE_COMPLETION_RELEASE_MISSING`。两侧均记录了 Participant delete 和 Factory
+normal-close 失败；应用退出码分别为 A=0、B=4。这里的关闭失败记录不表示两端
+`rcl` shutdown 都以非零退出。该窗口没有 `ROS_NATIVE_SUMMARY`、`ROS_NATIVE_DATA`
+或 `FDDST_REAL_SOCKET`，因此 20 条 ROS 样本的 SDK 结构化发送/接收链为
+`NOT_PROVEN`。Guard 通过只证明记录的环境恢复范围，不能改写为正常 ROS/RMW/DDS/
+Runtime 关闭成功。
+
+本轮事实状态：
+
+| 范围 | 状态 |
+| --- | --- |
+| Direct DDS 2.14 双板正常窗口 | PASS（限定 5/5 每端） |
+| ROS 2 双板业务窗口 | FAIL；data run `34d9a4ba979667d9` |
+| ROS Topic/graph/service 文本子集 | 已观察，但不能覆盖整体失败或 native 链缺失 |
+| ROS 正常关闭 | FAIL/不完整；不是 guard PASS |
+| 新增 DDS/ROS query 与 data 额度 | 各自均已消费；剩余为 0，无 repair retry |
+| 生产资格、P0/PF/P4、SDK epoch/drain/cancellation | 未证明，保持原门禁 |
+
+证据入口：[分层验收收据](../.artifacts/ros2-device-acceptance/layered-device-20261002/)、
+[direct DDS 独立验收](../.artifacts/dds214-layered-acceptance/dds214-20261002-r1/device-independent/TEST_RESULT.md)、
+[ROS 独立失败审计](../.artifacts/dds214-layered-acceptance/ros2-20261002-r1/device-independent/TEST_RESULT.md)。
+历史 ROS 失败窗口、A 侧退出 139 的未知原因和旧额度账本保持不变；本轮没有提交，也没有
+把 ROS 窗口标记为设备通过。
+## Task-scoped teardown stop（2026-10-03）
+
+本次授权任务的 source/repair 已通过 Host 与独立 review；final tester 的 `10/10`、
+`21/21`、`7/7`、`5/5`、`7/7`、`8/8` 是不同 scope，不能相加为单一功能总数。r19
+model-native 材料不是 PASS，r18 taint 材料不是 canonical；role binding 修正保留在
+原始收据中。实际 query `c94d3fc03c6dc707` PASS 且完整恢复。
+
+唯一数据准备 `cfb0f5d9f48ff4d5` 在 B 首个基线系统 hash 步骤因
+`HDC E001005 Device notfound` 停止：local rc0 但缺 remote marker。A 的 ELF/辅助发送
+准备记录存在；未发生 data grant、ROS 启动、DATA marker、central data claim 或业务
+样本。该结果是 pre-business infrastructure/connectivity failure，不是 SDK/ROS data
+FAIL。正常双端 restore 收据缺失，后续 connectivity 检查不等于 restore。
+
+当前状态：`QUERY=PASS / DATA_PREPARATION=FAIL / ROS_DATA=NOT_RUN / DEVICE_GATE=BLOCKED /
+NOT_COMMITTED`。旧 N10/N100、ledger、query 与历史失败保持原身份；默认
+`NativeBackendUnavailable`、P0/PF/P4、生产资格不变。本任务停止，不启动新的 business
+执行。证据入口：[task FINAL_REPORT](../.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/FINAL_REPORT.md)、
+[EVIDENCE_INDEX](../.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/EVIDENCE_INDEX.md)。
+
+## Repository-contained ROS2 build usage（2026-10-03）
+
+ROS 2 source for this phase is contained in the repository under `ros2/src`; an empty
+external `Documents/ros2/src` path is not the source-of-truth location. The target
+rebuild entry `integrations/ros2/target/rebuild.py` uses only repository
+`build/ros2-target` output/temp/install/package plus installed SDK/Host tools. It does
+not require pre-populating an external source tree.
+
+For a fresh output directory, run from this repository:
+
+```powershell
+python -B integrations/ros2/target/rebuild.py --output build/ros2-target-r2 --phase all
+```
+
+An unfinished build can continue with `--phase prepare`, `fastdds`, `ros`,
+`assembly`, `consumer`, or `package`; use the same explicit output directory.
+Completed package/binding receipts are not overwritten. SDK, CMake, Ninja,
+Host Python and Host ROS generators are explicit CLI inputs. The existing
+API23 dependency prefixes and identity bridge under `.artifacts` are checked
+inputs, not files automatically supplied by a clone. The build Python selection
+must not replace the independently bound device-executor Python environment.
+
+The current build evidence records Fast DDS 2.14.5, RMW 8.4.3, rcl 9.2.11 and rclcpp
+28.1.22, a transport installation, an independent installed consumer, and a 109-member
+AArch64 package with maximum package-source path 155 and no RPATH/3.6 Host Fake leakage. Final
+layout/vendor/debugger/task/Node checks are recorded in the repository-build artifact;
+these are build/compile/static or Host checks, not ROS device acceptance.
+
+The build-only evidence preceded iteration 6 device selection; its subsequent
+query/preparation/recovery is recorded below. Existing data4 21-topic residuals,
+A139 uncertainty and RMW cast/map reference
+uncertainty remain historical. Default `NativeBackendUnavailable`, P0/PF/P4 and
+production restrictions remain unchanged. Evidence: [repository build result](../.artifacts/ros2-repo-build-20261003/BUILD_RESULT.md)
+and [evidence index](../.artifacts/ros2-repo-build-20261003/EVIDENCE_INDEX.md).
+
+## 历史快照：Current continuation stop（2026-10-03）
+
+本次 query `a35093db86b9cc67` 通过并完整恢复；错误 Pixi 验证
+`9135d4608d7abbe5` 在 claim/HDC 前失败，不能与实际 query 结果混称。数据准备
+`81ccfee5ad0dbc7e` 在 B 首个 action_msgs 类型支持库 hash 步骤因缺少
+`MDDS_REMOTE_EXIT` 停止；未发生 grant、ROS 启动、DATA marker 或 central data claim。
+已有 recovery `f4022cac...` 及独立接受通过，114 个 owned deployment files/side
+保留并验证，但这不是正常 ROS close。
+
+当前 repository build 已在 `build/ros2-target` 路径解决旧 45 项 legacy-path inputs；
+原 C-root prefix 不恢复。实际执行器副本的发送路径最大170字符，辅助文件最大189字符。
+本次预检、查询、部署与恢复实际使用了HDC；没有启动ROS业务，也未在恢复后创建下一
+continuation或开启新设备窗口。Git/production 状态不变。历史 21-topic、Participant=4、A139 和无新 RMW branch
+观察保持原结论。详见 [current turn report](../.artifacts/ros2-repo-build-20261003/CURRENT_TURN_REPORT.md)
+及 [evidence index](../.artifacts/ros2-repo-build-20261003/CURRENT_TURN_EVIDENCE_INDEX.md)。
+
+## Observer lifetime repair（2026-10-03）
+
+时间点说明：此前 `cfb0f5d9f48ff4d5` 已完成追加恢复并获独立接受；随后 query `c4c95555ba2f3fc9` PASS，data `7cec05d3a24e5b4c` 观察到 ROS Topic 20/20、graph/service，但正常关闭 FAIL、声明范围内环境 guard PASS。本次 observer 修复工作没有新的设备操作。
+
+`NativeObservation` 的固定元数据状态已按受审方案改为在控制侧 `Begin` 完成初始化并发布，随后保留为有界进程级元数据；callback 路径不再惰性构造观察状态，也不持有 Runtime、SDK handle、payload、receiver、thread 或 module 资源。独立 review 绑定为 PASS，Host/ASan 定向范围各 7/7，普通 ROS Host 双进程为 20/20 且正常退出，Close-error 负例保留预期应用退出 4；完整 CONFIG 收据为 544/544、无失败、无 skip。目标包 109 个成员中只有 bridge 变化，设备未加载、未执行 HDC。
+
+该修复关闭的是 observer metadata lifetime/诊断可用性问题，不关闭 ROS 设备 teardown。既有设备 data 结果仍为 FAIL：两端 Participant 删除返回 4/`ACTIVE_ENTITIES`，Topic cast/map/reference 责任和残留集合仍未确定，A 端远程 139 仍 UNKNOWN，native 完整链仍缺失。当前设备状态继续为 `DEVICE_NOT_ADMITTED`；不把 Host 20/20、guard 或 observer 修复写成设备通过或生产资格。证据入口：[observer lifetime repair FINAL_REPORT](../.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/observer-lifetime-repair-20261003/FINAL_REPORT.md)、[EVIDENCE_INDEX](../.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/observer-lifetime-repair-20261003/EVIDENCE_INDEX.md)。
+
+## 最新 paired normal-close 双板验收（2026-10-04）
+
+后续受限设备窗口已完成 `ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_VERIFIED`。查询
+`d1c2cb4097279214` 和数据 `be8cb2d90f287223` 使用 SDK23/AArch64 构建的
+`build/ros2-target/r2`，通过 SDK23 HDC 部署到原登记双板。该结果更新本文档此前的
+`DEVICE_NOT_ADMITTED` 快照；此前历史失败及其原始收据仍保持不变。
+
+设备端实际范围为普通 `rclcpp`、未修改 `rmw_fastrtps`、隔离 Fast DDS 2.14.5 和本项目
+DSoftBus Socket/Binding。RELIABLE、BEST_EFFORT 均为双向 5 writes/5 takes，合计
+20/20；graph 和 service request/reply 单独记账。两端 Reader/Writer/Topic/Publisher/
+Subscriber 删除及原始 Participant 删除均返回 0，Runtime integration close 和 public
+factory delete 均为 0，应用与远端进程正常退出，完整恢复 guard 通过。预删除容器快照为
+空且明确标记为顺序、非原子采样。native 结构化记录与 20 条 Topic 接收具有同 run 的
+逻辑/结构关联，不能扩大为 SDK 内部 epoch、逐物理包因果或完整 drain 证明。
+
+本轮修复并纳入最终包的范围包括：Topic RTTI key 修复后的删除路径、creation-complete
+与 failed-construction 区分、每 Runtime 的 pre-native-close paired 协调，以及共享
+控制出口的串行化；没有修改原版 RMW。目标身份为 Fast DDS 2.14.5、Fast CDR 2.2.5、
+RMW 8.4.3、rcl 9.2.11、rclcpp 28.1.22；目标包 109 成员，构建和临时输出均位于
+仓库 `build/ros2-target`。Host、目标静态审计和设备原始收据分开保存，不能将 Host
+数字相加成一项全集测试。
+
+状态边界：本节限定功能已 `DEVICE_TESTED / VERIFIED`；验收当时 HEAD 为
+`4807765f53826ed0b882cac32610acb17ee30b4f` 且尚未提交，后续提交状态以 Git 历史为准。
+P0/PF/P4 原状态和默认
+`NativeBackendUnavailable` 保持不变。SDK epoch/drain/cancellation 仍未证明，当前不具备
+生产资格，未生成 `QualificationProfile`。历史
+A139、早期 Participant/Topic 删除失败及其原因不被本次成功回填为已解释。证据入口：
+[最终报告](../.artifacts/ros2-topic-rtti-repair-20261004/paired-close/FINAL_REPORT.md)、
+[EVIDENCE_INDEX](../.artifacts/ros2-topic-rtti-repair-20261004/paired-close/EVIDENCE_INDEX.json)。
+
+### 可分发的最小证据索引
+
+| 项目 | 记录 |
+| --- | --- |
+| Query / data | `d1c2cb4097279214` / `be8cb2d90f287223` |
+| Target main / build manifest | `9dc9068c3ae6acf08a429d21df130e759bbd7d68a285697897ab5c5091fbd0f2` / `10664d4c00d7c986459086c141e37954a1597d39c95e278bfdc03962b6fa0a6a` |
+| Independent review / raw teardown | `FINAL_DIFF_REVIEW.json` SHA-256 `6aeb7bd30957b4769d781648044032393cc9a91bb0bff519ef3dbf44c73a2687` / `RAW_TEARDOWN_ACCEPTANCE.json` SHA-256 `8705c369e08ba07fa11b68cf5de50b3e265775595dae611c42b550ea72b89bee` |
+| Relative evidence | `../.artifacts/ros2-topic-rtti-repair-20261004/paired-close/FINAL_REPORT.md`; `../.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/iterations/iteration-20/windows/{query-15,data-15}/` |
+
+这些路径和哈希用于绑定本机证据；`.artifacts`、SDK、设备运行库、私有配置和原始日志不随
+项目 clone 或安装包自动提供。

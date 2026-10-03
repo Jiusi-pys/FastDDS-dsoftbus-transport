@@ -65,6 +65,7 @@ def main():
                     help="read-only origin of the consumer source tree")
     ap.add_argument("--header", required=True,
                     help="authorised public header bound by header_sha256")
+    ap.add_argument("--scenario", choices=['INSTALLED_RUNTIME','ROS2_DSOFTBUS','DDS214_LAYER_BASELINE'], default='INSTALLED_RUNTIME')
     a = ap.parse_args()
 
     repo = Path(a.repo).resolve()
@@ -72,9 +73,25 @@ def main():
     pkg = Path(a.package_source).resolve()
     src = Path(a.consumer_source).resolve()
     header = Path(a.header).resolve()
+    ros = a.scenario == 'ROS2_DSOFTBUS'
+    dds214 = a.scenario == 'DDS214_LAYER_BASELINE'
+    configured214 = ros or dds214
+    members = INSTALLED_MEMBERS
+    main_member = INSTALLED_MAIN
+    if configured214:
+        selection = json.loads((pkg/'PACKAGE_INPUTS.json').read_text(encoding='utf-8'))
+        if selection.get('scope') != 'STATIC_ELF_INPUT_SELECTION_NOT_BUILD_OR_DEVICE_ADMISSION':
+            raise ValueError('Explicit static package-selection receipt required')
+        members = tuple(row['name'] for row in selection['members'])
+        if len(set(members)) != len(members) or not 1 <= len(members) <= 128:
+            raise ValueError('Invalid ROS package membership')
+        main_member = 'fastdds_dsoftbus_dds214_baseline' if dds214 else 'ordinary_ros2_transport_consumer'
+        if main_member not in members:raise ValueError('Actual ROS application missing')
+        for row in selection['members']:
+            if dg(pkg/row['name']) != row['sha256']:raise ValueError('ROS selected input drift')
 
     gaps = []
-    for member in INSTALLED_MEMBERS:
+    for member in members:
         if not (pkg / member).is_file():
             gaps.append("package member missing: %s" % (pkg / member))
     if not src.is_dir():
@@ -89,7 +106,7 @@ def main():
     build = root / "build"
     (build / "package").mkdir(parents=True, exist_ok=True)
     artifacts = []
-    for member in INSTALLED_MEMBERS:
+    for member in members:
         srcfile = pkg / member
         dst = build / "package" / member
         shutil.copyfile(srcfile, dst)
@@ -107,16 +124,21 @@ def main():
             key=lambda e: e["path"]),
         "authorised_header": {"path": str(header), "sha256": dg(header)},
     }
+    if configured214:
+        source_state['_local_fixture_note']='Derived LOCAL_CONTRACT_TEST input binding from actual target ELF selection and installed consumer files; not original build provenance or device admission.'
     (build / "source-state.json").write_text(
         json.dumps(source_state, indent=2) + "\n", encoding="utf-8", newline="\n")
 
     manifest = {"_local_fixture_note": source_state["_local_fixture_note"],
-                "artifacts": [dict(e,path=e['source']) for e in artifacts], "main": INSTALLED_MAIN,
+                "artifacts": [dict(e,path=e['source']) for e in artifacts], "main": main_member,
                 "sourceStateSha256": dg(build / "source-state.json"),
                 "bridgeExit": 0, "configureExit": 0, "buildExit": 0}
-    cache=Path('C:/mdds-installed-runtime-0929/target/CMakeCache.txt')
-    if 'FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME:BOOL=ON' not in cache.read_text():raise ValueError('Actual installed build option absent')
-    manifest['configureArguments']=['-DFASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME=ON']
+    cache=Path('C:/fdds-dds214-layer-target-external-r3-1002/CMakeCache.txt' if dds214 else 'C:/fdds-ros2-target-assembly-1001/CMakeCache.txt' if ros else 'C:/mdds-installed-runtime-0929/target/CMakeCache.txt')
+    if not configured214 and 'FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME:BOOL=ON' not in cache.read_text():raise ValueError('Actual installed build option absent')
+    if configured214:
+        if 'OHOS_STL:UNINITIALIZED=c++_shared' not in cache.read_text() and 'OHOS_STL:STRING=c++_shared' not in cache.read_text():raise ValueError('Actual target shared-runtime option absent')
+        manifest.update(scenario=a.scenario,abi=dict(fastrtps='2.14.5',cpp_runtime='c++_shared'))
+    manifest['configureArguments']=[] if configured214 else ['-DFASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME=ON']
     manifest['configuration_origin']=dict(path=str(cache),sha256=dg(cache),scope='DERIVED_CACHE_OPTION_NOT_ORIGINAL_BUILD_COMMAND')
     (build / "build-manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
@@ -181,8 +203,9 @@ def main():
     (root / "MATERIALIZATION.json").write_text(
         json.dumps(mat, indent=2) + "\n", encoding="utf-8", newline="\n")
 
-    (root / "INSTALLED_RUNTIME_CONTRACT.md").write_text(
-        "LOCAL_CONTRACT_TEST plan for the installed-runtime scenario.\n\n"
+    plan_name = 'DDS214_CONTRACT.md' if dds214 else 'ROS2_CONTRACT.md' if ros else 'INSTALLED_RUNTIME_CONTRACT.md'
+    (root / plan_name).write_text(
+        ("LOCAL_CONTRACT_TEST plan for the ROS2_DSOFTBUS scenario.\n\n" if ros else "LOCAL_CONTRACT_TEST plan for the installed-runtime scenario.\n\n")+
         "Not a device plan and not device evidence. The contract binds local_contract_test:true\n"
         "and a declared LOCAL_FAKE_SANDBOX driver; only the lowest device-command boundary is\n"
         "replaced. 0 HDC, 0 remote commands, 0 queries, 0 deployments, 0 grants.\n",
@@ -195,7 +218,7 @@ def main():
         "task_root": str(root),
         "private_config_sha256": pcs,
         "materialization_sha256": dg(root / "MATERIALIZATION.json"),
-        "plan_sha256": dg(root / "INSTALLED_RUNTIME_CONTRACT.md"),
+        "plan_sha256": dg(root / plan_name),
         "limits": LIMITS,
         "execution_files": execution_files,
         "permission_helper": preflight["permission_helper"],
@@ -205,7 +228,7 @@ def main():
             "build_manifest_sha256": dg(build / "build-manifest.json"),
             "source_state": str(build / "source-state.json"),
             "source_state_sha256": dg(build / "source-state.json"),
-            "main_sha256": dg(build / "package" / INSTALLED_MAIN),
+            "main_sha256": dg(build / "package" / main_member),
             "package_artifacts": artifacts,
         },
         "local_contract_test": True,
@@ -218,6 +241,14 @@ def main():
             "with only the device-command boundary replaced by a rejecting local driver; 0 HDC, "
             "0 remote commands, 0 queries, 0 deployments, 0 grants; real ledgers untouched."),
     }
+    if configured214:
+        contract.update(scope='ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_ACCEPTANCE',
+            authorization='ROS2_TARGET_BUILD_BOUNDED_DEVICE_ACCEPTANCE_AND_LOCAL_COMMIT',
+            limits=dict(canonical_windows=1,repair_retries=1,total_attempts=2,
+                query_pairs_per_attempt=1,total_query_pairs=2,max_record_bytes=8192,
+                per_side_writes=10,per_side_takes=10,stages=7))
+    if dds214:
+        contract.update(scope='DDS214_LAYER_BASELINE_ACCEPTANCE',limits=dict(canonical_windows=1,repair_retries=0,total_attempts=1,query_pairs_per_attempt=1,total_query_pairs=1,max_record_bytes=8192,per_side_writes=5,per_side_takes=5,stages=4))
     (root / "DEVICE_CONTRACT.json").write_text(
         json.dumps(contract, indent=2) + "\n", encoding="utf-8", newline="\n")
 

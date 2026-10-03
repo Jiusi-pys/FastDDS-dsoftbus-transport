@@ -4,6 +4,8 @@
 #endif
 #include <fastdds_dsoftbus/dsoftbus/ProviderAdapter.hpp>
 #include <functional>
+#include <fastdds_dsoftbus/dsoftbus/HostRuntimeShutdownPoint.hpp>
+namespace fastdds_dsoftbus::dsoftbus::experimental { class Runtime; }
 namespace fastdds_dsoftbus::dsoftbus::phase0 {
 // Experiment assembly permission only. Not a platform capability or factory.
 class RuntimeProbeAccess final {
@@ -11,6 +13,10 @@ public:
     static AdapterBuildResult Build(ProviderAdapterDomain&,ServiceRecordTable&,NativeOwnerTable&,
             ApplicationAttachments&,std::shared_ptr<NativeBackend>,const BindingRequest&);
     static std::shared_ptr<NativeSendProvider> SendBridge(ProviderAdapter&,NativeOwnerTable&);
+    // Private assembly, same single control-thread setup contract as descriptor
+    // issuance. No installed public entry and no authority over SDK drain.
+    static bool BeforeNativeClose(experimental::Runtime&,
+            std::function<void(const host_test::RuntimeShutdownPoint&)>);
 };
 bool RuntimeProbeBeforeConnect() noexcept;
 bool InvokeArmedPreConnectGate() noexcept;

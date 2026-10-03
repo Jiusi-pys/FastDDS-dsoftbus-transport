@@ -15,12 +15,13 @@ def verify_completed_query(window,archive_manifest=None):
  spec=importlib.util.spec_from_file_location('completed_contract',task/'executor/task_contract.py');c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
  proof=cfg['task_contract'];freeze=Path(proof['freeze_path']).resolve();need(freeze.parent==task and proof['task_root']==str(task),'Foreign source contract')
  frozen=obj(freeze);c.materialization_record(frozen);c.verify_shared_guard(cfg,frozen);raw(task/'MATERIALIZATION.json');c.verify_private_binding(cfg);raw(task/'PRIVATE_CONFIG.json');need(frozen.get('private_config_sha256')==digest(task/'PRIVATE_CONFIG.json'),'Original private configuration mismatch');need(files[str(freeze)]==proof['freeze_sha256'] and frozen['task_root']==str(task),'Original contract hash/identity mismatch')
- local=frozen.get('scope')==c.INSTALLED_SCOPE and frozen.get('local_contract_test') is True
+ local=frozen.get('scope') in (c.INSTALLED_SCOPE,c.ROS_SCOPE,c.layered().SCOPE) and frozen.get('local_contract_test') is True
  if local:
   c.verify_local_driver(frozen)
   need(cfg['targets']=={'A':'SIM-A','B':'SIM-B'} and Path(cfg['hdc_path']).name=='fake-hdc.exe','Local query must use synthetic driver/targets')
-  claim=obj(task/'local-test-claims'/('query-'+cfg['run']+'.json'))
-  need(claim==dict(scope=c.INSTALLED_SCOPE,local_contract_test=True,run=cfg['run'],window=str(window),kind='LOCAL_QUERY_DISPATCH_INTENT',device_authority=False),'Local query claim mismatch')
+  claim=obj(c.layered().path(c.this_contract(),'query') if frozen['scope']==c.layered().SCOPE else task/'local-test-claims'/('query-'+cfg['run']+'.json'))
+  expected=c.layered().row(c.this_contract(),cfg) if frozen['scope']==c.layered().SCOPE else c.ros_query_claim_row(cfg,True) if frozen['scope']==c.ROS_SCOPE else dict(scope=frozen['scope'],local_contract_test=True,run=cfg['run'],window=str(window),kind='LOCAL_QUERY_DISPATCH_INTENT',device_authority=False)
+  need(claim==expected,'Local query claim mismatch')
  else:need(frozen['execution_admitted'] is True,'Source contract not admitted')
  need(frozen['plan_sha256']==proof['plan_sha256'],'Source plan mismatch')
  c.assert_fresh_run(cfg['run']);need(cfg['scenario']=='readonly-directory-query' and cfg['targets']==c.TARGETS and cfg['token']==c.TOKENS,'Original query target/scenario mismatch')
@@ -33,14 +34,14 @@ def verify_completed_query(window,archive_manifest=None):
   rows=json.loads(raw(archive_manifest).decode('utf-8-sig'));need(isinstance(rows,list),'Archive mapping type')
   for row in rows:
    original=str(Path(row['original_path']).resolve());need(original not in archive,'Duplicate archive mapping');archive[original]=row
- archived_inputs={str((task.parents[2]/e['path']).resolve()) for e in frozen.get('execution_files',[])}
+ archived_inputs={str((c.repo_root()/e['path']).resolve()) for e in frozen.get('execution_files',[])}
  def original_hash(path,expected):
   path=Path(path).resolve();row=archive.get(str(path))
   if archive_manifest and str(path) in archived_inputs:
    need(row is not None and row['sha256']==expected,'Missing/mismatched original executor archive');actual=raw(row['archive_path'])
   else:actual=raw(path)
   need(hashlib.sha256(actual).hexdigest()==expected,'Original execution input drift')
- for row in frozen.get('execution_files',[]):original_hash(task.parents[2]/row['path'],row['sha256'])
+ for row in frozen.get('execution_files',[]):original_hash(c.repo_root()/row['path'],row['sha256'])
  if archive_manifest:need(len(archive)==len(frozen['execution_files']),'Archive membership mismatch')
  original_hash(task/'executor/task_contract.py',cfg['contract_validator_sha256'])
  for name,sha in cfg['executor_sha256'].items():original_hash(task/'executor-route-query'/name,sha)
@@ -58,6 +59,21 @@ def verify_completed_query(window,archive_manifest=None):
   claim=obj(c.claim_path('query',purpose));need(claim.get('scope')==frozen['scope'] and type(claim.get('cycles')) is int and claim['cycles']==purpose and claim.get('run')==cfg['run'] and claim.get('window')==str(window) and claim.get('kind')=='QUERY_DISPATCH_INTENT','Completed query claim mismatch')
  if frozen['scope']==c.INSTALLED_SCOPE and not local:
   c.verify_installed_device_mode(frozen,cfg);c.verify_installed_query_claim(cfg);raw(c.installed_claim_path('query',cfg['installed_attempt']))
+ if frozen['scope']==c.ROS_SCOPE:
+  need(cfg.get('query_for_scenario')==c.ROS_SCENARIO and cfg.get('work_package')==c.ROS_SCOPE,'ROS completed query purpose mismatch')
+  if not local:
+   c.verify_installed_device_mode(frozen,cfg);c.verify_ros_query_claim(cfg);raw(c.ros_claim_path('query',cfg['ros_attempt']))
+  claim_path=task/'local-test-claims'/('query-'+cfg['run']+'.json') if local else c.ros_claim_path('query',cfg['ros_attempt'])
+  for side in 'AB':
+   dispatch=obj(window/('QUERY_DISPATCH_INTENT_'+side+'.json'))
+   need(dispatch==dict(run=cfg['run'],side=side,target=cfg['targets'][side],purpose=c.ROS_SCENARIO,claim_path=str(claim_path),claim_sha256=digest(claim_path),contract_sha256=proof['freeze_sha256'],driver_path=cfg['hdc_path'],remote_execution='UNOBSERVED_AT_INTENT'),'ROS query dispatch receipt identity mismatch')
+ if frozen['scope']==c.layered().SCOPE:
+  need(cfg.get('query_for_scenario')==c.layered().SCENARIO and cfg.get('work_package')==c.layered().SCOPE,'DDS214 completed query purpose')
+  c.layered().completed_query(c.this_contract(),cfg);claim_path=c.layered().path(c.this_contract(),'query');raw(claim_path)
+  if not local:c.verify_installed_device_mode(frozen,cfg)
+  for side in 'AB':
+   dispatch=obj(window/('QUERY_DISPATCH_INTENT_'+side+'.json'))
+   need(dispatch==dict(run=cfg['run'],side=side,target=cfg['targets'][side],purpose=c.layered().SCENARIO,claim_path=str(claim_path),claim_sha256=digest(claim_path),contract_sha256=proof['freeze_sha256'],driver_path=cfg['hdc_path'],remote_execution='UNOBSERVED_AT_INTENT'),'DDS214 query dispatch receipt identity mismatch')
  need(bool(raw(window/'EXECUTION_STARTED').strip()),'Execution receipt missing')
  summary=obj(window/'window-summary.json');need(summary.get('first_failure') is None and summary.get('cleanup_failures')==[] and summary.get('attempted_grants')==['A','B'],'Query recovery incomplete')
  for s in 'AB':
@@ -71,4 +87,4 @@ def verify_completed_query(window,archive_manifest=None):
   g=obj(window/s/'final-guard.json');need(all(g.get(k) is True for k in ('Passed','byte_match','metadata_match','process_absent')) and g.get('Phase')=='Revoked' and g.get('service_permission')=='DENIED','Final restoration incomplete')
   for phase in ('before','after'):need(Path(g['metadata_'+phase]['evidence']).resolve()==window/s/('metadata-'+phase),'Foreign metadata evidence')
   need(raw(window/s/'baseline.json')==raw(window/s/'after.json'),'Restoration bytes mismatch')
- return dict(schema=2,source_query_window=str(window),query_run=cfg['run'],query_for_cycles=purpose,query_pair_consumed=(frozen['scope']==c.OBSERVED_SCOPE or (frozen['scope']==c.INSTALLED_SCOPE and not local)),accounting_scope='ORIGINAL_QUERY_ONLY',original_query_dds='NOT_RUN',replay_side_effects='NO_DEVICE_OR_CLAIM_MUTATION',source_contract=proof,source_executor=frozen.get('execution_files',[]),source_state_sha256=binding['source_state_sha256'],archive_manifest=str(Path(archive_manifest).resolve()) if archive_manifest else None,original_files_sha256=files,replay_validator_sha256={str(Path(__file__).resolve()):digest(__file__),str(task/'executor-route-query/route_query.py'):digest(task/'executor-route-query/route_query.py'),str(task/'executor/task_contract.py'):digest(task/'executor/task_contract.py')})
+ return dict(schema=2,source_query_window=str(window),query_run=cfg['run'],query_for_cycles=purpose,query_pair_consumed=(frozen['scope']==c.OBSERVED_SCOPE or (frozen['scope'] in (c.INSTALLED_SCOPE,c.ROS_SCOPE,c.layered().SCOPE) and not local)),local_query_claim_consumed=local,query_for_scenario=cfg.get('query_for_scenario'),accounting_scope='ORIGINAL_QUERY_ONLY',original_query_dds='NOT_RUN',replay_side_effects='NO_DEVICE_OR_CLAIM_MUTATION',source_contract=proof,source_executor=frozen.get('execution_files',[]),source_state_sha256=binding['source_state_sha256'],archive_manifest=str(Path(archive_manifest).resolve()) if archive_manifest else None,original_files_sha256=files,replay_validator_sha256={str(Path(__file__).resolve()):digest(__file__),str(task/'executor-route-query/route_query.py'):digest(task/'executor-route-query/route_query.py'),str(task/'executor/task_contract.py'):digest(task/'executor/task_contract.py')})

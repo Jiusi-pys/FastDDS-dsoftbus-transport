@@ -5,6 +5,7 @@
 #include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
 #include <fastdds_dsoftbus/dsoftbus/ProviderAdapter.hpp>
 #include <functional>
+#include <fastdds_dsoftbus/dsoftbus/HostRuntimeShutdownPoint.hpp>
 namespace fastdds_dsoftbus::dsoftbus::host_test {
 // Observation of the work actually selected by a shared runtime pump. It grants
 // no authority and carries neither owners nor SDK generations.
@@ -15,6 +16,7 @@ struct HostSendObservation {
 };
 struct HostLoopObservation {
     bool started=false, input_open=false, sealed=false, closed=false;
+    bool shutdown_observer_fault=false;
     std::size_t active_pumps=0;
     bool input_closing=false;
     std::uint64_t open_calls=0,close_calls=0,shutdown_calls=0;
@@ -56,6 +58,9 @@ public:
     // optional coordination gate here; the loop arms it for exactly one
     // Initialize() call on the calling thread. Refused once the loop has started.
     bool SetPreConnectGate(std::function<bool()>);
+    // Single-thread assembly only, before Start. Immutable once installed;
+    // shared runtimes and replacement are refused. Not an installed public API.
+    bool SetBeforeNativeClose(std::function<void(const RuntimeShutdownPoint&)>);
     bool Start(const DSoftBusTransportDescriptor&) noexcept override;
     InputOpenResult Open(const Locator&, InputChannels::Receiver*) noexcept override;
     bool InputCloseAllowedOnThisThread() const noexcept override;

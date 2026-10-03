@@ -42,6 +42,13 @@ def prepare(destination,preflight_path,provenance,contract_path=None,query_cycle
       'command_contract':'--list-nodes --expected-token <board-token> --preflight-confirmed',
       'scope':'CURRENT_PUBLIC_DIRECTORY_ONLY; NO_SOCKET; DDS_NOT_RUN'}
     frozen=json.loads(Path(task_contract['freeze_path']).read_text())
+    if frozen['scope']==contract.layered().SCOPE:
+        config['work_package']=contract.layered().SCOPE;config['query_for_scenario']=contract.layered().SCENARIO
+    if frozen['scope']==contract.ROS_SCOPE:
+        config['work_package']=contract.ROS_SCOPE;config['query_for_scenario']=contract.ROS_SCENARIO
+        config['ros_attempt']=1 if frozen.get('local_contract_test') is True else contract.ros_next_attempt()
+        if contract.ros_task_mode(frozen):config.update(ros_task_id=frozen['task_id'],ros_authorization_mode=contract.ROS_TASK_AUTHORIZATION,task_authority_root=frozen['task_authority_root'])
+        if retry:config['retry_evidence']={'path':str(Path(retry).resolve()),'sha256':digest(retry)}
     if frozen['scope']==contract.INSTALLED_SCOPE and frozen.get('local_contract_test') is not True:
         config['installed_attempt']=contract.installed_next_attempt()
         if retry:config['retry_evidence']={'path':str(Path(retry).resolve()),'sha256':digest(retry)}

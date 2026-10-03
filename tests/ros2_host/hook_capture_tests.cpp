@@ -14,6 +14,7 @@ int main(int argc,char** argv){
     auto set=reinterpret_cast<void(*)(void(*)())>(fastdds_dsoftbus_hook_platform::symbol(lease->module,"PlatformTestCopyBarrier"));assert(set);set(barrier);
     lease->capture=reinterpret_cast<Capture>(fastdds_dsoftbus_hook_platform::symbol(lease->module,"PlatformTestCapture"));assert(lease->capture);
     lease->close=close_owner;lease->owner=&closed;attach(&closed,lease);
+    mark_created(lease);
     fastdds_dsoftbus::ros2_diagnostics::Snapshot snapshot;int result=-1;
     std::thread copy([&]{result=capture_startup(&snapshot);});assert(entered.get_future().wait_for(std::chrono::seconds(5))==std::future_status::ready);
     std::thread closer([&]{after_delete(&closed);});
