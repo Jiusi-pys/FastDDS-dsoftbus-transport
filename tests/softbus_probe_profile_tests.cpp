@@ -106,6 +106,26 @@ int main()
             Require(!ObserveProbeIdentity(0, "a", 0).valid, "zero capacity rejected");
             Require(!ObserveProbeIdentity(0, "a", 1).valid, "terminator outside capacity rejected");
         }},
+        {"IDENTITY-EXPORT dispatch is local only; availability keeps peers", [] {
+            std::vector<std::string> calls;
+            const auto query=[&](const std::string& id,const char* role,std::size_t index) {calls.emplace_back(std::string(role)+":"+id+":"+std::to_string(index));return true;};
+            const std::vector<std::string> peers{"unit-peer-0","unit-peer-1"};
+            const auto local=CheckProbeIdentitySet("unit-local",peers,true,query);
+            Require(local.complete&&local.remote_expected==0&&calls==std::vector<std::string>{"local:unit-local:0"}, "actual export query dispatch contains local only");
+            calls.clear();const auto legacy=CheckProbeIdentitySet("unit-local",peers,false,query);
+            Require(legacy.complete&&legacy.remote_valid==2&&calls==std::vector<std::string>{"local:unit-local:0","remote:unit-peer-0:0","remote:unit-peer-1:1"}, "legacy actual targets/roles/indices preserved");
+            Require(!CheckProbeIdentitySet("unit-local",{},true,query).complete, "no online route cannot satisfy dual-board input");
+        }},
+        {"IDENTITY-EXPORT exact private path and bytes", [] {
+            Require(ValidIdentityExportPath("/data/local/tmp/mdds_dds_1234567890abcdef_A/local-udid.bin"), "exact A output");
+            Require(ValidIdentityExportPath("/data/local/tmp/mdds_dds_1234567890abcdef_B/local-udid.bin"), "exact B output");
+            for(const char* bad : {"/tmp/local-udid.bin", "/data/local/tmp/mdds_dds_1234567890abcdef_C/local-udid.bin", "/data/local/tmp/mdds_dds_1234567890abcdef_A/../local-udid.bin", "/data/local/tmp/mdds_dds_1234567890ABCDEF_A/local-udid.bin"})
+                Require(!ValidIdentityExportPath(bad), "foreign/escape/identity rejected");
+            Require(ValidIdentityExportBytes("unit-udid",9), "synthetic exact bytes accepted");
+            Require(!ValidIdentityExportBytes(nullptr,9)&&!ValidIdentityExportBytes("",0), "missing rejected");
+            Require(!ValidIdentityExportBytes("a\nb",3)&&!ValidIdentityExportBytes("a\rb",3)&&!ValidIdentityExportBytes("a\0b",3), "configuration line ambiguity rejected");
+            const std::string large(65,'a');Require(!ValidIdentityExportBytes(large.data(),large.size()), "V1 length bound");
+        }},
         {"IDENTITY-03 failed query never validates stale buffer", [] {
             const auto failed = ObserveProbeIdentity(-42, "stale-but-complete", 19);
             Require(!failed.valid && !failed.nul_terminated && failed.length == 0, "failed API provides no string evidence");

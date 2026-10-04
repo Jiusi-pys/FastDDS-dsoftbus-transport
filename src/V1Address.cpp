@@ -202,6 +202,36 @@ bool AddressCodec::DecodeServiceName(std::string_view name, ServiceAddress& outp
     return true;
 }
 
+bool AddressCodec::ValidNativeScope(const NativeNameScope& scope) noexcept
+{
+    const auto valid = [](std::string_view text, std::size_t maximum) {
+        if (text.empty() || text.size() > maximum || text.front()=='.' || text.back()=='.' || text.find("..")!=std::string_view::npos) return false;
+        for (const unsigned char c:text)
+            if (!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='.'||c=='_'||c=='-')) return false;
+        return true;
+    };
+    if (scope.contract!=NativeNameContract::PackageScopedV1 || !valid(scope.authorized_package,64) ||
+            !valid(scope.deployment_prefix,254)) return false;
+    const auto& package=scope.authorized_package;const auto& prefix=scope.deployment_prefix;
+    if (prefix.size()<=package.size()+1 || prefix.compare(0,package.size(),package)!=0 || prefix[package.size()]!='.') return false;
+    if (prefix.find(package,package.size()+1)!=std::string::npos || prefix.find(".md1")!=std::string::npos) return false;
+    // Refuse a repeated complete deployment prefix, never normalize or strip it.
+    for(std::size_t split=1;split<prefix.size();++split)
+        if(prefix[split]=='.' && split*2+1==prefix.size() && prefix.compare(0,split,prefix,split+1,split)==0)return false;
+    return true;
+}
+bool AddressCodec::SameNativeScope(const NativeNameScope& a,const NativeNameScope& b) noexcept
+{
+    return a.contract==b.contract && a.authorized_package==b.authorized_package && a.deployment_prefix==b.deployment_prefix;
+}
+bool AddressCodec::EncodeScopedServiceName(const ServiceAddress& address,const NativeNameScope& scope,std::string& output)
+{
+    if(!ValidNativeScope(scope))return false;
+    std::string body;
+    if(!EncodeServiceName(address,body) || scope.deployment_prefix.size()+1>max_service_name_bytes-body.size())return false;
+    std::string complete=scope.deployment_prefix+'.'+body;output=std::move(complete);return true;
+}
+
 DeviceDirectory::DeviceDirectory(std::size_t maximum, KeyDeriver derive)
     : maximum_(maximum), derive_key_(std::move(derive)), entries_(std::size_t{0})
 {

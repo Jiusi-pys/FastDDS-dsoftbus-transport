@@ -13,6 +13,7 @@ struct V1PeerDeployment
     std::string network_id;
     std::string local_initiator_name;
     std::vector<std::string> expected_remote_initiator_names;
+    v1::NativeNameScope native_name_scope;
 };
 struct V1Deployment
 {
@@ -21,6 +22,7 @@ struct V1Deployment
     v1::Profile profile = v1::Profile::BytesNative;
     std::string callback_namespace;
     std::vector<V1PeerDeployment> peers;
+    v1::NativeNameScope native_name_scope;
 };
 struct DSoftBusTransportDescriptor final : eprosima::fastdds::rtps::TransportDescriptorInterface
 {
@@ -33,6 +35,7 @@ struct DSoftBusTransportDescriptor final : eprosima::fastdds::rtps::TransportDes
     std::vector<Locator> default_user_unicast;
     SendQueueLimits send_limits;
     v1::Profile profile = v1::Profile::BytesNative;
+    v1::NativeNameScope native_name_scope;
     // Atomic pre-publication setup. Inputs are explicit deployment identities;
     // this operation does not acquire permissions or authenticate the digest.
     DirectoryIssue ConfigureV1(const V1Deployment&);

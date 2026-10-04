@@ -2,7 +2,16 @@
 #include <string>
 #include "../StartupDiagnostics.hpp"
 #include "../NativePrefix.hpp"
+#include "../../../probes/V1LocatorObservation.hpp"
 namespace fastdds_dsoftbus::ros2_target_observation {
+struct V1LocatorSnapshot {
+    struct Advert {std::uint64_t observation=0;bool sending=false;std::int32_t socket=-1;experiment::SpdpLocatorObservation value{};};
+    struct Selected {std::uint32_t kind=0,port=0;std::array<std::uint8_t,16> address{};};
+    std::array<Advert,256> adverts{};std::array<Selected,256> selected{};
+    std::size_t advert_count=0,selected_count=0;
+    std::uint64_t faults=0;
+};
+bool CaptureV1(V1LocatorSnapshot&) noexcept;
 void Begin(const std::string&, unsigned);
 #ifdef FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST
 void SetSourceForHostInjection() noexcept;

@@ -434,7 +434,9 @@ try {
             & python (Join-Path (Split-Path -Parent $PSScriptRoot) 'executor/task_contract.py') --claim-query (Join-Path $windowRoot 'window.json')
             if ($LASTEXITCODE -ne 0) {throw 'Query quota not admitted'}
         }
-        $query=Invoke-Remote -Board $board -Step 'directory-query' -CommandText ('env -i PATH=/system/bin:/system/xbin LD_LIBRARY_PATH='+$loader+' timeout 10 '+$root+'/softbus_record_probe --list-nodes --expected-token '+$cfg.token.$board+' --preflight-confirmed')
+        $identityOption=''
+        if ($cfg.PSObject.Properties['identity_qualification'] -and $cfg.identity_qualification -eq $true) {$identityOption=' --check-identities --identity-output '+$cfg.private_identity_output.$board}
+        $query=Invoke-Remote -Board $board -Step 'directory-query' -CommandText ('env -i PATH=/system/bin:/system/xbin LD_LIBRARY_PATH='+$loader+' timeout 10 '+$root+'/softbus_record_probe --list-nodes'+$identityOption+' --expected-token '+$cfg.token.$board+' --preflight-confirmed')
 
         if ($query.Text -notmatch '(?m)^result=PASS scope=READONLY_ROUTE_QUERY .*cleanup=NO_SOCKET_RESOURCES token_restored=1 ') {throw "Read-only directory query failed $board"}
 
@@ -494,13 +496,45 @@ try {
 
     }
 
-    [IO.File]::WriteAllText((Join-Path $windowRoot 'window-summary.json'), (@{first_failure=$windowFailure;cleanup_failures=@($cleanupFailures.ToArray());attempted_grants=@($attempted.ToArray());time_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Depth 8), $utf8)
-
 }
 
 # Query outputs are already retained in the registered command receipts.
 
 # Stop all device operations after any restoration failure.
+
+# Private identity files belong only to this exact fresh query window. Collect
+# after both permission guards restore, then remove only the verified inode.
+# No raw identity bytes enter diagnostic stdout or the public package.
+if ($cleanupFailures.Count -eq 0 -and $cfg.PSObject.Properties['identity_qualification'] -and $cfg.identity_qualification -eq $true) {
+    $identityRows=@{}
+    foreach ($board in @('A','B')) {
+        try {
+            $output=[string]$cfg.private_identity_output.$board
+            $expectedOutput=[string]$cfg.remote.$board+'/local-udid.bin'
+            if ($output -cne $expectedOutput) {throw 'Private identity path drift'}
+            $probe=Invoke-Remote -Board $board -Step 'identity-file-metadata' -CommandText ('if test ! -e '+$output+' && test ! -L '+$output+'; then echo MDDS_IDENTITY_ABSENT=1; else test -f '+$output+' && test ! -L '+$output+" && stat -c 'MDDS_IDENTITY mode=%a uid=%u bytes=%s links=%h inode=%i' "+$output+' && sha256sum '+$output+" && stat -c 'MDDS_IDENTITY_PARENT uid=%u' "+$cfg.remote.$board+'; fi')
+            if ($probe.Text -match '(?m)^MDDS_IDENTITY_ABSENT=1\s*$') {
+                $identityRows[$board]=@{present=$false;remote_absent=$true;path=$output}
+                if (-not $windowFailure) {throw 'Required private identity missing'}
+                continue
+            }
+            if ($probe.Text -notmatch '(?m)^MDDS_IDENTITY mode=600 uid=([0-9]+) bytes=([1-9][0-9]?) links=1 inode=([1-9][0-9]*)\s*$') {throw 'Unsafe private identity metadata'}
+            $identityUid=$Matches[1];$identitySize=[int]$Matches[2];$identityInode=$Matches[3]
+            if ($identitySize -gt 64 -or $probe.Text -notmatch ('(?m)^MDDS_IDENTITY_PARENT uid='+[regex]::Escape($identityUid)+'\s*$')) {throw 'Identity owner or length mismatch'}
+            if ($probe.Text -notmatch ('(?m)^([0-9a-f]{64})\s+'+[regex]::Escape($output)+'\s*$')) {throw 'Identity hash missing'}
+            $identityHash=$Matches[1]
+            $privateDir=Join-Path $windowRoot ($board+'/identity');New-Item -ItemType Directory -Path $privateDir -ErrorAction Stop | Out-Null
+            $destination=Join-Path $privateDir 'local-udid.bin'
+            Invoke-HdcLogged -Board $board -Step 'identity-file-receive' -NativeArguments @('file','recv',$output,$destination) | Out-Null
+            $bytes=[IO.File]::ReadAllBytes($destination)
+            if ($bytes.Length -ne $identitySize -or (Get-FileHash -LiteralPath $destination).Hash.ToLowerInvariant() -cne $identityHash -or $bytes -contains 0 -or $bytes -contains 10 -or $bytes -contains 13) {throw 'Private identity transfer mismatch'}
+            Invoke-Remote -Board $board -Step 'identity-file-remove-owned' -CommandText ('test ! -L '+$output+' && stat -c %i '+$output+' | grep -qx '+$identityInode+' && sha256sum '+$output+' | grep -q '+$identityHash+' && rm '+$output+' && test ! -e '+$output+' && test ! -L '+$output) | Out-Null
+            $identityRows[$board]=@{present=$true;remote_absent=$true;path=$output;local_path=$destination;bytes=$identitySize;sha256=$identityHash;mode='600';uid=$identityUid;inode=$identityInode;disposition='EXACT_BYTES_RECEIVED_AND_OWNED_EXPORT_REMOVED'}
+        } catch {$cleanupFailures.Add($board+': identity artifact: '+$_.Exception.Message);break}
+    }
+    [IO.File]::WriteAllText((Join-Path $windowRoot 'IDENTITY_ARTIFACT_CLEANUP.json'), (@{run=$cfg.run;scope='PRIVATE_IDENTITY_EXPORT_ONLY';pass=($cleanupFailures.Count -eq 0);sides=$identityRows} | ConvertTo-Json -Depth 8),$utf8)
+}
+[IO.File]::WriteAllText((Join-Path $windowRoot 'window-summary.json'), (@{first_failure=$windowFailure;cleanup_failures=@($cleanupFailures.ToArray());attempted_grants=@($attempted.ToArray());time_utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Depth 8), $utf8)
 
 if ($cleanupFailures.Count -gt 0) {
 

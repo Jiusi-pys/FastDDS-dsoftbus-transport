@@ -2,8 +2,31 @@
 
 #include <cstddef>
 #include <string_view>
+#include <string>
+#include <vector>
 
 namespace fastdds_dsoftbus_probe {
+// Explicit private identity-output contract for the existing read-only query.
+bool ValidIdentityExportPath(std::string_view) noexcept;
+bool ValidIdentityExportBytes(const void*, std::size_t) noexcept;
+struct ProbeIdentityCheckSummary {
+    bool local_valid=false, complete=false;
+    std::size_t remote_valid=0, remote_expected=0;
+};
+// The same dispatch loop is consumed by the real public GetNodeKeyInfo path.
+// Explicit local export queries no peer UDID; route crossmatch stays separate.
+template<class Query>
+ProbeIdentityCheckSummary CheckProbeIdentitySet(const std::string& local,
+        const std::vector<std::string>& peers,bool local_export,Query&& query)
+{
+    ProbeIdentityCheckSummary result;
+    result.local_valid=query(local,"local",0);
+    result.remote_expected=local_export?0:peers.size();
+    for(std::size_t i=0;i<result.remote_expected;++i)
+        if(query(peers[i],"remote",i))++result.remote_valid;
+    result.complete=result.local_valid&&!peers.empty()&&result.remote_valid==result.remote_expected;
+    return result;
+}
 // SDK-free probe policy. The native boundary asserts these ABI enum values
 // against the actual Socket headers used for the device build.
 inline constexpr int probe_bytes_data_type = 2;

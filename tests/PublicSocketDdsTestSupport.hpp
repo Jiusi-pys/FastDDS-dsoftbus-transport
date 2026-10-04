@@ -1,3 +1,4 @@
+#include "V1NativeNameTestSupport.hpp"
 #pragma once
 #include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
 #include <fastdds/LibrarySettings.hpp>
@@ -31,10 +32,10 @@ std::string Handle(const dds::InstanceHandle_t& h){return Hex(h.value,16);}
 std::uint64_t Sequence(const rtps::SequenceNumber_t& n){return(std::uint64_t(std::uint32_t(n.high))<<32)|n.low;}
 v1::DeviceIdentity Identity(int side){return {"host-public",151,side?"synthetic-public-B":"synthetic-public-A"};}
 Locator Local(int side){EndpointId key{};Locator value;Require(v1::AddressCodec::DeriveKey(Identity(side),key)&&v1::AddressCodec::EncodeLocator({key,std::uint32_t(17+side),v1::Profile::BytesNative},value),"V1 locator");return value;}
-std::string Name(int side,const char* role){if(std::string(role)=="listener"){std::string name;Require(v1::AddressCodec::EncodeServiceName({"host-public",151,std::uint32_t(17+side),v1::Profile::BytesNative},name),"canonical listener");return name;}return std::string("host.public.")+(side?"B.":"A.")+role;}
+std::string Name(int side,const char* role){if(std::string(role)=="listener"){std::string name;Require(v1::AddressCodec::EncodeScopedServiceName({"host-public",151,std::uint32_t(17+side),v1::Profile::BytesNative},{v1::NativeNameContract::PackageScopedV1,"host.public.dds","host.public.dds.v1"},name),"canonical listener");return name;}return std::string("host.public.")+(side?"B.":"A.")+role;}
 
 std::string Network(int side){return side?"model.net.B":"model.net.A";}
-DSoftBusTransportDescriptor Configuration(int side){DSoftBusTransportDescriptor d(8192);Require(d.ConfigureV1({Identity(side),std::uint32_t(17+side),v1::Profile::BytesNative,Name(side,"namespace"),{{Identity(1-side),std::uint32_t(18-side),Network(1-side),Name(side,"outgoing"),{Name(1-side,"outgoing")}}}}).code==DirectoryError::None,"production ConfigureV1");return d;}
+DSoftBusTransportDescriptor Configuration(int side){DSoftBusTransportDescriptor d(8192);Require(d.ConfigureV1(ScopedHostDeployment({Identity(side),std::uint32_t(17+side),v1::Profile::BytesNative,Name(side,"namespace"),{{Identity(1-side),std::uint32_t(18-side),Network(1-side),Name(side,"outgoing"),{Name(1-side,"outgoing")}}}})).code==DirectoryError::None,"production ConfigureV1");return d;}
 
 PublicSocketConfiguration PublicConfig(int side){PublicSocketConfiguration c;c.identity={Name(side,"outgoing"),{std::uint64_t(910+side*4)},{std::uint64_t(1010+side*4)}};c.listener_identity={Name(side,"listener"),{std::uint64_t(911+side*4)},{std::uint64_t(1011+side*4)}};c.package_name="host.public.dds";c.peer_name=Name(1-side,"listener");c.peer_network_id=Network(1-side);c.bind_qos={{0,65536}};c.listen_qos=c.bind_qos;c.max_message_size=8192;return c;}
 // Decode the actual RTPS DATA(SPDP) parameter list, without using the codec

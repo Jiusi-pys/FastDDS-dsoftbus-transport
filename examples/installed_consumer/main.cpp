@@ -25,8 +25,8 @@ int main()
     try {
         DSoftBusTransportDescriptor descriptor(8192);
         // Synthetic Host example identities. Real deployments provide validated UDIDs.
-        require(descriptor.ConfigureV1({{"installed-example",177,"synthetic-local"},17,v1::Profile::BytesNative,"example.namespace",
-            {{{"installed-example",177,"synthetic-peer"},29,"example.network","example.dial",{"example.remote"}}}}).code==DirectoryError::None,"V1 configuration");
+        require(descriptor.ConfigureV1([&]{V1Deployment input{{"installed-example",177,"synthetic-local"},17,v1::Profile::BytesNative,"example.namespace",
+            {{{"installed-example",177,"synthetic-peer"},29,"example.network","example.dial",{"example.remote"}}}}; input.native_name_scope={v1::NativeNameContract::PackageScopedV1,"example.package","example.package.v1"};for(auto& peer:input.peers)peer.native_name_scope=input.native_name_scope;return input;}()).code==DirectoryError::None,"V1 configuration");
         std::unique_ptr<eprosima::fastdds::rtps::TransportInterface> unavailable(descriptor.create_transport());
         require(unavailable && !unavailable->init(), "default MDDS must remain unavailable");
         unavailable->shutdown(); unavailable.reset();

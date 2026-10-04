@@ -19,6 +19,8 @@ struct Config {
     v1::DeviceIdentity identity, peer_identity;
     std::uint32_t service_slot=0, peer_slot=0;
     v1::Profile profile=v1::Profile::BytesNative;
+    v1::NativeNameScope native_name_scope;
+    std::string local_initiator_name, peer_initiator_name, callback_namespace;
 };
 struct Result {
     bool success=false,drained=false;

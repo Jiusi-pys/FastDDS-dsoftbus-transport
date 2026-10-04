@@ -1,6 +1,21 @@
 #include "softbus_probe_profile.hpp"
 
 namespace fastdds_dsoftbus_probe {
+bool ValidIdentityExportPath(std::string_view path) noexcept
+{
+    constexpr std::string_view prefix="/data/local/tmp/mdds_dds_";
+    constexpr std::string_view a="_A/local-udid.bin",b="_B/local-udid.bin";
+    if(path.size()!=prefix.size()+16+a.size() || path.substr(0,prefix.size())!=prefix) return false;
+    const auto run=path.substr(prefix.size(),16),tail=path.substr(prefix.size()+16);
+    return run.find_first_not_of("0123456789abcdef")==std::string_view::npos && (tail==a||tail==b);
+}
+bool ValidIdentityExportBytes(const void* pointer,std::size_t length) noexcept
+{
+    if(!pointer||length==0||length>64)return false;
+    const auto* bytes=static_cast<const unsigned char*>(pointer);
+    for(std::size_t i=0;i<length;++i)if(bytes[i]==0||bytes[i]=='\n'||bytes[i]=='\r')return false;
+    return true;
+}
 bool ParseProbeProfile(std::string_view text, ProbeProfile& result) noexcept
 {
     if (text == "bytes") result = ProbeProfile::Bytes;

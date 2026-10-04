@@ -1,3 +1,4 @@
+#include "V1NativeNameTestSupport.hpp"
 #include "HostProviderTestSupport.hpp"
 #include <fastdds_dsoftbus/dsoftbus/PublicSocketBackend.hpp>
 #include <socket.h>
@@ -68,7 +69,7 @@ void EntranceIdentity(){
     Check(table.AbandonExposure(*client.value)==RecordStatus::None&&table.AbandonExposure(*server.value)==RecordStatus::None,"release unused pending anchors");
     Check(table.ReleaseSink(*client.value,sink)==RecordStatus::None,"release stack sink");
 }
-void Default(){auto c=Config();Check(c.ConfigureV1({{"default-host",0,"synthetic-local"},17,v1::Profile::BytesNative,"default.ns",{}}).code==DirectoryError::None,"V1 default precondition");DSoftBusTransport facade(c);auto backend=std::make_shared<PublicSocketBackend>(ShimConfig());Check(!facade.init()&&facade.last_error().error==FacadeError::NativeBackendUnavailable,"normal factory remains unavailable");Check(fake_sdk::sockets==0&&!backend->Create({}).api_called,"no implicit load/construction/empty context call");}
+void Default(){auto c=Config();Check(c.ConfigureV1(ScopedHostDeployment({{"default-host",0,"synthetic-local"},17,v1::Profile::BytesNative,"default.ns",{}})).code==DirectoryError::None,"V1 default precondition");DSoftBusTransport facade(c);auto backend=std::make_shared<PublicSocketBackend>(ShimConfig());Check(!facade.init()&&facade.last_error().error==FacadeError::NativeBackendUnavailable,"normal factory remains unavailable");Check(fake_sdk::sockets==0&&!backend->Create({}).api_called,"no implicit load/construction/empty context call");}
 void RollbackOther(){ShimFixture a;a.Open();auto* original=fake_sdk::listener;auto c=ShimConfig();c.identity={"host.public.failed",{313},{413}};fake_sdk::socket_result=43;fake_sdk::bind_result=-901;{ShimFixture b(c);Check(!b.TryOpen(),"second Bind fails");b.Close();Check(b.loop->Observe().receive.records==0&&b.loop->Observe().receive.retained_applications==0,"failed claims settled");}Check(fake_sdk::closed_ids==std::vector<int32_t>{43}&&!a.shim->Observe().closed,"other owner not closed");std::uint8_t x=9;original->OnBytes(42,&x,1);Check(a.loop->PumpReceive()==BackendStatus::None&&a.receiver.bytes[0]==9,"first binding still works");a.Close();}
 void ObserveSetup(){ShimFixture f;fake_sdk::on_socket=[&]{(void)f.loop->Observe();};fake_sdk::on_bind=[&]{(void)f.loop->Observe();};fake_sdk::on_shutdown=[&]{(void)f.loop->Observe();};f.Open();f.Close();Check(fake_sdk::closes==1,"public calls outside core gates");}
 void Server(const std::string& which){

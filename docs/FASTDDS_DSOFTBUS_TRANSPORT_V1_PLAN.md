@@ -97,3 +97,36 @@ QualificationProfile 至少绑定 SDK、固件、DSoftBus library 和构建 arti
 性能必须覆盖 64 B、1 KiB、16 KiB、64 KiB、1 MiB，小控制消息与大样本并发，空闲/持续/饱和/突发；输出吞吐、p50/p95/p99 延迟、CPU、RSS、分配次数、adapter copy bytes、连接数、队列占用、恢复与关闭时间。比较 Bytes 与加密 RAW 的相近安全条件、明文 RAW 与加密 RAW 的单独成本，并比较 Fast DDS asynchronous publish 与 TX modes 的组合；不预设 RAW 更快。三板 A→B/C、单远端故障隔离和多设备公平性保持 `DEFERRED`。
 
 双板必须覆盖跨 Participant、跨进程、跨 board、多 Reader、混合 UDP/TCP/SHM、BEST_EFFORT/RELIABLE、大样本分片、late joiner、离线/重连和进程退出。三板 A→B/C、单远端故障隔离和多设备公平性当前明确 `DEFERRED`，不能用双板多 Participant 代替。
+
+## 2026-10-04 显式修订：PACKAGE_SCOPED_V1 native 服务名合同
+
+本节为用户 `PACKAGE_SCOPED_V1_SERVICE_NAME_REVISION_AND_TASK_CONTINUATION` 授权的新合同修订，不回写旧裸名合同或其 checkpoint。设备验证仍待本轮真实收据。
+
+原 `md1.<namespace小写hex>.<domain八位小写hex>.<slot六位小写hex>.<profile两位小写hex>` 保留为规范 V1 服务名主体。`.01` 表示原 profile1；slot 仍为原零基 service_slot。完整 SDK listener/peer-listener 名称唯一装配为 `<已批准完整部署前缀>.<规范主体>`，不得双前缀、截断、裸名 fallback 或失败后重试旧名。
+
+部署显式声明 `PACKAGE_SCOPED_V1`、实际合法 package、属于该 package 的已准入完整前缀及对端同一合同。配置生成器必须对照受控 PRIVATE_CONFIG；实际 Runtime 在一次性 descriptor 发行前将 package、生成 listener/peerName、发起端映射绑定到 immutable PublicSocketConfiguration。输入 peer scope 经相等性校验后不另存别名；ValidateV1 用唯一存储 scope 重算所有结果名称，拒绝字段变更。原有独立发起端名称仍是明确部署输入，不由 bridge 重建 run/side/role 名；listener 与发起端 SDK record 必须保持不同，原 owner/lease 生命周期不变。
+
+前缀仅影响 native 命名。原哈希输入及逻辑 namespace、UDID、domain、SHA-256前16字节、kind、profile/slot port、24字节CDR、meta/user相同公告、完整locator selection、碰撞拒绝及 NO_REACCEPT 全部不变。完整名称仍受255字节上限；加入前缀导致容量不足时明确拒绝，不缩短主体或 namespace。缺失/非法字符、错误包根、重复前缀和对端不一致均在 native 暴露前拒绝。静态策略匹配仅为本地准入依据，不是 SDK/device PASS；平台规则、身份、grant、PF/P4 和生产默认 backend 均不因本修订改变。
+<!-- V1 initiator deployment decision, 2026-10-04 -->
+
+本次部署暂时沿用原来已经批准的具体发起端 Socket 名字，分别通过
+`local_initiator_name` 和 `peer_initiator_name` 显式输入。它们不是规范
+`md1` listener 主体的一部分，也不进入 namespace 或地址哈希。真实名字仅
+保存在受控部署材料中；TargetBridge 不根据 run/side/role 重建名字。
+这是本轮用户明确批准的临时部署决定，后续修改发起端命名合同必须单独
+说明兼容性并验证两端对应关系，不能将本轮沿用写成长期规范。
+
+<!-- V1 device acceptance closeout, 2026-10-05 -->
+
+本轮 final raw acceptance 已在受控范围完成：V1 locator device runtime 与
+ROS2 dual-board acceptance 为 PASS，Commit Gate 为 PASS，生产资格仍为
+`NOT_PRODUCTION_QUALIFIED`。两板双 QoS 合计 `20/20`，graph、两个跨板
+service exchange、Participant delete、Runtime close、public return 0 和
+正常退出通过；SPDP `SendBytes`/ingress 各板 `14/14`，实际观察保留完整
+kind/address/port，profile 1、slot 0、port `0x01000001`。SDK-correlated
+20 takes、109-member package、live origins 和 normal restore 均有收据。
+
+该收据不证明 cleanup-tail absence、zero loss、SDK epoch 或 SDK drain；A
+侧 19 个 `InvalidState` callback、B 侧 0 个及 startup cleanup flag 0 按
+原始记录保留。A5/C1 `NO_REACCEPT`、PF/P4、正式 reconnect 缺口和其他
+设计限制不变；未生成 QualificationProfile，未启动性能 100 轮或新设计。

@@ -52,8 +52,8 @@ using namespace fastdds_dsoftbus::dsoftbus;
 #endif
 
     DSoftBusTransportDescriptor descriptor(4096);
-    check(descriptor.ConfigureV1({{"consumer",0,"synthetic-local"},17,v1::Profile::BytesNative,"consumer.namespace",
-        {{{"consumer",0,"synthetic-remote"},29,"consumer.network","consumer.dial",{"consumer.remote.dial"}}}}).code==DirectoryError::None,"V1 deployment configuration");
+    check(descriptor.ConfigureV1([&]{V1Deployment input{{"consumer",0,"synthetic-local"},17,v1::Profile::BytesNative,"consumer.namespace",
+        {{{"consumer",0,"synthetic-remote"},29,"consumer.network","consumer.dial",{"consumer.remote.dial"}}}}; input.native_name_scope={v1::NativeNameContract::PackageScopedV1,"example.package","example.package.v1"};for(auto& peer:input.peers)peer.native_name_scope=input.native_name_scope;return input;}()).code==DirectoryError::None,"V1 deployment configuration");
     const rtps::TransportDescriptorInterface& base_descriptor = descriptor;
     check(base_descriptor.min_send_buffer_size() == 4096, "descriptor bound");
     {

@@ -281,7 +281,19 @@ void DSoftBusTransport::select_locators(Selector& selector) const
             });
             if (!duplicate && entry->state.unicast.push_back(index)) added = true;
         }
-        if (added) selector.select(i);
+        if (added) {
+            selector.select(i);
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+            // Capture actual selected values only after entry selection; this
+            // leaf diagnostic retains no locator pointer or routing authority.
+            selector.for_each([&](const Locator& value) {
+                if(!LocatorCodec::IsValid(value)||!r->plan->Find(value))return;
+                char text[51]{};std::snprintf(text,sizeof(text),"%08x:%08x:",unsigned(value.kind),value.port);
+                for(unsigned j=0;j<16;++j)std::snprintf(text+18+2*j,3,"%02x",value.address[j]);
+                runtime_probe::TraceText("V1_SELECTED_LOCATOR",text);
+            });
+#endif
+        }
     }
 }
 bool DSoftBusTransport::is_local_locator(const Locator& locator) const

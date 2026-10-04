@@ -1,3 +1,4 @@
+#include "V1NativeNameTestSupport.hpp"
 // Actual assembly of the installed experimental entry over the test-only Fake C
 // boundary. The installed entry documents one Runtime and one Participant per
 // process, and the process-global service-record table is not reusable across two
@@ -21,20 +22,20 @@
 using namespace fastdds_dsoftbus::dsoftbus;
 v1::DeviceIdentity identity(unsigned side) { return {"host-runtime", 151, side ? "synthetic-B" : "synthetic-A"}; }
 Locator local(unsigned side) { EndpointId key{}; Locator value; auto id=identity(side); if(!v1::AddressCodec::DeriveKey(id,key)||!v1::AddressCodec::EncodeLocator({key,17+side,v1::Profile::BytesNative},value))std::abort(); return value; }
-std::string listener(unsigned side) { std::string name; auto id=identity(side); if(!v1::AddressCodec::EncodeServiceName({id.name_space,id.domain,17+side,v1::Profile::BytesNative},name))std::abort();return name; }
+std::string listener(unsigned side) { std::string name; auto id=identity(side); if(!v1::AddressCodec::EncodeScopedServiceName({id.name_space,id.domain,17+side,v1::Profile::BytesNative},{v1::NativeNameContract::PackageScopedV1,"host.public.dds","host.public.dds.v1"},name))std::abort();return name; }
 phase0::PublicSocketConfiguration config(unsigned side) {
     const std::string me=side?"host.public.B.":"host.public.A.", peer=side?"host.public.A.":"host.public.B.";
     phase0::PublicSocketConfiguration c;
     c.identity={me+"outgoing",{910+side*4},{1010+side*4}};
     c.listener_identity={listener(side),{911+side*4},{1011+side*4}};
     c.package_name="host.public.dds";c.peer_name=listener(1-side);c.peer_network_id=side?"model.net.A":"model.net.B";
-    c.listen_qos={{0,80},{1,2000}};c.bind_qos=c.listen_qos;c.max_message_size=8192;return c;
+    c.listen_qos={{0,80},{1,2000}};c.bind_qos=c.listen_qos;c.max_message_size=8192;c.expected_peer_initiator_name=peer+"outgoing";return c;
 }
 DSoftBusTransportDescriptor descriptor(unsigned side) {
     auto c=config(side);DSoftBusTransportDescriptor d(8192);
     V1Deployment input{identity(side),17+side,v1::Profile::BytesNative,"library.test",
         {{identity(1-side),18-side,c.peer_network_id,c.identity.service_name,{config(1-side).identity.service_name}}}};
-    if(d.ConfigureV1(input).code!=DirectoryError::None)std::abort();return d;
+    if(d.ConfigureV1(ScopedHostDeployment(input)).code!=DirectoryError::None)std::abort();return d;
 }
 namespace {
 using Transport = eprosima::fastdds::rtps::TransportInterface;
@@ -212,6 +213,50 @@ int ReentrantLifetime() {
 }
 int main(int argc,char** argv) {
     const char* mode = argc>1?argv[1]:"";
+    if(std::strcmp(mode,"--service-scope")==0){
+        auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);
+        std::array<std::string,2> expected;
+        for(unsigned side=0;side<2;++side){auto id=identity(side);std::string body;if(!v1::AddressCodec::EncodeServiceName({id.name_space,id.domain,17+side,v1::Profile::BytesNative},body))return 1;expected[side]="host.public.dds.v1."+body;}
+        public_socket_fake::SetListenerNames(expected);
+        experimental::Runtime a(config(0)),b(config(1));auto da=a.MakeDescriptor(descriptor(0)),db=b.MakeDescriptor(descriptor(1));
+        if(!da||!db)return 2;std::unique_ptr<Transport> ta(da->create_transport()),tb(db->create_transport());NullReceiver ra,rb;
+        if(!ta||!tb||!ta->init()||!tb->init())return 3;
+        bool openedA=false,openedB=false;std::thread x([&]{openedA=ta->OpenInputChannel(local(0),&ra,8192);}),y([&]{openedB=tb->OpenInputChannel(local(1),&rb,8192);});x.join();y.join();
+        ta->shutdown();tb->shutdown();ta.reset();tb.reset();a.Close();b.Close();
+        if(!openedA||!openedB){std::cerr<<"SCOPED_SERVICE_PROVIDER_RED actual SocketInfo listener/peerName did not match explicit scoped canonical names\n";return 4;}
+        if(!NoResidue())return 5;std::cout<<"SCOPED_SERVICE_ACTUAL_PUBLIC_API_PASS\n";return 0;
+    }
+    if(std::strcmp(mode,"--service-reject")==0){
+        public_socket_fake::Configure(std::make_shared<host_dds::Trace>(),true);
+        experimental::Runtime runtime(config(0));
+        for(int mutation=0;mutation<7;++mutation){auto d=descriptor(0);
+            if(mutation==0)d.native_name_scope.deployment_prefix.clear();
+            if(mutation==1)d.native_name_scope.authorized_package="another.package";
+            if(mutation==2)d.native_name_scope.deployment_prefix="host.public.dds.host.public.dds.v1";
+            if(mutation==3)d.directory.routes.front().fields.remote_listen_name="wrong.peer";
+            if(mutation==4)d.directory.routes.front().fields.expected_remote_initiator_names={"host.public.wrong.peer"};
+            if(mutation==5)d.directory.routes.front().fields.local_initiator_name=d.directory.locals.front().local_listen_name;
+            if(mutation==6){d.directory.locals.front().local_listen_name="host.public.dds.v1."+d.directory.locals.front().local_listen_name;}
+            if(runtime.MakeDescriptor(d))return 10+mutation;
+        }
+        for(const auto& scope:std::array<v1::NativeNameScope,2>{{{v1::NativeNameContract::PackageScopedV1,"host.public.dds","host.public.dds.rogue"},{v1::NativeNameContract::PackageScopedV1,"another.package","another.package.v1"}}}) {
+            auto input=ScopedHostDeployment({identity(0),17,v1::Profile::BytesNative,"library.test",{{identity(1),18,"model.net.B","host.public.A.outgoing",{"host.public.B.outgoing"}}}});
+            input.native_name_scope=scope;input.peers.front().native_name_scope=scope;
+            DSoftBusTransportDescriptor wrong(8192);if(wrong.ConfigureV1(input).code!=DirectoryError::None||wrong.ValidateV1().code!=DirectoryError::None)return 26;
+            if(runtime.MakeDescriptor(wrong))return 27;
+        }
+        auto deployment=ScopedHostDeployment({identity(0),17,v1::Profile::BytesNative,"library.test",{{identity(1),18,"model.net.B","host.public.A.outgoing",{"host.public.B.outgoing"}}}});
+        DSoftBusTransportDescriptor d(8192);auto unchanged=descriptor(0);d=unchanged;
+        deployment.peers.front().native_name_scope.deployment_prefix="host.public.dds.other";
+        if(d.ConfigureV1(deployment).code==DirectoryError::None||d.default_user_unicast!=unchanged.default_user_unicast)return 30;
+        deployment.peers.front().native_name_scope=deployment.native_name_scope;deployment.identity.name_space=std::string(116,'n');deployment.peers.front().identity.name_space=deployment.identity.name_space;
+        if(d.ConfigureV1(deployment).code==DirectoryError::None||d.default_user_unicast!=unchanged.default_user_unicast)return 31;
+        auto scope=deployment.native_name_scope;scope.deployment_prefix="host.public.dds.v1.host.public.dds.v1";if(v1::AddressCodec::ValidNativeScope(scope))return 32;
+        scope=deployment.native_name_scope;scope.deployment_prefix="host.public.dds.bad*";if(v1::AddressCodec::ValidNativeScope(scope))return 33;
+        if(!runtime.MakeDescriptor(descriptor(0)))return 34;
+        auto observation=public_socket_fake::Observe();if(observation.sockets[0]||observation.sockets[1]||observation.live)return 35;
+        std::cout<<"SCOPED_SERVICE_REJECTIONS_BEFORE_NATIVE_PASS\n";return 0;
+    }
     if(std::strcmp(mode,"--identity")==0){
         public_socket_fake::Configure(std::make_shared<host_dds::Trace>(),true);
         experimental::Runtime runtime(config(0));auto invalid=descriptor(0);invalid.directory.identities.clear();

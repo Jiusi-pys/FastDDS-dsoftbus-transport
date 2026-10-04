@@ -1,3 +1,4 @@
+#include "V1NativeNameTestSupport.hpp"
 #include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <atomic>
 #include <condition_variable>
@@ -149,7 +150,7 @@ bool FSend(rtps::SenderResource& sender, const std::vector<Locator>& targets, st
 int RunTransportFacadeTests(int argc, char** argv) {
     std::vector<std::pair<std::string, std::function<void()>>> cases;
     cases.emplace_back("FCD-01-production-factory", [] {
-        auto d = FD(); FCHECK(d.ConfigureV1({{"factory-test",0,"synthetic-factory"},0,v1::Profile::BytesNative,"factory.ns",{}}).code == DirectoryError::None); std::unique_ptr<rtps::TransportInterface> a(d.create_transport()), b(d.create_transport());
+        auto d = FD(); FCHECK(d.ConfigureV1(ScopedHostDeployment({{"factory-test",0,"synthetic-factory"},0,v1::Profile::BytesNative,"factory.ns",{}})).code == DirectoryError::None); std::unique_ptr<rtps::TransportInterface> a(d.create_transport()), b(d.create_transport());
         FCHECK(a && b && a.get() != b.get() && d.min_send_buffer_size() == 64 && d.maxInitialPeersRange == 1);
         auto* typed = dynamic_cast<DSoftBusTransport*>(a.get()); FCHECK(typed && typed->mode() == FacadeMode::NativeUnavailable);
         FCHECK(!a->init() && typed->last_error().error == FacadeError::NativeBackendUnavailable && typed->state() == FacadeState::Failed);
@@ -466,7 +467,7 @@ int RunTransportFacadeTests(int argc, char** argv) {
         FILE* capture = std::tmpfile(); FCHECK(capture); std::fflush(stderr);
         const int saved = F_DUP(F_FILENO(stderr)); FCHECK(saved >= 0 && F_DUP2(F_FILENO(capture), F_FILENO(stderr)) >= 0);
         bool failed = false;
-        { auto d = FD(); FCHECK(d.ConfigureV1({{"factory-test",0,"synthetic-factory"},0,v1::Profile::BytesNative,"factory.ns",{}}).code == DirectoryError::None); std::unique_ptr<rtps::TransportInterface> t(d.create_transport()); failed = t && !t->init(); }
+        { auto d = FD(); FCHECK(d.ConfigureV1(ScopedHostDeployment({{"factory-test",0,"synthetic-factory"},0,v1::Profile::BytesNative,"factory.ns",{}})).code == DirectoryError::None); std::unique_ptr<rtps::TransportInterface> t(d.create_transport()); failed = t && !t->init(); }
         std::fflush(stderr); F_DUP2(saved, F_FILENO(stderr)); F_CLOSE(saved);
         std::rewind(capture); char buffer[512]{}; const auto n = std::fread(buffer, 1, sizeof(buffer) - 1, capture); std::fclose(capture);
         FCHECK(failed && n > 0 && std::string(buffer).find("NativeBackendUnavailable") != std::string::npos);

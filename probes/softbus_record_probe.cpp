@@ -23,6 +23,8 @@
 #include <thread>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 namespace {
 using namespace fastdds_dsoftbus_probe;
@@ -43,6 +45,7 @@ struct Options {
     bool server = false;
     bool list_nodes = false;
     bool check_identities = false;
+    std::string identity_output;
     ProbeProfile profile = ProbeProfile::Bytes;
     bool profile_explicit = false;
     std::uint64_t token = 0;
@@ -57,12 +60,13 @@ void Usage()
         "   or: softbus_record_probe --list-nodes [--check-identities] --expected-token <owned-id> --preflight-confirmed\n"
         "--list-nodes queries current local/online network IDs only; creates no Socket and changes no network membership.\n"
         "--check-identities additionally observes local and online-peer UDID availability without printing identity bytes.\n"
+        "With that mode only, --identity-output <exact-window>/local-udid.bin exclusively writes the validated local identity privately.\n"
         "It requires at least one online peer, and accepts no grant or network-membership changes.\n"
         "   or: softbus_record_probe --client --local-name <dial> --remote-listen-name <listen>"
         " --peer-network-id <64hex> --expected-peer-network-id <same64hex>"
         " --expected-token <owned-id> --preflight-confirmed\n"
         "Requires externally verified owned normal/DATASYNC identity; performs no token-file writes.\n"
-        "Record-mode token allowlist: 671793191 (A), 671320465 (B); board binding is externally verified.\n"
+        "Record-mode token allowlist: registered A/B identities; board binding is externally verified.\n"
         "--preflight-confirmed is an operator assertion, not internal authorization evidence.\n"
         "Record modes accept --profile bytes|raw|raw-encrypted (default: bytes, logged explicitly).\n"
         "--list-nodes rejects --profile and remains a read-only route query.\n"
@@ -96,6 +100,7 @@ bool ParseOptions(int argc, char** argv, Options& options)
         { mode = true; options.server = key == "--server"; options.list_nodes = key == "--list-nodes"; }
         else if (key == "--preflight-confirmed" && !preflight) preflight = true;
         else if (key == "--check-identities" && !options.check_identities) options.check_identities = true;
+        else if (key == "--identity-output" && options.identity_output.empty() && i+1<argc) options.identity_output=argv[++i];
         else if (key == "--profile" && !options.profile_explicit && i + 1 < argc)
         {
             options.profile_explicit = true;
@@ -121,9 +126,9 @@ bool ParseOptions(int argc, char** argv, Options& options)
     if (!mode || !token || !preflight || options.token == 0 ||
             options.token > std::numeric_limits<AccessTokenID>::max()) return false;
     if (options.list_nodes)
-        return !options.profile_explicit && options.local_name.empty() && options.remote_listen_name.empty() && options.peer_network_id.empty() &&
+        return (options.identity_output.empty() || (options.check_identities&&ValidIdentityExportPath(options.identity_output))) && !options.profile_explicit && options.local_name.empty() && options.remote_listen_name.empty() && options.peer_network_id.empty() &&
                 options.expected_initiator_name.empty() && options.expected_peer_network_id.empty();
-    if (options.check_identities) return false;
+    if (options.check_identities || !options.identity_output.empty()) return false;
     if (!AdmitTokenEntry({TokenEntryMode::Record, true, preflight, options.token})) return false;
     if (!ValidName(options.local_name) || !ValidNetwork(options.expected_peer_network_id)) return false;
     if (options.server)
@@ -189,8 +194,35 @@ TaskCheckpoint ObserveMainTask()
     return observed;
 }
 
+bool SavePrivateIdentity(const std::string& path,const void* bytes,std::size_t length)
+{
+    if(!ValidIdentityExportPath(path)||!ValidIdentityExportBytes(bytes,length))return false;
+    const auto parent=path.substr(0,path.rfind('/'));
+    const int directory=open(parent.c_str(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+    if(directory<0)return false;
+    struct stat owned{};
+    if(fstat(directory,&owned)!=0||!S_ISDIR(owned.st_mode)||owned.st_uid!=getuid()||(owned.st_mode&0022)) {close(directory);return false;}
+    const int file=openat(directory,"local-udid.bin",O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,0600);
+    if(file<0){close(directory);return false;}
+    struct stat created{};
+    bool ok=fstat(file,&created)==0&&S_ISREG(created.st_mode)&&(created.st_mode&0777)==0600&&created.st_uid==getuid();
+    std::size_t offset=0;
+    while(ok&&offset<length) {
+        const auto written=write(file,static_cast<const unsigned char*>(bytes)+offset,length-offset);
+        if(written<0&&errno==EINTR)continue;
+        if(written<=0){ok=false;break;}offset+=static_cast<std::size_t>(written);
+    }
+    if(close(file)!=0)ok=false;
+    if(!ok) {
+        struct stat current{};
+        if(fstatat(directory,"local-udid.bin",&current,AT_SYMLINK_NOFOLLOW)==0&&current.st_dev==created.st_dev&&current.st_ino==created.st_ino)
+            (void)unlinkat(directory,"local-udid.bin",0);
+    }
+    if(close(directory)!=0)ok=false;
+    return ok;
+}
 bool CheckNodeIdentities(void* provider, const std::string& local_id,
-        const std::vector<std::string>& remote_ids)
+        const std::vector<std::string>& remote_ids,const std::string& output)
 {
     const auto get_key = reinterpret_cast<decltype(&GetNodeKeyInfo)>(dlsym(provider, "GetNodeKeyInfo"));
     if (!get_key)
@@ -199,7 +231,9 @@ bool CheckNodeIdentities(void* provider, const std::string& local_id,
             << " local=NOT_QUERIED remote=NOT_QUERIED qualification_only=true\n";
         return false;
     }
-    const auto query = [get_key](const std::string& network, const char* kind, std::size_t index) {
+    std::array<std::uint8_t,UDID_BUF_LEN> local_identity{};
+    std::size_t local_length=0;
+    const auto query = [get_key,&local_identity,&local_length](const std::string& network, const char* kind, std::size_t index) {
         std::array<std::uint8_t, UDID_BUF_LEN> identity;
         identity.fill(0xa5); // A missing native terminator must not be supplied by this probe.
         const auto started = Clock::now();
@@ -208,7 +242,8 @@ bool CheckNodeIdentities(void* provider, const std::string& local_id,
         const int rc = get_key(package_name, network.c_str(), NODE_KEY_UDID,
                 identity.data(), static_cast<std::int32_t>(identity.size()));
         const auto observed = ObserveProbeIdentity(rc, identity.data(), identity.size());
-        identity.fill(0); // Identity is never persisted or included in diagnostics.
+        if(observed.valid&&!std::strcmp(kind,"local")) {local_length=observed.length;std::copy_n(identity.begin(),local_length,local_identity.begin());}
+        identity.fill(0); // Identity bytes are never included in diagnostics.
         std::cout << "stage=GetNodeKeyInfo action=RETURN route_kind=" << kind << " index=" << index
             << " rc=" << rc << " elapsed_ms="
             << std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-started).count()
@@ -216,20 +251,21 @@ bool CheckNodeIdentities(void* provider, const std::string& local_id,
             << " valid=" << observed.valid << " identity_bytes=NOT_LOGGED\n";
         return observed.valid;
     };
-    const bool local_valid = query(local_id, "local", 0);
-    std::size_t remote_valid = 0;
-    for (std::size_t i = 0; i < remote_ids.size(); ++i)
-        if (query(remote_ids[i], "remote", i)) ++remote_valid;
-    const bool complete = local_valid && !remote_ids.empty() && remote_valid == remote_ids.size();
+    const auto checked=CheckProbeIdentitySet(local_id,remote_ids,!output.empty(),query);
+    const bool local_valid=checked.local_valid,complete=checked.complete;
+    const auto remote_valid=checked.remote_valid;
+    const bool exported=output.empty() || (complete&&SavePrivateIdentity(output,local_identity.data(),local_length));
+    local_identity.fill(0);
+    if(!output.empty())std::cout<<"stage=identity_export result="<<(exported?"PASS":"FAIL")<<" bytes="<<local_length<<" exclusive=1 mode=0600 identity_bytes=NOT_LOGGED\n";
     std::cout << "stage=identity_summary result=" << (complete ? "PASS" : "FAIL")
-        << " local_valid=" << local_valid << " remote_expected=" << remote_ids.size()
+        << " local_valid=" << local_valid << " remote_expected=" << checked.remote_expected
         << " remote_valid=" << remote_valid << " remote="
-        << (remote_ids.empty() ? "NOT_OBSERVED" : remote_valid == remote_ids.size() ? "ALL_VALID" : "INCOMPLETE")
+        << (!output.empty()?"NOT_QUERIED_LOCAL_EXPORT":remote_ids.empty() ? "NOT_OBSERVED" : remote_valid == remote_ids.size() ? "ALL_VALID" : "INCOMPLETE")
         << " network_id_as_stable_identity=false qualification_only=true\n";
-    return complete;
+    return complete&&exported;
 }
 
-bool ListOnlineNodes(bool check_identities)
+bool ListOnlineNodes(bool check_identities,const std::string& identity_output)
 {
     // Deliberately separate from Runtime/LoadProvider: this mode cannot create
     // or bind a Socket. The provider stays loaded until process exit.
@@ -281,7 +317,7 @@ bool ListOnlineNodes(bool check_identities)
     std::cout << "stage=route_summary query_valid=true remote_count=" << remote_ids.size()
         << " route_available=" << !remote_ids.empty() << " free_returned=" << freed
         << " allocation_present=" << had_buffer << " node_observation_cap=32 communication=NOT_RUN\n";
-    return !check_identities || CheckNodeIdentities(provider, local_id, remote_ids);
+    return !check_identities || CheckNodeIdentities(provider, local_id, remote_ids,identity_output);
 }
 
 const ProbeProfileDescription& RequireProfile(ProbeProfile profile)
@@ -589,7 +625,7 @@ public:
             << " record_budget_ms=7000 record_budget_start=RUNTIME_CREATION"
             << " ordering=" << (query_only_ ? "LEGACY_MANAGER_BEFORE_SELECT" : "TOKEN_BEFORE_FIRST_EXPLICIT_MANAGER_OR_PROVIDER")
             << " historical_ipc=NOT_PROVEN sdk_thread_tokens=NOT_MEASURED\n";
-        if (query_only_) return ListOnlineNodes(options_.check_identities);
+        if (query_only_) return ListOnlineNodes(options_.check_identities,options_.identity_output);
         runtime = new Runtime(std::move(options_));
         return RunRecords(*runtime);
     }

@@ -31,6 +31,14 @@ struct EndpointAddress
     Profile profile = Profile::BytesNative;
 };
 
+enum class NativeNameContract : std::uint8_t { Unspecified = 0, PackageScopedV1 = 1 };
+struct NativeNameScope
+{
+    NativeNameContract contract = NativeNameContract::Unspecified;
+    std::string authorized_package;
+    std::string deployment_prefix;
+};
+
 class AddressCodec final
 {
 public:
@@ -56,6 +64,10 @@ public:
     // Failed codecs leave output unchanged. Parsing accepts canonical text only.
     static bool EncodeServiceName(const ServiceAddress& address, std::string& output);
     static bool DecodeServiceName(std::string_view name, ServiceAddress& output);
+    // Revision R2: unchanged canonical body, one explicit deployment-prefix layer.
+    static bool ValidNativeScope(const NativeNameScope&) noexcept;
+    static bool SameNativeScope(const NativeNameScope&, const NativeNameScope&) noexcept;
+    static bool EncodeScopedServiceName(const ServiceAddress&, const NativeNameScope&, std::string& output);
 };
 
 enum class DirectoryStatus

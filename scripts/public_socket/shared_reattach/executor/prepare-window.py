@@ -60,6 +60,11 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
                    stages=list(contract.ROS_STAGES),service_prefix=contract.PRIVATE['ros2_service_prefix'],
                    package_name=contract.PRIVATE['ros2_package_name'],expected_writes={'A':10,'B':10},record_count=20,
                    payload_bytes=128,max_record_bytes=8192,timeout_seconds=300)
+        if frozen.get('v1_successor_authorization'):
+            v1=contract.PRIVATE.get('v1_deployment')
+            if not v1 or frozen.get('identity_qualification') is True:raise ValueError('V1 ROS requires verified private identity/configuration, not query prerequisite contract')
+            cfg['v1_deployment']=v1
+            cfg['v1_locator_analyzer']=frozen['v1_locator_analyzer']
         if frozen.get('local_contract_test') is True:cfg['simulated']=True
         if contract.ros_task_mode(frozen):cfg.update(ros_task_id=frozen['task_id'],ros_authorization_mode=contract.ROS_TASK_AUTHORIZATION,task_authority_root=frozen['task_authority_root'])
         if frozen.get('paired_runtime_close') is True:cfg['paired_runtime_close']=True
@@ -102,10 +107,9 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
         if ros or dds214:
             platform=[x for x in cfg['required_platform_paths'] if Path(x).name=='libsoftbus_client.z.so']
             if len(platform)!=1:raise ValueError('ROS requires exactly one declared real Socket library source')
-            # The private profile carries a name stem, as for the installed
-            # consumer. TargetBridge appends only run/side/role, so its config
-            # needs the full package namespace. Socket.pkgName does not add it.
-            # This selects names under the existing policy; it grants nothing.
+            # Assemble the full approved deployment prefix once. V1 TargetBridge
+            # derives the canonical listener/peer body and consumes the separately
+            # approved concrete initiator inputs; Socket.pkgName adds no prefix.
             values={'bridge_library':cfg['remote'][side]+'/libfastdds_dsoftbus_ros2_target_bridge.so',
                     'fastdds_module':cfg['remote'][side]+'/libfastrtps.so.2.14',
                     'fastcdr_module':cfg['remote'][side]+'/libfastcdr.so.2',
@@ -113,11 +117,15 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
                     'run':run,'side':'0' if side=='A' else '1','domain':'201',
                     'authorized_package':cfg['package_name'],'peer_network_id':cfg['peer'][side],
                     'service_prefix':cfg['package_name']+'.'+cfg['service_prefix'],'connect_release':cfg['remote'][side]+'/control.LISTENER_READY'}
+            if ros and cfg.get('v1_deployment'):
+                v=cfg['v1_deployment'];other='B' if side=='A' else 'A'
+                values.update(locator_version='V1',native_name_contract='PACKAGE_SCOPED_V1',namespace=v['namespace'],domain=str(v['domain']),profile=v['profile'],local_udid=v['udids'][side],peer_udid=v['udids'][other],service_slot=str(v['slots'][side]),peer_slot=str(v['slots'][other]),local_initiator_name=v['initiator_names'][side],peer_initiator_name=v['initiator_names'][other])
             if ros and cfg.get('paired_runtime_close') is True:
                 values['runtime_close_release']=cfg['remote'][side]+'/control.RUNTIME_CLOSE'
             (aux/('dds214.conf' if dds214 else 'ros.conf')).write_text(''.join(k+'='+v+'\n' for k,v in values.items()),encoding='utf-8',newline='\n')
         (aux/'required-load-paths.txt').write_text('\n'.join([cfg['remote'][side]+'/'+e['name'] for e in artifacts]+cfg['required_platform_paths'])+'\n',newline='\n')
     cfg['auxiliary_sha256']={s:{p.name:digest(p) for p in (destination/s/'aux').iterdir()} for s in ['A','B']}
+    contract.verify_window(cfg)
     (destination/'window.json').write_text(json.dumps(cfg,indent=2));return {'run':run,'window':str(destination),'status':'PREPARED_NOT_EXECUTED'}
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('mode',choices=contract.CASES);p.add_argument('--build',required=True);p.add_argument('--destination',required=True);p.add_argument('--preflight',required=True);p.add_argument('--route');p.add_argument('--retry');p.add_argument('--contract');p.add_argument('--cycles',type=int,default=1);a=p.parse_args();print(json.dumps(prepare(a.mode,a.build,a.destination,a.preflight,a.route,a.retry,a.contract,a.cycles)))

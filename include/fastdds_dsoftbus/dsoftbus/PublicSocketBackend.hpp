@@ -13,6 +13,8 @@ struct PublicSocketConfiguration {
     std::string package_name,peer_name,peer_network_id;
     std::vector<PublicSocketQos> listen_qos,bind_qos;
     std::size_t max_message_size=0;
+    // Admitted peer mapping for factory validation; never sent as an SDK override.
+    std::string expected_peer_initiator_name;
 };
 enum class PublicSocketOperation {Socket,Listen,Bind,Send,Shutdown,Count};
 struct PublicSocketCall {

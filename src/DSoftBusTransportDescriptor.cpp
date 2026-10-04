@@ -15,18 +15,20 @@ DirectoryIssue DSoftBusTransportDescriptor::ConfigureV1(const V1Deployment& depl
     // This runtime currently transports Bytes records only. Legal RAW codec
     // profiles remain structural values; they are not a native support claim.
     if (deployment.profile != v1::Profile::BytesNative) return {DirectoryError::IncompatibleProfile};
+    if (!v1::AddressCodec::ValidNativeScope(deployment.native_name_scope)) return {DirectoryError::InvalidString};
     DSoftBusTransportDescriptor prepared(*this);
     prepared.directory.locals.clear();
     prepared.directory.routes.clear();
     prepared.directory.identities.clear();
     prepared.egress_selections.clear();
     prepared.profile = deployment.profile;
+    prepared.native_name_scope = deployment.native_name_scope;
     const auto encode = [&](const v1::DeviceIdentity& identity, std::uint32_t slot,
             Locator& locator, std::string& name) -> DirectoryIssue {
         EndpointId key{};
         if (!v1::AddressCodec::DeriveKey(identity, key)) return {DirectoryError::InvalidIdentity};
         if (!v1::AddressCodec::EncodeLocator({key, slot, deployment.profile}, locator) ||
-                !v1::AddressCodec::EncodeServiceName({identity.name_space, identity.domain, slot, deployment.profile}, name))
+                !v1::AddressCodec::EncodeScopedServiceName({identity.name_space, identity.domain, slot, deployment.profile}, deployment.native_name_scope, name))
             return {DirectoryError::InvalidLocator};
         prepared.directory.identities.push_back({key, identity.name_space, identity.domain, identity.udid});
         return {};
@@ -36,6 +38,7 @@ DirectoryIssue DSoftBusTransportDescriptor::ConfigureV1(const V1Deployment& depl
     if (issue.code != DirectoryError::None) return issue;
     prepared.directory.locals.push_back({local, deployment.callback_namespace, listener});
     for (const auto& peer : deployment.peers) {
+        if (!v1::AddressCodec::SameNativeScope(peer.native_name_scope,deployment.native_name_scope)) return {DirectoryError::InvalidString};
         if (peer.identity.name_space != deployment.identity.name_space || peer.identity.domain != deployment.identity.domain)
             return {DirectoryError::InvalidIdentity};
         Locator remote; std::string remote_listener;
@@ -55,11 +58,15 @@ DirectoryIssue DSoftBusTransportDescriptor::ConfigureV1(const V1Deployment& depl
     default_metatraffic_unicast.swap(prepared.default_metatraffic_unicast);
     default_user_unicast.swap(prepared.default_user_unicast);
     profile = prepared.profile;
+    native_name_scope.authorized_package.swap(prepared.native_name_scope.authorized_package);
+    native_name_scope.deployment_prefix.swap(prepared.native_name_scope.deployment_prefix);
+    native_name_scope.contract=prepared.native_name_scope.contract;
     return {};
 }
 DirectoryIssue DSoftBusTransportDescriptor::ValidateV1() const
 {
     if (directory.identities.empty()) return {DirectoryError::MissingIdentity};
+    if (!v1::AddressCodec::ValidNativeScope(native_name_scope)) return {DirectoryError::InvalidString};
     if (profile != v1::Profile::BytesNative) return {DirectoryError::IncompatibleProfile};
     const auto built = EndpointDirectory::Build(directory);
     if (!built.value) return built.issue;
@@ -75,7 +82,7 @@ DirectoryIssue DSoftBusTransportDescriptor::ValidateV1() const
             [&](const DirectoryConfiguration::IdentityBinding& value) { return value.key == address.device_key; });
         if (identity == directory.identities.end()) return false;
         std::string expected;
-        return v1::AddressCodec::EncodeServiceName({identity->name_space, identity->domain, address.slot, profile}, expected) && expected == name;
+        return v1::AddressCodec::EncodeScopedServiceName({identity->name_space, identity->domain, address.slot, profile}, native_name_scope, expected) && expected == name;
     };
     if (!canonical_name(directory.locals.front().local_locator, directory.locals.front().local_listen_name))
         return {DirectoryError::InvalidIdentity};
@@ -86,8 +93,11 @@ DirectoryIssue DSoftBusTransportDescriptor::ValidateV1() const
     for (const auto& identity : directory.identities)
         if (identity.name_space != local_identity->name_space || identity.domain != local_identity->domain)
             return {DirectoryError::InvalidIdentity};
-    for (const auto& route : directory.routes)
+    for (const auto& route : directory.routes) {
         if (!canonical_name(route.key.remote_locator, route.fields.remote_listen_name)) return {DirectoryError::InvalidIdentity};
+        if (route.fields.local_initiator_name==directory.locals.front().local_listen_name ||
+                std::find(route.fields.expected_remote_initiator_names.begin(),route.fields.expected_remote_initiator_names.end(),route.fields.remote_listen_name)!=route.fields.expected_remote_initiator_names.end())return {DirectoryError::InvalidString};
+    }
     return {};
 }
 eprosima::fastdds::rtps::TransportInterface* DSoftBusTransportDescriptor::create_transport() const

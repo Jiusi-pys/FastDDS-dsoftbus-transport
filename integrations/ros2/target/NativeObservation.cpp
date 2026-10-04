@@ -17,6 +17,7 @@ struct ObserverState {
     std::array<Frame,capacity> frames{};
     std::size_t count=0;
     std::mutex mutex;
+    fastdds_dsoftbus::ros2_target_observation::V1LocatorSnapshot v1_locators;
     std::string run;
     unsigned side=0;
     std::atomic<std::uint64_t> observations{0},send_enter{0},send_return{0},send_error{0},ingress{0},overflow{0},malformed{0};
@@ -86,6 +87,21 @@ void TraceText(const char* key,const char* borrowed) noexcept {
     // The interface supplies a valid borrowed C string. Do not retain pointers,
     // peer identities or arbitrary text; bounded scanning records only truncation.
     auto* state=trace_state();if(!state)return;
+    if(key&&!std::strcmp(key,"V1_SELECTED_LOCATOR")) {
+        // Exact value-only diagnostic key; arbitrary text stays redacted below.
+        try {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            auto& output=state->v1_locators;
+            std::size_t length=0;if(borrowed)while(length<51&&borrowed[length])++length;
+            if(length!=50||!borrowed||borrowed[8]!=':'||borrowed[17]!=':'||output.selected_count==output.selected.size()){++output.faults;return;}
+            auto nibble=[](char ch)->int {return ch>='0'&&ch<='9'?ch-'0':ch>='a'&&ch<='f'?ch-'a'+10:-1;};
+            ros2_target_observation::V1LocatorSnapshot::Selected value;
+            for(unsigned i=0;i<50;++i)if(i!=8&&i!=17&&nibble(borrowed[i])<0){++output.faults;return;}
+            for(unsigned i=0;i<8;++i){value.kind=(value.kind<<4)|unsigned(nibble(borrowed[i]));value.port=(value.port<<4)|unsigned(nibble(borrowed[9+i]));}
+            for(unsigned i=0;i<16;++i)value.address[i]=std::uint8_t((nibble(borrowed[18+2*i])<<4)|nibble(borrowed[19+2*i]));
+            output.selected[output.selected_count++]=value;return;
+        }catch(...){++state->capture_faults;return;}
+    }
     auto& startup=state->startup;
     try {
         std::lock_guard<std::mutex> lock(state->startup_mutex);ros2_diagnostics::Event e;
@@ -108,6 +124,13 @@ std::uint64_t SocketFrame(const char* event,std::int32_t socket,const std::uint8
     if(!decoded.valid){++state->malformed;return observation;}
     // Bounded structural metadata only. Never store payload or alter/forward it.
     std::lock_guard<std::mutex> lock(state->mutex);
+    const auto locators=fastdds_dsoftbus::experiment::ObserveSpdpLocators(data,size);
+    if(!locators.valid||locators.unsupported||locators.overflow)++state->v1_locators.faults;
+    else for(std::size_t i=0;i<locators.count;++i) {
+        auto& output=state->v1_locators;
+        if(output.advert_count==output.adverts.size()){++output.faults;break;}
+        output.adverts[output.advert_count++]={observation,sending,socket,locators.values[i]};
+    }
     for(const auto& item:decoded.data) {
         if(state->count==capacity){++state->overflow;continue;}
         state->frames[state->count++]={observation,sending,socket,item.writer_guid,item.sequence_hi,item.sequence_lo};
@@ -116,6 +139,10 @@ std::uint64_t SocketFrame(const char* event,std::int32_t socket,const std::uint8
 }
 }
 namespace fastdds_dsoftbus::ros2_target_observation {
+bool CaptureV1(V1LocatorSnapshot& output) noexcept {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
+    try {std::lock_guard<std::mutex> lock(state->mutex);output=state->v1_locators;return true;}catch(...){++state->capture_faults;return false;}
+}
 void Begin(const std::string& identifier,unsigned board) {
     if(identifier.size()!=16||board>1||identifier.find_first_not_of("0123456789abcdef")!=std::string::npos)
         throw std::invalid_argument("Invalid observer identity");
@@ -168,6 +195,17 @@ bool Flush() {
     std::array<Frame,capacity> snapshot;
     std::size_t stored;
     {std::lock_guard<std::mutex> lock(state->mutex);stored=state->count;std::copy_n(state->frames.begin(),stored,snapshot.begin());}
+    V1LocatorSnapshot locators;const bool locator_capture=CaptureV1(locators);
+    for(std::size_t i=0;i<locators.advert_count;++i) {
+        const auto& frame=locators.adverts[i];char writer[33]{},address[33]{};
+        for(unsigned j=0;j<16;++j){std::snprintf(writer+2*j,3,"%02x",frame.value.writer[j]);std::snprintf(address+2*j,3,"%02x",frame.value.address[j]);}
+        std::fprintf(stdout,"ROS_V1_SPDP run=%s side=%c observation=%llu direction=%s socket=%d writer=%s sequence_high=%u sequence_low=%u data_offset=%zu pid=%04x bytes=%u kind=%08x address=%s port=%08x\n",state->run.c_str(),state->side?'B':'A',static_cast<unsigned long long>(frame.observation),frame.sending?"SDK_SEND":"SDK_INGRESS",frame.socket,writer,frame.value.sequence_high,frame.value.sequence_low,frame.value.data_submessage_offset,unsigned(frame.value.pid),unsigned(frame.value.serialized_bytes),frame.value.kind,address,frame.value.port);
+    }
+    for(std::size_t i=0;i<locators.selected_count;++i) {
+        const auto& value=locators.selected[i];char address[33]{};for(unsigned j=0;j<16;++j)std::snprintf(address+2*j,3,"%02x",value.address[j]);
+        std::fprintf(stdout,"ROS_V1_SELECTED run=%s side=%c kind=%08x address=%s port=%08x scope=ACTUAL_SELECTOR_VALUES\n",state->run.c_str(),state->side?'B':'A',value.kind,address,value.port);
+    }
+    std::fprintf(stdout,"ROS_V1_OBSERVATION run=%s side=%c captured=%u adverts=%zu selected=%zu faults=%llu sdk_epoch=NOT_PROVEN\n",state->run.c_str(),state->side?'B':'A',unsigned(locator_capture),locators.advert_count,locators.selected_count,static_cast<unsigned long long>(locators.faults));
     for(std::size_t i=0;i<stored;++i) {
         char guid[33]{};for(std::size_t j=0;j<16;++j)std::snprintf(guid+2*j,3,"%02x",snapshot[i].writer[j]);
         std::fprintf(stdout,"ROS_NATIVE_DATA run=%s side=%c observation=%llu direction=%s socket=%d writer=%s sequence_hi=%d sequence_lo=%u scope=STRUCTURAL_APP_OBSERVER\n",
@@ -178,6 +216,6 @@ bool Flush() {
     std::fflush(stdout);
     ros2_diagnostics::Snapshot startup_copy;
     const bool startup_ok=Capture(startup_copy)&&ros2_diagnostics::Write(startup_copy,ros2_diagnostics::Stdout,nullptr);
-    return startup_ok&&!startup_copy.overflow&&!startup_copy.output_errors&&state->overflow.load()==0&&state->malformed.load()==0&&state->send_error.load()==0&&state->send_enter.load()==state->send_return.load();
+    return locator_capture&&!locators.faults&&startup_ok&&!startup_copy.overflow&&!startup_copy.output_errors&&state->overflow.load()==0&&state->malformed.load()==0&&state->send_error.load()==0&&state->send_enter.load()==state->send_return.load();
 }
 }

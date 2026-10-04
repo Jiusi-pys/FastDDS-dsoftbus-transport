@@ -15,7 +15,7 @@ processes={};streams={};commands={}
 input_hashes={str(f.resolve()):hashlib.sha256(f.read_bytes()).hexdigest() for f in [a.exe,a.bridge,a.fastdds_prefix/'bin/fastrtps-2.14.dll']}
 for index,side in enumerate('AB'):
  conf=a.output/(side+'.conf');conf.write_text('\n'.join([
-  'bridge_library='+str(a.bridge.resolve()),'fastdds_module='+str((a.fastdds_prefix/'bin/fastrtps-2.14.dll').resolve()),'fastcdr_module='+str((a.ros_prefix/'bin/fastcdr-2.2.dll').resolve()),'locator_version=V1\nbackend=HOST_OPAQUE_BYTES_TEST_ONLY',
+  'bridge_library='+str(a.bridge.resolve()),'fastdds_module='+str((a.fastdds_prefix/'bin/fastrtps-2.14.dll').resolve()),'fastcdr_module='+str((a.ros_prefix/'bin/fastcdr-2.2.dll').resolve()),'locator_version=V1\nnative_name_contract=PACKAGE_SCOPED_V1\nauthorized_package=host.ros.test\nservice_prefix=host.ros.test.v1\nbackend=HOST_OPAQUE_BYTES_TEST_ONLY',
   'run='+run,'side='+str(index),'port='+str(ports[index]),'peer_port='+str(ports[1-index]),
   'domain='+str(domain),'forward='+a.forward,'host_close_error='+a.host_close_error])+'\n')
  if a.paired_close:

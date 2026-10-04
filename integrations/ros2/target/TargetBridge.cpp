@@ -27,7 +27,7 @@ Values read(const char* path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("configuration missing");
     const std::set<std::string> keys{"bridge_library", "fastdds_module", "fastcdr_module", "softbus_module",
-        "backend", "run", "side", "domain", "authorized_package", "peer_network_id", "service_prefix", "connect_release", "locator_version", "namespace", "local_udid", "peer_udid", "service_slot", "peer_slot", "profile"};
+        "backend", "run", "side", "domain", "authorized_package", "peer_network_id", "service_prefix", "connect_release", "locator_version", "namespace", "local_udid", "peer_udid", "service_slot", "peer_slot", "profile", "native_name_contract", "local_initiator_name", "peer_initiator_name"};
     Values values;
     std::string line;
     while (std::getline(input, line)) {
@@ -99,7 +99,7 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
     *output = nullptr;
     try {
         const auto values = read(path);
-        if(values.at("locator_version")!="V1" || values.at("profile")!="BYTES_NATIVE")
+        if(values.at("locator_version")!="V1" || values.at("profile")!="BYTES_NATIVE" || values.at("native_name_contract")!="PACKAGE_SCOPED_V1")
             throw std::runtime_error("explicit supported V1 profile required");
         DSoftBusTransportDescriptor config(65536);
         const auto slot=integer(values,"service_slot",v1::AddressCodec::max_slot);
@@ -122,17 +122,16 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         auto* owner = new Owner; *output = owner; owner->run = values.at("run"); owner->side = side;
         fastdds_dsoftbus::ros2_target_observation::Begin(owner->run,side);
         owner->diagnostic_control=[] { (void)fastdds_dsoftbus::ros2_target_observation::ExportPending(); FastddsDsoftbusFactoryFlushTeardownPending(); };
-        const auto prefix = values.at("service_prefix") + "." + owner->run;
-        auto name = [&](unsigned index, const char* role) { return prefix + "." + std::to_string(index) + "." + role; };
-        const auto issue=config.ConfigureV1({local_identity,slot,v1::Profile::BytesNative,prefix+".ns",
-            {{peer_identity,peer_slot,values.at("peer_network_id"),name(side,"outgoing"),{name(1-side,"outgoing")}}}});
+        const auto prefix = values.at("service_prefix");
+        const auto issue=config.ConfigureV1([&]{V1Deployment input{local_identity,slot,v1::Profile::BytesNative,prefix+".ns",
+            {{peer_identity,peer_slot,values.at("peer_network_id"),values.at("local_initiator_name"),{values.at("peer_initiator_name")}}}};input.native_name_scope={v1::NativeNameContract::PackageScopedV1,values.at("authorized_package"),prefix};for(auto& peer:input.peers)peer.native_name_scope=input.native_name_scope;return input;}());
         if(issue.code!=DirectoryError::None)throw std::runtime_error("V1 deployment configuration rejected");
         const auto local=config.directory.locals.front().local_locator;
         const auto remote=config.directory.routes.front().key.remote_locator;
         phase0::PublicSocketConfiguration backend;
-        backend.identity = {name(side,"outgoing"),{910+side*4},{1010+side*4}};
+        backend.identity = {values.at("local_initiator_name"),{910+side*4},{1010+side*4}};
         backend.listener_identity = {config.directory.locals.front().local_listen_name,{911+side*4},{1011+side*4}};
-        backend.package_name = values.at("authorized_package"); backend.peer_network_id = values.at("peer_network_id");
+        backend.package_name = values.at("authorized_package");backend.expected_peer_initiator_name=values.at("peer_initiator_name"); backend.peer_network_id = values.at("peer_network_id");
         backend.peer_name = config.directory.routes.front().fields.remote_listen_name; backend.max_message_size = 65536;
         backend.bind_qos = {{0,80},{1,2000}}; backend.listen_qos = backend.bind_qos;
         owner->runtime = std::make_unique<experimental::Runtime>(backend);

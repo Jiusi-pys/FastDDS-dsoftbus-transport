@@ -39,6 +39,11 @@ ROS_TASK_AUTHORIZATION='TASK_SCOPED_ROS2_DEVICE_VALIDATION'
 ROS_TASK_GRANT_RELATIVE='.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/AUTHORIZATION.json'
 ROS_TASK_GRANT_PATH=None
 ROS_TASK_GRANT_SHA256='1dbadad0591bad3f76ef98a6bab09ff80ee6b75491e54c447410c841b39bea51'
+ROS_V1_SUCCESSOR_GRANT_RELATIVE='.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/V1_SUCCESSOR_AUTHORIZATION_20261004.json'
+ROS_V1_SUCCESSOR_GRANT_PATH=None
+ROS_V1_SUCCESSOR_GRANT_SHA256='fce6e3d9ca8c7d0d20790dbeba2e3e4b673d521ab815b685af17f519b6ad0750'
+ROS_V1_RECOVERED_SOURCE_RELATIVE='.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/iterations/iteration-23/INDEPENDENT_RECOVERED_IDENTITY_SOURCE_ACCEPTANCE.json'
+ROS_V1_RECOVERED_SOURCE_SHA256='7e3cd32f3496216847b6ba15c62077c65f2485174d0fbb4f0f1ac2cb22e6547b'
 ROS_TASK_WINDOW_LIMITS=dict(timeout_seconds=300,per_side_writes=10,per_side_takes=10,record_count=20,stdout_budget=25165824,max_record_bytes=8192,stages=7)
 ROS_ONE_WINDOW_AUTHORIZATIONS=(ROS_OBSERVED_AUTHORIZATION,ROS_SERVICE_NAME_AUTHORIZATION,ROS_LAYERED_AUTHORIZATION)
 ROS_STAGES=['LISTENER_READY','RELIABLE_READY','RELIABLE_DONE','BEST_EFFORT_READY','BEST_EFFORT_DONE','TEARDOWN_READY','DDS_DELETED']
@@ -60,6 +65,49 @@ def ros_task_mode(frozen=None):
   p=TASK_ROOT/'DEVICE_CONTRACT.json'
   frozen=json.loads(p.read_text(encoding='utf-8-sig')) if p.is_file() else {}
  return frozen.get('authorization')==ROS_TASK_AUTHORIZATION
+
+def verify_v1_successor(frozen,grant):
+ # An additional human task authorization, never a platform permission grant.
+ # It exempts exactly the old accepted checkpoint; a new PASS remains terminal.
+ binding=frozen.get('v1_successor_authorization')
+ if binding is None:return None
+ need(binding==PRIVATE.get('v1_successor_authorization'),'V1 successor private input mismatch')
+ expected=Path(ROS_V1_SUCCESSOR_GRANT_PATH).resolve() if ROS_V1_SUCCESSOR_GRANT_PATH is not None else (repo_root()/ROS_V1_SUCCESSOR_GRANT_RELATIVE).resolve()
+ need(binding==dict(path=str(expected),sha256=ROS_V1_SUCCESSOR_GRANT_SHA256) and digest(expected)==ROS_V1_SUCCESSOR_GRANT_SHA256,'V1 successor authorization anchor drift')
+ record=json.loads(expected.read_text(encoding='utf-8-sig'))
+ need(record.get('schema')==1 and record.get('authorization')=='PACKAGE_SCOPED_V1_SERVICE_NAME_REVISION_AND_TASK_CONTINUATION' and record.get('work_package')=='V1_LOCATOR_DEVICE_ACCEPTANCE','V1 successor purpose')
+ need(record.get('original_authorization_sha256')==ROS_TASK_GRANT_SHA256 and record.get('native_name_contract')=='PACKAGE_SCOPED_V1' and record.get('profile')=='BYTES_NATIVE','V1 original authority/contract')
+ for key in ('same_registered_identity','same_platform_permission_scheme'):need(record.get(key) is True,'V1 identity scope expanded')
+ for key in ('historical_refund','fixed_attempt_balance','reaccept','production_qualification'):need(record.get(key) is False,'V1 unauthorized expansion')
+ prior=record.get('predecessor',{});window=Path(prior.get('window','')).resolve()
+ need(window==Path(grant['task_root']).resolve()/'iterations/iteration-20/windows/data-15' and prior.get('run')=='be8cb2d90f287223' and digest(window/'window.json')==prior.get('window_sha256'),'V1 exact predecessor drift')
+ item=prior.get('independent_acceptance',{});acceptance=window/'independent-tester/INDEPENDENT_ACCEPTANCE.json'
+ need(item==dict(path=str(acceptance),sha256=digest(acceptance)),'V1 independent predecessor drift')
+ accepted=json.loads(acceptance.read_text(encoding='utf-8-sig'));config=json.loads((window/'window.json').read_text(encoding='utf-8-sig'))
+ need(accepted.get('run')==prior['run'] and accepted.get('functional_verdict')=='PASS_IN_STATED_DUAL_BOARD_ROS_SCOPE' and accepted.get('environment_restoration_verdict')=='PASS','V1 predecessor not independently accepted/restored')
+ need(config.get('run')==prior['run'] and config.get('targets')==TARGETS and config.get('token')==TOKENS and config.get('package_name')==PRIVATE.get('ros2_package_name'),'V1 registered identity changed')
+ return record
+
+def verify_recovered_identity_source(window):
+ # Exactly the reviewed original query and its appended file-only restoration.
+ # Original FAIL and consumed claim remain unchanged; ordinary query validation
+ # never uses this exception.
+ path=(repo_root()/ROS_V1_RECOVERED_SOURCE_RELATIVE).resolve()
+ need(path.is_file() and digest(path)==ROS_V1_RECOVERED_SOURCE_SHA256,'Recovered identity acceptance drift')
+ accepted=json.loads(path.read_text(encoding='utf-8-sig'));window=Path(window).resolve()
+ need(accepted.get('verdict')=='PASS_IN_PREREQUISITE_SCOPE' and accepted.get('LEGITIMATE_PRIVATE_LOCAL_UDID_INPUTS_AVAILABLE') is True and accepted.get('ORIGINAL_QUERY_RAW_ROUTE_CROSSMATCH')=='PASS' and accepted.get('APPENDED_OWNED_ARTIFACT_RESTORATION')=='PASS' and accepted.get('ORIGINAL_QUERY_WINDOW')=='FAIL_PRESERVED','Recovered identity prerequisite not independently accepted')
+ need(accepted.get('source_window')==str(window) and accepted.get('source_window_sha256')==digest(window/'window.json'),'Recovered source original window drift')
+ need(accepted.get('sdk_queries_repeated')==0 and accepted.get('claim_status')=='ORIGINAL_CONSUMED_QUERY_CLAIM_NOT_REFUNDED','Recovered source cannot refund/query again')
+ files=accepted.get('proof_files_sha256',{});need(bool(files),'Recovered source raw proof absent')
+ for item,expected in files.items():need(digest(item)==expected,'Recovered source original/recovery raw evidence drift')
+ recovery=Path(accepted.get('recovery_directory','')).resolve()
+ need(recovery==window/'identity-artifact-recovery/attempt-1' and digest(recovery/'RESULT.json')==accepted.get('recovery_result_sha256'),'Recovered source exact restoration drift')
+ result=json.loads((recovery/'RESULT.json').read_text(encoding='utf-8-sig'))
+ need(result.get('status')=='PASS' and all(result.get(key)==0 for key in ('sdk_queries','permission_actions','business_dispatches')),'Recovery performed unauthorized SDK/permission/business actions')
+ need(set(result.get('sides',{}))=={'A','B'} and all(row.get('remote_absent') is True and row.get('mode')=='600' and row.get('bytes')==64 for row in result['sides'].values()),'Recovered source export restoration incomplete')
+ cfg=json.loads((window/'window.json').read_text(encoding='utf-8-sig'))
+ need(cfg.get('targets')==TARGETS and cfg.get('token')==TOKENS and cfg.get('identity_qualification') is True,'Recovered source registered identity mismatch')
+ return accepted
 
 def verify_ros_task_grant(frozen):
  need(frozen.get('scope')==ROS_SCOPE and frozen.get('authorization')==ROS_TASK_AUTHORIZATION,'Task authorization purpose mismatch')
@@ -88,6 +136,7 @@ def verify_ros_task_grant(frozen):
   prior=json.loads((w/'window.json').read_text(encoding='utf-8-sig'))
   need(PRIVATE.get('ros2_package_name')==prior.get('package_name') and TARGETS==prior.get('targets') and TOKENS==prior.get('token'),'Task changed existing device/permission identity scheme')
   _require_normal_restored(w)
+ verify_v1_successor(frozen,grant)
  return grant
 
 def ros_task_authority_root():
@@ -126,15 +175,18 @@ def ros_task_data_outcome(window,config):
  loads=record('load-collection-summary.json')
  need('first_failure' in loads and isinstance(loads.get('failures'),list),'Task load terminal result missing')
  if loads['first_failure'] or loads['failures']:return failed(loads['first_failure'] or 'ROS_LOAD_ORIGIN_FAILED')
- for name in ('ros-analysis','ros-native-analysis'):
-  failure=window/'ANALYSIS_FAILURE.json'
+ names=['ros-analysis','ros-native-analysis']
+ if 'v1_deployment' in config:names.append('v1-locator-analysis')
+ for name in names:
+  failure_name='V1_ANALYSIS_FAILURE.json' if name=='v1-locator-analysis' else 'ANALYSIS_FAILURE.json'
+  failure=window/failure_name
   if failure.is_file():
-   value=record('ANALYSIS_FAILURE.json');need(value.get('run')==config['run'] and bool(value.get('first_failure')),'Task analysis failure identity')
+   value=record(failure_name);need(value.get('run')==config['run'] and bool(value.get('first_failure')),'Task analysis failure identity')
    return failed(value['first_failure'])
   value=record(name+'.json');need(value.get('run')==config['run'] and type(value.get('pass')) is bool,'Task analysis terminal identity/result')
   rc=window/(name+'.rc');need(rc.is_file(),'Task analysis exit receipt missing');evidence[rc.name]=digest(rc)
   code=rc.read_text(encoding='utf-8-sig').strip();need(re.fullmatch(r'-?[0-9]+',code) is not None,'Task analysis exit receipt invalid')
-  if value['pass'] is False or int(code)!=0:return failed('ROS_ANALYSIS_FAILED' if name=='ros-analysis' else 'ROS_NATIVE_SAMPLE_CORRELATION_FAILED')
+  if value['pass'] is False or int(code)!=0:return failed({'ros-analysis':'ROS_ANALYSIS_FAILED','ros-native-analysis':'ROS_NATIVE_SAMPLE_CORRELATION_FAILED','v1-locator-analysis':'ACTUAL_V1_LOCATOR_ANALYSIS_FAILED'}[name])
  return dict(status='PASS',first_failure=None,evidence=evidence)
 
 def pregrant_module():
@@ -166,6 +218,7 @@ def task_preparation_failures(authority,exclude_window=None):
 
 def ros_task_next_attempt(exclude_window=None):
  frozen=json.loads((TASK_ROOT/'DEVICE_CONTRACT.json').read_text(encoding='utf-8-sig'));grant=verify_ros_task_grant(frozen)
+ successor=verify_v1_successor(frozen,grant)
  rows=ros_task_claim_rows();preparations=task_preparation_failures(Path(grant['task_root']).resolve(),exclude_window)
  if not rows:return 1
  latest=max(r[0] for r in rows)
@@ -187,12 +240,18 @@ def ros_task_next_attempt(exclude_window=None):
   summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'))
   if kind=='data':
    outcome=ros_task_data_outcome(window,config)
-   need(outcome['status']!='PASS','Successful task data window ends further dispatch')
+   predecessor=successor and successor['predecessor']
+   need(outcome['status']!='PASS' or (predecessor and row.get('run')==predecessor['run'] and window==Path(predecessor['window']).resolve()),'Successful task data window ends further dispatch')
  current=[r for r in rows if r[0]==latest]
  query=next((r for r in current if r[1]=='query'),None);data=next((r for r in current if r[1]=='data'),None)
  prep=next((r for r in preparations if r[0]==latest),None)
+ if successor and data and data[3].get('run')==successor['predecessor']['run']:
+  return latest+1
  if query and not data and not prep:
   window=Path(query[3]['window']);summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'))
+  if successor and (repo_root()/ROS_V1_RECOVERED_SOURCE_RELATIVE).is_file():
+   recovered=json.loads((repo_root()/ROS_V1_RECOVERED_SOURCE_RELATIVE).read_text(encoding='utf-8-sig'))
+   if recovered.get('source_window')==str(window.resolve()):verify_recovered_identity_source(window);return latest
   if not summary.get('first_failure'):
    result=window/'ROUTE_QUERY_RESULT.json';need(result.is_file() and json.loads(result.read_text(encoding='utf-8-sig')).get('pass') is True,'Task query derived result incomplete')
    return latest # Own consumed query is available for data, never another query dispatch.
@@ -768,7 +827,14 @@ def _require_normal_restored(window):
 def _require_window_guards_restored(window):
  # The normal device restoration checks remain independent of auxiliary
  # debugger closure. Neither can substitute for the other.
- summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'));need(summary['cleanup_failures']==[],'Prior cleanup incomplete')
+ summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'))
+ if summary['cleanup_failures']:
+  need((window/'window.json').is_file() and json.loads((window/'window.json').read_text(encoding='utf-8-sig')).get('identity_qualification') is True,'Prior cleanup incomplete')
+  verify_recovered_identity_source(window)
+ if (window/'window.json').is_file() and json.loads((window/'window.json').read_text(encoding='utf-8-sig')).get('identity_qualification') is True:
+  cleanup=json.loads((window/'IDENTITY_ARTIFACT_CLEANUP.json').read_text(encoding='utf-8-sig'))
+  if cleanup.get('pass') is not True:verify_recovered_identity_source(window)
+  else:need(set(cleanup.get('sides',{}))=={'A','B'} and all(row.get('remote_absent') is True for row in cleanup['sides'].values()),'Prior private identity artifact restoration incomplete')
  if (window/'result.json').exists():
   result=json.loads((window/'result.json').read_text());need(not result.get('timedOut') and result.get('collectionCleanup')!='UNCONFIRMED','Prior runtime/collector termination uncertain')
  for side in ['A','B']:
@@ -1022,9 +1088,39 @@ def require_restored(window):
   if f.get('local_contract_test') is not True or not (Path(window)/'NO_STATE_CHANGE_RECOVERY.json').exists():raise original
   return validate_local_no_state_change(window)
 
+def verify_v1_window(c,frozen):
+ if not frozen.get('v1_successor_authorization'):return
+ spec=importlib.util.spec_from_file_location('window_v1_private',TASK_ROOT/'executor/private_config.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+ v=module.validate_v1_deployment(PRIVATE,repo_root())
+ need(v is not None and c.get('v1_deployment')==v,'Window V1 deployment differs from controlled input')
+ need(c.get('package_name')==PRIVATE['ros2_package_name'] and c.get('service_prefix')==PRIVATE['ros2_service_prefix'],'Window native package/prefix changed')
+ analyzer=c.get('v1_locator_analyzer',{});canonical=repo_root()/'scripts/public_socket/analyze_v1_locators.py'
+ need(analyzer==frozen.get('v1_locator_analyzer') and Path(analyzer.get('path','')).resolve()==canonical.resolve() and digest(canonical)==analyzer.get('sha256'),'V1 independent analyzer not frozen')
+ root=Path(c['window_root'])
+ for side in 'AB':
+  path=root/side/'aux/ros.conf'
+  if not root.exists():continue # First preparation pass; actual launch always has the files.
+  need(path.is_file(),'Generated V1 ROS config missing')
+  rows=[line.split('=',1) for line in path.read_text(encoding='utf-8').splitlines()]
+  need(all(len(row)==2 for row in rows) and len({row[0] for row in rows})==len(rows),'Generated V1 ROS config duplicate/invalid field')
+  values=dict(rows);other='B' if side=='A' else 'A'
+  expected=dict(locator_version='V1',native_name_contract='PACKAGE_SCOPED_V1',namespace=v['namespace'],domain=str(v['domain']),profile=v['profile'],local_udid=v['udids'][side],peer_udid=v['udids'][other],service_slot=str(v['slots'][side]),peer_slot=str(v['slots'][other]),local_initiator_name=v['initiator_names'][side],peer_initiator_name=v['initiator_names'][other],authorized_package=c['package_name'],service_prefix=c['package_name']+'.'+c['service_prefix'])
+  need(all(values.get(key)==value for key,value in expected.items()),'Generated V1 ROS endpoint/name contract mismatch')
+  if 'auxiliary_sha256' in c:need(c['auxiliary_sha256'][side].get('ros.conf')==digest(path),'Generated V1 ROS config bytes drift')
+
+def verify_v1_identity_correspondence(c):
+ acceptance=json.loads((repo_root()/ROS_V1_RECOVERED_SOURCE_RELATIVE).read_text(encoding='utf-8-sig'))
+ accepted=verify_recovered_identity_source(acceptance['source_window'])
+ result=json.loads((Path(accepted['recovery_directory'])/'RESULT.json').read_text(encoding='utf-8-sig'))
+ for side in 'AB':
+  row=result['sides'][side];expected=dict(path=str(Path(row['local_path']).resolve()),sha256=row['sha256'])
+  actual=c['v1_deployment']['udid_receipts'][side]
+  need(actual==expected and digest(expected['path'])==expected['sha256'],'V1 identity must come from corresponding accepted board export')
+
 def verify_window(c):
  validate_shape(c);need(c['task_contract']==load(c['task_contract']['freeze_path']),'Contract changed')
  frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text());verify_shared_guard(c,frozen)
+ need(not (frozen.get('v1_successor_authorization') and frozen.get('identity_qualification') is True),'Identity prerequisite contract cannot dispatch ROS data')
  if is_dds214(c):
   need(frozen['scope']==layered().SCOPE,'DDS214 work package mismatch')
   layered().budget(this_contract(),c)
@@ -1038,6 +1134,8 @@ def verify_window(c):
   return
  if is_ros(c):
   need(frozen['scope']==ROS_SCOPE,'ROS work package mismatch')
+  verify_v1_window(c,frozen)
+  if frozen.get('v1_successor_authorization'):verify_v1_identity_correspondence(c)
   need(type(frozen.get('paired_runtime_close',False)) is bool and type(c.get('paired_runtime_close',False)) is bool and
        c.get('paired_runtime_close',False)==frozen.get('paired_runtime_close',False),'ROS paired shutdown contract drift')
   if frozen.get('local_contract_test') is True:
@@ -1102,10 +1200,44 @@ def verify_window(c):
   path=Path(row['path']).resolve();need(path.is_relative_to(TASK_ROOT) and digest(path)==row['sha256'],'Repair receipt drift')
   repair=json.loads(path.read_text());need(repair.get('root_cause') and repair.get('fix') and repair.get('affected_validation') and repair.get('review'),'Unsubstantiated repair')
   need(sum('retry_evidence' in x for _,x in prior)<frozen['limits']['repair_retries'],'Repair retry limit reached')
+def verify_identity_query_binding(c,frozen):
+ identity=frozen.get('identity_qualification',False)
+ need(type(identity) is bool and type(c.get('identity_qualification',False)) is bool and c.get('identity_qualification',False)==identity,'Identity query mode mismatch')
+ if identity:
+  need(verify_v1_successor(frozen,verify_ros_task_grant(frozen)) is not None,'Identity query missing V1 successor')
+  bound=frozen.get('identity_query_helper',{});image=Path(bound.get('path','')).resolve()
+  need(image==Path(PRIVATE['query_helper_path']).resolve() and c.get('query_helper')==dict(path=str(image),sha256=bound.get('sha256')) and image.stat().st_size==bound.get('size') and digest(image)==bound.get('sha256'),'Identity helper binding drift')
+  source=bound.get('source',{});need(source==dict(path='probes/softbus_record_probe.cpp',sha256=digest(repo_root()/'probes/softbus_record_probe.cpp')),'Identity helper current source drift')
+  proof=bound.get('binding_receipt',{});receipt_path=Path(proof.get('path','')).resolve()
+  need(digest(receipt_path)==proof.get('sha256'),'Identity helper compile receipt drift')
+  receipt=json.loads(receipt_path.read_text(encoding='utf-8-sig'))
+  need(receipt.get('schema')=='IDENTITY_HELPER_TARGET_COMPILE' and receipt.get('scope')=='COMPILE_LINK_ONLY_NO_DEVICE' and receipt.get('compile_exit')==0 and receipt.get('artifact')==dict(path=str(image),bytes=bound['size'],sha256=bound['sha256']),'Identity helper compile correspondence')
+  rows=receipt.get('inputs',[]);need(bool(rows) and any(Path(row['path']).resolve()==repo_root()/'probes/softbus_record_probe.cpp' for row in rows),'Identity helper input closure missing')
+  for row in rows:need(digest(row['path'])==row['sha256'],'Identity helper input drift')
+  closure_binding=bound.get('dependency_closure',{});closure_path=Path(closure_binding.get('path','')).resolve()
+  need(digest(closure_path)==closure_binding.get('sha256'),'Identity helper dependency closure receipt drift')
+  closure=json.loads(closure_path.read_text(encoding='utf-8-sig'))
+  need(closure.get('schema')=='IDENTITY_HELPER_TARGET_COMPILE' and closure.get('scope')=='COMPILE_LINK_ONLY_NO_DEVICE' and closure.get('compile_link_exit')==0 and closure.get('device_operations')==0,'Identity helper dependency closure scope')
+  correspondence=closure.get('artifact_correspondence',{})
+  need(correspondence.get('same_bytes') is True and correspondence.get('original_binding_receipt_sha256')==proof['sha256'] and correspondence.get('original_artifact_sha256')==bound['sha256'] and correspondence.get('fresh_artifact_sha256')==bound['sha256'],'Identity helper dependency artifact mismatch')
+  compiler=closure.get('compiler',{});need(digest(compiler['path'])==compiler.get('sha256'),'Identity compiler drift')
+  libraries=closure.get('direct_link_libraries',[]);need(len(libraries)==3,'Identity direct library closure')
+  for row in libraries:need(digest(row['path'])==row['sha256'],'Identity direct link library drift')
+  units=closure.get('translation_units',[]);need(len(units)==4 and closure.get('closure',{}).get('translation_unit_count')==4 and closure.get('closure',{}).get('system_headers_included') is True,'Identity compiler dependency coverage incomplete')
+  total=0
+  for unit in units:
+   need(digest(unit['depfile'])==unit.get('depfile_sha256'),'Identity dependency file drift')
+   dependencies=unit.get('dependencies',[]);need(len(dependencies)==unit.get('dependency_count') and bool(dependencies),'Identity dependency list incomplete');total+=len(dependencies)
+   for row in dependencies:need(digest(row['path'])==row['sha256'],'Identity compiler dependency drift')
+  need(total==closure['closure'].get('all_dependency_entries'),'Identity dependency count mismatch')
+  need(c.get('private_identity_output')=={side:c['remote'][side]+'/local-udid.bin' for side in 'AB'},'Identity private output mismatch')
+  need(c.get('command_contract')=='--list-nodes --check-identities --identity-output <exact-window>/local-udid.bin --expected-token <board-token> --preflight-confirmed','Identity query command mismatch')
+
 def verify_query_context(c):
  verify_private_binding(c)
  need(c['task_contract']==load(c['task_contract']['freeze_path']),'Query contract drift');assert_fresh_run(c['run'])
  frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text());verify_shared_guard(c,frozen);need(not frozen.get('resume_authorization'),'No new query permitted by resume authorization');pre=Path(c['preflight_config']).resolve()
+ verify_identity_query_binding(c,frozen)
  need(pre.is_relative_to(TASK_ROOT) and digest(pre)==c['preflight_config_sha256'],'Query preflight drift');expected=json.loads(pre.read_text(encoding='utf-8-sig'))
  need(c['platform']==expected['platform'] and c['permission_helper']==frozen['permission_helper'],'Query platform/helper drift')
  need(c['scenario']=='readonly-directory-query' and c['targets']==TARGETS and c['token']==TOKENS,'Query identity')

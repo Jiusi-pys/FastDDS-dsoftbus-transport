@@ -19,7 +19,14 @@ def prepare(destination,preflight_path,provenance,contract_path=None,query_cycle
     if preflight.get('eligible_for_executor_gate') is not True: raise ValueError('Current two-board preflight not eligible')
     if not preflight_path.is_relative_to(here.parent):raise ValueError('Fresh preflight must belong to this task')
     query=Path(contract.PRIVATE['query_helper_path']);helper=Path(preflight['permission_helper']['path'])
-    if digest(query)!=QUERY_SHA256 or query.stat().st_size!=257536: raise ValueError('Query helper identity mismatch')
+    frozen=json.loads(Path(task_contract['freeze_path']).read_text())
+    identity=frozen.get('identity_qualification') is True
+    query_sha=QUERY_SHA256;query_size=257536
+    if identity:
+        successor=contract.verify_v1_successor(frozen,contract.verify_ros_task_grant(frozen))
+        if successor is None:raise ValueError('Identity qualification requires explicit V1 successor')
+        bound=frozen['identity_query_helper'];query=Path(bound['path']);query_sha=bound['sha256'];query_size=bound['size']
+    if digest(query)!=query_sha or query.stat().st_size!=query_size: raise ValueError('Query helper identity mismatch')
     if digest(helper)!=PERMISSION_SHA256 or preflight['permission_helper']['sha256']!=PERMISSION_SHA256: raise ValueError('Permission helper identity mismatch')
     provenance_sha=digest(provenance)
     run=secrets.token_hex(8)
@@ -29,9 +36,9 @@ def prepare(destination,preflight_path,provenance,contract_path=None,query_cycle
       'package':str(destination/'helpers'),'eligible_for_executor_gate':True,
       'preflight_config':str(preflight_path),'preflight_config_sha256':digest(preflight_path),
       'permission_helper':{'path':str(helper),'sha256':PERMISSION_SHA256},
-      'query_helper':{'path':str(query),'sha256':QUERY_SHA256},
+      'query_helper':{'path':str(query),'sha256':query_sha},
       'helper_provenance':str(provenance),'helper_provenance_sha256':provenance_sha,
-      'package_artifacts':[{'name':'native_permission_probe','sha256':PERMISSION_SHA256},{'name':'softbus_record_probe','sha256':QUERY_SHA256}],
+      'package_artifacts':[{'name':'native_permission_probe','sha256':PERMISSION_SHA256},{'name':'softbus_record_probe','sha256':query_sha}],
       'platform':preflight['platform'],'system_library_dirs':contract.LIBDIRS,
       'targets':contract.TARGETS,'hdc_path':contract.PRIVATE['hdc_path'],'private_config_sha256':digest(here.parent/'PRIVATE_CONFIG.json'),'permission_baseline_sha256':contract.PRIVATE['permission_baseline_sha256'],
       'remote':{side:f'/data/local/tmp/mdds_dds_{run}_{side}' for side in ['A','B']},
@@ -41,6 +48,10 @@ def prepare(destination,preflight_path,provenance,contract_path=None,query_cycle
       'executor_sha256':{name:digest(here/name) for name in ['run-window.ps1','route_query.py','prepare-query.py','launch.ps1']},
       'command_contract':'--list-nodes --expected-token <board-token> --preflight-confirmed',
       'scope':'CURRENT_PUBLIC_DIRECTORY_ONLY; NO_SOCKET; DDS_NOT_RUN'}
+    if identity:
+        config['identity_qualification']=True
+        config['private_identity_output']={side:config['remote'][side]+'/local-udid.bin' for side in 'AB'}
+        config['command_contract']='--list-nodes --check-identities --identity-output <exact-window>/local-udid.bin --expected-token <board-token> --preflight-confirmed'
     frozen=json.loads(Path(task_contract['freeze_path']).read_text())
     if frozen['scope']==contract.layered().SCOPE:
         config['work_package']=contract.layered().SCOPE;config['query_for_scenario']=contract.layered().SCENARIO

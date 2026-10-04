@@ -59,7 +59,7 @@ if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME OR FASTDDS_DSOFTBUS_BUILD_EXPERIM
         else()
             target_compile_options(ros2_startup_diagnostics_tests PRIVATE -UNDEBUG)
         endif()
-        foreach(_case normal local socket listen gate gate_throw bind match cleanup capacity capacity_reject null_receiver)
+        foreach(_case normal local socket listen gate gate_throw bind match cleanup capacity capacity_reject null_receiver v1_locator v1_locator_bad_text)
             add_test(NAME dsoftbus.ros2_startup.${_case} COMMAND ros2_startup_diagnostics_tests ${_case})
             set_tests_properties(dsoftbus.ros2_startup.${_case} PROPERTIES TIMEOUT 20)
         endforeach()
@@ -76,6 +76,8 @@ if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME OR FASTDDS_DSOFTBUS_BUILD_EXPERIM
         # across two live pairs, so each case runs as its own process.
         add_test(NAME dsoftbus.library.experimental_assembly COMMAND experimental_runtime_tests)
         add_test(NAME dsoftbus.library.v1_identity COMMAND experimental_runtime_tests --identity)
+        add_test(NAME dsoftbus.library.v1_service_scope COMMAND experimental_runtime_tests --service-scope)
+        add_test(NAME dsoftbus.library.v1_service_reject COMMAND experimental_runtime_tests --service-reject)
         add_test(NAME dsoftbus.library.experimental_preconnect_gate COMMAND experimental_runtime_tests --gate)
         add_test(NAME dsoftbus.library.experimental_preconnect_refusal COMMAND experimental_runtime_tests --refusal)
         add_test(NAME dsoftbus.library.experimental_preconnect_ownership COMMAND experimental_runtime_tests --ownership)

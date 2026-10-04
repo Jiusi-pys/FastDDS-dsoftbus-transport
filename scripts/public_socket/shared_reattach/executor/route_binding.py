@@ -14,6 +14,7 @@ def load_route_binding(private_path):
     private_path=Path(private_path).resolve()
     task=Path(__file__).resolve().parent.parent
     require(private_path.is_relative_to(task),'Query must belong to current task')
+    if json.loads(private_path.read_text(encoding='utf-8-sig')).get('recovered_identity_source') is not None:return load_recovered_identity_binding(private_path)
     if json.loads(private_path.read_text(encoding='utf-8-sig')).get('replay') is not None:return load_replayed_binding(private_path)
     require(private_path.parent.parent==task/'windows','Query must belong to current task')
     require(private_path.name=='PRIVATE_ROUTE_BINDINGS.json','Expected explicit private route receipt')
@@ -53,6 +54,23 @@ def load_route_binding(private_path):
     return {'schema':1,'query_run':run,'private_receipt':str(private_path),'peer':parsed['peer'],
             'local_id_sha256':expected_digests,'proof_files_sha256':files,
             'selection':'OPPOSITE_ACTUAL_LOCAL_ID_EXACTLY_ONCE_IN_GUARDED_PUBLIC_QUERY'}
+
+def load_recovered_identity_binding(private_path):
+    task=Path(__file__).resolve().parent.parent;private_path=Path(private_path).resolve()
+    private=json.loads(private_path.read_text(encoding='utf-8-sig'));binding=private.get('recovered_identity_source',{})
+    spec=importlib.util.spec_from_file_location('recovered_task_contract',task/'executor/task_contract.py');contract=importlib.util.module_from_spec(spec);spec.loader.exec_module(contract)
+    window=Path(binding.get('source_query_window','')).resolve();accepted=contract.verify_recovered_identity_source(window)
+    acceptance=(contract.repo_root()/contract.ROS_V1_RECOVERED_SOURCE_RELATIVE).resolve()
+    require(binding==dict(source_query_window=str(window),acceptance_path=str(acceptance),acceptance_sha256=digest(acceptance)),'Recovered source binding drift')
+    spec=importlib.util.spec_from_file_location('recovered_route_parser',task/'executor-route-query/route_query.py');parser=importlib.util.module_from_spec(spec);spec.loader.exec_module(parser)
+    parsed=parser.correlate(*(parser.decode(window/side/'directory-query/stdout.log') for side in 'AB'))
+    require(parsed['pass'] and private.get('peer')==parsed['peer'],'Recovered source differs from original raw route crossmatch')
+    config=json.loads((window/'window.json').read_text(encoding='utf-8-sig'))
+    authority=Path(contract.PRIVATE['task_authority_root']).resolve();claim=authority/'ros2/task-ledger'/('query-'+str(config['ros_attempt'])+'.json')
+    require(json.loads(claim.read_text(encoding='utf-8-sig'))==contract.ros_query_claim_row(config,False),'Original consumed query claim drift')
+    files=dict(accepted['proof_files_sha256']);files[str(acceptance)]=digest(acceptance);files[str(claim)]=digest(claim);files[str(private_path)]=digest(private_path)
+    for path in (Path(__file__).resolve(),task/'executor/task_contract.py',task/'executor-route-query/route_query.py'):files[str(path)]=digest(path)
+    return dict(schema=1,query_run=config['run'],private_receipt=str(private_path),source_query_window=str(window),peer=parsed['peer'],local_id_sha256={side:hashlib.sha256(parsed['boards'][side]['local'].encode()).hexdigest() for side in 'AB'},proof_files_sha256=files,selection='ORIGINAL_CONSUMED_QUERY_RAW_CROSSMATCH_WITH_INDEPENDENT_APPENDED_EXPORT_RESTORATION')
 
 def load_replayed_binding(private_path):
     task=Path(__file__).resolve().parent.parent;directory=Path(private_path).parent

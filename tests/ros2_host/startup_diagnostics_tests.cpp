@@ -1,3 +1,4 @@
+#include "../V1NativeNameTestSupport.hpp"
 #include "../../integrations/ros2/target/NativeObservation.hpp"
 #include "../../probes/PublicSocketRuntimeTrace.hpp"
 #include "../FakePublicSocketLink.hpp"
@@ -8,19 +9,22 @@
 #include <thread>
 #include <stdexcept>
 #include <iostream>
+#include <fastdds/rtps/common/LocatorSelector.hpp>
+#include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
+namespace fastdds_dsoftbus::dsoftbus::dds_experiment {std::uint64_t SocketFrame(const char*,std::int32_t,const std::uint8_t*,std::size_t) noexcept;}
 using namespace fastdds_dsoftbus;
 using namespace dsoftbus;
 namespace observation=ros2_target_observation;
 namespace diagnostic=ros2_diagnostics;
 v1::DeviceIdentity identity(unsigned side) { return {"host-runtime", 151, side ? "synthetic-B" : "synthetic-A"}; }
 Locator local(unsigned side) { EndpointId key{}; Locator value; auto id=identity(side); if(!v1::AddressCodec::DeriveKey(id,key)||!v1::AddressCodec::EncodeLocator({key,17+side,v1::Profile::BytesNative},value))std::abort(); return value; }
-std::string listener(unsigned side) { std::string name; auto id=identity(side); if(!v1::AddressCodec::EncodeServiceName({id.name_space,id.domain,17+side,v1::Profile::BytesNative},name))std::abort();return name; }
-phase0::PublicSocketConfiguration config(unsigned side){const std::string me=side?"host.public.B.":"host.public.A.",peer=side?"host.public.A.":"host.public.B.";phase0::PublicSocketConfiguration c;c.identity={me+"outgoing",{910+side*4},{1010+side*4}};c.listener_identity={listener(side),{911+side*4},{1011+side*4}};c.package_name="host.public.dds";c.peer_name=listener(1-side);c.peer_network_id=side?"model.net.A":"model.net.B";c.listen_qos={{0,80},{1,2000}};c.bind_qos=c.listen_qos;c.max_message_size=8192;return c;}
+std::string listener(unsigned side) { std::string name; auto id=identity(side); if(!v1::AddressCodec::EncodeScopedServiceName({id.name_space,id.domain,17+side,v1::Profile::BytesNative},{v1::NativeNameContract::PackageScopedV1,"host.public.dds","host.public.dds.v1"},name))std::abort();return name; }
+phase0::PublicSocketConfiguration config(unsigned side){const std::string me=side?"host.public.B.":"host.public.A.",peer=side?"host.public.A.":"host.public.B.";phase0::PublicSocketConfiguration c;c.identity={me+"outgoing",{910+side*4},{1010+side*4}};c.listener_identity={listener(side),{911+side*4},{1011+side*4}};c.package_name="host.public.dds";c.peer_name=listener(1-side);c.peer_network_id=side?"model.net.A":"model.net.B";c.listen_qos={{0,80},{1,2000}};c.bind_qos=c.listen_qos;c.max_message_size=8192;c.expected_peer_initiator_name=peer+"outgoing";return c;}
 DSoftBusTransportDescriptor descriptor(unsigned side) {
     auto c=config(side);DSoftBusTransportDescriptor d(8192);
     V1Deployment input{identity(side),17+side,v1::Profile::BytesNative,"library.test",
         {{identity(1-side),18-side,c.peer_network_id,c.identity.service_name,{config(1-side).identity.service_name}}}};
-    if(d.ConfigureV1(input).code!=DirectoryError::None)std::abort();return d;
+    if(d.ConfigureV1(ScopedHostDeployment(input)).code!=DirectoryError::None)std::abort();return d;
 }
 struct Receiver:eprosima::fastdds::rtps::TransportReceiverInterface{void OnDataReceived(const eprosima::fastdds::rtps::octet*,std::uint32_t,const Locator&,const Locator&)override{}};
 bool append(const char* p,std::size_t n,void* state){static_cast<std::string*>(state)->append(p,n);return true;}
@@ -29,6 +33,26 @@ int main(int argc,char** argv){
  assert(argc==2);const std::string mode=argv[1];
  public_socket_fake::Configure(std::make_shared<host_dds::Trace>(),true);public_socket_fake::SetListenerNames({listener(0),listener(1)});
  observation::Begin("1234567890abcdef",0);observation::SetSourceForHostInjection();
+ if(mode=="v1_locator") {
+  // Native observation receives original RTPS bytes, not codec expected values.
+  std::vector<std::uint8_t> packet{'R','T','P','S',2,3,1,15};packet.insert(packet.end(),12,0xa7);
+  std::vector<std::uint8_t> body{0,0,16,0,0,0,0,0,0,1,0,0xc2,0,0,0,0,7,0,0,0,0,3,0,0};
+  for(unsigned pid:{0x31u,0x32u}){body.insert(body.end(),{std::uint8_t(pid),0,24,0,0,0,0,0x40,1,0,0,1});for(unsigned j=0;j<16;++j)body.push_back(std::uint8_t(j+1));}
+  body.insert(body.end(),{1,0,0,0});packet.insert(packet.end(),{0x15,5,std::uint8_t(body.size()),0});packet.insert(packet.end(),body.begin(),body.end());
+  dds_experiment::SocketFrame("SDK_SEND",7,packet.data(),packet.size());observation::V1LocatorSnapshot captured;
+  assert(observation::CaptureV1(captured)&&captured.advert_count==2&&captured.adverts[0].value.pid==0x31&&captured.adverts[1].value.pid==0x32&&captured.adverts[0].value.port==0x01000001&&captured.adverts[0].value.address==captured.adverts[1].value.address&&!captured.faults);
+  experimental::Runtime a(config(0));auto d=a.MakeDescriptor(descriptor(0));assert(d);std::unique_ptr<eprosima::fastdds::rtps::TransportInterface> transport(d->create_transport());assert(transport&&transport->init());
+  namespace rtps=eprosima::fastdds::rtps;rtps::LocatorSelectorEntry entry(4,0);entry.enabled=true;
+  const auto remote=local(1);auto wrong_profile=remote;wrong_profile.port=0x02000013;auto wrong_slot=remote;wrong_slot.port++;auto wrong_address=remote;wrong_address.address[0]^=1;
+  for(const auto& value:{remote,wrong_profile,wrong_slot,wrong_address})assert(entry.unicast.push_back(value));
+  rtps::LocatorSelector selector(eprosima::fastdds::ResourceLimitedContainerConfig::fixed_size_configuration(1));assert(selector.add_entry(&entry));selector.selection_start();transport->select_locators(selector);
+  assert(observation::CaptureV1(captured)&&captured.selected_count==1&&captured.selected[0].kind==unsigned(remote.kind)&&captured.selected[0].port==remote.port&&std::memcmp(captured.selected[0].address.data(),remote.address,16)==0);
+  transport->shutdown();transport.reset();assert(a.Close());std::cout<<"ACTUAL_V1_FRAME_AND_SELECTOR_CAPTURE_PASS synthetic_only=1\n";return 0;
+ }
+ if(mode=="v1_locator_bad_text") {
+  runtime_probe::TraceText("ordinary_key","private text remains redacted");runtime_probe::TraceText("V1_SELECTED_LOCATOR","bad");observation::V1LocatorSnapshot captured;
+  assert(observation::CaptureV1(captured)&&captured.faults==1&&captured.selected_count==0);return 0;
+ }
  if(mode=="export_pipe"){
   // Stress the actual exporter; event injection here is distinct from the
   // actual SDK-boundary fault tests below and carries no device authority.

@@ -24,8 +24,9 @@ bool RuntimeProbeBeforeConnect() noexcept {
 namespace fastdds_dsoftbus::dsoftbus::experimental {
 struct Runtime::Impl {
     explicit Impl(phase0::PublicSocketConfiguration config)
-        : backend(std::make_shared<phase0::PublicSocketBackend>(std::move(config))),
+        : binding(config), backend(std::make_shared<phase0::PublicSocketBackend>(std::move(config))),
           loop(std::make_shared<host_test::HostProviderLoop>(backend)) {}
+    const phase0::PublicSocketConfiguration binding;
     std::shared_ptr<phase0::PublicSocketBackend> backend;
     std::shared_ptr<host_test::HostProviderLoop> loop;
     std::atomic<bool> issued{false}, created{false};
@@ -60,6 +61,15 @@ Runtime::MakeDescriptor(const DSoftBusTransportDescriptor& config) {
 #endif
         std::fprintf(stderr, "Fast DDS DSoftBus descriptor: V1 configuration error=%u\n", static_cast<unsigned>(issue.code));
         return {};
+    }
+    const auto& binding=impl_->binding;
+    if(config.native_name_scope.authorized_package!=binding.package_name || config.directory.locals.size()!=1 ||
+       config.directory.routes.size()!=1 || config.directory.locals.front().local_listen_name!=binding.listener_identity.service_name ||
+       config.directory.routes.front().fields.remote_listen_name!=binding.peer_name ||
+       config.directory.routes.front().fields.remote_network_id!=binding.peer_network_id ||
+       config.directory.routes.front().fields.local_initiator_name!=binding.identity.service_name ||
+       config.directory.routes.front().fields.expected_remote_initiator_names!=std::vector<std::string>{binding.expected_peer_initiator_name}) {
+        std::fputs("Fast DDS DSoftBus descriptor: native deployment binding mismatch\n",stderr);return {};
     }
     if(impl_->issued.exchange(true)) return {};
     return std::make_shared<Descriptor>(config,impl_);

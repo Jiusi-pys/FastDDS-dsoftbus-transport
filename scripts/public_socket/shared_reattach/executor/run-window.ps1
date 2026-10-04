@@ -472,6 +472,18 @@ if ($cfg.scenario -ceq 'ROS2_DSOFTBUS') {
             [IO.File]::WriteAllText((Join-Path $windowRoot 'ANALYSIS_FAILURE.json'),(@{first_failure='ROS_NATIVE_SAMPLE_CORRELATION_FAILED';phase='POSTRUN_ANALYSIS';run=$cfg.run;analyzer_exit=$nativeExit;original_window_summary=(Join-Path $windowRoot 'window-summary.json')} | ConvertTo-Json -Depth 4),$utf8)
             exit 1
         }
+        if ($cfg.PSObject.Properties['v1_deployment']) {
+            $v1Analyzer=Join-Path $repoRoot 'scripts/public_socket/analyze_v1_locators.py'
+            if ((Get-FileHash -LiteralPath $v1Analyzer).Hash.ToLowerInvariant() -cne $cfg.v1_locator_analyzer.sha256) {throw 'V1 locator analyzer changed after admission'}
+            $v1Private=Join-Path (Split-Path -Parent $PSScriptRoot) 'PRIVATE_CONFIG.json'
+            & python $v1Analyzer --window $windowRoot --private-profile $v1Private --output (Join-Path $windowRoot 'v1-locator-analysis.json') 1> (Join-Path $windowRoot 'v1-locator-analysis.stdout.log') 2> (Join-Path $windowRoot 'v1-locator-analysis.stderr.log')
+            $v1Exit=$LASTEXITCODE
+            [IO.File]::WriteAllText((Join-Path $windowRoot 'v1-locator-analysis.rc'),[string]$v1Exit,$utf8)
+            if ($v1Exit -ne 0) {
+                [IO.File]::WriteAllText((Join-Path $windowRoot 'V1_ANALYSIS_FAILURE.json'),(@{first_failure='ACTUAL_V1_LOCATOR_ANALYSIS_FAILED';phase='POSTRUN_ANALYSIS';run=$cfg.run;analyzer_exit=$v1Exit} | ConvertTo-Json),$utf8)
+                exit 1
+            }
+        }
     }
 }
 if ($cfg.PSObject.Properties['cycles'] -and $cfg.cycles -gt 1) {

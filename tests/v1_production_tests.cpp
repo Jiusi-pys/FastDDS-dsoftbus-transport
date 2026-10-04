@@ -1,3 +1,4 @@
+#include "V1NativeNameTestSupport.hpp"
 #include "HostProviderTestSupport.hpp"
 #include <fastdds_dsoftbus/dsoftbus/V1Address.hpp>
 #include <fastdds/rtps/common/LocatorSelector.hpp>
@@ -27,8 +28,8 @@ Locator V1(const char* udid, std::uint32_t slot) {
 }
 void Production() {
     DSoftBusTransportDescriptor config(64);
-    Check(config.ConfigureV1({{"alpha",0x01020304,"udid-1"},17,v1::Profile::BytesNative,"v1.ns",
-        {{{"alpha",0x01020304,"udid-2"},29,"model.net","model.dial",{"model.peer"}}}}).code==DirectoryError::None,"production configuration");
+    Check(config.ConfigureV1(ScopedHostDeployment({{"alpha",0x01020304,"udid-1"},17,v1::Profile::BytesNative,"v1.ns",
+        {{{"alpha",0x01020304,"udid-2"},29,"model.net","model.dial",{"model.peer"}}}})).code==DirectoryError::None,"production configuration");
     const auto local=config.directory.locals.front().local_locator,remote=config.directory.routes.front().key.remote_locator;
     const std::uint8_t golden[]={0xc3,0x79,0x77,0x84,0x97,0x6e,0xd6,0x8c,0xef,0x55,0xb2,0xf0,0xf2,0x2e,0x8c,0xc4};
     Check(std::equal(std::begin(golden),std::end(golden),local.address),"independent golden production hash");
@@ -46,9 +47,9 @@ void Production() {
         Check(!transport->is_locator_allowed(wrong)&&!transport->is_locator_reachable(wrong),"changed complete locator excluded");}
     Locator wrong=remote;wrong.port=0x0200001e;Check(!transport->IsLocatorSupported(wrong),"profile excluded");
     auto before=config;auto bad=V1Deployment{{"alpha",0x01020304,""},17,v1::Profile::BytesNative,"v1.ns",{}};
-    Check(config.ConfigureV1(bad).code==DirectoryError::InvalidIdentity&&config.default_user_unicast==before.default_user_unicast,"missing identity no publication");
+    Check(config.ConfigureV1(ScopedHostDeployment(bad)).code==DirectoryError::InvalidIdentity&&config.default_user_unicast==before.default_user_unicast,"missing identity no publication");
     bad.identity.udid="udid-1";bad.slot=0x00ffffff;
-    Check(config.ConfigureV1(bad).code==DirectoryError::InvalidLocator&&config.default_user_unicast==before.default_user_unicast,"slot overflow no exposure");
+    Check(config.ConfigureV1(ScopedHostDeployment(bad)).code==DirectoryError::InvalidLocator&&config.default_user_unicast==before.default_user_unicast,"slot overflow no exposure");
     auto old=EndpointDirectory::Build(config.directory);Check(bool(old.value),"existing directory");
     auto conflicting=config.directory;conflicting.identities.push_back(conflicting.identities.front());conflicting.identities.back().udid="synthetic-conflict";
     const auto collision=EndpointDirectoryTestAccess::Forced(conflicting);
