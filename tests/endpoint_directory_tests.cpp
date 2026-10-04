@@ -26,6 +26,7 @@ int RunEndpointDirectoryTests(int argc, char** argv)
         result.address[15] = id;
         return result;
     };
+    const auto invalid_locator = [&] { auto value=locator(0);value.port=0;return value; };
     const auto configuration = [&] {
         DirectoryConfiguration c;
         c.locals.push_back({locator(2), "namespace-a", "a.listen"});
@@ -59,7 +60,7 @@ int RunEndpointDirectoryTests(int argc, char** argv)
             endpoint[7] = 0xff;
             Locator encoded;
             CHECK(LocatorCodec::Encode(endpoint, encoded));
-            CHECK(encoded.kind == 0x40000000 && encoded.port == 1);
+            CHECK(encoded.kind == 0x40000000 && encoded.port == 0x01000001);
             CHECK(std::equal(endpoint.begin(), endpoint.end(), encoded.address));
             EndpointId decoded{};
             CHECK(LocatorCodec::Decode(encoded, decoded));
@@ -78,21 +79,15 @@ int RunEndpointDirectoryTests(int argc, char** argv)
     });
 
     cases.emplace_back("LC-02", [&] {
-        for (int invalid = 0; invalid < 3; ++invalid) {
+        for (int pattern = 0; pattern < 3; ++pattern) {
             EndpointId endpoint{};
-            if (invalid == 1) endpoint[15] = 1;
-            if (invalid == 2) { endpoint[0] = 0xff; endpoint[15] = 2; }
-            auto sentinel = locator(77);
-            CHECK(!LocatorCodec::Encode(endpoint, sentinel));
-            CHECK(sentinel == locator(77));
-            auto malformed = locator(2);
-            std::copy(endpoint.begin(), endpoint.end(), malformed.address);
+            if (pattern == 1) endpoint[15] = 1;
+            if (pattern == 2) endpoint[0] = 0xff;
+            Locator encoded;
+            CHECK(LocatorCodec::Encode(endpoint, encoded));
             EndpointId output{};
-            output.fill(17);
-            const auto before = output;
-            CHECK(!LocatorCodec::Decode(malformed, output));
-            CHECK(output == before);
-            CHECK(!LocatorCodec::IsValid(malformed));
+            CHECK(LocatorCodec::Decode(encoded, output) && output == endpoint);
+            CHECK(LocatorCodec::IsValid(encoded));
         }
         for (int invalid = 0; invalid < 5; ++invalid) {
             auto malformed = locator(2);
@@ -132,10 +127,10 @@ int RunEndpointDirectoryTests(int argc, char** argv)
     cases.emplace_back("ED-02", [&] {
         const auto d = build(configuration());
         CHECK(d->FindLocal(locator(90)).issue.code == DirectoryError::NotFound);
-        CHECK(d->FindLocal(locator(0)).issue.code == DirectoryError::InvalidLocator);
+        CHECK(d->FindLocal(invalid_locator()).issue.code == DirectoryError::InvalidLocator);
         CHECK(d->ResolveOutbound({locator(2), locator(90)}).issue.code == DirectoryError::NotFound);
-        CHECK(d->ResolveOutbound({locator(0), locator(3)}).issue.code == DirectoryError::InvalidLocator);
-        CHECK(d->ResolveOutbound({locator(2), locator(1)}).issue.code == DirectoryError::InvalidLocator);
+        CHECK(d->ResolveOutbound({invalid_locator(), locator(3)}).issue.code == DirectoryError::InvalidLocator);
+        CHECK(d->ResolveOutbound({locator(2), locator(1)}).issue.code == DirectoryError::NotFound);
         auto key = observed();
         key.callback_namespace = "absent";
         CHECK(d->ResolveInbound(key).issue.code == DirectoryError::NotFound);
@@ -145,7 +140,7 @@ int RunEndpointDirectoryTests(int argc, char** argv)
         key.actual_data_type = RecordDataType::Unsupported;
         CHECK(d->ResolveInbound(key).issue.code == DirectoryError::UnsupportedDataType);
         CHECK(d->RoutesTo(locator(90)).issue.code == DirectoryError::NotFound);
-        CHECK(d->RoutesTo(locator(0)).issue.code == DirectoryError::InvalidLocator);
+        CHECK(d->RoutesTo(invalid_locator()).issue.code == DirectoryError::InvalidLocator);
         CHECK(build({})->FindLocal(locator(2)).issue.code == DirectoryError::NotFound);
     });
 
@@ -173,9 +168,9 @@ int RunEndpointDirectoryTests(int argc, char** argv)
         auto c = configuration();
         c.locals.push_back(c.locals[0]);
         rejects(c, DirectoryError::DuplicateLocal);
-        c = configuration(); c.locals[0].local_locator = locator(0);
+        c = configuration(); c.locals[0].local_locator = invalid_locator();
         rejects(c, DirectoryError::InvalidLocator);
-        c = configuration(); c.routes[0].key.remote_locator = locator(1);
+        c = configuration(); c.routes[0].key.remote_locator = invalid_locator();
         rejects(c, DirectoryError::InvalidLocator);
         c = configuration(); c.routes[0].key.local_locator = locator(8);
         rejects(c, DirectoryError::MissingLocal);
@@ -287,7 +282,7 @@ int RunEndpointDirectoryTests(int argc, char** argv)
         CHECK(d->WithUpdatedRoute(c.routes[0].key, 1, other.fields).issue.code == DirectoryError::ReverseConflict);
         CHECK(d->ResolveInbound(observed()).value->route_version == 1);
         CHECK(d->WithUpdatedRoute({locator(2), locator(80)}, 1, other.fields).issue.code == DirectoryError::NotFound);
-        CHECK(d->WithUpdatedRoute({locator(0), locator(3)}, 1, other.fields).issue.code == DirectoryError::InvalidLocator);
+        CHECK(d->WithUpdatedRoute({invalid_locator(), locator(3)}, 1, other.fields).issue.code == DirectoryError::InvalidLocator);
         CHECK(d->WithUpdatedRoute(c.routes[0].key, 0, other.fields).issue.code == DirectoryError::StaleVersion);
         auto bad = other.fields; bad.remote_network_id.clear();
         CHECK(d->WithUpdatedRoute(c.routes[0].key, 1, bad).issue.code == DirectoryError::InvalidString);

@@ -75,6 +75,7 @@ if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME OR FASTDDS_DSOFTBUS_BUILD_EXPERIM
         # contract and the process-global service-record table is not reusable
         # across two live pairs, so each case runs as its own process.
         add_test(NAME dsoftbus.library.experimental_assembly COMMAND experimental_runtime_tests)
+        add_test(NAME dsoftbus.library.v1_identity COMMAND experimental_runtime_tests --identity)
         add_test(NAME dsoftbus.library.experimental_preconnect_gate COMMAND experimental_runtime_tests --gate)
         add_test(NAME dsoftbus.library.experimental_preconnect_refusal COMMAND experimental_runtime_tests --refusal)
         add_test(NAME dsoftbus.library.experimental_preconnect_ownership COMMAND experimental_runtime_tests --ownership)

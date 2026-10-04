@@ -12,15 +12,22 @@ using namespace fastdds_dsoftbus;
 using namespace dsoftbus;
 namespace observation=ros2_target_observation;
 namespace diagnostic=ros2_diagnostics;
-Locator local(unsigned side){EndpointId id{};id[0]=10;id[15]=static_cast<std::uint8_t>(side+1);Locator l;assert(LocatorCodec::Encode(id,l));return l;}
-phase0::PublicSocketConfiguration config(unsigned side){const std::string me=side?"host.public.B.":"host.public.A.",peer=side?"host.public.A.":"host.public.B.";phase0::PublicSocketConfiguration c;c.identity={me+"outgoing",{910+side*4},{1010+side*4}};c.listener_identity={me+"listener",{911+side*4},{1011+side*4}};c.package_name="host.public.dds";c.peer_name=peer+"listener";c.peer_network_id=side?"model.net.A":"model.net.B";c.listen_qos={{0,80},{1,2000}};c.bind_qos=c.listen_qos;c.max_message_size=8192;return c;}
-DSoftBusTransportDescriptor descriptor(unsigned side){auto c=config(side);DSoftBusTransportDescriptor d(8192);d.directory.locals={{local(side),"startup.test",c.listener_identity.service_name}};d.directory.routes={{{local(side),local(1-side)},{c.peer_network_id,c.peer_name,c.identity.service_name,{config(1-side).identity.service_name},RecordDataType::Bytes},1}};d.default_metatraffic_unicast={local(side)};d.default_user_unicast={local(side)};return d;}
+v1::DeviceIdentity identity(unsigned side) { return {"host-runtime", 151, side ? "synthetic-B" : "synthetic-A"}; }
+Locator local(unsigned side) { EndpointId key{}; Locator value; auto id=identity(side); if(!v1::AddressCodec::DeriveKey(id,key)||!v1::AddressCodec::EncodeLocator({key,17+side,v1::Profile::BytesNative},value))std::abort(); return value; }
+std::string listener(unsigned side) { std::string name; auto id=identity(side); if(!v1::AddressCodec::EncodeServiceName({id.name_space,id.domain,17+side,v1::Profile::BytesNative},name))std::abort();return name; }
+phase0::PublicSocketConfiguration config(unsigned side){const std::string me=side?"host.public.B.":"host.public.A.",peer=side?"host.public.A.":"host.public.B.";phase0::PublicSocketConfiguration c;c.identity={me+"outgoing",{910+side*4},{1010+side*4}};c.listener_identity={listener(side),{911+side*4},{1011+side*4}};c.package_name="host.public.dds";c.peer_name=listener(1-side);c.peer_network_id=side?"model.net.A":"model.net.B";c.listen_qos={{0,80},{1,2000}};c.bind_qos=c.listen_qos;c.max_message_size=8192;return c;}
+DSoftBusTransportDescriptor descriptor(unsigned side) {
+    auto c=config(side);DSoftBusTransportDescriptor d(8192);
+    V1Deployment input{identity(side),17+side,v1::Profile::BytesNative,"library.test",
+        {{identity(1-side),18-side,c.peer_network_id,c.identity.service_name,{config(1-side).identity.service_name}}}};
+    if(d.ConfigureV1(input).code!=DirectoryError::None)std::abort();return d;
+}
 struct Receiver:eprosima::fastdds::rtps::TransportReceiverInterface{void OnDataReceived(const eprosima::fastdds::rtps::octet*,std::uint32_t,const Locator&,const Locator&)override{}};
 bool append(const char* p,std::size_t n,void* state){static_cast<std::string*>(state)->append(p,n);return true;}
 bool throwing(const char*,std::size_t,void*){throw std::runtime_error("injected export error");}
 int main(int argc,char** argv){
  assert(argc==2);const std::string mode=argv[1];
- public_socket_fake::Configure(std::make_shared<host_dds::Trace>(),true);
+ public_socket_fake::Configure(std::make_shared<host_dds::Trace>(),true);public_socket_fake::SetListenerNames({listener(0),listener(1)});
  observation::Begin("1234567890abcdef",0);observation::SetSourceForHostInjection();
  if(mode=="export_pipe"){
   // Stress the actual exporter; event injection here is distinct from the
@@ -46,7 +53,12 @@ int main(int argc,char** argv){
  if(mode=="bind")public_socket_fake::FailNext(public_socket_fake::InjectedOperation::Bind,-779);
  if(mode=="gate")assert(a.SetPreConnectGate([]{return false;}));
  if(mode=="gate_throw")assert(a.SetPreConnectGate([]()->bool{throw std::runtime_error("injected");}));
- auto da=a.MakeDescriptor(d);std::unique_ptr<eprosima::fastdds::rtps::TransportInterface> ta(da->create_transport());Receiver ra;assert(ta&&ta->init());
+ auto da=a.MakeDescriptor(d);
+ if(mode=="local"){
+  assert(!da);diagnostic::Snapshot snapshot;assert(observation::Capture(snapshot)&&snapshot.first_present&&snapshot.first.type==diagnostic::ValueType::LocalStatus&&snapshot.first.value==int(DirectoryError::InvalidIdentity));
+  const auto api=public_socket_fake::Observe();assert(!api.sockets[0]&&!api.sockets[1]&&!api.live);return 0;
+ }
+ assert(da);std::unique_ptr<eprosima::fastdds::rtps::TransportInterface> ta(da->create_transport());Receiver ra;assert(ta&&ta->init());
  if(mode=="capacity_reject"||mode=="null_receiver"){
   assert(!ta->OpenInputChannel(local(0),mode=="null_receiver"?nullptr:&ra,mode=="capacity_reject"?1:8192));
   diagnostic::Snapshot s;assert(observation::Capture(s)&&s.first_present&&s.first.type==diagnostic::ValueType::LocalStatus&&s.entered[0]==0);ta->shutdown();ta.reset();(void)a.Close();return 0;

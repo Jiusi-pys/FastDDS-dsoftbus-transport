@@ -11,6 +11,20 @@
 
 namespace fastdds_dsoftbus::dsoftbus {
 namespace detail {
+// Explicit fields, independent of Locator_t padding/CDR representation.
+struct SendPeerKey {
+    std::int32_t kind = 0;
+    std::uint32_t port = 0;
+    EndpointId address{};
+    bool operator<(const SendPeerKey& other) const noexcept {
+        if (kind != other.kind) return kind < other.kind;
+        if (port != other.port) return port < other.port;
+        return address < other.address;
+    }
+    bool operator==(const SendPeerKey& other) const noexcept {
+        return kind == other.kind && port == other.port && address == other.address;
+    }
+};
 struct SendQueueState
 {
     struct Count { std::size_t records = 0; std::size_t bytes = 0; };
@@ -20,7 +34,7 @@ struct SendQueueState
     std::mutex mutex;
     std::condition_variable changed;
     Count total;
-    std::map<EndpointId, Count> peers;
+    std::map<SendPeerKey, Count> peers;
     bool closed = false;
     std::size_t queued = 0;
     std::unique_ptr<OwnedSendRecord::Storage> head;
@@ -32,10 +46,10 @@ struct SendQueueState
 struct SendQueueCharge
 {
     std::shared_ptr<SendQueueState> state;
-    EndpointId peer;
+    SendPeerKey peer;
     std::size_t bytes;
     SendQueueCharge() noexcept : peer{}, bytes(0) {}
-    SendQueueCharge(std::shared_ptr<SendQueueState> owner, EndpointId key, std::size_t size) noexcept
+    SendQueueCharge(std::shared_ptr<SendQueueState> owner, SendPeerKey key, std::size_t size) noexcept
         : state(std::move(owner)), peer(key), bytes(size) {}
     SendQueueCharge(SendQueueCharge&& other) noexcept
         : state(std::move(other.state)), peer(other.peer), bytes(other.bytes) {}
@@ -85,12 +99,15 @@ bool SendQueueStringValid(const std::string& value, std::size_t maximum)
     return !value.empty() && value.size() <= maximum && value.find('\0') == std::string::npos;
 }
 
-bool SendQueueRouteValid(const Route& route, std::uint64_t generation, EndpointId& peer)
+bool SendQueueRouteValid(const Route& route, std::uint64_t generation, detail::SendPeerKey& peer)
 {
     if (generation == 0 || route.route_version == 0 ||
             !LocatorCodec::IsValid(route.key.local_locator) ||
-            !LocatorCodec::Decode(route.key.remote_locator, peer) ||
+            !LocatorCodec::Decode(route.key.remote_locator, peer.address) ||
+            (route.key.local_locator.port >> 24) != (route.key.remote_locator.port >> 24) ||
             route.fields.data_type != RecordDataType::Bytes) return false;
+    peer.kind = route.key.remote_locator.kind;
+    peer.port = route.key.remote_locator.port;
     const auto& fields = route.fields;
     if (!SendQueueStringValid(fields.remote_network_id, 64) ||
             !SendQueueStringValid(fields.remote_listen_name, 255) ||
@@ -192,7 +209,7 @@ try
     try {
         charges.reserve(target_count);
         for (std::size_t i = 0; i < target_count; ++i) {
-            EndpointId peer{};
+            detail::SendPeerKey peer{};
             if (!targets[i].route || !SendQueueRouteValid(*targets[i].route, targets[i].generation, peer))
                 return SendAdmission::InvalidRoute;
             for (const auto& existing : charges) {

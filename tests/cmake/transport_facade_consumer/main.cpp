@@ -51,22 +51,9 @@ using namespace fastdds_dsoftbus::dsoftbus;
     std::cout << "FACADE_CONSUMER_LOADED_FASTDDS=" << loaded.dli_fname << '\n';
 #endif
 
-    EndpointId local_id{}, remote_id{};
-    local_id.back() = 2;
-    remote_id.back() = 10;
-    Locator local, remote;
-    check(LocatorCodec::Encode(local_id, local) && LocatorCodec::Encode(remote_id, remote),
-            "canonical fixture locators");
     DSoftBusTransportDescriptor descriptor(4096);
-    descriptor.directory.locals.push_back({local, "facade.consumer.namespace", "facade.consumer.listen"});
-    Route route;
-    route.key = {local, remote};
-    route.route_version = 1;
-    route.fields = {"facade-consumer-network", "facade.remote.listen", "facade.consumer.dial",
-            {"facade.remote.dial"}, RecordDataType::Bytes};
-    descriptor.directory.routes.push_back(route);
-    descriptor.default_metatraffic_unicast.push_back(local);
-    descriptor.default_user_unicast.push_back(local);
+    check(descriptor.ConfigureV1({{"consumer",0,"synthetic-local"},17,v1::Profile::BytesNative,"consumer.namespace",
+        {{{"consumer",0,"synthetic-remote"},29,"consumer.network","consumer.dial",{"consumer.remote.dial"}}}}).code==DirectoryError::None,"V1 deployment configuration");
     const rtps::TransportDescriptorInterface& base_descriptor = descriptor;
     check(base_descriptor.min_send_buffer_size() == 4096, "descriptor bound");
     {

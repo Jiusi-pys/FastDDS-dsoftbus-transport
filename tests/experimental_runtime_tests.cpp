@@ -19,20 +19,22 @@
 #include <vector>
 
 using namespace fastdds_dsoftbus::dsoftbus;
-Locator local(unsigned side) { EndpointId id{}; id[0]=10; id[15]=static_cast<std::uint8_t>(side+1); Locator l; if(!LocatorCodec::Encode(id,l))std::abort(); return l; }
+v1::DeviceIdentity identity(unsigned side) { return {"host-runtime", 151, side ? "synthetic-B" : "synthetic-A"}; }
+Locator local(unsigned side) { EndpointId key{}; Locator value; auto id=identity(side); if(!v1::AddressCodec::DeriveKey(id,key)||!v1::AddressCodec::EncodeLocator({key,17+side,v1::Profile::BytesNative},value))std::abort(); return value; }
+std::string listener(unsigned side) { std::string name; auto id=identity(side); if(!v1::AddressCodec::EncodeServiceName({id.name_space,id.domain,17+side,v1::Profile::BytesNative},name))std::abort();return name; }
 phase0::PublicSocketConfiguration config(unsigned side) {
     const std::string me=side?"host.public.B.":"host.public.A.", peer=side?"host.public.A.":"host.public.B.";
     phase0::PublicSocketConfiguration c;
     c.identity={me+"outgoing",{910+side*4},{1010+side*4}};
-    c.listener_identity={me+"listener",{911+side*4},{1011+side*4}};
-    c.package_name="host.public.dds";c.peer_name=peer+"listener";c.peer_network_id=side?"model.net.A":"model.net.B";
+    c.listener_identity={listener(side),{911+side*4},{1011+side*4}};
+    c.package_name="host.public.dds";c.peer_name=listener(1-side);c.peer_network_id=side?"model.net.A":"model.net.B";
     c.listen_qos={{0,80},{1,2000}};c.bind_qos=c.listen_qos;c.max_message_size=8192;return c;
 }
 DSoftBusTransportDescriptor descriptor(unsigned side) {
     auto c=config(side);DSoftBusTransportDescriptor d(8192);
-    d.directory.locals={{local(side),"library.test",c.listener_identity.service_name}};
-    d.directory.routes={{{local(side),local(1-side)},{c.peer_network_id,c.peer_name,c.identity.service_name,{config(1-side).identity.service_name},RecordDataType::Bytes},1}};
-    d.default_metatraffic_unicast={local(side)};d.default_user_unicast={local(side)};return d;
+    V1Deployment input{identity(side),17+side,v1::Profile::BytesNative,"library.test",
+        {{identity(1-side),18-side,c.peer_network_id,c.identity.service_name,{config(1-side).identity.service_name}}}};
+    if(d.ConfigureV1(input).code!=DirectoryError::None)std::abort();return d;
 }
 namespace {
 using Transport = eprosima::fastdds::rtps::TransportInterface;
@@ -48,7 +50,7 @@ bool Bring(Transport& t, NullReceiver& r, unsigned side) {
 bool NoResidue() { const auto s=public_socket_fake::Observe(); return !s.live&&!s.queued&&!s.bytes&&!s.invalid; }
 
 int Baseline() {
-    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);
+    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);public_socket_fake::SetListenerNames({listener(0),listener(1)});
     experimental::Runtime a(config(0)),b(config(1));
     auto da=a.MakeDescriptor(descriptor(0)),db=b.MakeDescriptor(descriptor(1));
     if(!da||!db||a.MakeDescriptor(descriptor(0)))return 1;
@@ -71,7 +73,7 @@ int Baseline() {
 // a nonzero bind count. Without a gate the connect is unconditional, which the
 // baseline case already exercised.
 int Gate() {
-    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);
+    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);public_socket_fake::SetListenerNames({listener(0),listener(1)});
     experimental::Runtime a(config(0)),b(config(1));
     std::mutex gate_mutex;std::condition_variable gate_ready;
     int arrived=0,admissions=0,replaced=0;std::vector<public_socket_fake::Snapshot> at_entry;
@@ -113,7 +115,7 @@ int Gate() {
 // A refusing gate must fail the channel open instead of continuing the connect,
 // and the refusal must be reported rather than hidden as a clean local close.
 int Refusal() {
-    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);
+    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);public_socket_fake::SetListenerNames({listener(0),listener(1)});
     experimental::Runtime a(config(0));
     if(!a.SetPreConnectGate([]{return false;}))return 1;
     auto d=a.MakeDescriptor(descriptor(0));
@@ -137,7 +139,7 @@ int Refusal() {
 // each connect must consult only its own. A single process-wide slot would either
 // refuse the second install or clear both, so this case fails under that design.
 int Ownership() {
-    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);
+    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);public_socket_fake::SetListenerNames({listener(0),listener(1)});
     experimental::Runtime a(config(0)),b(config(1));
     int a_runs=0,b_runs=0;
     if(!a.SetPreConnectGate([&]{++a_runs;return true;}))return 1;
@@ -163,7 +165,7 @@ int Ownership() {
 }
 // An exception is a refusal, not a successful connect or an escaped exception.
 int Throwing() {
-    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);
+    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);public_socket_fake::SetListenerNames({listener(0),listener(1)});
     experimental::Runtime a(config(0));int calls=0;
     if(!a.SetPreConnectGate([&]() -> bool {++calls;throw 7;}))return 1;
     auto d=a.MakeDescriptor(descriptor(0));if(!d)return 2;
@@ -181,7 +183,7 @@ int Throwing() {
 // test (bounded by CTest). A shared capture outlives the caller's copy and is
 // released after the owning runtime/descriptors are destroyed.
 int ReentrantLifetime() {
-    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);
+    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);public_socket_fake::SetListenerNames({listener(0),listener(1)});
     struct Lifetime { explicit Lifetime(int& x):destroyed(x){} ~Lifetime(){++destroyed;} int& destroyed; };
     int destroyed=0,calls=0;std::weak_ptr<Lifetime> weak;
     {
@@ -210,6 +212,16 @@ int ReentrantLifetime() {
 }
 int main(int argc,char** argv) {
     const char* mode = argc>1?argv[1]:"";
+    if(std::strcmp(mode,"--identity")==0){
+        public_socket_fake::Configure(std::make_shared<host_dds::Trace>(),true);
+        experimental::Runtime runtime(config(0));auto invalid=descriptor(0);invalid.directory.identities.clear();
+        if(runtime.MakeDescriptor(invalid))return 1;
+        invalid=descriptor(0);invalid.directory.identities.front().udid.clear();
+        if(runtime.MakeDescriptor(invalid))return 2;
+        auto valid=runtime.MakeDescriptor(descriptor(0));if(!valid)return 3;
+        const auto observed=public_socket_fake::Observe();if(observed.sockets[0]||observed.sockets[1]||observed.live)return 4;
+        std::cout<<"V1_IDENTITY_REJECTED_BEFORE_NATIVE_AND_ISSUANCE_PASS\n";return 0;
+    }
     if(std::strcmp(mode,"--gate")==0)return Gate();
     if(std::strcmp(mode,"--refusal")==0)return Refusal();
     if(std::strcmp(mode,"--ownership")==0)return Ownership();

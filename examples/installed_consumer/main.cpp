@@ -23,13 +23,10 @@ int main()
     auto* factory = fd::DomainParticipantFactory::get_instance();
     fd::DomainParticipant* participant = nullptr;
     try {
-        EndpointId local_id{}, peer_id{}; local_id[0]=10; peer_id[0]=10; local_id[15]=1; peer_id[15]=2;
-        Locator local, peer;
-        require(LocatorCodec::Encode(local_id,local) && LocatorCodec::Encode(peer_id,peer), "locator");
         DSoftBusTransportDescriptor descriptor(8192);
-        descriptor.directory.locals={{local,"example.namespace","example.listener"}};
-        descriptor.directory.routes={{{local,peer},{"example.network","example.peer","example.dial",{"example.remote"},RecordDataType::Bytes},1}};
-        descriptor.default_metatraffic_unicast={local}; descriptor.default_user_unicast={local};
+        // Synthetic Host example identities. Real deployments provide validated UDIDs.
+        require(descriptor.ConfigureV1({{"installed-example",177,"synthetic-local"},17,v1::Profile::BytesNative,"example.namespace",
+            {{{"installed-example",177,"synthetic-peer"},29,"example.network","example.dial",{"example.remote"}}}}).code==DirectoryError::None,"V1 configuration");
         std::unique_ptr<eprosima::fastdds::rtps::TransportInterface> unavailable(descriptor.create_transport());
         require(unavailable && !unavailable->init(), "default MDDS must remain unavailable");
         unavailable->shutdown(); unavailable.reset();

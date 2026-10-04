@@ -92,6 +92,11 @@ bool DSoftBusTransport::init(const fastdds_dsoftbus::binding::PropertyPolicy*, c
         const std::uint32_t effective_limit = no_frag == 0 ? eprosima::fastdds::rtps::s_maximumMessageSize : no_frag;
         if (frozen_.maxMessageSize > effective_limit)
             return InitFailure({FacadeError::UnsupportedNoFragmentRequest, "no_fragment_limit"});
+        if (mode_ != FacadeMode::HostModel || !frozen_.directory.identities.empty()) {
+            const auto issue = frozen_.ValidateV1();
+            if (issue.code != DirectoryError::None)
+                return InitFailure({FacadeError::DirectoryRejected, "v1_identity", issue.entry, issue});
+        }
         const auto built = EgressPlan::Build(frozen_.directory, frozen_.egress_selections);
         if (!built.value) {
             auto error = built.issue.code == EgressError::AllocationFailure ? FacadeError::AllocationFailure :
@@ -139,7 +144,7 @@ std::shared_ptr<DSoftBusTransport::Ready> DSoftBusTransport::ReadyLease() const
 { std::lock_guard<std::mutex> lock(lifecycle_); return state_ == FacadeState::ModelReady ? ready_ : nullptr; }
 bool DSoftBusTransport::IsInputChannelOpen(const Locator& local) const
 { auto ready = ReadyLease(); auto* slot = ready ? ready->FindLocal(local) : nullptr; return slot && slot->committed_open.load(); }
-bool DSoftBusTransport::IsLocatorSupported(const Locator& l) const { return LocatorCodec::IsValid(l); }
+bool DSoftBusTransport::IsLocatorSupported(const Locator& l) const { return v1::AddressCodec::Supports(l, frozen_.profile); }
 bool DSoftBusTransport::is_locator_allowed(const Locator& locator) const
 { auto r = ReadyLease(); return r && LocatorCodec::IsValid(locator) && (r->FindLocal(locator) || r->plan->Find(locator)); }
 bool DSoftBusTransport::is_locator_reachable(const Locator& locator)
@@ -265,7 +270,12 @@ void DSoftBusTransport::select_locators(Selector& selector) const
         bool added = false;
         for (std::size_t index = 0; index < entry->unicast.size(); ++index) {
             const auto& remote = entry->unicast[index];
-            if (!LocatorCodec::IsValid(remote) || !r->plan->Find(remote) || selector.is_selected(remote)) continue;
+            if (!IsLocatorSupported(remote) || !r->plan->Find(remote)) continue;
+            // Generic is_selected classifies FF private addresses as IPv6
+            // multicast. Traverse selected values and compare the full locator.
+            bool selected = false;
+            selector.for_each([&](const Locator& value) { if (value == remote) selected = true; });
+            if (selected) continue;
             const bool duplicate = std::any_of(entry->state.unicast.begin(), entry->state.unicast.end(), [&](std::size_t prior) {
                 return prior < entry->unicast.size() && entry->unicast[prior] == remote;
             });

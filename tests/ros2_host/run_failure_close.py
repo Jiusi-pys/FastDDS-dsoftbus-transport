@@ -32,7 +32,7 @@ for index, side in enumerate('AB'):
         'bridge_library=' + str(a.bridge.resolve()),
         'fastdds_module=' + str((a.fastdds_prefix / 'bin/fastrtps-2.14.dll').resolve()),
         'fastcdr_module=' + str((a.ros_prefix / 'bin/fastcdr-2.2.dll').resolve()),
-        'backend=HOST_OPAQUE_BYTES_TEST_ONLY', 'run=' + run, 'side=' + str(index),
+        'locator_version=V1\nbackend=HOST_OPAQUE_BYTES_TEST_ONLY', 'run=' + run, 'side=' + str(index),
         'port=' + str(ports[index]), 'peer_port=' + str(ports[1-index]),
         'domain=201', 'forward=1']) + '\n', encoding='utf-8')
     env = os.environ.copy()

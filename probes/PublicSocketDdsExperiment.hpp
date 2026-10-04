@@ -14,6 +14,11 @@ struct Config {
     std::string scenario="SMALL";
     std::string service_prefix="com.kaihong.mdds.p";
     unsigned side=0, delete_first=1, cycles=1;
+    // Required V1 deployment inputs. Host fixtures supply synthetic UDIDs;
+    // an old probe configuration is refused before any native exposure.
+    v1::DeviceIdentity identity, peer_identity;
+    std::uint32_t service_slot=0, peer_slot=0;
+    v1::Profile profile=v1::Profile::BytesNative;
 };
 struct Result {
     bool success=false,drained=false;

@@ -31,15 +31,12 @@ std::map<std::string,std::string> read(const char* path) {
         auto p=line.find('=');if(p==std::string::npos)throw std::runtime_error("configuration syntax");
         if(!m.emplace(line.substr(0,p),line.substr(p+1)).second)throw std::runtime_error("duplicate key");
     }
-    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release")throw std::runtime_error("unknown key");
+    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version")throw std::runtime_error("unknown key");
     return m;
 }
 unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsigned max) {
     const auto& s=m.at(k);if(!std::regex_match(s,std::regex("[0-9]+")))throw std::runtime_error("integer syntax");
     auto n=std::stoul(s);if(n>max)throw std::runtime_error("integer range");return static_cast<unsigned>(n);
-}
-Locator logical(unsigned side) {
-    Locator l{};l.kind=LocatorCodec::kind;l.port=LocatorCodec::port;l.address[0]=0x31;l.address[15]=static_cast<unsigned char>(side+1);return l;
 }
 struct Owner:fastdds_dsoftbus::ros2_integration::BridgeOwner {bool host_close_error=false;};
 }
@@ -48,6 +45,7 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
     *out=nullptr;
     try {
         auto m=read(path);
+        if(m.at("locator_version")!="V1")throw std::runtime_error("explicit V1 configuration required");
         if(m.at("backend")!="HOST_OPAQUE_BYTES_TEST_ONLY")throw std::runtime_error("backend unavailable; Host-only binary");
         if(!std::regex_match(m.at("run"),std::regex("[0-9a-f]{16}")))throw std::runtime_error("run identity");
         unsigned side=integer(m,"side",1),port=integer(m,"port",65535),peerport=integer(m,"peer_port",65535);
@@ -72,16 +70,21 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         fastdds_dsoftbus::ros2_target_observation::Begin(owner->run,side);
         fastdds_dsoftbus::ros2_target_observation::SetSourceForHostInjection();
         owner->diagnostic_control=[] {(void)fastdds_dsoftbus::ros2_target_observation::ExportPending();FastddsDsoftbusFactoryFlushTeardownPending();};
-        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",name(side,"listener"),name(1-side,"listener"),name(1-side,"outgoing"),forward});
+        DSoftBusTransportDescriptor config(65536);
+        const auto identity=[&](unsigned index){return v1::DeviceIdentity{"host-ros",domain,index?"synthetic-host-B":"synthetic-host-A"};};
+        const auto issue=config.ConfigureV1({identity(side),17+side,v1::Profile::BytesNative,prefix+".ns",
+            {{identity(1-side),18-side,side?"host.net.A":"host.net.B",name(side,"outgoing"),{name(1-side,"outgoing")}}}});
+        if(issue.code!=DirectoryError::None)throw std::runtime_error("V1 deployment configuration rejected");
+        const auto local=config.directory.locals.front().local_locator;
+        const auto remote=config.directory.routes.front().key.remote_locator;
+        const auto& local_name=config.directory.locals.front().local_listen_name;
+        const auto& peer_name=config.directory.routes.front().fields.remote_listen_name;
+        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",local_name,peer_name,name(1-side,"outgoing"),forward});
         phase0::PublicSocketConfiguration b;
         b.identity={name(side,"outgoing"),{910+side*4},{1010+side*4}};
-        b.listener_identity={name(side,"listener"),{911+side*4},{1011+side*4}};
-        b.package_name="host.ros.test";b.peer_network_id=side?"host.net.A":"host.net.B";b.peer_name=name(1-side,"listener");
+        b.listener_identity={local_name,{911+side*4},{1011+side*4}};
+        b.package_name="host.ros.test";b.peer_network_id=side?"host.net.A":"host.net.B";b.peer_name=peer_name;
         b.max_message_size=65536;b.bind_qos={{0,80},{1,2000}};b.listen_qos=b.bind_qos;
-        DSoftBusTransportDescriptor config(65536);
-        config.directory.locals={{logical(side),prefix+".ns",b.listener_identity.service_name}};
-        config.directory.routes={{{logical(side),logical(1-side)}, {b.peer_network_id,b.peer_name,b.identity.service_name,{name(1-side,"outgoing")},RecordDataType::Bytes},1}};
-        config.default_metatraffic_unicast={logical(side)};config.default_user_unicast={logical(side)};
         owner->runtime=std::make_unique<experimental::Runtime>(b);
         if(!owner->runtime->SetPreConnectGate([]{return fastdds_dsoftbus::ros2_host::WaitPeerListener(15000);}))throw std::runtime_error("gate installation");
         if(m.count("runtime_close_release")) {
@@ -94,12 +97,12 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         // built-in UDP/TCP transports, init() accepts that only when the participant states the larger limit.
         qos.transport().max_msg_size_no_frag=config.maxMessageSize;
         qos.transport().use_builtin_transports=false;qos.transport().user_transports.clear();qos.transport().user_transports.push_back(owner->descriptor);
-        qos.wire_protocol().builtin.initialPeersList.clear();qos.wire_protocol().builtin.initialPeersList.push_back(logical(1-side));
+        qos.wire_protocol().builtin.initialPeersList.clear();qos.wire_protocol().builtin.initialPeersList.push_back(remote);
         qos.wire_protocol().builtin.metatrafficMulticastLocatorList.clear();
         qos.wire_protocol().builtin.metatrafficUnicastLocatorList.clear();
-        qos.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(logical(side));
+        qos.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(local);
         qos.wire_protocol().default_unicast_locator_list.clear();
-        qos.wire_protocol().default_unicast_locator_list.push_back(logical(side));
+        qos.wire_protocol().default_unicast_locator_list.push_back(local);
         qos.wire_protocol().default_multicast_locator_list.clear();
         eprosima::fastrtps::LibrarySettingsAttributes settings;settings.intraprocess_delivery=eprosima::fastrtps::INTRAPROCESS_OFF;
         eprosima::fastrtps::xmlparser::XMLProfileManager::library_settings(settings);

@@ -18,7 +18,20 @@ Host 验证使用 `HOST_OPAQUE_BYTES_TEST_ONLY` 桥接和两个独立进程。�
 不透明字节，不解析 ROS/RTPS，也不伪造发现、匹配或 Reader 结果；运行记录中的
 `fake_sdk=1` 是 Host 测试边界标识，不是设备或 SDK 证据。
 
-## 当前限定双板验收摘要（2026-10-04）
+## 当前 G2/A1 package 状态（2026-10-04）
+
+本次 G2/A1 package 没有执行 HDC、设备或跨设备操作；设备 V1 状态为
+`NOT_RUN`，不能由 Host 结果替代。最终 named tester 在当前工作树上完成了
+Fast DDS 2.14.5 Host 与 API23 TargetBridge 的 clean-first build/link/static
+检查，Host214 与 CTest `14/14 PASS`，安装并 relocated consumer `PASS`，以及
+ROS 双进程 paired-close `20 writes / 20 takes PASS`。failure-close harness
+本身 exit 0，所监控 child processes 按预期各 exit 4；forward-0 pair 的 exit 4/0 writes/0 takes 是保留的
+负向 harness 结果，不是普通业务成功。完整 Release CONFIG 为 `552/552 PASS`，
+受影响 ASan 为 `208/208 PASS`；预构建依赖 DLL 未插桩，TSan 未运行。review
+receipt 为 `build/g2a1/REVIEW.md`，当前无阻塞 finding。A5/C1 的
+`NO_REACCEPT`、PF/P4 和生产资格边界保持不变。
+
+## 历史限定双板验收摘要（2026-10-04）
 
 在 SDK23/AArch64 的 `build/ros2-target/r2` 包上，登记的两块 RK3588A 已完成限定范围
 的 ROS 2 双板验收：query `d1c2cb4097279214`、data `be8cb2d90f287223`；普通
@@ -269,15 +282,25 @@ Pixi Python 3.12。不要让系统 Python 3.13 在缺少 ament 依赖时被 CMak
 
 ## Required flat configuration and Host run
 
-required 模式使用一个由两端各自读取的 flat config。下面是完整键集合；A/B 只
-改变 `side`、监听端口和对端端口，`run` 必须是同一个 16 位十六进制标识，且所有
-路径为绝对路径：
+required 模式使用一个由两端各自读取的 flat config。当前 V1 配置必须显式选择
+`locator_version=V1`，并提供 `namespace`、`local_udid`、`peer_udid`、
+`service_slot`、`peer_slot` 和 `profile=BYTES_NATIVE`。UDID 来自已授权的部署输入；
+该路径不申请新的 SDK API 或 permission，也不从 `networkId`、device name 或随机
+runtime id 推导身份。下面是当前 Host 示例的完整 V1 键集合；A/B 只改变 `side`、
+监听端口和对端端口，`run` 必须是同一个 16 位十六进制标识，且所有路径为绝对路径：
 
 ```text
 bridge_library=D:/install/fastdds-dsoftbus-ros2-host/bin/fastdds_dsoftbus_ros2_host_bridge.dll
 fastdds_module=D:/install/fastrtps-2.14.5/bin/fastrtps-2.14.dll
 fastcdr_module=D:/deps/ros2-jazzy/bin/fastcdr-2.2.dll
 backend=HOST_OPAQUE_BYTES_TEST_ONLY
+locator_version=V1
+namespace=ros2.synthetic
+local_udid=synthetic-local-A
+peer_udid=synthetic-local-B
+service_slot=17
+peer_slot=18
+profile=BYTES_NATIVE
 run=0123456789abcdef
 side=0
 port=41001
@@ -286,9 +309,17 @@ domain=201
 forward=1
 ```
 
-B 使用相同的前三个键、backend、run、domain 和 forward，并设置
-`side=1`、`port=41002`、`peer_port=41001`。启动每个普通 ROS executable 之前，
+B 使用相同的 library/module、backend、namespace、run、domain、forward 和
+`locator_version`/`profile`，并设置
+`side=1`、交换 `local_udid`/`peer_udid` 与 `service_slot`/`peer_slot`，并设置
+`port=41002`、`peer_port=41001`。启动每个普通 ROS executable 之前，
 分别设置自己的 config 路径；不能在 Participant 创建后切换配置：
+
+旧的 probe 配置如果缺少这些 V1 identity/slot 字段会在 descriptor publication
+之前拒绝；它不能通过回退到 legacy port-1 locator 继续运行。历史文档中把多个
+补丁脚本手工串联的示例也不适用于当前 package；当前唯一入口是
+`integrations/ros2/prepare_fastdds_source.py`，它必须从声明的 2.14.5 baseline
+执行完整五步并校验六个头文件。
 
 ```powershell
 $env:RMW_IMPLEMENTATION = 'rmw_fastrtps_cpp'
@@ -638,7 +669,7 @@ continuation或开启新设备窗口。Git/production 状态不变。历史 21-t
 
 该修复关闭的是 observer metadata lifetime/诊断可用性问题，不关闭 ROS 设备 teardown。既有设备 data 结果仍为 FAIL：两端 Participant 删除返回 4/`ACTIVE_ENTITIES`，Topic cast/map/reference 责任和残留集合仍未确定，A 端远程 139 仍 UNKNOWN，native 完整链仍缺失。当前设备状态继续为 `DEVICE_NOT_ADMITTED`；不把 Host 20/20、guard 或 observer 修复写成设备通过或生产资格。证据入口：[observer lifetime repair FINAL_REPORT](../.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/observer-lifetime-repair-20261003/FINAL_REPORT.md)、[EVIDENCE_INDEX](../.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/observer-lifetime-repair-20261003/EVIDENCE_INDEX.md)。
 
-## 最新 paired normal-close 双板验收（2026-10-04）
+## 历史 paired normal-close 双板验收（2026-10-04）
 
 后续受限设备窗口已完成 `ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_VERIFIED`。查询
 `d1c2cb4097279214` 和数据 `be8cb2d90f287223` 使用 SDK23/AArch64 构建的

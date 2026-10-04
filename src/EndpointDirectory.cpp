@@ -1,4 +1,5 @@
 #include <fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp>
+#include <fastdds_dsoftbus/dsoftbus/V1Address.hpp>
 
 #include <algorithm>
 #include <iterator>
@@ -11,16 +12,6 @@ namespace {
 bool DirectoryBytesValid(const std::string& bytes, std::size_t maximum)
 {
     return !bytes.empty() && bytes.size() <= maximum && bytes.find('\0') == std::string::npos;
-}
-
-bool DirectoryEndpointValid(const EndpointId& endpoint)
-{
-    if (endpoint[0] == 0xff) return false;
-    // Besides all-zero, reserve IPv6 ::1 because Fast DDS's generic isLocal
-    // fallback and external-locator heuristic also inspect private kinds.
-    const bool prefix_zero = std::all_of(endpoint.begin(), endpoint.end() - 1,
-            [](std::uint8_t byte) { return byte == 0; });
-    return !(prefix_zero && endpoint.back() <= 1);
 }
 
 bool DirectorySameKey(const RouteKey& a, const RouteKey& b)
@@ -51,21 +42,48 @@ bool DirectorySlotConflict(const std::string& first_name, const std::string& fir
 
 bool LocatorCodec::Encode(const EndpointId& endpoint, Locator& output)
 {
-    if (!DirectoryEndpointValid(endpoint)) return false;
-    Locator encoded(kind, port);
-    std::copy(endpoint.begin(), endpoint.end(), encoded.address);
-    output = encoded;
-    return true;
+    return v1::AddressCodec::EncodeLocator({endpoint, 0, v1::Profile::BytesNative}, output);
 }
 
 bool LocatorCodec::Decode(const Locator& locator, EndpointId& output)
 {
-    if (locator.kind != kind || locator.port != port) return false;
-    EndpointId endpoint{};
-    std::copy(std::begin(locator.address), std::end(locator.address), endpoint.begin());
-    if (!DirectoryEndpointValid(endpoint)) return false;
-    output = endpoint;
+    v1::EndpointAddress endpoint;
+    if (!v1::AddressCodec::DecodeLocator(locator, endpoint)) return false;
+    output = endpoint.device_key;
     return true;
+}
+
+DirectoryIssue EndpointDirectory::ValidateIdentityBindings(const DirectoryConfiguration& config, bool verify_digest)
+{
+    const auto extra = config.identities.size() > config.locals.size() ? config.identities.size() - config.locals.size() : 0;
+    if (extra > config.routes.size() && extra - config.routes.size() > config.routes.size())
+        return {DirectoryError::InvalidIdentity};
+    for (std::size_t i = 0; i < config.identities.size(); ++i) {
+        const auto& identity = config.identities[i];
+        const v1::DeviceIdentity canonical{identity.name_space, identity.domain, identity.udid};
+        EndpointId derived{};
+        if (!v1::AddressCodec::DeriveKey(canonical, derived)) return {DirectoryError::InvalidIdentity, i};
+        // Detect conflicting canonical identities before reporting digest mismatch.
+        // This same comparison is exercised through private test access with forced keys.
+        for (std::size_t j = 0; j < i; ++j) {
+            const auto& previous = config.identities[j];
+            if (identity.key == previous.key && (identity.name_space != previous.name_space ||
+                    identity.domain != previous.domain || identity.udid != previous.udid))
+                return {DirectoryError::IdentityCollision, i, j};
+        }
+        if (verify_digest && identity.key != derived) return {DirectoryError::InvalidIdentity, i};
+    }
+    if (!config.identities.empty()) {
+        const auto covered = [&](const Locator& locator) {
+            EndpointId key{};
+            return LocatorCodec::Decode(locator, key) && std::any_of(config.identities.begin(), config.identities.end(),
+                [&](const DirectoryConfiguration::IdentityBinding& identity) { return identity.key == key; });
+        };
+        for (const auto& local : config.locals) if (!covered(local.local_locator)) return {DirectoryError::MissingIdentity};
+        for (const auto& route : config.routes)
+            if (!covered(route.key.local_locator) || !covered(route.key.remote_locator)) return {DirectoryError::MissingIdentity};
+    }
+    return {};
 }
 
 bool LocatorCodec::IsValid(const Locator& locator)
@@ -76,6 +94,12 @@ bool LocatorCodec::IsValid(const Locator& locator)
 
 DirectoryResult<EndpointDirectory::Snapshot> EndpointDirectory::Build(const DirectoryConfiguration& config)
 {
+    return BuildImpl(config, true);
+}
+DirectoryResult<EndpointDirectory::Snapshot> EndpointDirectory::BuildImpl(const DirectoryConfiguration& config, bool verify_digest)
+{
+    const auto identity_issue = ValidateIdentityBindings(config, verify_digest);
+    if (identity_issue.code != DirectoryError::None) return {std::nullopt, identity_issue};
     // All validation is against this input, with no mutation/publication of an
     // existing snapshot. The trusted configuration's startup checks are O(n^2).
     // Network callback input never grows the directory or its reverse index.
@@ -107,6 +131,8 @@ DirectoryResult<EndpointDirectory::Snapshot> EndpointDirectory::Build(const Dire
         if (!LocatorCodec::IsValid(route.key.local_locator) ||
                 !LocatorCodec::IsValid(route.key.remote_locator))
             return {std::nullopt, {DirectoryError::InvalidLocator, i}};
+        if ((route.key.local_locator.port >> 24) != (route.key.remote_locator.port >> 24))
+            return {std::nullopt, {DirectoryError::IncompatibleProfile, i}};
         const auto local_it = std::find_if(config.locals.begin(), config.locals.end(),
                 [&](const LocalBinding& binding) { return binding.local_locator == route.key.local_locator; });
         if (local_it == config.locals.end())

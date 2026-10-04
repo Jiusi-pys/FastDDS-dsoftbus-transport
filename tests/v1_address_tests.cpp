@@ -206,6 +206,21 @@ int main()
             }
         }
     });
+    cases.emplace_back("V1-12-frozen-independent-tuple-vectors", [] {
+        EndpointId key{};
+        // Frozen preimage: 4d4444532d56312d444556494345000005616c706861010203040006756469642d31
+        CHECK(v1::AddressCodec::DeriveKey({"alpha",16909060u,"udid-1"},key));
+        CHECK(Hex(key)=="c3797784976ed68cef55b2f0f22e8cc4");
+        // Frozen preimage: 4d4444532d56312d444556494345000005616c706861010203040006756469642d32
+        CHECK(v1::AddressCodec::DeriveKey({"alpha",16909060u,"udid-2"},key));
+        CHECK(Hex(key)=="38b2c66402f6e6c3e7a1d841eee6a565");
+        // Frozen preimage: 4d4444532d56312d444556494345000001610000000000026263
+        CHECK(v1::AddressCodec::DeriveKey({"a",0u,"bc"},key));
+        CHECK(Hex(key)=="d1e87ba5a9287196fa18a50eb3f61158");
+        // Frozen preimage: 4d4444532d56312d444556494345000002616200000000000163
+        CHECK(v1::AddressCodec::DeriveKey({"ab",0u,"c"},key));
+        CHECK(Hex(key)=="56b70cba22b4235bff9123470a1cf7df");
+    });
     std::size_t failures = 0;
     for (const auto& test : cases) {
         try { test.second(); std::cout << "PASS " << test.first << '\n'; }

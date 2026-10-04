@@ -27,7 +27,7 @@ Values read(const char* path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("configuration missing");
     const std::set<std::string> keys{"bridge_library", "fastdds_module", "fastcdr_module", "softbus_module",
-        "backend", "run", "side", "domain", "authorized_package", "peer_network_id", "service_prefix", "connect_release"};
+        "backend", "run", "side", "domain", "authorized_package", "peer_network_id", "service_prefix", "connect_release", "locator_version", "namespace", "local_udid", "peer_udid", "service_slot", "peer_slot", "profile"};
     Values values;
     std::string line;
     while (std::getline(input, line)) {
@@ -47,12 +47,6 @@ unsigned integer(const Values& v, const char* key, unsigned limit) {
     const auto value = std::stoul(text);
     if (value > limit) throw std::runtime_error("integer range");
     return static_cast<unsigned>(value);
-}
-Locator logical(unsigned side) {
-    Locator value{};
-    value.kind = LocatorCodec::kind; value.port = LocatorCodec::port;
-    value.address[0] = 0x31; value.address[15] = static_cast<unsigned char>(side + 1);
-    return value;
 }
 struct Origins { const Values* config; bool fastdds=false, fastcdr=false, softbus=false, mixed=false; };
 int loaded(dl_phdr_info* info, size_t, void* context) {
@@ -105,6 +99,15 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
     *output = nullptr;
     try {
         const auto values = read(path);
+        if(values.at("locator_version")!="V1" || values.at("profile")!="BYTES_NATIVE")
+            throw std::runtime_error("explicit supported V1 profile required");
+        DSoftBusTransportDescriptor config(65536);
+        const auto slot=integer(values,"service_slot",v1::AddressCodec::max_slot);
+        const auto peer_slot=integer(values,"peer_slot",v1::AddressCodec::max_slot);
+        const v1::DeviceIdentity local_identity{values.at("namespace"),domain,values.at("local_udid")};
+        const v1::DeviceIdentity peer_identity{values.at("namespace"),domain,values.at("peer_udid")};
+        if(!v1::AddressCodec::ValidIdentity(local_identity)||!v1::AddressCodec::ValidIdentity(peer_identity))
+            throw std::runtime_error("invalid deployment identity");
         if (values.at("backend") != "OHOS_PUBLIC_SOCKET_EXPERIMENTAL") throw std::runtime_error("target backend selection");
         if (!std::regex_match(values.at("run"), std::regex("[0-9a-f]{16}")) ||
                 !std::regex_match(values.at("peer_network_id"), std::regex("[0-9a-f]{64}")))
@@ -121,17 +124,17 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         owner->diagnostic_control=[] { (void)fastdds_dsoftbus::ros2_target_observation::ExportPending(); FastddsDsoftbusFactoryFlushTeardownPending(); };
         const auto prefix = values.at("service_prefix") + "." + owner->run;
         auto name = [&](unsigned index, const char* role) { return prefix + "." + std::to_string(index) + "." + role; };
+        const auto issue=config.ConfigureV1({local_identity,slot,v1::Profile::BytesNative,prefix+".ns",
+            {{peer_identity,peer_slot,values.at("peer_network_id"),name(side,"outgoing"),{name(1-side,"outgoing")}}}});
+        if(issue.code!=DirectoryError::None)throw std::runtime_error("V1 deployment configuration rejected");
+        const auto local=config.directory.locals.front().local_locator;
+        const auto remote=config.directory.routes.front().key.remote_locator;
         phase0::PublicSocketConfiguration backend;
         backend.identity = {name(side,"outgoing"),{910+side*4},{1010+side*4}};
-        backend.listener_identity = {name(side,"listener"),{911+side*4},{1011+side*4}};
+        backend.listener_identity = {config.directory.locals.front().local_listen_name,{911+side*4},{1011+side*4}};
         backend.package_name = values.at("authorized_package"); backend.peer_network_id = values.at("peer_network_id");
-        backend.peer_name = name(1-side,"listener"); backend.max_message_size = 65536;
+        backend.peer_name = config.directory.routes.front().fields.remote_listen_name; backend.max_message_size = 65536;
         backend.bind_qos = {{0,80},{1,2000}}; backend.listen_qos = backend.bind_qos;
-        DSoftBusTransportDescriptor config(65536);
-        config.directory.locals = {{logical(side),prefix+".ns",backend.listener_identity.service_name}};
-        config.directory.routes = {{{logical(side),logical(1-side)},
-            {backend.peer_network_id,backend.peer_name,backend.identity.service_name,{name(1-side,"outgoing")},RecordDataType::Bytes},1}};
-        config.default_metatraffic_unicast = {logical(side)}; config.default_user_unicast = {logical(side)};
         owner->runtime = std::make_unique<experimental::Runtime>(backend);
         if (!owner->runtime->SetPreConnectGate([owner, release=values.at("connect_release")] { return await_connect(owner,release); }))
             throw std::runtime_error("gate installation failed");
@@ -148,11 +151,11 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         qos.transport().max_msg_size_no_frag = config.maxMessageSize;
         qos.transport().use_builtin_transports = false; qos.transport().user_transports.clear();
         qos.transport().user_transports.push_back(owner->descriptor);
-        qos.wire_protocol().builtin.initialPeersList.clear(); qos.wire_protocol().builtin.initialPeersList.push_back(logical(1-side));
+        qos.wire_protocol().builtin.initialPeersList.clear(); qos.wire_protocol().builtin.initialPeersList.push_back(remote);
         qos.wire_protocol().builtin.metatrafficMulticastLocatorList.clear();
         qos.wire_protocol().builtin.metatrafficUnicastLocatorList.clear();
-        qos.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(logical(side));
-        qos.wire_protocol().default_unicast_locator_list.clear(); qos.wire_protocol().default_unicast_locator_list.push_back(logical(side));
+        qos.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(local);
+        qos.wire_protocol().default_unicast_locator_list.clear(); qos.wire_protocol().default_unicast_locator_list.push_back(local);
         qos.wire_protocol().default_multicast_locator_list.clear();
         eprosima::fastrtps::LibrarySettingsAttributes settings;
         settings.intraprocess_delivery = eprosima::fastrtps::INTRAPROCESS_OFF;

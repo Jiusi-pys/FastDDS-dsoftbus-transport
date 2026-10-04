@@ -48,6 +48,7 @@ struct Fixture {
     Fixture(bool forward=true){
         DSoftBusKeyedSamplePubSubType().register_type_object_representation();
         public_socket_fake::Configure(trace,forward);
+        public_socket_fake::SetListenerNames({Name(0,"listener"),Name(1,"listener")});
         for(int side=0;side<2;++side){auto& n=nodes[side];n.backend=std::make_shared<PublicSocketBackend>(PublicConfig(side));n.runtime=HostProviderLoop::CreateShared(n.backend,std::make_shared<SharedObserver>(side,trace));}
         public_socket_fake::SetSendObserver([&](int side,int id){const auto v=nodes[side].runtime->Observe();Require(id==101+100*side&&v.native.send.entered==1,"original shared outgoing ticket");trace->Detail({"SHARED_SEND_TICKET","","","owner="+std::to_string(v.adapter.binding.owner_incarnation),side},trace->Capture());});
     }

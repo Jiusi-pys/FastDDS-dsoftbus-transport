@@ -28,6 +28,7 @@ struct SendTargetView
 struct SendQueueLimits
 {
     // Experimental payload limits, NOT an RSS or SDK capability guarantee.
+    // Peer budgets count complete remote endpoints (kind/address/profile/slot).
     std::size_t peer_records = 32;
     std::size_t peer_bytes = 256 * 1024;
     std::size_t global_records = 128;

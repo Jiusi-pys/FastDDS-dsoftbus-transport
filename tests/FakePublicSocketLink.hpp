@@ -13,6 +13,8 @@ struct Snapshot {
     QosObservation listen_qos[2],bind_qos[2]; // Actual borrowed C parameters, bounded copy.
 };
 void Configure(std::shared_ptr<host_dds::Trace>,bool forwarding);
+void SetListenerNames(const std::array<std::string,2>&);
+void SetPacketObserver(std::function<void(int,const std::uint8_t*,std::size_t)>);
 void UseBoundedBackpressure();
 void SetSendObserver(std::function<void(int,int)>);
 // Declared detail window. Lifecycle events, error records and every counter stay

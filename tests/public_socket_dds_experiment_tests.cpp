@@ -22,7 +22,7 @@ using namespace std::chrono_literals;
 void Check(bool b,const char* m){if(!b)throw std::runtime_error(m);}
 int main(int argc,char**argv){try{
     Check(argc==2,"case");std::string test=argv[1];
-    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);
+    auto trace=std::make_shared<host_dds::Trace>();public_socket_fake::Configure(trace,true);std::array<std::string,2> listener_names;for(unsigned side=0;side<2;++side)Check(v1::AddressCodec::EncodeServiceName({"host-dds-probe",151,17+side,v1::Profile::BytesNative},listener_names[side]),"canonical fixture names");public_socket_fake::SetListenerNames(listener_names);
     Check(IsolateProcess(),"effective process isolation");
     if(test=="sampling-transition"){
         std::array<std::uint8_t,44> p{};std::memcpy(p.data(),"RTPS",4);p[4]=2;p[20]=21;p[21]=1;p[22]=20;p[35]=0xc2;p[40]=1;
@@ -57,15 +57,14 @@ DumpFrames();fastdds_dsoftbus::dsoftbus::runtime_probe::DumpTrace();return 0;
         for(unsigned i=0;i<FrameLimit();++i)SocketFrame("UNIT",7,p.data(),p.size());Check(FrameCount()==FrameLimit()&&FrameOverflow()==1,"bounded trace overflow visible");return 0;
     }
     if(test=="default"){
-        EndpointId a{},b{};a[0]=10;a[15]=1;b[0]=10;b[15]=2;Locator l,p;LocatorCodec::Encode(a,l);LocatorCodec::Encode(b,p);
-        DSoftBusTransportDescriptor d(8192);d.directory.locals={{l,"host.public.A.namespace","host.public.A.listener"}};d.directory.routes={{{l,p},{"model.net.B","host.public.B.listener","host.public.A.outgoing",{"host.public.B.outgoing"},RecordDataType::Bytes},1}};d.default_metatraffic_unicast={l};d.default_user_unicast={l};
+        DSoftBusTransportDescriptor d(8192);Check(d.ConfigureV1({{"host-dds-probe",151,"synthetic-probe-A"},17,v1::Profile::BytesNative,"host.public.A.namespace",{{{"host-dds-probe",151,"synthetic-probe-B"},18,"model.net.B","host.public.A.outgoing",{"host.public.B.outgoing"}}}}).code==DirectoryError::None,"default V1 configuration");
         std::unique_ptr<eprosima::fastdds::rtps::TransportInterface> t(d.create_transport());auto actual=dynamic_cast<DSoftBusTransport*>(t.get());Check(actual&&!actual->init()&&actual->last_error().error==FacadeError::NativeBackendUnavailable,"experiment variant default factory stays unavailable");Check(public_socket_fake::Observe().sockets[0]==0,"default no public call");return 0;
     }
     if(test=="terminal-status"){host_test::HostLoopObservation v;v.sealed=true;Check(ExpectedTerminal({NativeStatus::ServiceClosing},v,true),"known close refused");for(auto status:{NativeStatus::ForeignState,NativeStatus::WrongRole,NativeStatus::InvalidConfiguration,NativeStatus::ProviderContractFault,NativeStatus::AllocationFailure,NativeStatus::OwnerUnavailable})Check(!ExpectedTerminal({status},v,true),"foreign/configuration/provider errors never terminal success");Check(ExpectedTerminal({NativeStatus::Revoked},v,true)&&ExpectedTerminal({NativeStatus::NotReady},v,true)&&!ExpectedTerminal({NativeStatus::Revoked},v,false),"close statuses require observed teardown");Check(!ExpectedTerminal({NativeStatus::NotReady,NativeSendOutcome::ReturnedSdkCode,-1},v,true),"SDK error not waived");return 0;}
     DSoftBusKeyedSamplePubSubType().register_type_object_representation();
     ExperimentLargeSamplePubSubType().register_type_object_representation();
-    Config c[2];for(unsigned i=0;i<2;++i){c[i].run="0123456789abcdef";c[i].side=i;c[i].peer_network=i?"model.net.A":"model.net.B";c[i].service_prefix="host.public";c[i].delete_first=test=="a-first"?0:1;}
-    if(test=="invalid"){c[0].side=2;auto v=Run(c[0],[](const char*){return true;});Check(!v.success&&public_socket_fake::Observe().sockets[0]==0,"invalid rejected before SDK");return 0;}
+    Config c[2];for(unsigned i=0;i<2;++i){c[i].run="0123456789abcdef";c[i].side=i;c[i].peer_network=i?"model.net.A":"model.net.B";c[i].service_prefix="host.public";c[i].delete_first=test=="a-first"?0:1;c[i].identity={"host-dds-probe",151,i?"synthetic-probe-B":"synthetic-probe-A"};c[i].peer_identity={"host-dds-probe",151,i?"synthetic-probe-A":"synthetic-probe-B"};c[i].service_slot=17+i;c[i].peer_slot=18-i;}
+    if(test=="invalid"){auto missing=c[0];missing.identity.udid.clear();auto rejected=Run(missing,[](const char*){return true;});Check(!rejected.success&&public_socket_fake::Observe().sockets[0]==0,"missing UDID before native");c[0].side=2;auto v=Run(c[0],[](const char*){return true;});Check(!v.success&&public_socket_fake::Observe().sockets[0]==0,"invalid rejected before SDK");return 0;}
     if(test=="stage-failure"){auto v=Run(c[0],[](const char*){return false;});Check(!v.success&&v.drained&&public_socket_fake::Observe().live==0,"listener-stage failure public DDS cleanup");return 0;}
     const bool regression=test=="BE_DELAYED_DROP"||test=="F256"||test=="F1M"||test=="REL_LOSS"||test=="BE_LOSS"||test=="VOL_LATE"||test=="TL_LATE"||test=="KEYED_LAST";
     const bool cycling=test=="SHARED_CYCLE_2"||test=="SHARED_CYCLE_10"||test=="SHARED_CYCLE_100";

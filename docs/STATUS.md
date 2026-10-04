@@ -5,10 +5,20 @@ markers and permission identifiers from their original runs. They are labeled by
 their work-package dates and artifact paths; they do not describe the current
 `FastDDSDSoftBusTransport` package unless a section explicitly says so.
 
-> **累计实验基线（2026-09-27）**：A 的七场景与真实 CloseBusy 责任修复，加上 B 的 opt-in 决策诊断及稳定化验证。旧 111/6 未知与新 107/2 已观察原因分别保留。
-> 范围、容量单位、依赖与证据见 [bounded DDS stabilization baseline](BOUNDED_DDS_STABILIZATION_BASELINE.md)。本 checkpoint 的当前 isolated Host CONFIG suite 为 `445/445 PASS`；设备未运行，未进行新的 ASan。下列工作包状态是历史快照，不代表当前 Git 提交状态或生产放行。
+> **历史累计实验基线（2026-09-27）**：A 的七场景与真实 CloseBusy 责任修复，加上 B 的 opt-in 决策诊断及稳定化验证。旧 111/6 未知与新 107/2 已观察原因分别保留。
+> 范围、容量单位、依赖与证据见 [bounded DDS stabilization baseline](BOUNDED_DDS_STABILIZATION_BASELINE.md)。该历史 checkpoint 的 isolated Host CONFIG suite 为 `445/445 PASS`；设备未运行，未进行新的 ASan。下列工作包状态是历史快照，不代表当前 Git 提交状态或生产放行。
 
-## 当前 checkpoint：AUDIT_FIX_BASELINE（2026-10-04；本地 checkpoint，未 push）
+## 当前 checkpoint：G2A1_V1_LOCATOR_INTEGRATION（2026-10-04；本地 acceptance snapshot，未 push）
+
+本工作包的当前状态为：**`V1_ADDRESS_CODEC_PRODUCTION_PATH_IMPLEMENTED / V1_ADDRESS_CODEC_HOST_INTEGRATION_VERIFIED / ROS214_AND_API23_TARGET_BUILD_VERIFIED / PRE_COMMIT_GATE_PASS / READY_FOR_COMMIT / DEVICE_V1_NOT_RUN / NOT_PRODUCTION_QUALIFIED`**。生产路径已接入 V1：`LocatorCodec` 是 V1 的兼容薄封装，`DSoftBusTransportDescriptor::ConfigureV1` 在发布前生成并验证有界身份目录、碰撞和服务名，`ValidateV1` 要求同一完整 locator 用于 metatraffic/user advertisement；运行时 descriptor 在一次性创建前再次验证。`EndpointDirectory`、完整 locator selection、Host bridge、TargetBridge 和 public socket DDS probe 均使用该路径。未进行 HDC、设备或跨设备操作；本工作包不实现 re-accept，PF/P4 和生产资格保持原状态。
+
+V1 合同记录如下：私有 kind `0x40000000`；地址键为 SHA-256 前 16 字节，输入为 ASCII `MDDS-V1-DEVICE`（含 NUL）、namespace 长度 `u16BE`、namespace bytes、domain `u32BE`、UDID 长度 `u16BE`、UDID bytes；namespace 为 1..116 个不含 NUL 的不透明字节，UDID 为 1..64 个不含 NUL 的不透明字节。port 高 8 位为 profile，低 24 位为 `slot + 1`；profile 1/2/3 结构合法，当前 native pipeline 只支持 `BytesNative` profile 1，slot 为 0..`0x00fffffe`，零低位、非法 profile 和溢出拒绝。独立 fixture 的 synthetic `alpha/0x01020304/udid-1` 向量为：`4d4444532d56312d444556494345000005616c706861010203040006756469642d31` → `c3797784976ed68cef55b2f0f22e8cc4`。
+
+最终 tester evidence：Release full CONFIG `552/552 PASS`（`build/g2a1/final-test/final-config552-final*`，`-j2`，672.56 s）；受影响 ASan `208/208 PASS`（`-j2`，预构建 Fast DDS/Fast CDR/foonathan DLL 未插桩，TSan 未运行）；安装并外部 relocated consumer `PASS`；Host Fast DDS 2.14.5 与 API23 TargetBridge clean-first build/link/static gate `PASS`；`Host214 CTest 14/14 PASS`。ROS 双进程 paired-close `20 writes / 20 takes PASS`（`ros-dual-final`）；failure-close harness 本身 exit 0，所监控 child processes 按预期各 exit 4；forward-0 pair 返回 1，属于保留的负向 ledger（A/B 均 exit 4，writes/takes 0，sends 15，ingress 0，active pumps 0），不能当作普通成功。两项原始 death test 在 common working directory 下因共享 `srtc_close_child_output.txt` 竞争而失败；最终测试采用每个测试唯一工作目录并发运行，断言未改变，也没有 source fix。`experiment.matrix_control_receipts` 的旧高并行失败仍单独保留，原因未解释。
+
+独立 review 已清除当前生产路径的阻塞 finding；receipt 为 `build/g2a1/REVIEW.md`。Debug 配置只完成静态审计，未运行；最终 probe identity migration 已检查。当前仍未证明：设备 V1 执行、跨设备运行、TSan、所有并发 race、SDK 内部 drain/cancellation/quiescence、re-accept，以及生产 qualification。A5/C1 的既有 table/route lifetime 限制和 `NO_REACCEPT` 不变。旧 `93e2dd1` 的过程记录不回填本工作包 receipt；本节只描述本次 named tester/reviewer evidence。
+
+## 历史 checkpoint：AUDIT_FIX_BASELINE（2026-10-04；本地 checkpoint，未 push）
 
 状态（本提交的标签；文档随该提交入库，提交号以 `git log` 为准，不在文中自引用）：**`AUDIT_FIX_BASELINE_COMMITTED / NOT_PUSHED / NOT_PRODUCTION_QUALIFIED`**。它只是对全源审计和独立复核所发现缺陷的一次限定修复，**不是**全部目标完成，也**不是** `REACCEPT_SUPPORTED`、`V1_CODEC_VERIFIED` 或当前修订的设备验证。此前成功的 ROS 设备窗口仍绑定其原始源码和 package；本修订的运行时改动（包括下面的 ROS2 bridge 改动）没有在该设备窗口上执行，不能当作新修订的执行证据。
 
@@ -36,7 +46,7 @@ their work-package dates and artifact paths; they do not describe the current
 
 **A5/C1（未修复，保持 fail-closed）。** 一个 `NativeOwnerTable` 对一条 route 在整个 table 生命周期内只允许一个 Accepted owner：`FindPlan(Accepted, route)` 对已 `close_intent` 的退休 owner 仍返回该 owner（`src/NativeOwnerTable.cpp:191-199`），因此 `PrepareInbound`（`:677`）与 `ObserveInbound`（`:737`）此后都以 `DuplicateConnection` 拒绝同一 route 的新 accepted socket；创建过外部 socket 的 owner cell 不回收（`:580`）。结果是：对端断开后重新拨入、或 dual 拓扑 `CloseInput` 后 `ReopenInput` 再 accept，在同一 table 内**不受支持**。`N4-CLOSED-ACCEPTED-NO-REACCEPT` 只是对这一行为的特征测试，不是支持声明。本 checkpoint 没有回收墓碑、复用 owner cell 或引入新 epoch；任何显式重连需求保持**未满足**，不是被豁免。重新接受需要单独设计，并需要 SDK 对 socket id 复用的保证。
 
-**G2/A1（未满足，下一项实现）。** 生产路径（facade、send、input、ROS2 bridge）仍使用旧 `LocatorCodec`（`include/fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp:24-25`：kind `0x40000000`，`port == 1`，原始 16 字节 id），不是冻结的 V1 地址合同；`v1::AddressCodec`（`include/fastdds_dsoftbus/dsoftbus/V1Address.hpp`、`src/V1Address.cpp`）只在单元测试和实验里使用，且二者声称同一个 kind。唯一的现行要求在 [FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md](FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md) 第 28 行（locator 使用规范服务名、稳定的 namespace/domain/UDID 摘要和 profile/slot 编码）和第 30 行（“地址编码固定为”：私有非负 kind；`address[16]` 为规范 `{namespace, domain, UDID}` 的 SHA-256 截断键，碰撞必须拒绝歧义路由；`port` 高 8 位编码 profile，低 24 位编码 `slot + 1`，零值和非法组合拒绝；同一 Participant 的 metatraffic/user traffic 公告同一 DSoftBus locator；profile 不兼容的 locator 在选择阶段排除）；第 41 行要求自定义 locator 选择按完整地址比较。实现时以这些行为准，不使用历史寻址提案，也不自行发明字节布局。
+**G2/A1（该历史 checkpoint 时未满足）。** 生产路径（facade、send、input、ROS2 bridge）仍使用旧 `LocatorCodec`（`include/fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp:24-25`：kind `0x40000000`，`port == 1`，原始 16 字节 id），不是冻结的 V1 地址合同；`v1::AddressCodec`（`include/fastdds_dsoftbus/dsoftbus/V1Address.hpp`、`src/V1Address.cpp`）只在单元测试和实验里使用，且二者声称同一个 kind。唯一的现行要求在 [FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md](FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md) 第 28 行（locator 使用规范服务名、稳定的 namespace/domain/UDID 摘要和 profile/slot 编码）和第 30 行（“地址编码固定为”：私有非负 kind；`address[16]` 为规范 `{namespace, domain, UDID}` 的 SHA-256 截断键，碰撞必须拒绝歧义路由；`port` 高 8 位编码 profile，低 24 位编码 `slot + 1`，零值和非法组合拒绝；同一 Participant 的 metatraffic/user traffic 公告同一 DSoftBus locator；profile 不兼容的 locator 在选择阶段排除）；第 41 行要求自定义 locator 选择按完整地址比较。实现时以这些行为准，不使用历史寻址提案，也不自行发明字节布局。该历史观察已由上面的 G2A1 当前 checkpoint 更新；原文作为当时 evidence 保留。
 
 其余设计问题保持各自已记录的处置，未宣布关闭：G3（发送 deadline 与准入预算已有；同步 SDK 进入后的返回界和 Close/drain 仍未证明有界；未确立需要改 descriptor ABI，超时后不得直接释放资源）、G1（每目标一份拷贝、按 N 份计费与 N 份实际内存一致；共享块是待实现优化）、A6（多目标全有或全无接纳是已有测试固定的明确合同）、B4（重复 Socket 请求可返回已有 ID，盲目 Shutdown 可能误关旧 owner；条件性缺口，需要平台身份保证）、A4（路由在 init 时冻结，`DeviceDirectory` 未接入）。来源：[独立审核报告](../.artifacts/review-full-20261004/FINAL_REVIEW.md)与本次全源审计。未跟踪的 `src/service_record_binding_tests.cpp` 是未参与构建的旧副本，`communication_dsoftbus` gitlink 为本地脏状态，二者均已保留、未纳入本次提交。
 
@@ -52,9 +62,9 @@ ROS2 Host 交付（审核 P2）：新增唯一入口 `integrations/ros2/prepare_
 - 安装包消费者（`tests/install_consumer_test.py`，对本修订新构建的 package）：`INSTALL_RELOCATION_EXTERNAL_HEADERS_DEFAULT_AND_HOST_DDS_PASS`。2.14.5 变体：20 个运行时 TU 的 `cl /Zs` 语法检查无错误；Host `Bridge.cpp` 同样；`TargetBridge.cpp` 未编译（见 A2）。这些只是语法/链接级检查。
 - `experiment.matrix_control_receipts`：**未解决、未复现**。它是 `RUN_SERIAL`；其 UDP 端口（31000–31140，`reference_control_tests.cjs` 以 `31000+n*20` 固定分配）没有其他测试使用，也不在 OS 排除范围内，输出目录由 `mkdtemp` 唯一。失败的是第一个子进程（`wrong_run`，需要在测试内置 5 秒 kill 之前自行退出）；保留的目录时间戳显示它从启动到退出被记录经过了约 14 秒，而 kill 定时器是 5 秒——kill 没有及时生效或事件循环被饿死，原因未确定；其 stdout 是块缓冲，被 kill 后日志为空，无法判断卡在何处。单独运行时，`wrong_run` 的子进程约 0.17 秒自行退出（从未执行过的新拷贝为 0.17–0.29 秒，因此首次执行的杀毒扫描不是已证实的原因），整个测试单独运行约 1.8 秒通过。因此不能声称降低并行度修复了它；测试、超时与断言均未改动，高并行下的结果仍作为未解决项记录。
 
-## 当前 checkpoint：BOUNDED_DDS_STABILIZATION（2026-09-27；artifact run `20260927T103431Z`）
+## 历史 checkpoint：BOUNDED_DDS_STABILIZATION（2026-09-27；artifact run `20260927T103431Z`）
 
-独立 tester 在冻结候选树上完成 Release/CONFIG Host build 与完整 CTest：`445/445 PASS`、exit 0，commit gate `PASS`。配置显式开启 bounded regression 与 decision diagnostics；生产默认仍为 `NativeBackendUnavailable`，诊断默认 OFF。没有 HDC/SDK/device execution，也没有新的 ASan；B 的 `72/72` ASan 结果仍是历史、预构建 Fast DDS 未完整插桩的 source-equivalent evidence。该状态仅记录 checkpoint evidence，不声明已提交、SDK qualification、release 或 production readiness。
+该历史 checkpoint 的独立 tester 在冻结候选树上完成 Release/CONFIG Host build 与完整 CTest：`445/445 PASS`、exit 0，commit gate `PASS`。配置显式开启 bounded regression 与 decision diagnostics；生产默认仍为 `NativeBackendUnavailable`，诊断默认 OFF。没有 HDC/SDK/device execution，也没有新的 ASan；B 的 `72/72` ASan 结果仍是历史、预构建 Fast DDS 未完整插桩的 source-equivalent evidence。该状态仅记录历史 checkpoint evidence，不声明当前 package 已提交、SDK qualification、release 或 production readiness。
 
 ## 当前工作包：PUBLIC_SOCKET_BINDING_DECISION_AND_CLOSE_STABILIZATION（2026-09-27；artifact run `20260927T083510Z`）
 

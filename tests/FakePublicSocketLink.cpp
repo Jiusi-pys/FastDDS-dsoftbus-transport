@@ -11,7 +11,7 @@ namespace {
 using namespace std::chrono_literals;
 struct Row {int id=0,side=0,role=0,peer=-1;bool active=false,bound=false,pending_bind=false;std::string name;const ISocketListener* listener=nullptr;};
 struct Record {int from=0,to=0,target_id=0;const ISocketListener* callback=nullptr;std::vector<std::uint8_t> bytes;host_dds::DetailStamp observation;};
-struct Link {std::mutex gate;std::condition_variable changed;std::array<Row,6> rows{};std::array<bool,2> binding{};Snapshot counts;bool backpressure=false,forwarding=true,delay_bind=false,release_bind=false;std::deque<Record> queue;std::shared_ptr<host_dds::Trace> trace;std::function<void(int,int)> send_observer;};
+struct Link {std::mutex gate;std::condition_variable changed;std::array<Row,6> rows{};std::array<bool,2> binding{};Snapshot counts;bool backpressure=false,forwarding=true,delay_bind=false,release_bind=false;std::deque<Record> queue;std::shared_ptr<host_dds::Trace> trace;std::function<void(int,int)> send_observer;std::function<void(int,const std::uint8_t*,std::size_t)> packet_observer;};
 std::shared_ptr<Link> link;
 std::array<std::int32_t,3> injected{};std::function<void()> shutdown_barrier;
 int Failure(InjectedOperation op){const auto i=static_cast<std::size_t>(op);const auto rc=injected[i];injected[i]=0;return rc;}
@@ -30,6 +30,8 @@ void FailNext(InjectedOperation op,std::int32_t rc){std::lock_guard<std::mutex> 
 void SetShutdownBarrier(std::function<void()> fn){std::lock_guard<std::mutex> lock(link->gate);shutdown_barrier=std::move(fn);}
 void UseBoundedBackpressure(){std::lock_guard<std::mutex> lock(link->gate);link->backpressure=true;}
 void SetSendObserver(std::function<void(int,int)> f){std::lock_guard<std::mutex> lock(link->gate);link->send_observer=std::move(f);}
+void SetListenerNames(const std::array<std::string,2>& names){std::lock_guard<std::mutex> lock(link->gate);for(int i=0;i<2;++i){if(link->rows[i*3].active)throw std::runtime_error("listener names after exposure");link->rows[i*3].name=names[i];}}
+void SetPacketObserver(std::function<void(int,const std::uint8_t*,std::size_t)> fn){std::lock_guard<std::mutex> lock(link->gate);link->packet_observer=std::move(fn);}
 void SetFrameDetail(bool on){link->trace->SetDetail(on);}
 Snapshot Observe(){std::lock_guard<std::mutex> lock(link->gate);auto v=link->counts;v.queued=link->queue.size();for(auto& r:link->rows)if(r.active)++v.live;return v;}
 void DelayBindCallbacks(){std::lock_guard<std::mutex> lock(link->gate);link->delay_bind=true;}
@@ -64,7 +66,7 @@ int32_t Socket(SocketInfo info){using namespace public_socket_fake;std::lock_gua
     for(auto& row:link->rows)if(row.role!=2&&row.name==info.name){
         if(row.active)return Invalid("Fake duplicate active Socket");
         if(row.role==0&&(info.peerName||info.peerNetworkId))return Invalid("listener has peer");
-        if(row.role==1&&(!info.peerName||!info.peerNetworkId||Name(1-row.side,"listener")!=info.peerName||Network(1-row.side)!=info.peerNetworkId))return Invalid("outgoing static peer mismatch");
+        if(row.role==1&&(!info.peerName||!info.peerNetworkId||link->rows[(1-row.side)*3].name!=info.peerName||Network(1-row.side)!=info.peerNetworkId))return Invalid("outgoing static peer mismatch");
         row.active=true;++link->counts.sockets[row.side];link->trace->Add({"FAKE_C_SOCKET","","","id="+std::to_string(row.id)+",role="+std::to_string(row.role),row.side});return row.id;
     }return Invalid("unknown static Socket name");
 }
@@ -87,9 +89,9 @@ int32_t Bind(int32_t id,const QosTV* q,uint32_t n,const ISocketListener* cb){usi
     if(!deferred){server->OnBind(accepted_id,peer);Event("FAKE_ON_BIND",destination,"accepted="+std::to_string(accepted_id)+",adapter_readiness_checked_by_test_not_assumed_from_void_callback");}
     {std::lock_guard<std::mutex> lock(link->gate);link->rows[destination*3+2].bound=true;link->rows[side*3+1].bound=true;}return 0;
 }
-int32_t SendBytes(int32_t id,const void* data,uint32_t size){using namespace public_socket_fake;int side=0,to=0,target=0;const ISocketListener* callback=nullptr;std::function<void(int,int)> observer;const auto observation=link->trace->Capture();
-    {std::lock_guard<std::mutex> lock(link->gate);const auto k=Index(id);if(k<0||link->rows[k].role!=1||!data||!size||size>8192)return Invalid("Fake send wrong role/buffer");auto& r=link->rows[k];side=r.side;++link->counts.sends[side];const auto destination=Index(r.peer);if(!r.active||!r.bound||destination<0||!link->rows[destination].active)return -704;if(link->rows[destination].role!=2||!link->rows[destination].bound)return Invalid("Fake send target not accepted");to=link->rows[destination].side;target=r.peer;callback=link->rows[destination].listener;observer=link->send_observer;}
-    if(observer)observer(side,id);const auto* p=static_cast<const std::uint8_t*>(data);link->trace->DetailFrame(observation,"FAKE_SEND",side,p,size);
+int32_t SendBytes(int32_t id,const void* data,uint32_t size){using namespace public_socket_fake;int side=0,to=0,target=0;const ISocketListener* callback=nullptr;std::function<void(int,int)> observer;std::function<void(int,const std::uint8_t*,std::size_t)> packet;const auto observation=link->trace->Capture();
+    {std::lock_guard<std::mutex> lock(link->gate);const auto k=Index(id);if(k<0||link->rows[k].role!=1||!data||!size||size>8192)return Invalid("Fake send wrong role/buffer");auto& r=link->rows[k];side=r.side;++link->counts.sends[side];const auto destination=Index(r.peer);if(!r.active||!r.bound||destination<0||!link->rows[destination].active)return -704;if(link->rows[destination].role!=2||!link->rows[destination].bound)return Invalid("Fake send target not accepted");to=link->rows[destination].side;target=r.peer;callback=link->rows[destination].listener;observer=link->send_observer;packet=link->packet_observer;}
+    if(packet)packet(side,static_cast<const std::uint8_t*>(data),size);if(observer)observer(side,id);const auto* p=static_cast<const std::uint8_t*>(data);link->trace->DetailFrame(observation,"FAKE_SEND",side,p,size);
     if(!link->forwarding)return 0;
     {std::unique_lock<std::mutex> lock(link->gate);
         const auto alive=[&]{const auto from=Index(id),to=Index(target);return from>=0&&to>=0&&link->rows[from].active&&link->rows[from].bound&&link->rows[from].peer==target&&link->rows[to].active&&link->rows[to].bound&&link->rows[to].listener==callback;};

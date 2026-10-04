@@ -29,11 +29,48 @@ void Require(bool v,const char* why){if(!v)throw std::runtime_error(why);}
 std::string Guid(const rtps::GUID_t& g){return Hex(g.guidPrefix.value,12)+Hex(g.entityId.value,4);}
 std::string Handle(const dds::InstanceHandle_t& h){return Hex(h.value,16);}
 std::uint64_t Sequence(const rtps::SequenceNumber_t& n){return(std::uint64_t(std::uint32_t(n.high))<<32)|n.low;}
-Locator Local(int side){EndpointId id{};id[0]=10;id[14]=128;id[15]=std::uint8_t(side+1);Locator l;Require(LocatorCodec::Encode(id,l),"locator");return l;}
-std::string Name(int side,const char* role){return std::string("host.public.")+(side?"B.":"A.")+role;}
+v1::DeviceIdentity Identity(int side){return {"host-public",151,side?"synthetic-public-B":"synthetic-public-A"};}
+Locator Local(int side){EndpointId key{};Locator value;Require(v1::AddressCodec::DeriveKey(Identity(side),key)&&v1::AddressCodec::EncodeLocator({key,std::uint32_t(17+side),v1::Profile::BytesNative},value),"V1 locator");return value;}
+std::string Name(int side,const char* role){if(std::string(role)=="listener"){std::string name;Require(v1::AddressCodec::EncodeServiceName({"host-public",151,std::uint32_t(17+side),v1::Profile::BytesNative},name),"canonical listener");return name;}return std::string("host.public.")+(side?"B.":"A.")+role;}
+
 std::string Network(int side){return side?"model.net.B":"model.net.A";}
-DSoftBusTransportDescriptor Configuration(int side){DSoftBusTransportDescriptor d(8192);auto local=Local(side),peer=Local(1-side);d.directory.locals={{local,Name(side,"namespace"),Name(side,"listener")}};d.directory.routes={{{local,peer},{Network(1-side),Name(1-side,"listener"),Name(side,"outgoing"),{Name(1-side,"outgoing")},RecordDataType::Bytes},1}};d.default_metatraffic_unicast={local};d.default_user_unicast={local};return d;}
+DSoftBusTransportDescriptor Configuration(int side){DSoftBusTransportDescriptor d(8192);Require(d.ConfigureV1({Identity(side),std::uint32_t(17+side),v1::Profile::BytesNative,Name(side,"namespace"),{{Identity(1-side),std::uint32_t(18-side),Network(1-side),Name(side,"outgoing"),{Name(1-side,"outgoing")}}}}).code==DirectoryError::None,"production ConfigureV1");return d;}
+
 PublicSocketConfiguration PublicConfig(int side){PublicSocketConfiguration c;c.identity={Name(side,"outgoing"),{std::uint64_t(910+side*4)},{std::uint64_t(1010+side*4)}};c.listener_identity={Name(side,"listener"),{std::uint64_t(911+side*4)},{std::uint64_t(1011+side*4)}};c.package_name="host.public.dds";c.peer_name=Name(1-side,"listener");c.peer_network_id=Network(1-side);c.bind_qos={{0,65536}};c.listen_qos=c.bind_qos;c.max_message_size=8192;return c;}
+// Decode the actual RTPS DATA(SPDP) parameter list, without using the codec
+// to compute expected wire values. Captured from the real SendBytes seam.
+inline bool ObserveV1Advertisement(const std::uint8_t* bytes,std::size_t size,const Locator& expected) {
+    if(size<20||std::memcmp(bytes,"RTPS",4))return false;
+    for(std::size_t pos=20;pos+4<=size;) {
+        const bool le=(bytes[pos+1]&1)!=0;
+        const auto u16=[&](const std::uint8_t* p){return unsigned(le?(p[0]|(p[1]<<8)):((p[0]<<8)|p[1]));};
+        const auto length=u16(bytes+pos+2);const auto body=pos+4;
+        const auto end=length?body+length:size;if(end>size||end<body)throw std::runtime_error("SPDP submessage bounds");
+        if(bytes[pos]==0x15 && (bytes[pos+1]&4) && end-body>=24 && Hex(bytes+body+8,4)=="000100c2") {
+            std::size_t payload=body+4+u16(bytes+body+2);
+            if(bytes[pos+1]&2) { while(payload+4<=end){const auto pid=u16(bytes+payload),n=u16(bytes+payload+2);payload+=4;if(pid==1)break;payload+=(n+3)&~3u;} }
+            if(payload+4>end)throw std::runtime_error("SPDP payload bounds");
+            const bool little=bytes[payload]==0&&bytes[payload+1]==3;
+            if(!little && !(bytes[payload]==0&&bytes[payload+1]==2))throw std::runtime_error("SPDP PL_CDR representation");
+            const auto word=[&](const std::uint8_t* p){return std::uint32_t(little?(std::uint32_t(p[0])|(std::uint32_t(p[1])<<8)|(std::uint32_t(p[2])<<16)|(std::uint32_t(p[3])<<24)):((std::uint32_t(p[0])<<24)|(std::uint32_t(p[1])<<16)|(std::uint32_t(p[2])<<8)|p[3]));};
+            bool meta=false,user=false;payload+=4;
+            while(payload+4<=end) {
+                const auto pid=little?unsigned(bytes[payload]|(bytes[payload+1]<<8)):unsigned((bytes[payload]<<8)|bytes[payload+1]);
+                const auto n=little?unsigned(bytes[payload+2]|(bytes[payload+3]<<8)):unsigned((bytes[payload+2]<<8)|bytes[payload+3]);payload+=4;
+                if(pid==1)break;if(n>end-payload)throw std::runtime_error("SPDP parameter bounds");
+                if(pid==0x31||pid==0x32) {
+                    Require(n==24,"locator CDR size remains 24");
+                    Require(word(bytes+payload)==std::uint32_t(expected.kind)&&word(bytes+payload+4)==expected.port&&std::equal(expected.address,expected.address+16,bytes+payload+8),"actual complete V1 SPDP advertisement");
+                    if(pid==0x31)user=true;else meta=true;
+                }
+                payload+=(n+3)&~3u;
+            }
+            Require(meta&&user,"both SPDP meta/user locator PIDs");return true;
+        }
+        if(!length)break;pos=end;
+    }
+    return false;
+}
 struct Descriptor final:rtps::TransportDescriptorInterface {
     DSoftBusTransportDescriptor config;std::shared_ptr<HostProviderLoop> loop;mutable std::atomic<unsigned> factories{0};
     Descriptor(int side,std::shared_ptr<HostProviderLoop> p):TransportDescriptorInterface(8192,1),config(Configuration(side)),loop(std::move(p)){}

@@ -98,6 +98,7 @@ void P0() {
     Check(n.Shutdown(11).status==BackendStatus::NativeBackendUnavailable,"null shutdown");
     Fixture f; DSoftBusTransportDescriptor d(64);d.directory=f.config.directory;
     d.default_metatraffic_unicast={Loc(1)};d.default_user_unicast={Loc(1)};
+    Check(d.ConfigureV1({{"provider-default",0,"synthetic-local"},17,v1::Profile::BytesNative,"default.ns",{}}).code==DirectoryError::None,"V1 default precondition");
     DSoftBusTransport t(d);Check(t.mode()==FacadeMode::NativeUnavailable,"real facade default");
     Check(!t.init() && t.last_error().error==FacadeError::NativeBackendUnavailable,"real init remains unavailable");
 }

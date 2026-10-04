@@ -2,6 +2,10 @@
 #include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
 #include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
 #include <atomic>
+#include <cstdio>
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+#include "../probes/PublicSocketRuntimeTrace.hpp"
+#endif
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -49,6 +53,14 @@ bool Runtime::SetPreConnectGate(std::function<bool()> gate) {
 Runtime::~Runtime() = default;
 std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>
 Runtime::MakeDescriptor(const DSoftBusTransportDescriptor& config) {
+    const auto issue = config.ValidateV1();
+    if (issue.code != DirectoryError::None) {
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+        runtime_probe::TraceEvent("Descriptor_V1_DirectoryError_result",UINT64_MAX,-1,-1,static_cast<int>(issue.code),0);
+#endif
+        std::fprintf(stderr, "Fast DDS DSoftBus descriptor: V1 configuration error=%u\n", static_cast<unsigned>(issue.code));
+        return {};
+    }
     if(impl_->issued.exchange(true)) return {};
     return std::make_shared<Descriptor>(config,impl_);
 }

@@ -22,9 +22,9 @@ class LocatorCodec final
 {
 public:
     static constexpr std::int32_t kind = 0x40000000;
-    static constexpr std::uint32_t port = 1;
-    // Reject zero, ::1 and addresses beginning FF: current Fast DDS IP helpers
-    // would otherwise classify private addresses as unspecified/local/multicast.
+    static constexpr std::uint32_t port = 0x01000001;
+    // Compatibility spelling for V1 structural encoding of a pre-derived key,
+    // BytesNative/slot0. Identity validation belongs to configuration/directory.
     static bool Encode(const EndpointId& endpoint, Locator& output);
     static bool Decode(const Locator& locator, EndpointId& output);
     static bool IsValid(const Locator& locator);
@@ -77,6 +77,17 @@ struct DirectoryConfiguration
 {
     std::vector<LocalBinding> locals;
     std::vector<Route> routes;
+    struct IdentityBinding
+    {
+        EndpointId key{};
+        std::string name_space;
+        std::uint32_t domain = 0;
+        std::string udid;
+    };
+    // Deployment identity inputs, never learned from networkId or callbacks.
+    // Empty only for explicitly injected SDK-free structural fixtures.
+    // Sized-empty construction lets MSVC Debug proxy allocation throw normally.
+    std::vector<IdentityBinding> identities = std::vector<IdentityBinding>(std::size_t{0});
 };
 
 enum class DirectoryError
@@ -94,7 +105,11 @@ enum class DirectoryError
     InvalidVersion,
     NotFound,
     StaleVersion,
-    VersionExhausted
+    VersionExhausted,
+    InvalidIdentity,
+    IdentityCollision,
+    MissingIdentity,
+    IncompatibleProfile
 };
 
 struct DirectoryIssue
@@ -142,6 +157,9 @@ public:
     EndpointDirectory& operator=(EndpointDirectory&&) = delete;
 
 private:
+    friend class EndpointDirectoryTestAccess;
+    static DirectoryIssue ValidateIdentityBindings(const DirectoryConfiguration&, bool verify_digest);
+    static DirectoryResult<Snapshot> BuildImpl(const DirectoryConfiguration&, bool verify_digest);
     // Explicitly use throwing empty-vector construction for Debug iterator
     // proxies, so an allocation failure can reach the caller's handler.
     EndpointDirectory()
