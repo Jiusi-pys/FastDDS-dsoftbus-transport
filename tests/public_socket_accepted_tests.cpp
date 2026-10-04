@@ -23,6 +23,17 @@ int32_t Bind(int32_t id,const QosTV*,uint32_t,const ISocketListener* listener){C
 int32_t SendBytes(int32_t id,const void* data,uint32_t size){Check(id==20,"only outgoing may send");++accepted_fake::sends;auto p=static_cast<const std::uint8_t*>(data);accepted_fake::sent.assign(p,p+size);return 0;}
 void Shutdown(int32_t id){auto& live=accepted_fake::alive[accepted_fake::Index(id)];Check(live,"no duplicate or uncreated Fake Shutdown");live=false;accepted_fake::shutdowns.push_back(id);if(accepted_fake::throw_shutdown)throw std::runtime_error("Fake SDK close exception");}
 }
+namespace fastdds_dsoftbus::dsoftbus {
+// Existing friend seam of ApplicationAttachments (also used by application_attachments_tests):
+// installs only the open_registered hook that the real OpenReceiver already invokes.
+class ApplicationAttachmentsTestAccess
+{
+public:
+    static std::unique_ptr<ApplicationAttachments> Make(const std::vector<Locator>& locals, std::function<void()> opened)
+    { return std::unique_ptr<ApplicationAttachments>(new ApplicationAttachments(locals, AttachmentLimits{},
+            {std::move(opened), {}, {}, {}, {}})); }
+};
+}
 namespace {
 struct Peer {
     std::string name="model.peer",network="model.net",package="host.peer.package";
@@ -62,6 +73,62 @@ void ConnectedWindow(bool split){
     std::uint8_t b=7;accepted_fake::server->OnBytes(30,&b,1);Check(attachments.SnapshotUsage().records==0,"pre-publication bytes still terminal, no future adoption");
     Check(adapter.Publish()==BackendStatus::None,"normal publication");accepted_fake::server->OnBytes(30,&b,1);Check(adapter.DispatchOne()==BackendStatus::None&&f.receiver.calls==1,"new post-publication data only");
     Check(adapter.Close().adapter_drained&&attachments.SnapshotUsage().records==0,"normal original ownership cleanup");
+}
+// AUDIT-C2: in the dual topology the receiver lives on the listener binding, not on the
+// outgoing binding. When the provider stops while ReopenInput is between the listener's
+// reopen and the adapter's publication check, the rollback must close the LISTENER's
+// receiver again and leave the outgoing binding and every native owner untouched.
+struct ForwardingBackend final:NativeBackend {
+    std::shared_ptr<PublicSocketBackend> real;ProviderCallbacks outgoing;
+    BackendKind Kind()const noexcept override{return real->Kind();}
+    BackendIdentity Identity()const override{return real->Identity();}
+    BackendTopology Topology()const noexcept override{return real->Topology();}
+    BackendIdentity ListenerIdentity()const override{return real->ListenerIdentity();}
+    BackendStatus ConfigureEntrance(const RecordEntrance& e)override{return real->ConfigureEntrance(e);}
+    BackendSocketResult Create(ProviderCallbacks c)override{outgoing=c;return real->Create(c);}
+    BackendSocketResult CreateListener(ProviderCallbacks c)override{return real->CreateListener(c);}
+    BackendStatus CommitAcceptedOwner(const RecordEntrance& e,const NativeOwnerLease& o)override{return real->CommitAcceptedOwner(e,o);}
+    BackendCallResult Listen(std::int32_t id)override{return real->Listen(id);}
+    BackendCallResult Bind(std::int32_t id)override{return real->Bind(id);}
+    BackendSendResult Send(std::int32_t id,const std::uint8_t* p,std::size_t n,std::chrono::steady_clock::time_point d)override{return real->Send(id,p,n,d);}
+    BackendCallResult Shutdown(std::int32_t id)override{return real->Shutdown(id);}
+    std::size_t MaxMessageSize()const noexcept override{return real->MaxMessageSize();}
+};
+void ReopenRollbackDual(){
+    AcceptedFixture f;ProviderAdapterDomain domain;
+    NativeTableConfiguration config;config.directory=f.d.directory;config.directions={RouteDirection::Both};config.dial_only_egress=true;config.service_pkg_name="mdds.host.loop";
+    auto native=NativeOwnerTable::Build(config);Check(bool(native),"native table");
+    bool armed=false;std::function<void()> during_reopen;
+    auto attachments=ApplicationAttachmentsTestAccess::Make({L(2)},[&]{if(armed&&during_reopen)during_reopen();});
+    auto backend=std::make_shared<ForwardingBackend>();backend->real=f.backend;
+    BindingRequest request;request.service_name=f.backend->Identity().service_name;request.role=RecordRole::Client;request.local=L(2);request.route=config.directory.routes[0].key;request.has_route=true;request.config=config;request.directory=*EndpointDirectory::Build(config.directory).value;request.receiver=&f.receiver;
+    auto built=ProviderAdapter::Build(domain,ServiceRecordTable::Process(),**native.value,*attachments,backend,request);Check(bool(built.adapter),"actual dual adapter over the real shim");auto& adapter=*built.adapter;
+    Cleanup close{[&]{armed=false;during_reopen={};(void)adapter.Close();}};
+    Check(f.backend->MaxMessageSize()==64&&backend->MaxMessageSize()==64,"the real backend states exactly its configured bound");
+    Check(adapter.Initialize()==BackendStatus::None&&adapter.Publish()==BackendStatus::None,"dual adapter published");
+    const auto before=adapter.Observe();
+    Check(before.listener.receiver_open&&!before.binding.receiver_open,"the receiver is on the listener, not on the outgoing binding");
+    Check(before.binding.socket==20&&before.listener.socket==10&&accepted_fake::alive[0]&&accepted_fake::alive[1],"both owned sockets live");
+    Check(adapter.CloseInput()==BackendStatus::None,"input closed");
+    const auto closed=adapter.Observe();Check(!closed.listener.receiver_open&&!closed.input_open,"listener receiver closed");
+    const auto idle_apps=attachments->SnapshotUsage().active_applications;
+    // The provider stops through the public callback handle exactly while ReopenInput is
+    // inside the listener binding's real OpenReceiver (after registration, before return).
+    int stops=0;during_reopen=[&]{++stops;Check(backend->outgoing.OnShutdown(20)==BackendStatus::None,"provider stop reaches the adapter");};armed=true;
+    const auto reopened=adapter.ReopenInput(&f.receiver);armed=false;
+    Check(stops==1,"the stop was delivered inside the real reopen");
+    Check(reopened==BackendStatus::ProviderStopped,"reopen reports the provider stop");
+    const auto after=adapter.Observe();
+    Check(!after.input_open,"no half-published input");
+    Check(!after.listener.receiver_open&&!after.listener.application_bound,"the listener's reopened receiver was rolled back");
+    Check(attachments->SnapshotUsage().active_applications==idle_apps,"its application claim was released");
+    // The unaffected outgoing binding and both native owners keep their identity.
+    Check(after.binding.phase==before.binding.phase&&after.binding.owner_incarnation==before.binding.owner_incarnation&&after.binding.record_incarnation==before.binding.record_incarnation&&after.binding.socket==before.binding.socket,"outgoing binding identity unchanged");
+    Check(!after.binding.receiver_open&&!after.binding.owner_closed&&after.binding.setup_complete,"outgoing binding untouched and still set up");
+    Check(after.listener.owner_incarnation==before.listener.owner_incarnation&&after.listener.socket==before.listener.socket&&!after.listener.owner_closed,"listener owner identity unchanged");
+    Check(accepted_fake::shutdowns.empty()&&accepted_fake::alive[0]&&accepted_fake::alive[1],"the rollback closed no SDK socket");
+    const auto result=adapter.Close();Check(result.adapter_drained,"adapter closes cleanly after the rollback");
+    auto ids=accepted_fake::shutdowns;std::sort(ids.begin(),ids.end());Check(ids==std::vector<int32_t>({10,20}),"each owned socket is closed exactly once by its own owner");
 }
 void Normal(){
     AcceptedFixture f;f.Open();Peer peer;
@@ -144,4 +211,4 @@ void ObservedAll(){AcceptedFixture f;f.Open();Peer peer;f.Commit(peer);f.Data();
 void NoAllocationDrain(){AcceptedFixture f;f.Open();Peer peer;f.Commit(peer);std::uint8_t b=3;accepted_fake::server->OnBytes(30,&b,1);Check(f.loop->Observe().receive.queued==1,"real queued record");accepted_fake::shutdowns.reserve(8);loop_deny_allocations=true;auto result=f.loop->CloseAccepted();loop_deny_allocations=false;Check(result==BackendStatus::None&&f.loop->Observe().receive.records==0&&f.loop->Observe().receive.bytes==0,"close cannot mistake failed allocating take for empty queue");Check(f.receiver.calls==0,"queued cancel does not invoke receiver");f.Close();}
 
 }
-int main(int argc,char** argv){try{Check(argc==2,"case required");std::string c=argv[1];if(c=="connected-window")ConnectedWindow(false);else if(c=="split-bind-window")ConnectedWindow(true);else if(c=="normal")Normal();else if(c=="reject")RejectAndRetry();else if(c=="duplicate")DuplicateAndForeign();else if(c=="early-late")EarlyLate();else if(c=="stop-before-commit")StopBeforeCommit();else if(c=="local-close")LocalClose();else if(c=="borrow")BorrowedParameters();else if(c=="copy"||c=="running")Drain(c);else if(c=="repeat")Repeated();else if(c=="unknown")Unknown();else if(c=="negotiation2")Negotiation2();else if(c=="callback-error")CallbackError();else if(c=="first-error")FirstError();else if(c=="commit-window")CommitWindow();else if(c=="observed-all")ObservedAll();else if(c=="no-allocation-drain")NoAllocationDrain();else throw std::runtime_error("unknown case");std::cout<<"PASS actual PublicSocketBackend / Fake public API "<<c<<'\n';return 0;}catch(const std::exception& e){loop_deny_allocations=false;std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}
+int main(int argc,char** argv){try{Check(argc==2,"case required");std::string c=argv[1];if(c=="connected-window")ConnectedWindow(false);else if(c=="split-bind-window")ConnectedWindow(true);else if(c=="normal")Normal();else if(c=="reopen-rollback-dual")ReopenRollbackDual();else if(c=="reject")RejectAndRetry();else if(c=="duplicate")DuplicateAndForeign();else if(c=="early-late")EarlyLate();else if(c=="stop-before-commit")StopBeforeCommit();else if(c=="local-close")LocalClose();else if(c=="borrow")BorrowedParameters();else if(c=="copy"||c=="running")Drain(c);else if(c=="repeat")Repeated();else if(c=="unknown")Unknown();else if(c=="negotiation2")Negotiation2();else if(c=="callback-error")CallbackError();else if(c=="first-error")FirstError();else if(c=="commit-window")CommitWindow();else if(c=="observed-all")ObservedAll();else if(c=="no-allocation-drain")NoAllocationDrain();else throw std::runtime_error("unknown case");std::cout<<"PASS actual PublicSocketBackend / Fake public API "<<c<<'\n';return 0;}catch(const std::exception& e){loop_deny_allocations=false;std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

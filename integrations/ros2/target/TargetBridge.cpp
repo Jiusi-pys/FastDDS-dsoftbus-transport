@@ -143,6 +143,9 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         owner->descriptor = owner->runtime->MakeDescriptor(config);
         if (!owner->descriptor) throw std::runtime_error("descriptor issuance failed");
         auto& qos = *static_cast<eprosima::fastdds::dds::DomainParticipantQos*>(raw);
+        // The descriptor's maxMessageSize (65536) is above Fast DDS's default no-fragment ceiling (65500). Like the
+        // built-in UDP/TCP transports, init() accepts that only when the participant states the larger limit.
+        qos.transport().max_msg_size_no_frag = config.maxMessageSize;
         qos.transport().use_builtin_transports = false; qos.transport().user_transports.clear();
         qos.transport().user_transports.push_back(owner->descriptor);
         qos.wire_protocol().builtin.initialPeersList.clear(); qos.wire_protocol().builtin.initialPeersList.push_back(logical(1-side));

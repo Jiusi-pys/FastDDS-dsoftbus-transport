@@ -145,35 +145,54 @@ cmake --install build-ros2-host --config Release --prefix $prefix
 
 ROS Jazzy 的已验证 Host 环境使用 Fast DDS `2.14.5`。从该版本的提交
 `ebcb5c05e9da9e262041e8616bbaff61ab40a296` 建立一个独立的、可写的 vendor 副本；
-原 Git 源只作为归档输入读取，不要修改仓库中的 Fast DDS 子仓库。归档前先准备
-一个全新的空目录和 tar 文件路径：
+原 Git 源只作为归档输入读取，不要修改仓库中的 Fast DDS 子仓库。vendor 目录必须是
+**仓库 `build/` 下的真实（非链接）目录**，因为补丁链中的 `apply_topic_rtti_key.py`
+只接受隔离的仓库构建目录。归档前先准备一个全新的空目录和 tar 文件路径：
 
 ```powershell
-$vendor = 'D:/src/fastrtps-2.14.5'
-$archive = 'D:/archives/fastrtps-2.14.5.tar'
+$repo = (Get-Location).Path
+$vendor = "$repo/build/ros2-host/fastrtps-2.14.5"
+$archive = "$repo/build/ros2-host/fastrtps-2.14.5.tar"
 New-Item -ItemType Directory -Path $vendor
-git -C D:/src/Fast-DDS archive --format=tar `
+git -c core.autocrlf=false -C D:/src/Fast-DDS archive --format=tar `
   --output=$archive ebcb5c05e9da9e262041e8616bbaff61ab40a296
 tar -xf $archive -C $vendor
-python integrations/ros2/apply_fastdds_hook.py --source D:/src/fastrtps-2.14.5
-python integrations/ros2/apply_endpoint_guard.py --source D:/src/fastrtps-2.14.5
+python integrations/ros2/prepare_fastdds_source.py --source $vendor
 ```
 
-两个脚本会核对 `UPSTREAM.json` 中的原始文件 hash，并应用当前四个配置/工厂
-补丁文件以及 `FastddsHook.hpp`。它们只改变版本绑定的 Participant/endpoint
-配置接入和 owner 结算保护；不改变 UDP/TCP/SHM、SPDP/SEDP、History、ACK/NACK
-或分片协议语义。
+`prepare_fastdds_source.py` 是唯一受支持的入口，按固定顺序执行完整的五步补丁链：
+`apply_fastdds_hook.py`、`apply_endpoint_guard.py`、`apply_teardown_observation.py`、
+`apply_residual_observation.py`、`apply_topic_rtti_key.py`。每一步前，它用与
+`target/rebuild.py` 相同的 exact-EOL 规则核对 `UPSTREAM.json`、
+`TEARDOWN_UPSTREAM.json`、`RESIDUAL_UPSTREAM.json`、`TOPIC_RTTI_UPSTREAM.json` 记录的
+原始文件 hash：只接受内容相同或仅换行符不同的文件，其余一律拒绝。结束时它确认
+`FastddsHook.hpp`、`PlatformModule.hpp`、`StartupDiagnostics.hpp`、
+`TeardownDiagnostics.hpp`、`ResidualDiagnostics.hpp`、`NativePrefix.hpp` 六个头文件
+已放入 `src/cpp/fastdds/domain/` 且与仓库副本一致。不要只运行其中一两个脚本，
+也不要手工复制头文件：缺任何一步都会得到缺少头文件或与已验收构建不一致的源码树。
+这些补丁只改变版本绑定的 Participant/endpoint 配置接入、owner 结算保护和只读观察；
+不改变 UDP/TCP/SHM、SPDP/SEDP、History、ACK/NACK 或分片协议语义。
 
-随附的 vendor patch 使用 zero-context diff；如确需手动应用，必须使用
-`git apply --unidiff-zero`，但推荐始终使用上述两个带原始 hash 校验的脚本，避免
-绕过版本基线检查。
+补丁交付检查（不修改上游仓库）：
+
+```powershell
+python tests/ros2_host/check_patch_delivery.py --upstream-git D:/src/Fast-DDS
+```
+
+它从固定提交重放完整五步链，核对六个头文件的 hash（CRLF 折叠为 LF 后计算，不随
+克隆的 autocrlf 设置变化）、`fastdds-2.14.5-factory.patch` 的逐字节一致、重复应用被
+拒绝以及上游漂移被拒绝；成功时输出 `PATCH_DELIVERY_PASS`。
+
+随附的 `fastdds-2.14.5-factory.patch` 只是前两步（hook 与 endpoint guard）输出的
+zero-context diff 快照，供审阅用，不能替代完整补丁链。不要手动应用它；始终使用
+`prepare_fastdds_source.py`，避免绕过版本基线检查。
 
 用与 ROS Jazzy ABI 匹配的 Fast CDR、foonathan_memory 和 Windows OpenSSL prefix
 构建这个隔离副本。下面的变量都是示例路径；实际构建使用 VS2022 x64 Release、
 `/MD`、共享库、`SECURITY=ON`、`THIRDPARTY=OFF`，并关闭 vendor tests/examples：
 
 ```powershell
-$vendor = 'D:/src/fastrtps-2.14.5'
+# $vendor 沿用上一步已按完整补丁链准备好的 build/ 下的目录。
 $vendorBuild = 'D:/build/fastrtps-2.14.5'
 $vendorPrefix = 'D:/install/fastrtps-2.14.5'
 $deps = 'D:/deps/ros-jazzy-dependencies'
@@ -379,8 +398,8 @@ Windows 不提供 LSan，因此这些结果不包含外部依赖的插桩泄漏�
 因未观察到 exe allocator 注入点而标记 `SKIPPED`；该故障子项没有被宣称为 PASS。
 此前命名阶段的 `530/531` 失败仍是历史收据，当前 `531/531` 属于新的完整收据。
 
-提交的 vendor 交付材料只包含四个版本绑定的配置/工厂文件差异及两个应用脚本，
-属于已审查的配置接入，不是 Fast DDS 协议改动。原始 vendor 源、依赖 prefix、
+提交的 vendor 交付材料是完整的五步版本绑定补丁链（`prepare_fastdds_source.py` 及其五个
+应用脚本、四份 `*_UPSTREAM.json` 和六个头文件），属于已审查的配置接入，不是 Fast DDS 协议改动。原始 vendor 源、依赖 prefix、
 构建目录、DLL 和测试 artifact 不随项目 clone 提供；需要按上述版本与 hash 重新
 准备，或使用保存的本地交付收据核对。
 

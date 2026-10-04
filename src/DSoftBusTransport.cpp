@@ -85,7 +85,12 @@ bool DSoftBusTransport::init(const fastdds_dsoftbus::binding::PropertyPolicy*, c
                 !limits.global_records || !limits.global_bytes || limits.max_record_bytes > limits.peer_bytes ||
                 limits.max_record_bytes > limits.global_bytes)
             return InitFailure({FacadeError::InvalidLimits, "limits"});
-        if (no_frag > frozen_.maxMessageSize)
+        // Same rule as the built-in UDP/TCP init() in both pinned Fast DDS variants (3.6.2.0 and
+        // 2.14.5): `no_frag` is the optional maximum message size that lifts the default limit; 0
+        // selects the default s_maximumMessageSize (65500). The transport's own maximum must not
+        // exceed the effective limit.
+        const std::uint32_t effective_limit = no_frag == 0 ? eprosima::fastdds::rtps::s_maximumMessageSize : no_frag;
+        if (frozen_.maxMessageSize > effective_limit)
             return InitFailure({FacadeError::UnsupportedNoFragmentRequest, "no_fragment_limit"});
         const auto built = EgressPlan::Build(frozen_.directory, frozen_.egress_selections);
         if (!built.value) {
@@ -145,6 +150,9 @@ bool DSoftBusTransport::transform_remote_locator(const Locator& remote, Locator&
 { auto r = ReadyLease(); if (!r || !LocatorCodec::IsValid(remote) || !r->plan->Find(remote)) return false; out = remote; return true; }
 bool DSoftBusTransport::OpenOutputChannel(SendResourceList& list, const Locator& hint)
 {
+    // A locator of another transport's kind is not this transport's failure; recording
+    // it would overwrite the diagnostic of a real earlier error such as a failed init.
+    if (hint.kind != LocatorCodec::kind) return false;
     auto r = ReadyLease();
     if (!r) { Diagnose({FacadeError::InvalidState, "open_output"}); return false; }
     if (!LocatorCodec::IsValid(hint) || (!r->FindLocal(hint) && !r->plan->Find(hint))) {

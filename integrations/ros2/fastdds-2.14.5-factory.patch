@@ -27,6 +27,8 @@
 @@ -202,0 +214,2 @@
 +        fastdds_dsoftbus_hook::fail_pending(hook_lease);
 +        pending_owner.disarm();
+@@ -205,0 +219 @@
++    fastdds_dsoftbus_hook::mark_created(hook_lease);
 --- a/src/cpp/fastdds/publisher/PublisherImpl.cpp
 +++ b/src/cpp/fastdds/publisher/PublisherImpl.cpp
 @@ -0,0 +1,2 @@

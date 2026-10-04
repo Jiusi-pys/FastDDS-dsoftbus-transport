@@ -384,6 +384,7 @@ if(BUILD_DSOFTBUS_SERVICE_RECORD_BINDING)
                 resource-release fail-closed creator-exits-joiner-lives delivery-context-bypass
                 shared-group-release-race join-during-settle joiner-failure-keeps-creator
                 registration-allocation-failure accepted-topology prepared-accepted
+                second-binding-same-plan rejected-accepted-closed joiner-refuses-unanchored
                 close-request-from-callback close-sync-refused-in-callback
                 close-completion-guard-in-callback close-completes-outside-callback close-after-callback-exception
                 many-close-requests-one-close no-admission-after-close-request
@@ -565,7 +566,7 @@ if(BUILD_DSOFTBUS_HOST_PROVIDER_LOOP)
             set_tests_properties(dsoftbus.host_input_close.${_close_case} PROPERTIES TIMEOUT 20)
         endforeach()
         foreach(_loop_case default loop preopen input-close queued paused-send paused-receiver late error
-                open-exception open-allocation shared-init startup-allocation setup-cleanup-failure receive-limit)
+                open-exception open-allocation open-racing-shutdown backend-size-bound backend-size-above backend-size-unspecified observe-lifetime shared-init startup-allocation setup-cleanup-failure receive-limit)
             add_test(NAME dsoftbus.host_provider_loop.${_loop_case} COMMAND host_provider_loop_tests ${_loop_case})
             set_tests_properties(dsoftbus.host_provider_loop.${_loop_case} PROPERTIES TIMEOUT 20)
         endforeach()
@@ -711,7 +712,7 @@ if(BUILD_DSOFTBUS_PUBLIC_SOCKET_FAKE_TESTS)
         add_test(NAME dsoftbus.public_socket_dds.${_public_dds_case} COMMAND public_socket_dds_tests ${_public_dds_case})
         set_tests_properties(dsoftbus.public_socket_dds.${_public_dds_case} PROPERTIES TIMEOUT 45)
     endforeach()
-    foreach(_accepted_case connected-window split-bind-window normal reject duplicate early-late stop-before-commit local-close borrow copy running repeat unknown negotiation2 callback-error first-error commit-window observed-all no-allocation-drain)
+    foreach(_accepted_case connected-window split-bind-window normal reject duplicate early-late stop-before-commit local-close borrow copy running repeat unknown negotiation2 callback-error first-error commit-window observed-all no-allocation-drain reopen-rollback-dual)
         add_test(NAME dsoftbus.public_socket_accepted.${_accepted_case} COMMAND public_socket_accepted_tests ${_accepted_case})
         set_tests_properties(dsoftbus.public_socket_accepted.${_accepted_case} PROPERTIES TIMEOUT 30)
     endforeach()

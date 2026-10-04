@@ -807,7 +807,9 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
                 return NativeStatus::InvalidConfiguration;
             }
             const auto observed = records.Observe(request.existing);
-            if (observed.status != RecordStatus::None) {
+            // An unanchored record accepts no new owner (Publish refuses it with the
+            // same status); refuse here so no namespace or native owner is taken first.
+            if (observed.status != RecordStatus::None || observed.phase == RecordPhase::Unanchored) {
                 phase = BindingPhase::Failed;
                 return NativeStatus::Revoked;
             }
@@ -866,6 +868,14 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             }
             auto inbound = native.ObserveInbound(ns, request.accepted_socket, request.accepted);
             if (inbound.status != NativeStatus::None || !inbound.owner) {
+                // A rejected peer still gets a close-pending owner cell that holds this
+                // socket id. Adopt it so the release below runs the one close path
+                // (claim, provider Shutdown outside the gate, settle) instead of
+                // dropping the lease and leaving the socket open and the cell occupied.
+                if (inbound.owner) {
+                    owner = std::move(*inbound.owner);
+                    socket = request.accepted_socket;
+                }
                 phase = BindingPhase::Failed;
                 ReleaseLocalLocked();
                 return inbound.status;
@@ -882,6 +892,15 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             phase = BindingPhase::Failed;
             ReleaseLocalLocked();
             return reserved_owner.issue.code;
+        }
+        // Reserve hands back the plan's existing Ready/Listening owner, without a
+        // socket-call right, when one is already established. This binding could then
+        // neither create the socket nor claim its close, and the first binding must
+        // stay the sole close owner, so refuse instead of sharing it.
+        if (reserved_owner.value->creation != NativeCreation::CreateRequired || !reserved_owner.value->socket_call) {
+            phase = BindingPhase::Failed;
+            ReleaseLocalLocked();
+            return NativeStatus::OwnerUnavailable;
         }
         owner = std::move(reserved_owner.value->owner);
         socket_call.emplace(std::move(*reserved_owner.value->socket_call));

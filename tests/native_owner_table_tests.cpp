@@ -634,6 +634,24 @@ void BidirectionalRoute()
     CHECK(t->SnapshotUsage().owners==3);
 }
 
+void ClosedAcceptedRouteIsNotReaccepted()
+{
+    // Scope fact behind the one-shot accepted lane in the adapter and the public
+    // backend: the retired accepted owner keeps owning its route for the life of the
+    // table, so a later accepted socket on that route is refused here whatever the
+    // upper layers do. Only a closed Dial may be retried (allow_closed_dial_retry).
+    for(const bool dial_retry:{false,true}) {
+        auto c=Config(1,RouteDirection::Both);c.allow_closed_dial_retry=dial_retry;
+        auto t=Table(c);auto s=Space(*t,c);
+        auto first=t->ObserveInbound(s,900,Peer(c));CHECK(first.accepted&&first.owner);
+        CHECK(first.owner->RequestClose()==NativeStatus::None);
+        auto again=t->ObserveInbound(s,901,Peer(c));
+        CHECK(!again.accepted&&again.status==NativeStatus::DuplicateConnection);
+        auto prepared=t->PrepareInbound(s,902,Peer(c));
+        CHECK(!prepared&&prepared.issue.code==NativeStatus::DuplicateConnection);
+    }
+}
+
 void ClosedDialRetryPolicy()
 {
     auto c=Config(1,RouteDirection::Both);c.allow_closed_dial_retry=true;
@@ -817,6 +835,7 @@ int main(int argc,char** argv)
         {"N4-SETUP-POOL",BoundedConcurrentSetupPool},
         {"N4-BIDIRECTIONAL",BidirectionalRoute},
         {"N4-CLOSED-DIAL-RETRY",ClosedDialRetryPolicy},
+        {"N4-CLOSED-ACCEPTED-NO-REACCEPT",ClosedAcceptedRouteIsNotReaccepted},
         {"N4-RETRY-OUTSTANDING",ClosedDialRetryOutstandingLeases},
         {"N1-CFG",N1Configuration},{"N1-CACHE",N1Cache},{"N1-TICKET",N1Tickets},
         {"N1-CLOSE-SOCKET",N1CloseBeforeSocket},{"N1-CLOSE-POOL",N1ClosePool},

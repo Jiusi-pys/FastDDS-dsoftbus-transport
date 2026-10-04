@@ -29,9 +29,83 @@ void Late(){F f;f.Init();auto callbacks=f.mock->callbacks;Check(f.Send(),"admit"
 void Error(){F f;f.Init();f.mock->throw_send=true;Check(f.Send(),"admit error case");auto result=f.loop->PumpSend();Check(result.outcome==NativeSendOutcome::ReturnedByException&&!result.actual_return_code,"not fake SDK error");Check(f.receiver.calls==0,"no phantom delivery");f.mock->throw_close=true;f.transport->shutdown();auto first=f.loop->Observe().close;f.transport->shutdown();Check(first.status==BackendStatus::ProviderException&&f.loop->Observe().close.status==first.status&&f.mock->closes==1,"shutdown fault retained");}
 void OpenException(){F f;f.Init(false);f.mock->throw_identity=true;bool escaped=false,opened=false;try{opened=f.transport->OpenInputChannel(L(2),&f.receiver,64);}catch(...){escaped=true;}Check(!escaped&&!opened&&f.mock->creates==0,"identity exception mapped before side effect");f.mock->throw_identity=false;Check(f.transport->OpenInputChannel(L(2),&f.receiver,64),"retry after untouched failure");Check(f.Send(),"send after retry");f.loop->PumpSend();Check(f.loop->PumpReceive()==BackendStatus::None,"receiver after retry");f.Close();}
 void OpenAllocation(){F f;f.Init(false);const auto local=L(2);bool escaped=false,opened=false;loop_deny_allocations=true;try{opened=f.transport->OpenInputChannel(local,&f.receiver,64);}catch(...){escaped=true;}loop_deny_allocations=false;Check(!escaped&&!opened&&f.mock->creates==0,"open allocation mapped");Check(f.transport->last_error().error==FacadeError::AllocationFailure,"explicit allocation diagnostic");f.Close();}
+void OpenRacingShutdown(){
+    // AUDIT-C3: Shutdown overlaps an Open that is blocked inside Initialize. The
+    // shutdown sees no adapter and completes; the late Open must then be refused and
+    // its unpublished adapter closed, not published as a live adapter nobody drains.
+    F f;f.Init(false);Event entered,release;
+    f.mock->during_create=[&]{entered.Signal();release.Wait();};
+    std::thread open,close;InputOpenResult opened=InputOpenResult::Opened;bool shut=false;
+    Cleanup cleanup{[&]{release.Signal();if(open.joinable())open.join();if(close.joinable())close.join();}};
+    open=std::thread([&]{opened=f.loop->Open(L(2),&f.receiver);});entered.Wait();
+    close=std::thread([&]{shut=f.loop->Shutdown();});close.join();
+    Check(f.loop->Observe().closed&&shut,"shutdown completed while the open was still blocked");
+    release.Signal();open.join();
+    Check(opened==InputOpenResult::Disabled,"the open that lost the race is refused");
+    const auto view=f.loop->Observe();
+    Check(!view.input_open&&view.adapter.phase!=AdapterPhase::Published,"no live adapter was published into a closed runtime");
+    Check(f.mock->closes==1,"the unpublished adapter was closed exactly once");
+}
+void ObserveLifetime(){
+    // AUDIT-C5: Observe and CloseAccepted read the adapter/runtime members through a snapshot
+    // taken under the gate and use it after unlocking. That is sound only because those
+    // objects are created once and owned by the loop state until the state itself ends:
+    // never published early, never released by Shutdown. Pinned at the two interleavings the
+    // contract permits: a concurrent Open that has not published, and a concurrent Shutdown
+    // that is inside the adapter's own close. This is a functional lifetime check; data-race
+    // freedom itself needs TSan, which is not run here.
+    F f;f.Init(false);Event entered,release;
+    f.mock->during_create=[&]{entered.Signal();release.Wait();};
+    std::thread open,shut;InputOpenResult opened=InputOpenResult::Disabled;Event closing,go;
+    Cleanup cleanup{[&]{release.Signal();go.Signal();if(open.joinable())open.join();if(shut.joinable())shut.join();}};
+    open=std::thread([&]{opened=f.loop->Open(L(2),&f.receiver);});entered.Wait();
+    {   // Open is inside Initialize: its adapter is a local, so nothing is published or observable.
+        const auto v=f.loop->Observe();
+        Check(v.started&&!v.input_open&&v.native.owners>=1,"started runtime reports its own native table");
+        Check(v.adapter.phase==AdapterPhase::Constructed&&!v.adapter.input_open,"an unpublished adapter is not observable");
+        Check(f.loop->CloseAccepted()==BackendStatus::InvalidState,"no published adapter to close an accepted lane on");
+    }
+    release.Signal();open.join();Check(opened==InputOpenResult::Opened,"the blocked open completes");
+    Check(f.loop->Observe().adapter.phase==AdapterPhase::Published&&f.loop->Observe().input_open,"now published and observable");
+    Check(f.loop->CloseAccepted()==BackendStatus::None,"single topology has no accepted lane: nothing to close");
+    f.mock->during_close=[&]{closing.Signal();go.Wait();};
+    shut=std::thread([&]{f.loop->Shutdown();});closing.Wait();
+    {   // The adapter is inside its own close: its object must still be alive and observable.
+        const auto v=f.loop->Observe();
+        Check(v.adapter.phase==AdapterPhase::Closing,"the adapter object outlives the unlock and is mid-close");
+        Check(f.loop->CloseAccepted()==BackendStatus::None,"CloseAccepted on a closing adapter is safe and idempotent");
+        Check(f.mock->closes==1,"its native owner is being closed exactly once");
+    }
+    go.Signal();shut.join();
+    const auto done=f.loop->Observe();
+    Check(done.closed&&done.adapter.phase==AdapterPhase::Closed&&f.mock->closes==1,"Shutdown closes but does not release the adapter object");
+    Check(f.loop->CloseAccepted()==BackendStatus::None&&f.loop->Observe().adapter.phase==AdapterPhase::Closed,"still safe to observe and call after Shutdown");
+    Check(f.mock->closes==1,"no second close from the repeated calls");
+}
+void BackendSizeBound(){
+    // AUDIT-G4: the descriptor promises 64-byte messages; a backend that can only send
+    // fewer would admit the write and then refuse it at the SDK. Startup refuses it.
+    F small;small.mock->max_message=32;
+    Check(!small.transport->init(),"backend bound below the descriptor maximum is refused");
+    Check(small.transport->last_error().error==FacadeError::NativeBackendUnavailable,"as an unavailable backend");
+    Check(small.loop->Observe().closed&&small.mock->creates==0,"rolled back with no socket operation");
+    F exact;exact.mock->max_message=64;exact.Init();Check(exact.Send(),"a backend bound equal to the maximum is accepted");exact.loop->PumpSend();exact.Close();
+    // One accepted runtime per process: a closed record keeps its service name sealed in the
+    // process-wide table, so the 'above' and 'unspecified' bounds run as their own cases.
+}
+void BackendSizeAbove(){
+    F f;f.mock->max_message=4096;f.Init();Check(f.Send(),"a backend bound above the maximum is accepted");f.loop->PumpSend();f.Close();
+}
+void BackendSizeUnspecified(){
+    // The default MaxMessageSize() is 0 = no bound stated. It must not be read as a capacity: the
+    // loop starts (it has nothing to compare) but nothing in its view claims any backend capacity.
+    NullBackend null_backend;Check(null_backend.MaxMessageSize()==0,"default: no bound stated");
+    F f;Check(f.mock->MaxMessageSize()==0,"the mock states no bound by default");
+    f.Init();Check(f.Send(),"an unspecified bound performs no comparison and starts as before");f.loop->PumpSend();f.Close();
+}
 void SharedInit(){F f;f.Init();auto second=HostFacadeTestAccess::Create(f.config,f.loop);Check(!second->init(),"second attachment rejected");second.reset();Check(f.mock->closes==0&&f.Send(),"failed duplicate must not close first live owner");f.loop->PumpSend();Check(f.loop->PumpReceive()==BackendStatus::None&&f.receiver.calls==1,"first facade continues");f.Close();}
 void StartupAllocation(){F f;f.mock->deny_after_kind=true;bool escaped=false,ready=false;try{ready=f.transport->init();}catch(...){escaped=true;}loop_deny_allocations=false;Check(!escaped&&!ready,"startup allocation rejected");Check(f.loop->Observe().closed&&f.mock->creates==0&&f.mock->closes==0,"own partial startup rolled back, no socket operations");}
 void SetupCleanupFailure(){F f;f.Init(false);f.mock->reject_bind=true;f.mock->throw_close=true;Check(!f.transport->OpenInputChannel(L(2),&f.receiver,64),"Bind rejection returned");Check(f.mock->creates==1&&f.mock->closes==1&&!f.transport->IsInputChannelOpen(L(2)),"pending owner cleaned once, no receiver published");f.transport->shutdown();Check(f.loop->Observe().close.status==BackendStatus::BindingRejected&&f.loop->Observe().close.cleanup_status==BackendStatus::ProviderException,"first Bind failure and failed unpublished cleanup both retained");f.transport->shutdown();Check(f.mock->closes==1&&f.loop->Observe().close.status==BackendStatus::BindingRejected&&f.loop->Observe().close.cleanup_status==BackendStatus::ProviderException,"first failure and cleanup failure stable");}
 void ReceiveLimit(){F f;f.Init();std::vector<std::uint8_t> data(65,7);Check(f.transport->max_recv_buffer_size()==64,"declared maximum");f.mock->callbacks.OnBytes(42,data.data(),65);Check(f.loop->PumpReceive()==BackendStatus::NoWork&&f.receiver.calls==0,"oversized callback rejected by real attachments");f.mock->callbacks.OnBytes(42,data.data(),64);std::fill(data.begin(),data.end(),8);Check(f.loop->PumpReceive()==BackendStatus::None&&f.receiver.bytes==std::vector<std::uint8_t>(64,7),"exact limit owned and delivered");f.Close();}
 }
-int main(int argc,char**argv){try{Check(argc==2,"case required");std::string name=argv[1];const std::pair<const char*,void(*)()> cases[]={{"default",Defaults},{"loop",Loop},{"preopen",Preopen},{"input-close",InputClose},{"queued",Queued},{"paused-send",PausedSend},{"paused-receiver",PausedReceiver},{"late",Late},{"error",Error},{"open-exception",OpenException},{"open-allocation",OpenAllocation},{"shared-init",SharedInit},{"startup-allocation",StartupAllocation},{"setup-cleanup-failure",SetupCleanupFailure},{"receive-limit",ReceiveLimit}};for(auto c:cases)if(name==c.first){c.second();std::cout<<"PASS "<<name<<'\n';return 0;}throw std::runtime_error("unknown case");}catch(const std::exception&e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}
+int main(int argc,char**argv){try{Check(argc==2,"case required");std::string name=argv[1];const std::pair<const char*,void(*)()> cases[]={{"default",Defaults},{"loop",Loop},{"preopen",Preopen},{"input-close",InputClose},{"queued",Queued},{"paused-send",PausedSend},{"paused-receiver",PausedReceiver},{"late",Late},{"error",Error},{"open-exception",OpenException},{"open-allocation",OpenAllocation},{"open-racing-shutdown",OpenRacingShutdown},{"backend-size-bound",BackendSizeBound},{"backend-size-above",BackendSizeAbove},{"backend-size-unspecified",BackendSizeUnspecified},{"observe-lifetime",ObserveLifetime},{"shared-init",SharedInit},{"startup-allocation",StartupAllocation},{"setup-cleanup-failure",SetupCleanupFailure},{"receive-limit",ReceiveLimit}};for(auto c:cases)if(name==c.first){c.second();std::cout<<"PASS "<<name<<'\n';return 0;}throw std::runtime_error("unknown case");}catch(const std::exception&e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

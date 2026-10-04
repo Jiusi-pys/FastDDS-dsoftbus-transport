@@ -210,6 +210,7 @@ BackendKind PublicSocketBackend::Kind()const noexcept {
 }
 BackendIdentity PublicSocketBackend::Identity()const{return state_->config.identity;}
 BackendTopology PublicSocketBackend::Topology()const noexcept{return state_->dual?BackendTopology::ListenerAndOutgoing:BackendTopology::SingleOwner;}
+std::size_t PublicSocketBackend::MaxMessageSize()const noexcept{return state_->config.max_message_size;}
 BackendIdentity PublicSocketBackend::ListenerIdentity()const{return state_->config.listener_identity;}
 BackendStatus PublicSocketBackend::ConfigureEntrance(const RecordEntrance& entry){
     if(!entry||entry.slot_>=record_slot_capacity||!state_->valid||(!state_->dual&&entry.role()!=state_->config.role))return BackendStatus::InvalidIdentity;

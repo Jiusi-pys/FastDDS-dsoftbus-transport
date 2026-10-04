@@ -46,6 +46,7 @@ public:
     BackendKind Kind()const noexcept override;
     BackendIdentity Identity()const override;
     BackendTopology Topology()const noexcept override;
+    std::size_t MaxMessageSize()const noexcept override;
     BackendIdentity ListenerIdentity()const override;
     BackendStatus ConfigureEntrance(const RecordEntrance&) override;
     BackendSocketResult Create(ProviderCallbacks) override;

@@ -8,6 +8,50 @@ their work-package dates and artifact paths; they do not describe the current
 > **累计实验基线（2026-09-27）**：A 的七场景与真实 CloseBusy 责任修复，加上 B 的 opt-in 决策诊断及稳定化验证。旧 111/6 未知与新 107/2 已观察原因分别保留。
 > 范围、容量单位、依赖与证据见 [bounded DDS stabilization baseline](BOUNDED_DDS_STABILIZATION_BASELINE.md)。本 checkpoint 的当前 isolated Host CONFIG suite 为 `445/445 PASS`；设备未运行，未进行新的 ASan。下列工作包状态是历史快照，不代表当前 Git 提交状态或生产放行。
 
+## 当前 checkpoint：AUDIT_FIX_BASELINE（2026-10-04；本地 checkpoint，未 push）
+
+状态（本提交的标签；文档随该提交入库，提交号以 `git log` 为准，不在文中自引用）：**`AUDIT_FIX_BASELINE_COMMITTED / NOT_PUSHED / NOT_PRODUCTION_QUALIFIED`**。它只是对全源审计和独立复核所发现缺陷的一次限定修复，**不是**全部目标完成，也**不是** `REACCEPT_SUPPORTED`、`V1_CODEC_VERIFIED` 或当前修订的设备验证。此前成功的 ROS 设备窗口仍绑定其原始源码和 package；本修订的运行时改动（包括下面的 ROS2 bridge 改动）没有在该设备窗口上执行，不能当作新修订的执行证据。
+
+已修复（每项均有 Host 回归，见括号内 CTest 名；`N4-CLOSED-ACCEPTED-NO-REACCEPT` 是 `dsoftbus.native_owner_model` 内的一个 group）：
+
+| 项 | 修复 | 回归 |
+| --- | --- | --- |
+| B1 | `ServiceRecordBinding::Prepare` 不再解引用空 `socket_call`；同一 plan 上已有 Ready/Listening owner 时第二个 binding 以 `OwnerUnavailable` 拒绝，不共享 close owner | `service_record_binding.second-binding-same-plan` |
+| B2 | joiner 不再加入 `Unanchored` record（与 `Publish` 的 `Revoked` 一致，在取得 namespace/native owner 之前拒绝） | `service_record_binding.joiner-refuses-unanchored` |
+| B3 | 非 deferred accepted 路径上，`ObserveInbound` **新建**的 Rejected close-pending owner 现在由该 binding 接管，经唯一 close 路径 Shutdown 一次；若 id 已被存活 owner 持有而 peer 不一致，table 返回 `ForeignIdCollision` 且不返回 owner，因此不会被 Shutdown。被拒 owner cell 按既有有界设计继续保留（见下方限制） | `service_record_binding.rejected-accepted-closed` |
+| C2 | 双拓扑 `ReopenInput` 回滚关闭 receiver 所在的 listener binding，而不是 outgoing binding | `public_socket_accepted.reopen-rollback-dual`（用真实 ProviderAdapter/binding 在 listener 的 `OpenReceiver` 内注入 provider stop；旧的错 binding 实现会使该断言失败，已变异验证） |
+| C3 | `OpenRuntime` 发布 adapter 前在 gate 内复核 `stopping/closed`，输掉与 `Shutdown` 竞争的 Open 被拒绝且其 adapter 被关闭一次 | `host_provider_loop.open-racing-shutdown`（旧代码返回 `Opened`，已变异验证） |
+| C5 | `Observe`/`CloseAccepted` 在 gate 内取指针快照后再使用；`Observe` 对共享运行时先判断不可变的 `shared`，再读可能被 `StartShared` 移走的 registration 句柄（独立复核发现并已改） | `host_provider_loop.observe-lifetime`：**只是功能性的寿命/所有权不变量检查**——它在修复前和修复后的读取方式下都通过（已用把读取改回修复前形式的变异验证），所以快照写法本身**没有**被它单独回归保护；也**不是**数据竞争证明，TSan 未运行 |
+| A2 | `init(…, max_msg_size_no_frag)` 按固定的 Fast DDS 3.6.2.0 与 2.14.5 `UDP/TCPTransportInterface::init` 规则：0 表示默认 `s_maximumMessageSize`（65500），非 0 替换该上限，传输的 `maxMessageSize` 不得超过有效上限。旧测试期望是错误的合同假设，不是需保留的产品行为。**后果**：ROS2 两个 bridge 的 descriptor 为 65536（>65500）且关闭 builtin transport，默认 `no_frag=0` 在新规则下会被拒绝；因此 `integrations/ros2/Bridge.cpp` 与 `integrations/ros2/target/TargetBridge.cpp` 现在把 `qos.transport().max_msg_size_no_frag` 设为 descriptor 的 `maxMessageSize`（2.14.5 中该字段在 builtin 关闭时只影响 `init()` 的上限校验）。Host `Bridge.cpp` 在 2.14.5 头文件下做了 `cl /Zs` 语法检查；`TargetBridge.cpp` 含 `<link.h>`/`<unistd.h>`，需要 OHOS 交叉工具链，本机**未编译**；两者均未运行 | `transport_facade`（边界值 63/64/65/0、65500/65501，以及 bridge 使用的 65536：`init(nullptr,0)` 拒绝、`init(nullptr,65536)` 接受） |
+| A3 | `OpenOutputChannel` 对其他 transport kind 的 locator 不再覆盖 `last_error` | `transport_facade` |
+| G4 | 新增默认 `NativeBackend::MaxMessageSize()`（0 = 后端**未声明**上限，不是“无限”也不是容量声明）；`StartRuntime` 仅在非 0 且小于 descriptor 的 `maxMessageSize` 时拒绝启动。因此一个转发包装器若忘记覆盖该虚函数，检查会静默跳过（“未声明”的设计后果，不是容量声明） | `host_provider_loop.backend-size-bound / -above / -unspecified`（低于/等于/高于/未声明；`<` 改 `<=`、去掉 `!=0` 保护两个变异均使其失败） |
+
+已知限制（独立复核提出，已核实，未扩大本 checkpoint 范围）：
+
+- C3 的 lost-race 分支调用 `settle_pending()`，其清理结果写入 `failed_open_cleanup`；`ShutdownRuntime` 现在在 gate 内取该值的快照（消除无锁读）。但在快照之后才出现的清理失败**不会**并入 `Shutdown()` 已锁定的 `close` 结果，只能通过 `Observe().failed_open_cleanup` 看到；`Shutdown()` 也可能在输家的 `Initialize` 已创建 provider socket、`settle_pending()` 尚未关闭它时先返回 true。没有为此加入“等待进行中的 Open”机制。
+- `Observe()` 的行为变化：`Start` 失败后，native/receive/tx 现在报告为空（此前可能显示部分构建状态）。
+- B3 只覆盖 table 返回新建 Rejected owner cell 的情形。table 已满（`AdmissionSaturated`/`IdentityExhausted`，会 seal）时 `ObserveInbound` 不返回 owner，组合层没有可认领的 close 责任，因此不会 Shutdown 该 socket，停止 ingress 由调用方负责（`stop_ingress_required`）。该情形未被组合层测试覆盖。另外，`ObserveInbound` 对“同一 id、同一 peer、存活的 Accepted owner”按设计幂等地返回该 owner 的 lease（`native_owner_table_tests` 已固定），非 deferred 路径的 `Prepare` 会采纳它，释放该 binding 时会 Shutdown 该 id——这是既有语义，不在本修复范围。生产路径的 accepted binding 一律使用 `defer_accepted_ownership`（`ProviderAdapter.cpp:206`），只有测试会走非 deferred 路径。
+- C5 之外仍有受“控制调用外部串行化”合同约束的无锁读（例如 `OpenRuntime` 重开分支对 `s.adapter` 的读取）；它们既有，未改动。
+- 取得 `Shutdown` 的 `stopping` 之后不会再有对 `s.adapter` 的写（`Open` 只在 `!stopping` 时在 gate 内发布），因此 `ShutdownRuntime` 中无锁读 `s.adapter` 是安全的；这依赖 C3 的修复。
+
+**A5/C1（未修复，保持 fail-closed）。** 一个 `NativeOwnerTable` 对一条 route 在整个 table 生命周期内只允许一个 Accepted owner：`FindPlan(Accepted, route)` 对已 `close_intent` 的退休 owner 仍返回该 owner（`src/NativeOwnerTable.cpp:191-199`），因此 `PrepareInbound`（`:677`）与 `ObserveInbound`（`:737`）此后都以 `DuplicateConnection` 拒绝同一 route 的新 accepted socket；创建过外部 socket 的 owner cell 不回收（`:580`）。结果是：对端断开后重新拨入、或 dual 拓扑 `CloseInput` 后 `ReopenInput` 再 accept，在同一 table 内**不受支持**。`N4-CLOSED-ACCEPTED-NO-REACCEPT` 只是对这一行为的特征测试，不是支持声明。本 checkpoint 没有回收墓碑、复用 owner cell 或引入新 epoch；任何显式重连需求保持**未满足**，不是被豁免。重新接受需要单独设计，并需要 SDK 对 socket id 复用的保证。
+
+**G2/A1（未满足，下一项实现）。** 生产路径（facade、send、input、ROS2 bridge）仍使用旧 `LocatorCodec`（`include/fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp:24-25`：kind `0x40000000`，`port == 1`，原始 16 字节 id），不是冻结的 V1 地址合同；`v1::AddressCodec`（`include/fastdds_dsoftbus/dsoftbus/V1Address.hpp`、`src/V1Address.cpp`）只在单元测试和实验里使用，且二者声称同一个 kind。唯一的现行要求在 [FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md](FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md) 第 28 行（locator 使用规范服务名、稳定的 namespace/domain/UDID 摘要和 profile/slot 编码）和第 30 行（“地址编码固定为”：私有非负 kind；`address[16]` 为规范 `{namespace, domain, UDID}` 的 SHA-256 截断键，碰撞必须拒绝歧义路由；`port` 高 8 位编码 profile，低 24 位编码 `slot + 1`，零值和非法组合拒绝；同一 Participant 的 metatraffic/user traffic 公告同一 DSoftBus locator；profile 不兼容的 locator 在选择阶段排除）；第 41 行要求自定义 locator 选择按完整地址比较。实现时以这些行为准，不使用历史寻址提案，也不自行发明字节布局。
+
+其余设计问题保持各自已记录的处置，未宣布关闭：G3（发送 deadline 与准入预算已有；同步 SDK 进入后的返回界和 Close/drain 仍未证明有界；未确立需要改 descriptor ABI，超时后不得直接释放资源）、G1（每目标一份拷贝、按 N 份计费与 N 份实际内存一致；共享块是待实现优化）、A6（多目标全有或全无接纳是已有测试固定的明确合同）、B4（重复 Socket 请求可返回已有 ID，盲目 Shutdown 可能误关旧 owner；条件性缺口，需要平台身份保证）、A4（路由在 init 时冻结，`DeviceDirectory` 未接入）。来源：[独立审核报告](../.artifacts/review-full-20261004/FINAL_REVIEW.md)与本次全源审计。未跟踪的 `src/service_record_binding_tests.cpp` 是未参与构建的旧副本，`communication_dsoftbus` gitlink 为本地脏状态，二者均已保留、未纳入本次提交。
+
+ROS2 Host 交付（审核 P2）：新增唯一入口 `integrations/ros2/prepare_fastdds_source.py`，按固定顺序执行完整五步补丁链并校验六个头文件；`UPSTREAM.json` 的头文件 hash 以 CRLF 折叠为 LF 后计算。该入口对每个文件做精确的行尾映射（与 `target/rebuild.py` 的 `exact_eol` 同一规则：只接受内容相同或仅换行符不同，其余一律拒绝），并为每次转换打印 `EOL_MAPPED`；对 `git archive`（`core.autocrlf=false`）出来的 11 个原始文件中的 7 个需要这种映射。`check_patch_delivery.py` 现在除重放链外还直接调用 `prepare()`：用真实 `git archive` 的字节作输入，断言映射清单、与直接应用链所得的树逐字节一致、重复准备被拒绝、首个前提文件漂移被拒绝且树未被改动；并独立固定五个步骤名与六个头文件，使被丢弃的步骤会失败（已变异验证）。成功输出 `PATCH_DELIVERY_PASS`。从全新 `git archive` 运行单一入口得 `FASTDDS_SOURCE_PREPARED steps=5 headers=6`，六个头文件的准备树/元数据/仓库副本 hash 三方一致，补丁后的 `DomainParticipantFactory.cpp` 的 `cl /Zs` 语法编译通过；移除 `ResidualDiagnostics.hpp` 或 `NativePrefix.hpp` 后分别以 C1083 失败。语法编译只证明补丁后的 factory 文件可解析，不是设备或完整目标执行。已知缺口：该检查不比较链末状态 hash（元数据没有记录终态 hash），只比较与直接应用链的一致性。
+
+测试记录（`原生 VS2022 x64 Release/CONFIG`，非 MSYS）：
+
+- 原始高并行完整运行（`ctest -j 4`）：544/546，失败 `dsoftbus.host_provider_loop.backend-size-bound`（本次新增测试的夹具错误，已修正）与 `experiment.matrix_control_receipts`。该日志保留。
+- 之后 `ctest -j 2`：546/546（541 个既有 + 5 个当时新增）。
+- 之后又追加 4 个 CTest，注册总数 550（541 + 9）。一次针对 550 的完整运行因独立复核发现的问题需要改源码而被中止并保留为 `ABORTED`（不计入任何总数）。
+- 最终源码上的完整运行：**550/550 通过**（`ctest -j 2`，32 个逻辑核，原生 VS2022 x64 Release/CONFIG，非 MSYS；JUnit failures=0 skipped=0 disabled=0，用时 631 秒）。这是全部 550 个注册 CTest 在最终源码上的结果，JUnit 中没有任何 skipped 用例。
+- ASan（`/fsanitize=address /Zi`，ownership/rollback/close/host loop/accepted 等受影响套件，`ctest -j 2`，160 个 CTest；最终源码上重跑为 160/160 通过，JUnit failures=0 skipped=0）：通过。预构建的 Fast DDS、Fast CDR 和 foonathan 依赖**未插桩**；**TSan 未运行**——MSVC 没有 TSan，WSL 有 gcc/libtsan 但没有 Linux 版 Fast DDS，无法构建 `HostProviderLoop`。一次 ASan 运行因我的 harness 在 `cmd /c` 中让 `%PATH%` 在 `vcvars64.bat` 之前展开而全部超时，该日志另存为 `INVALID-harness-path` 且不计数。
+- 安装包消费者（`tests/install_consumer_test.py`，对本修订新构建的 package）：`INSTALL_RELOCATION_EXTERNAL_HEADERS_DEFAULT_AND_HOST_DDS_PASS`。2.14.5 变体：20 个运行时 TU 的 `cl /Zs` 语法检查无错误；Host `Bridge.cpp` 同样；`TargetBridge.cpp` 未编译（见 A2）。这些只是语法/链接级检查。
+- `experiment.matrix_control_receipts`：**未解决、未复现**。它是 `RUN_SERIAL`；其 UDP 端口（31000–31140，`reference_control_tests.cjs` 以 `31000+n*20` 固定分配）没有其他测试使用，也不在 OS 排除范围内，输出目录由 `mkdtemp` 唯一。失败的是第一个子进程（`wrong_run`，需要在测试内置 5 秒 kill 之前自行退出）；保留的目录时间戳显示它从启动到退出被记录经过了约 14 秒，而 kill 定时器是 5 秒——kill 没有及时生效或事件循环被饿死，原因未确定；其 stdout 是块缓冲，被 kill 后日志为空，无法判断卡在何处。单独运行时，`wrong_run` 的子进程约 0.17 秒自行退出（从未执行过的新拷贝为 0.17–0.29 秒，因此首次执行的杀毒扫描不是已证实的原因），整个测试单独运行约 1.8 秒通过。因此不能声称降低并行度修复了它；测试、超时与断言均未改动，高并行下的结果仍作为未解决项记录。
+
 ## 当前 checkpoint：BOUNDED_DDS_STABILIZATION（2026-09-27；artifact run `20260927T103431Z`）
 
 独立 tester 在冻结候选树上完成 Release/CONFIG Host build 与完整 CTest：`445/445 PASS`、exit 0，commit gate `PASS`。配置显式开启 bounded regression 与 decision diagnostics；生产默认仍为 `NativeBackendUnavailable`，诊断默认 OFF。没有 HDC/SDK/device execution，也没有新的 ASan；B 的 `72/72` ASan 结果仍是历史、预构建 Fast DDS 未完整插桩的 source-equivalent evidence。该状态仅记录 checkpoint evidence，不声明已提交、SDK qualification、release 或 production readiness。

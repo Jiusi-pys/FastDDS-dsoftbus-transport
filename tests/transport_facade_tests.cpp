@@ -192,8 +192,39 @@ int RunTransportFacadeTests(int argc, char** argv) {
             auto t = FM(d); FCHECK(!t->init() && t->state() == FacadeState::Failed && t->last_error().error == expected);
             rtps::SendResourceList senders; FCHECK(!t->OpenOutputChannel(senders, FL(10)) && senders.empty());
         }
-        auto t = FM(); FCHECK(!t->init(nullptr, 65) && t->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
+        // Contract of init(properties, max_msg_size_no_frag) in the pinned Fast DDS (3.6.2.0 and
+        // 2.14.5: UDPTransportInterface/TCPTransportInterface::init): a non-zero value replaces
+        // the default s_maximumMessageSize (65500) as the limit; 0 means the default. The
+        // transport's maxMessageSize (64 here) must not exceed the effective limit. The earlier
+        // expectation in this test (refuse when no_frag > maxMessageSize) was an incorrect
+        // contract assumption, not a product behavior to preserve.
+        auto t = FM(); FCHECK(!t->init(nullptr, 63) && t->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
         auto permitted = FM(); FCHECK(permitted->init(nullptr, 64));
+        auto larger = FM(); FCHECK(larger->init(nullptr, 65));
+        auto unlimited = FM(); FCHECK(unlimited->init(nullptr, 0));
+        {   // 0 selects the default 65500, not "no limit": a larger maximum is refused at the default.
+            const auto sized = [](std::uint32_t n) {
+                auto base = FD(); DSoftBusTransportDescriptor d(n);
+                d.directory = base.directory; d.egress_selections = base.egress_selections;
+                d.default_metatraffic_unicast = base.default_metatraffic_unicast; d.default_user_unicast = base.default_user_unicast;
+                return d; };
+            const std::uint32_t limit = eprosima::fastdds::rtps::s_maximumMessageSize;
+            auto refused = FM(sized(limit + 1)); FCHECK(!refused->init(nullptr, 0) && refused->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
+            auto just_below = FM(sized(limit + 1)); FCHECK(!just_below->init(nullptr, limit));
+            auto lifted = FM(sized(limit + 1)); FCHECK(lifted->init(nullptr, limit + 1));
+            auto at_default = FM(sized(limit)); FCHECK(at_default->init(nullptr, 0));
+            // The ROS2 bridges (integrations/ros2/Bridge.cpp, target/TargetBridge.cpp) issue a 65536-byte
+            // descriptor with the built-in transports off. Under this contract that is accepted only when the
+            // participant states the larger limit, so both bridges set qos.transport().max_msg_size_no_frag.
+            auto ros2_default = FM(sized(65536)); FCHECK(!ros2_default->init(nullptr, 0) && ros2_default->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
+            auto ros2_stated = FM(sized(65536)); FCHECK(ros2_stated->init(nullptr, 65536));
+        }
+        {   // AUDIT-A3: another transport's locator must not overwrite the init diagnostic.
+            auto udp = FL(2); udp.kind = 1;
+            rtps::SendResourceList foreign;
+            FCHECK(!t->OpenOutputChannel(foreign, udp) && foreign.empty());
+            FCHECK(t->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
+        }
         auto receive_only = FD(); receive_only.directory.routes.clear(); auto r = FM(receive_only); FCHECK(r->init());
         rtps::SendResourceList empty; FCHECK(!r->OpenOutputChannel(empty, FL(2)) && empty.empty());
     });

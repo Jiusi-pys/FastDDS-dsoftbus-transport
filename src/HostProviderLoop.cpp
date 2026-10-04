@@ -295,6 +295,10 @@ bool HostProviderLoop::StartRuntime(const DSoftBusTransportDescriptor& d) noexce
     constexpr auto admitted_kind=BackendKind::HostMock;
 #endif
     if(!s.backend||s.backend->Kind()!=admitted_kind||d.directory.locals.size()!=1||d.directory.routes.size()!=1){STARTUP_CAPTURE("LoopStart_ConfigRefused_result",UINT64_MAX,-1,-1,1,0);return false;}
+    // The descriptor's maxMessageSize is what Fast DDS is told it may send without
+    // fragmenting. A backend that rejects anything smaller would accept the write
+    // and then refuse it at the SDK, so refuse the mismatch at startup instead.
+    if(const auto bound=s.backend->MaxMessageSize();bound!=0&&bound<d.maxMessageSize){STARTUP_CAPTURE("LoopStart_BackendBoundRefused_result",UINT64_MAX,-1,-1,1,0);return false;}
     s.config.directory=d.directory;s.config.directions={s.backend->Topology()==BackendTopology::ListenerAndOutgoing?RouteDirection::Both:RouteDirection::Dial};s.config.service_pkg_name="mdds.host.loop";
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
     s.config.service_pkg_name="com.kaihong.mdds";
@@ -391,8 +395,16 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
     auto provider=pending->BindSendProvider(*s.native);
 #endif
     if(!provider){settle_pending();return InputOpenResult::Disabled;}
-    std::lock_guard<std::mutex> lock(s.gate);
-    s.adapter=std::move(pending);s.send_provider=std::move(provider);s.receiver=receiver;s.input_open=true;return InputOpenResult::Opened;
+    {
+        std::unique_lock<std::mutex> lock(s.gate);
+        // Initialize/Publish ran outside the gate, so a Shutdown may have sealed and
+        // closed the runtime meanwhile (it saw no adapter and reported success).
+        // Publishing now would install a live adapter nothing will ever drain.
+        if(!s.stopping&&!s.closed) {
+            s.adapter=std::move(pending);s.send_provider=std::move(provider);s.receiver=receiver;s.input_open=true;return InputOpenResult::Opened;
+        }
+    }
+    settle_pending();return InputOpenResult::Disabled;
     } catch(const std::bad_alloc&) {settle_pending();return InputOpenResult::AllocationFailure;}
       catch(...) {settle_pending();return InputOpenResult::Disabled;}
 }
@@ -549,8 +561,13 @@ bool HostProviderLoop::ShutdownRuntime(bool owns_stop) noexcept {
         try{s.before_native_close(point);}
         catch(...){std::lock_guard<std::mutex> lock(s.gate);s.shutdown_observer_fault=true;}
     }
+    // failed_open_cleanup is written under the gate by an Open that lost the race with this
+    // Shutdown, so it is read as a snapshot under the gate too. A cleanup failure recorded after
+    // this snapshot is not folded into `close`; it stays visible only through Observe().
+    std::optional<BackendCloseResult> failed_cleanup;
+    {std::lock_guard<std::mutex> lock(s.gate);failed_cleanup=s.failed_open_cleanup;}
     const auto result=s.adapter?s.adapter->Close():
-        s.failed_open_cleanup.value_or(BackendCloseResult{BackendStatus::None,true});
+        failed_cleanup.value_or(BackendCloseResult{BackendStatus::None,true});
     {std::lock_guard<std::mutex> lock(s.gate);s.close=result;s.input_open=false;s.closed=true;s.changed.notify_all();
         return result.status==BackendStatus::None&&result.adapter_drained&&!s.shutdown_observer_fault;}
 }
@@ -559,19 +576,30 @@ bool HostProviderLoop::InputCloseAllowedOnThisThread() const noexcept {
 }
 BackendStatus HostProviderLoop::CloseAccepted() noexcept {
     if(!InputCloseAllowedOnThisThread())return BackendStatus::InvalidState;
-    return state_->adapter?state_->adapter->CloseAccepted():BackendStatus::InvalidState;
+    ProviderAdapter* adapter=nullptr;
+    {std::lock_guard<std::mutex> lock(state_->gate);adapter=state_->adapter.get();}
+    return adapter?adapter->CloseAccepted():BackendStatus::InvalidState;
 }
 HostLoopObservation HostProviderLoop::Observe() const noexcept {
     auto& s=*state_;HostLoopObservation v;
-    {std::lock_guard<std::mutex> lock(s.gate);v.started=s.started;v.input_open=s.input_open;v.input_closing=s.input_closing;v.sealed=s.sealed;v.closed=s.closed;v.active_pumps=s.active;v.close=s.close;v.failed_open_cleanup=s.failed_open_cleanup;
+    // Start assigns these members before it sets `started` under the gate, and Open
+    // assigns the adapter under the gate; read them only through a snapshot taken
+    // there so Observe never races a half-built runtime.
+    const NativeOwnerTable* native=nullptr;const ApplicationAttachments* attachments=nullptr;
+    const NativeSendExecution* execution=nullptr;const EgressRegistration* registration_ptr=nullptr;ProviderAdapter* adapter=nullptr;
+    {std::lock_guard<std::mutex> lock(s.gate);adapter=s.adapter.get();
+        if(s.started){native=s.native.get();attachments=s.attachments.get();execution=s.execution.get();registration_ptr=&s.registration;}
+        v.started=s.started;v.input_open=s.input_open;v.input_closing=s.input_closing;v.sealed=s.sealed;v.closed=s.closed;v.active_pumps=s.active;v.close=s.close;v.failed_open_cleanup=s.failed_open_cleanup;
         v.open_calls=s.open_calls;v.close_calls=s.close_calls;v.shutdown_calls=s.shutdown_calls;v.first_close_order=s.first_close_order;v.first_shutdown_order=s.first_shutdown_order;v.shutdown_observer_fault=s.shutdown_observer_fault;}
     // A shared runtime moves its original registration into the first view, so this
     // state-level handle is deliberately empty there: it must never be published as
     // a per-view zero. Each shared view reports its own registration below.
-    if(s.registration&&!s.shared){v.tx=s.registration.SnapshotUsage();v.send=s.execution->Observe(s.registration);}
-    if(s.attachments)v.receive=s.attachments->SnapshotUsage();
-    if(s.native)v.native=s.native->SnapshotUsage();
-    if(s.adapter)v.adapter=s.adapter->Observe();
+    // `shared` is fixed before the loop is published; test it first, because a shared runtime moves its
+    // registration handle out under the gate (StartShared) and reading it here would race that move.
+    if(!s.shared&&registration_ptr&&*registration_ptr){v.tx=registration_ptr->SnapshotUsage();v.send=execution->Observe(*registration_ptr);}
+    if(attachments)v.receive=attachments->SnapshotUsage();
+    if(native)v.native=native->SnapshotUsage();
+    if(adapter)v.adapter=adapter->Observe();
     if(s.shared){
         EgressRegistration registration;
         std::array<EgressRegistration,2> all;

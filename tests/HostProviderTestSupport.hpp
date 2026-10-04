@@ -40,8 +40,9 @@ DSoftBusTransportDescriptor Config(){
 }
 struct Mock final:NativeBackend {
     ProviderCallbacks callbacks;std::atomic<int> sends{0},closes{0},creates{0};
-    std::function<void()> during_send,during_create;bool throw_send=false,throw_close=false,throw_identity=false,deny_after_kind=false,reject_bind=false;
-    std::vector<std::uint8_t> sent;
+    std::function<void()> during_send,during_create,during_close;bool throw_send=false,throw_close=false,throw_identity=false,deny_after_kind=false,reject_bind=false;
+    std::vector<std::uint8_t> sent;std::size_t max_message=0;
+    std::size_t MaxMessageSize()const noexcept override{return max_message;}
     BackendKind Kind()const noexcept override{if(deny_after_kind)loop_deny_allocations=true;return BackendKind::HostMock;}
     BackendIdentity Identity()const override{if(throw_identity)throw std::runtime_error("mock identity exception");return {"host.facade.loop",{51},{61}};}
     BackendSocketResult Create(ProviderCallbacks c)override{callbacks=c;++creates;if(during_create)during_create();return {BackendStatus::None,42};}
@@ -54,7 +55,7 @@ struct Mock final:NativeBackend {
         callbacks.OnBytes(id,temporary.data(),static_cast<std::uint32_t>(n));
         std::fill(temporary.begin(),temporary.end(),0xEE);return {BackendStatus::None,0};
     }
-    BackendCallResult Shutdown(std::int32_t id)override{Check(id==42,"close owned socket");++closes;if(throw_close)throw std::runtime_error("mock close exception");return BackendStatus::None;}
+    BackendCallResult Shutdown(std::int32_t id)override{Check(id==42,"close owned socket");++closes;if(during_close)during_close();if(throw_close)throw std::runtime_error("mock close exception");return BackendStatus::None;}
 };
 struct Receiver final:InputChannels::Receiver {
     std::atomic<int> calls{0};std::vector<std::uint8_t> bytes;Locator local,remote;std::function<void()> pause;

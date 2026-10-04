@@ -104,6 +104,12 @@ public:
     virtual BackendSendResult Send(std::int32_t, const std::uint8_t*, std::size_t,
             std::chrono::steady_clock::time_point) = 0;
     virtual BackendCallResult Shutdown(std::int32_t) = 0;
+    // Largest single message Send accepts, as the backend itself states it. 0 means the backend
+    // states NO bound: it is not "unbounded" and not a capacity of its own. The only consumer,
+    // HostProviderLoop::StartRuntime, compares a non-zero value with the descriptor's maximum and
+    // otherwise does nothing; it never derives or reports a capacity from this value. A real
+    // backend must override it (PublicSocketBackend is valid only with a non-zero bound).
+    virtual std::size_t MaxMessageSize() const noexcept { return 0; }
 };
 class NullBackend final : public NativeBackend {
 public:

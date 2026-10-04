@@ -1609,6 +1609,140 @@ void AcceptedTopology()
 }
 
 
+// AUDIT-B1: a second binding for the same (local, route) plan finds a Ready or
+// Listening native owner and is given no socket-call right. Preparing it must be
+// refused cleanly; it must neither mint a second owner nor take over the first
+// binding's sole close responsibility.
+void SecondBindingSamePlanRefused()
+{
+    Fixture fixture;
+    auto first = fixture.Deploy(fixture.CreateRequest("pkg.srtc.dup.a", RecordRole::Client, false), 71);
+    RequireEqual(fixture.native->SnapshotUsage().owners, 1, "the first binding owns the only native owner");
+    auto second = fixture.Build(fixture.CreateRequest("pkg.srtc.dup.b", RecordRole::Client, false));
+    RequireStatus(second->Prepare(), NativeStatus::OwnerUnavailable,
+            "a second client for the same route is refused instead of sharing the owner");
+    RequireEqual(fixture.native->SnapshotUsage().owners, 1, "no second native owner exists");
+    RequireEqual(static_cast<std::size_t>(fixture.provider.created), 1, "no hidden Socket call was made");
+    RequireStatus(second->Abandon(), NativeStatus::None, "the refused binding rolls back");
+    RequireEqual(static_cast<std::size_t>(fixture.provider.shutdown), 0,
+            "the refused binding never closed the first binding's socket");
+    RequireStatus(first->BeginClose(), NativeStatus::None, "the first binding closes");
+    RequireStatus(first->Abandon(), NativeStatus::None, "and releases");
+    RequireEqual(static_cast<std::size_t>(fixture.provider.shutdown), 1,
+            "its socket is closed exactly once, by its sole owner");
+    // The same refusal holds for the listener role: one listener per local.
+    Fixture listeners;
+    auto listener = listeners.Build(listeners.CreateRequest("pkg.srtc.dup.l1", RecordRole::Server, false));
+    RequireStatus(listener->Prepare(), NativeStatus::None, "prepare the first listener");
+    listeners.Arm(72);
+    RequireStatus(listener->Connect(), NativeStatus::None, "connect the first listener");
+    auto other = listeners.Build(listeners.CreateRequest("pkg.srtc.dup.l2", RecordRole::Server, false));
+    Require(other->Prepare() != NativeStatus::None, "a second listener for the same local is refused");
+    RequireEqual(listeners.native->SnapshotUsage().owners, 1, "and no second listener owner exists");
+    RequireStatus(other->Abandon(), NativeStatus::None, "its rollback releases what it took");
+    RequireStatus(listener->Abandon(), NativeStatus::None, "the first listener still releases normally");
+}
+
+// AUDIT-B3: on the non-deferred accepted path a peer the native table rejects gets
+// a Rejected, close-pending owner cell holding the SDK socket id. The composition
+// must claim the close of that socket; dropping the lease left the socket open with
+// nobody responsible for it. The cell itself stays pinned for the life of the table
+// (an owner that held an external socket is never reused), so it still counts.
+void RejectedAcceptedSocketIsClosed()
+{
+    Fixture fixture;
+    std::vector<NativeSocketId> closed;
+    fixture.provider.shutdown_hook = [&](NativeSocketId id) { closed.push_back(id); };
+    auto request = fixture.CreateRequest("pkg.srtc.rejected.accepted", RecordRole::Server, false);
+    request.is_accepted = true;
+    request.accepted_socket = 241;
+    request.accepted = ObservedPeerKey{fixture.config.directory.locals[0].callback_namespace,
+            "net.unknown", "peer.unknown", RecordDataType::Bytes};
+    auto binding = fixture.Build(request);
+    RequireStatus(binding->Prepare(), NativeStatus::UnknownPeer, "the unknown peer is refused");
+    RequireEqual(static_cast<std::size_t>(fixture.provider.shutdown), 1,
+            "the rejected accepted socket is shut down once");
+    Require(closed.size() == 1 && closed[0] == 241, "and it is the socket that was rejected");
+    RequireEqual(static_cast<std::size_t>(fixture.provider.created), 0, "no Socket call was invented");
+    RequireStatus(binding->Abandon(), NativeStatus::None, "the refused binding abandons cleanly");
+    RequireEqual(static_cast<std::size_t>(fixture.provider.shutdown), 1, "abandoning never closes it twice");
+    // Every further rejected socket is closed too, each exactly once.
+    for (NativeSocketId id = 250; id < 253; ++id) {
+        auto again = fixture.CreateRequest("pkg.srtc.rejected.accepted." + std::to_string(id), RecordRole::Server, false);
+        again.is_accepted = true;
+        again.accepted_socket = id;
+        again.accepted = request.accepted;
+        auto b = fixture.Build(again);
+        RequireStatus(b->Prepare(), NativeStatus::UnknownPeer, "each unknown peer is refused");
+        (void)b->Abandon();
+    }
+    RequireEqual(static_cast<std::size_t>(fixture.provider.shutdown), 4, "all four rejected sockets were closed");
+    Require(closed == std::vector<NativeSocketId>({241, 250, 251, 252}), "each was closed exactly once, by id");
+    // Documented bounded design: each rejected owner cell stays pinned (an owner that held an
+    // external socket is never reused), so the four cells are still counted. When the table is
+    // finally full it returns no owner (AdmissionSaturated, sealed, stop_ingress_required; table
+    // level: N1-INBOUND). There is then no close responsibility to claim, so this composition does
+    // not Shutdown that socket either; stopping ingress is left to the caller. That case is NOT
+    // exercised here.
+    RequireEqual(fixture.native->SnapshotUsage().owners, 4, "the four rejected cells are retained, not reclaimed");
+    Require(!fixture.native->SnapshotUsage().admission_sealed, "four retained cells do not seal the table");
+    // A socket id a retained owner already holds is never closed a second time: the table
+    // reports a collision and returns no owner, so there is no close responsibility to claim.
+    {
+        auto replay = fixture.CreateRequest("pkg.srtc.rejected.accepted.replay", RecordRole::Server, false);
+        replay.is_accepted = true;
+        replay.accepted_socket = 241;
+        replay.accepted = request.accepted;
+        auto b = fixture.Build(replay);
+        RequireStatus(b->Prepare(), NativeStatus::ForeignIdCollision, "an id held by a retained owner is a collision");
+        (void)b->Abandon();
+        RequireEqual(static_cast<std::size_t>(fixture.provider.shutdown), 4, "and it is not shut down again");
+        RequireEqual(fixture.native->SnapshotUsage().owners, 4, "without minting another cell");
+    }
+    // An id that a live, accepted owner holds belongs to that binding: a rejected request that
+    // names it must not close it.
+    Fixture live;
+    std::vector<NativeSocketId> live_closed;
+    live.provider.shutdown_hook = [&](NativeSocketId id) { live_closed.push_back(id); };
+    auto good = live.CreateRequest("pkg.srtc.rejected.live", RecordRole::Server, false);
+    const auto& route = live.config.directory.routes[2];
+    good.is_accepted = true;
+    good.accepted_socket = 270;
+    good.accepted = ObservedPeerKey{live.config.directory.locals[0].callback_namespace, route.fields.remote_network_id,
+            route.fields.expected_remote_initiator_names[0], RecordDataType::Bytes};
+    auto owner_binding = live.Build(good);
+    RequireStatus(owner_binding->Prepare(), NativeStatus::None, "a valid accepted socket is adopted");
+    auto thief = live.CreateRequest("pkg.srtc.rejected.live.thief", RecordRole::Server, false);
+    thief.is_accepted = true;
+    thief.accepted_socket = 270;
+    thief.accepted = ObservedPeerKey{live.config.directory.locals[0].callback_namespace, "net.unknown", "peer.unknown",
+            RecordDataType::Bytes};
+    auto thief_binding = live.Build(thief);
+    RequireStatus(thief_binding->Prepare(), NativeStatus::ForeignIdCollision, "a rejected request cannot name a live owner's id");
+    (void)thief_binding->Abandon();
+    Require(live_closed.empty() && live.provider.shutdown == 0, "the live owner's socket was not closed by the refused request");
+    RequireStatus(owner_binding->Abandon(), NativeStatus::None, "the owner releases normally");
+    Require(live_closed == std::vector<NativeSocketId>({270}), "and its socket is closed once, by its own owner");
+}
+
+// AUDIT-B2: a joiner may not be admitted into a record whose continuity is already
+// unproven. Publish refuses it, and Prepare must too, before any namespace or
+// native owner is taken for a binding that can never publish.
+void JoinerRefusesUnanchoredRecord()
+{
+    Fixture fixture;
+    auto creator = fixture.Build(fixture.CreateRequest("pkg.srtc.unanchored.join", RecordRole::Client, false));
+    RequireStatus(creator->Prepare(), NativeStatus::None, "the creator exposes both roles");
+    const auto client_role = creator->RoleEntrance(RecordRole::Client);
+    RequireStatus(creator->Abandon(), NativeStatus::None, "the creator abandons before any owner registered");
+    Require(Table().Observe(client_role).phase == RecordPhase::Unanchored, "so the record is unanchored");
+    auto joiner = fixture.Build(fixture.JoinRequest(*creator, RecordRole::Client, false));
+    RequireStatus(joiner->Prepare(), NativeStatus::Revoked, "joining an unanchored record is refused");
+    RequireEqual(fixture.native->SnapshotUsage().owners, 0, "before a native owner was reserved");
+    RequireEqual(static_cast<std::size_t>(fixture.provider.created), 0, "and without any Socket call");
+    RequireStatus(joiner->Abandon(), NativeStatus::None, "the refused joiner rolls back");
+}
+
 // ---- CALLBACK_CONTEXT_DESTROY_CONTRACT -----------------------------------------
 // A callback thread may ask the binding to close, but it is never made to wait for
 // its own in-flight permit: the request is recorded and returns, and the owner
@@ -2185,6 +2319,9 @@ int main(int argc, char** argv)
         {"join-during-settle", JoinDuringSettle}, {"joiner-failure-keeps-creator", JoinerFailureKeepsCreator},
         {"registration-allocation-failure", RegistrationAllocationFailure},
         {"accepted-topology", AcceptedTopology},
+        {"second-binding-same-plan", SecondBindingSamePlanRefused},
+        {"rejected-accepted-closed", RejectedAcceptedSocketIsClosed},
+        {"joiner-refuses-unanchored", JoinerRefusesUnanchoredRecord},
         {"prepared-accepted", PreparedAcceptedBinding},
         {"close-request-from-callback", CloseRequestFromCallback},
         {"close-sync-refused-in-callback", CloseSyncRefusedInCallback},

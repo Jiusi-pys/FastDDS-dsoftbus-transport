@@ -582,7 +582,8 @@ BackendStatus ProviderAdapter::ReopenInput(InputChannels::Receiver* receiver) no
         if(state_->stopped)return BackendStatus::ProviderStopped;
         if(state_->phase!=AdapterPhase::Published||state_->input_open||!receiver)return BackendStatus::InvalidState;
     }
-    const auto result=(state_->dual?state_->listener.get():state_->binding.get())->ReopenInput(receiver);
+    auto* receiver_binding=state_->dual?state_->listener.get():state_->binding.get();
+    const auto result=receiver_binding->ReopenInput(receiver);
     if(result!=NativeStatus::None)return result==NativeStatus::AllocationFailure?BackendStatus::AllocationFailure:BackendStatus::BindingRejected;
     {
         std::lock_guard<std::mutex> lock(state_->gate);
@@ -590,7 +591,7 @@ BackendStatus ProviderAdapter::ReopenInput(InputChannels::Receiver* receiver) no
             state_->request.receiver=receiver;state_->input_open=true;return BackendStatus::None;
         }
     }
-    (void)state_->binding->CloseInput(); // stop during reopen: no half-published receiver
+    (void)receiver_binding->CloseInput(); // stop during reopen: roll back the binding that was reopened
     return BackendStatus::ProviderStopped;
 }
 BackendCloseResult ProviderAdapter::Close() noexcept { return state_->Close(); }
