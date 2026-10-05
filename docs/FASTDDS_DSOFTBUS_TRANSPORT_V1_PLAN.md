@@ -170,3 +170,27 @@ service、DDS 删除、Runtime Close、public return 0、正常退出、加载�
 `SDK_RECONNECT_QUALIFIED`、`PF01/PF02_PASS` 和 QualificationProfile 均未
 成立。历史失败、577 分批覆盖、旧 V1/device receipts、data17/data18 以及
 35/36 refusal evidence 保留原处分，不回填为成功。
+
+<!-- Reconnect requirement closeout, 2026-10-05 -->
+
+新增的 [RECONNECT_REQUIREMENT_CLOSEOUT_20261005](RECONNECT_REQUIREMENT_CLOSEOUT_20261005.md)
+仅是规范对账和证据同步，不引入实现、测试或设备运行。基线为
+`5e57b2c4a176d7dd7d1f84d2e6af7f99addf4e9d`；当前 49 项源码/测试 hash、
+既有 API23、Host、ASan 和两次真实 SDK raw/review/恢复收据在原范围内复用，
+本次没有新的 build、test、HDC 或 SDK 操作。
+
+根据当前 V1 计划、A5/C1 Host contract、native admission contract 和实际
+control/pump 源码，本次只关闭两种正常 close 顺序下的同路由替换、原 ROS
+实体/listener/V1 locator 连续性、旧 owner 结算后新 owner 业务交付及正常
+清理子项。两次各有一个 `NATIVE_END`、一个外部 `NATIVE_REPLACE` 和两个
+`REACCEPT_DONE`；外部 peer-ready gate 是已批准合同的一部分，产品 pump 和
+binding 才执行真实 Socket/Bind，不能称为 assistance-free 或
+`BOUNDED_EVENT_DRIVEN_RECONNECT`。
+
+“terminal event 必须无外部 gate 自动触发 replacement”当前未在定位到的
+有效规范中成立，因此不新增状态机。V1 offline route invalidation/online
+re-resolution 仍是既有未闭合要求；peer restart、same-ID、任意 fault
+cancel、SDK physical record/epoch/drain 和原编号 A5/C1 finding closure 均
+保持未满足、未证明或 source-incomplete。默认 `NO_REACCEPT`、PF/P4、平台
+策略和 `NOT_PRODUCTION_QUALIFIED` 不变，`FULL_REQUIREMENTS_COMPLETE`、
+`SDK_RECONNECT_QUALIFIED` 和 QualificationProfile 均未成立。
