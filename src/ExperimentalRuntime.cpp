@@ -63,6 +63,7 @@ Runtime::MakeDescriptor(const DSoftBusTransportDescriptor& config) {
         return {};
     }
     const auto& binding=impl_->binding;
+    if(binding.bounded_reaccept_host&&!impl_->backend->BoundedReacceptHost())return {};
     if(config.native_name_scope.authorized_package!=binding.package_name || config.directory.locals.size()!=1 ||
        config.directory.routes.size()!=1 || config.directory.locals.front().local_listen_name!=binding.listener_identity.service_name ||
        config.directory.routes.front().fields.remote_listen_name!=binding.peer_name ||

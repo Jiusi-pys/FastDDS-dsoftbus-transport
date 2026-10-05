@@ -17,10 +17,12 @@ struct BridgeOwner {
     unsigned side = 0;
     bool public_delete_completed = false;
     std::function<void()> diagnostic_control;
+    std::function<bool()> before_pump; // explicit Host scheduling fixture only
 
     void StartPump() {
         pump = std::thread([this] {
             while (!stop.load()) {
+                if(before_pump){try{if(!before_pump()){std::this_thread::yield();continue;}}catch(...){failed=true;}}
                 const auto send = runtime->PumpSend();
                 if (send.outcome == dsoftbus::NativeSendOutcome::ReturnedInvalidCode ||
                         send.outcome == dsoftbus::NativeSendOutcome::ReturnedByException ||

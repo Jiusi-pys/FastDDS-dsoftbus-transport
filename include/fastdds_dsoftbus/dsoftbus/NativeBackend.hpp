@@ -89,6 +89,8 @@ public:
     virtual BackendKind Kind() const noexcept = 0;
     virtual BackendIdentity Identity() const = 0;
     virtual BackendTopology Topology() const noexcept {return BackendTopology::SingleOwner;}
+    virtual bool BoundedReacceptHost() const noexcept {return false;}
+    virtual BackendStatus ResetHostConnection(RecordRole,const NativeOwnerLease&) {return BackendStatus::NativeBackendUnavailable;}
     virtual BackendIdentity ListenerIdentity() const {return {};}
     virtual BackendStatus ConfigureEntrance(const RecordEntrance&) {return BackendStatus::None;}
     virtual BackendSocketResult Create(ProviderCallbacks) = 0;

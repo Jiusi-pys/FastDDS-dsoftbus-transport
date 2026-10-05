@@ -4,6 +4,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <example_interfaces/srv/add_two_ints.hpp>
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <set>
 #include <iomanip>
@@ -11,6 +12,7 @@
 #include <regex>
 #include <vector>
 #include <fstream>
+#include <functional>
 #include "FailureProtocol.hpp"
 #if defined(_WIN32)
 #include <process.h>
@@ -20,13 +22,14 @@
 
 using namespace std::chrono_literals;
 // Test/control metadata only. No business sample is read from this file.
-bool ControlStage(const std::string& run,const std::string& side,long pid,const std::string& stage) {
+bool ControlStage(const std::string& run,const std::string& side,long pid,const std::string& stage,const std::function<void()>& progress={}) {
     const char* prefix=std::getenv("FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX");
     if(!prefix)return true;
     std::cout<<"ROS_STAGE run="<<run<<" side="<<side<<" pid="<<pid<<" stage="<<stage<<std::endl;
     const std::string expected="ROS_RELEASE run="+run+" side="+side+" stage="+stage;
     const auto end=std::chrono::steady_clock::now()+90s;
     while(std::chrono::steady_clock::now()<end) {
+        if(progress)progress();
         std::ifstream cleanup(std::string(prefix)+".CLEANUP");std::string cleanup_line;
         if(std::getline(cleanup,cleanup_line)){
             if(!cleanup_line.empty()&&cleanup_line.back()=='\r')cleanup_line.pop_back();
@@ -109,7 +112,25 @@ int main(int argc,char** argv) {
         // Their elapsed time must not consume the service/receive budget.
         const auto business_deadline=std::chrono::steady_clock::now()+30s;
         active_stage="PUBLISH";
-        for(unsigned i=1;i<=5;++i){std_msgs::msg::String m;m.data=payload_prefix+side+":"+std::to_string(i);pub->publish(m);std::cout<<"ROS_WRITE run="<<run<<" side="<<side<<" ordinal="<<i<<" payload="<<m.data<<" phase="<<phase<<" topic="<<pub->get_topic_name()<<std::endl;}
+        for(unsigned i=1;i<=5;++i){std_msgs::msg::String m;m.data=payload_prefix+side+":"+std::to_string(i);pub->publish(m);std::cout<<"ROS_WRITE run="<<run<<" side="<<side<<" ordinal="<<i<<" payload="<<m.data<<" phase="<<phase<<" topic="<<pub->get_topic_name()<<std::endl;
+#if defined(_WIN32)
+            const char* reaccept=std::getenv("FDDST_HOST_REACCEPT_STAGE");
+            if(i==2&&phase=="reliable"&&reaccept&&std::string(reaccept)=="1"){
+                while(taken.size()<2&&std::chrono::steady_clock::now()<business_deadline){rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);}
+                if(bad||taken.size()!=2)ros_failure_protocol::Fail(run,side,pid,"REACCEPT","ORIGINAL_DELIVERY_MISSING");
+                if(client){
+                    while(!client->service_is_ready()&&std::chrono::steady_clock::now()<business_deadline){rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);}
+                    if(!client->service_is_ready())ros_failure_protocol::Fail(run,side,pid,"REACCEPT","ORIGINAL_SERVICE_NOT_READY");
+                }
+                const auto anchor=[&](const char* point){std::ostringstream gid;for(auto byte:pub->get_gid().data)gid<<std::hex<<std::setw(2)<<std::setfill('0')<<unsigned(byte);
+                    std::cout<<"ROS_REACCEPT_ANCHOR run="<<run<<" side="<<side<<" pid="<<pid<<" point="<<point<<" node="<<node.get()<<" publisher="<<pub.get()<<" subscriber="<<sub.get()<<" context="<<node->get_node_base_interface()->get_context().get()<<" gid="<<gid.str()<<std::endl;};
+                anchor("BEFORE");
+                if(!ControlStage(run,side,pid,"RELIABLE_REACCEPT_READY",[&]{rclcpp::spin_some(node);}))ros_failure_protocol::Fail(run,side,pid,"REACCEPT","CONTROL_RELEASE_MISSING");
+                anchor("AFTER");
+                if(pub->get_subscription_count()<1)ros_failure_protocol::Fail(run,side,pid,"REACCEPT","GRAPH_LOST");
+            }
+#endif
+        }
         active_stage="SERVICE";
         bool service_done=false;
         if(side=="A") {

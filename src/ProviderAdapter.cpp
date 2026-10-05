@@ -61,6 +61,9 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
         ~EventActivity(){if(armed){std::lock_guard<std::mutex> lock(state.gate);--state.active;state.idle.notify_all();}}
     };
     mutable std::mutex gate;
+    std::mutex control_gate;
+    std::size_t controls=0;
+    bool renewal_failed=false;
     std::condition_variable idle;
     AdapterPhase phase = AdapterPhase::Constructed;
     bool stopped = false, creating = false, pending_stop_conflict = false;
@@ -99,6 +102,13 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
                 creating = false;
                 socket = *result.socket;
                 if (pending_stop_conflict) {
+                    if(request.config.bounded_reaccept_host){
+                        outgoing_stopped=true;provider_status=BackendStatus::InvalidIdentity;
+                        (void)native.QuarantineHostId(request.local,*result.socket);
+                        // Ambiguous first effect: no owner/Shutdown right is inferred
+                        // from an indistinguishable callback and positive return.
+                        socket=-1;pending_stop.reset();return NativeSocketResult::Error(-1);
+                    }
                     stopped = true;
                     provider_status = BackendStatus::InvalidIdentity;
                 } else if (pending_stop) {
@@ -196,9 +206,9 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
             {
                 std::lock_guard<std::mutex> lock(gate);
                 const bool control_live=phase==AdapterPhase::Deploying||phase==AdapterPhase::Connected||(phase==AdapterPhase::Published&&input_open);
-                if(!dual||role!=RecordRole::Server||id<0||stopped||listener_stopped||!listener_ready||!control_live||accepted_closing){return RejectAcceptedLocked(BackendStatus::InvalidState,NativeStatus::WrongState);}
+                if(!dual||role!=RecordRole::Server||id<0||stopped||listener_stopped||!listener_ready||!control_live||accepted_closing){if(role==RecordRole::Server)(void)native.QuarantineHostId(request.local,id);return RejectAcceptedLocked(BackendStatus::InvalidState,NativeStatus::WrongState);}
                 if((accepted_phase==AcceptedPhase::Prepared||accepted_phase==AcceptedPhase::Active)&&accepted_id==id&&accepted_peer==peer)return BackendStatus::None;
-                if(accepted_phase!=AcceptedPhase::Empty){return RejectAcceptedLocked(BackendStatus::Capacity,NativeStatus::AdmissionSaturated);}
+                if(accepted_phase!=AcceptedPhase::Empty){(void)native.QuarantineHostId(request.local,id);return RejectAcceptedLocked(BackendStatus::Capacity,NativeStatus::AdmissionSaturated);}
                 ++active;activity.armed=true;accepted_phase=AcceptedPhase::Preparing;
                 accepted_id=id;accepted_peer=std::move(owned_peer);anchor=listener;
             }
@@ -218,9 +228,11 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
                 if(accepted_phase==AcceptedPhase::Preparing){accepted_phase=AcceptedPhase::Empty;accepted_id.reset();}
             }
             if(candidate)(void)candidate->Abandon();
+            (void)native.QuarantineHostId(request.local,id);
             return ready==NativeStatus::AllocationFailure?BackendStatus::AllocationFailure:BackendStatus::BindingRejected;
         }catch(...) {
             if(candidate)(void)candidate->Abandon();
+            (void)native.QuarantineHostId(request.local,id);
             std::lock_guard<std::mutex> lock(gate);(void)RejectAcceptedLocked(BackendStatus::AllocationFailure,NativeStatus::AllocationFailure);
             if(accepted_phase==AcceptedPhase::Preparing){accepted_phase=AcceptedPhase::Empty;accepted_id.reset();}
             return BackendStatus::AllocationFailure;
@@ -258,6 +270,7 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
     }
     BackendStatus RejectNegotiation(RecordRole role,std::int32_t id) noexcept {
         std::lock_guard<std::mutex> lock(gate);
+        if(role==RecordRole::Server)(void)native.QuarantineHostId(request.local,id);
         if(!dual||role!=RecordRole::Server||accepted_id!=id||accepted_phase!=AcceptedPhase::Prepared)return BackendStatus::InvalidState;
         accepted_phase=AcceptedPhase::Stopping;return BackendStatus::None;
     }
@@ -266,6 +279,11 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
         {
             std::lock_guard<std::mutex> lock(gate);
             if(phase==AdapterPhase::Closed)return BackendStatus::InvalidState;
+            if(request.config.bounded_reaccept_host&&role==RecordRole::Client&&creating&&socket<0){
+                if(native.HostIdWasSeen(id))return BackendStatus::ForeignSocket;
+                (void)native.QuarantineHostId(request.local,id);
+                pending_stop_conflict=true;return BackendStatus::PendingIdentity;
+            }
             if(dual&&role==RecordRole::Server&&accepted_id==id) {
                 if(accepted_phase==AcceptedPhase::Closed||accepted_phase==AcceptedPhase::Empty)return BackendStatus::InvalidState;
                 accepted_phase=AcceptedPhase::Stopping;target=accepted;
@@ -300,6 +318,42 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
         auto result=child?child->Abandon():NativeStatus::None;
         if(result!=NativeStatus::None&&result!=NativeStatus::AlreadySettled)return BackendStatus::BindingRejected;
         std::lock_guard<std::mutex> lock(gate);accepted_phase=AcceptedPhase::Closed;accepted_closing=false;
+        return BackendStatus::None;
+    }
+    BackendStatus AdvanceHostReaccept() noexcept {
+        if(!request.config.bounded_reaccept_host)return BackendStatus::None;
+        if(provider_callback_depth||ServiceRecordBinding::IsCallbackContext())return BackendStatus::InvalidState;
+        std::unique_lock<std::mutex> control(control_gate,std::try_to_lock);
+        if(!control.owns_lock())return BackendStatus::NoWork;
+        bool retire=false,dial=false;std::shared_ptr<ServiceRecordBinding> child;
+        {std::lock_guard<std::mutex> lock(gate);
+            if(stopped||listener_stopped||phase!=AdapterPhase::Published)return BackendStatus::None;
+            ++controls;retire=accepted_phase==AcceptedPhase::Stopping;child=accepted;dial=outgoing_stopped&&!renewal_failed;
+        }
+        struct ControlDone {ProviderAdapterState& s;~ControlDone(){std::lock_guard<std::mutex> lock(s.gate);--s.controls;s.idle.notify_all();}} done{*this};
+        if(retire){
+            const auto original=child?child->OriginalOwner():NativeOwnerLease{};
+            // A prepared-only candidate gets its close intent from Abandon;
+            // entered/captured old work still prevents any ready publication.
+            if(original&&original.Observe().owned_id&&!original.AdapterSettled())return BackendStatus::NoWork;
+            const auto closed=CloseAccepted();if(closed!=BackendStatus::None)return closed;
+            if(original){const auto reset=backend->ResetHostConnection(RecordRole::Server,original);if(reset!=BackendStatus::None)return reset;}
+            std::lock_guard<std::mutex> lock(gate);
+            if(phase!=AdapterPhase::Published||stopped||listener_stopped)return BackendStatus::ProviderStopped;
+            accepted.reset();accepted_id.reset();accepted_peer={};accepted_phase=AcceptedPhase::Empty;
+        }
+        if(dial){
+            const auto original=binding->OriginalOwner();
+            if(!original.AdapterSettled())return BackendStatus::NoWork;
+            auto status=binding->PrepareHostDialReplacement();
+            if(status!=NativeStatus::None){std::lock_guard<std::mutex> lock(gate);renewal_failed=true;return BackendStatus::BindingRejected;}
+            {std::lock_guard<std::mutex> lock(gate);if(phase!=AdapterPhase::Published||stopped||listener_stopped)return BackendStatus::ProviderStopped;socket=-1;outgoing_stopped=false;}
+            const auto reset=backend->ResetHostConnection(RecordRole::Client,original);
+            if(reset!=BackendStatus::None){std::lock_guard<std::mutex> lock(gate);outgoing_stopped=true;renewal_failed=true;return reset;}
+            status=binding->Connect();
+            std::lock_guard<std::mutex> lock(gate);
+            if(status!=NativeStatus::None||phase!=AdapterPhase::Published||stopped||listener_stopped||outgoing_stopped){outgoing_stopped=true;renewal_failed=true;return BackendStatus::BindingRejected;}
+        }
         return BackendStatus::None;
     }
     BackendStatus Bytes(RecordRole role,std::int32_t id, const void* data, std::uint32_t size) noexcept {
@@ -373,11 +427,13 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
     }
     BackendCloseResult Close() noexcept {
         if(provider_callback_depth||ServiceRecordBinding::IsCallbackContext())return {BackendStatus::InvalidState,false};
+        {std::lock_guard<std::mutex> lock(gate);if(phase!=AdapterPhase::Closed)phase=AdapterPhase::Closing;}
+        std::unique_lock<std::mutex> control(control_gate);
         {
             std::unique_lock<std::mutex> lock(gate);
             if (phase == AdapterPhase::Closed) return {provider_status,true,SdkDrain::Unproven,cleanup_status};
             phase = AdapterPhase::Closing;
-            idle.wait(lock, [&] { return active == 0; });
+            idle.wait(lock, [&] { return active == 0&&controls==0; });
         }
         if(dual) {
             const auto accepted_close=CloseAccepted();if(accepted_close!=BackendStatus::None)return {accepted_close,false};
@@ -532,6 +588,8 @@ BackendStatus ProviderAdapter::Publish() noexcept {
     return BackendStatus::None;
 }
 BackendStatus ProviderAdapter::DispatchOne() noexcept {
+    const auto control=state_->AdvanceHostReaccept();
+    if(control!=BackendStatus::None&&control!=BackendStatus::NoWork)return control;
     detail::ProviderAdapterState::DispatchActivity activity{*state_};
     {
         std::lock_guard<std::mutex> lock(state_->gate);
@@ -555,10 +613,11 @@ NativeResult<BindingInput> ProviderAdapter::AttachSharedInput(InputChannels::Rec
     }
     return (state_->dual?state_->listener.get():state_->binding.get())->AttachSharedInput(receiver);
 }
-BackendStatus ProviderAdapter::CloseAccepted() noexcept {return state_->CloseAccepted();}
+BackendStatus ProviderAdapter::CloseAccepted() noexcept {if(detail::provider_callback_depth||ServiceRecordBinding::IsCallbackContext())return BackendStatus::InvalidState;std::lock_guard<std::mutex> control(state_->control_gate);return state_->CloseAccepted();}
 bool ProviderAdapter::IsProviderCallbackContext() noexcept {return detail::provider_callback_depth!=0;}
 BackendStatus ProviderAdapter::CloseInput() noexcept {
     if(detail::provider_callback_depth||ServiceRecordBinding::IsCallbackContext())return BackendStatus::InvalidState;
+    std::lock_guard<std::mutex> control(state_->control_gate);
     if(state_->dual){const auto result=state_->CloseAccepted();if(result!=BackendStatus::None)return result;}
     bool was_open=false;
     {
@@ -577,6 +636,8 @@ BackendStatus ProviderAdapter::CloseInput() noexcept {
     return BackendStatus::None;
 }
 BackendStatus ProviderAdapter::ReopenInput(InputChannels::Receiver* receiver) noexcept {
+    if(detail::provider_callback_depth||ServiceRecordBinding::IsCallbackContext())return BackendStatus::InvalidState;
+    std::lock_guard<std::mutex> control(state_->control_gate);
     {
         std::lock_guard<std::mutex> lock(state_->gate);
         if(state_->stopped)return BackendStatus::ProviderStopped;

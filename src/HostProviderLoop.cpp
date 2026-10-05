@@ -304,6 +304,8 @@ bool HostProviderLoop::StartRuntime(const DSoftBusTransportDescriptor& d) noexce
     s.config.service_pkg_name="com.kaihong.mdds";
 #endif
     s.config.dial_only_egress=s.backend->Topology()==BackendTopology::ListenerAndOutgoing;
+    s.config.bounded_reaccept_host=s.backend->BoundedReacceptHost();
+    if(s.config.bounded_reaccept_host)s.config.allow_closed_dial_retry=true;
     auto native=NativeOwnerTable::Build(s.config);if(!native){STARTUP_CAPTURE("LoopStart_NativeStatus_result",UINT64_MAX,-1,-1,int(native.issue.code),0);return false;}s.native=std::move(*native.value);
     AttachmentLimits receive_limits;
     receive_limits.max_record_bytes=d.maxMessageSize;

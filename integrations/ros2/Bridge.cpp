@@ -31,7 +31,7 @@ std::map<std::string,std::string> read(const char* path) {
         auto p=line.find('=');if(p==std::string::npos)throw std::runtime_error("configuration syntax");
         if(!m.emplace(line.substr(0,p),line.substr(p+1)).second)throw std::runtime_error("duplicate key");
     }
-    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package")throw std::runtime_error("unknown key");
+    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control")throw std::runtime_error("unknown key");
     return m;
 }
 unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsigned max) {
@@ -51,6 +51,8 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         unsigned side=integer(m,"side",1),port=integer(m,"port",65535),peerport=integer(m,"peer_port",65535);
         if(!port||!peerport||port==peerport||integer(m,"domain",232)!=domain)throw std::runtime_error("domain/ports");
         bool forward=integer(m,"forward",1)!=0;
+        const bool reaccept=m.count("host_reaccept")&&integer(m,"host_reaccept",1)!=0;
+        if(reaccept&&(!m.count("reaccept_control")||!std::filesystem::path(m.at("reaccept_control")).is_absolute()))throw std::runtime_error("Host reaccept control must be explicit absolute path");
         if(GetModuleHandleA("fastdds-3.6.dll")||GetModuleHandleA("fastcdr-2.3.dll"))throw std::runtime_error("mixed Fast DDS/Fast CDR ABI");
         for(const auto* dll:{"fastrtps-2.14.dll","fastcdr-2.2.dll"}) {
             char loaded[MAX_PATH]{};auto handle=GetModuleHandleA(dll);
@@ -79,13 +81,35 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         const auto remote=config.directory.routes.front().key.remote_locator;
         const auto& local_name=config.directory.locals.front().local_listen_name;
         const auto& peer_name=config.directory.routes.front().fields.remote_listen_name;
-        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",local_name,peer_name,name(1-side,"outgoing"),forward});
+        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",local_name,peer_name,name(1-side,"outgoing"),forward,reaccept,reaccept?m.at("reaccept_control"):std::string{}});
         phase0::PublicSocketConfiguration b;
         b.identity={name(side,"outgoing"),{910+side*4},{1010+side*4}};
         b.listener_identity={local_name,{911+side*4},{1011+side*4}};
         b.package_name=m.at("authorized_package");b.expected_peer_initiator_name=name(1-side,"outgoing");b.peer_network_id=side?"host.net.A":"host.net.B";b.peer_name=peer_name;
         b.max_message_size=65536;b.bind_qos={{0,80},{1,2000}};b.listen_qos=b.bind_qos;
+        b.bounded_reaccept_host=reaccept;
         owner->runtime=std::make_unique<experimental::Runtime>(b);
+        if(reaccept){
+            struct Observation {std::optional<std::int32_t> outgoing,accepted;bool terminal=false,settled=false,replaced=false;};
+            auto observed=std::make_shared<Observation>();
+            owner->before_pump=[owner,observed]{
+                const bool permitted=fastdds_dsoftbus::ros2_host::ReacceptControlStep();
+                const auto current=owner->runtime->ObserveSocket();
+                if(!observed->outgoing&&current.outgoing_socket&&current.accepted_socket){observed->outgoing=current.outgoing_socket;observed->accepted=current.accepted_socket;}
+                if(observed->outgoing){
+                    const bool terminal=owner->side==0?current.outgoing_stopped:current.accepted_stopped;
+                    if(terminal&&!observed->terminal){observed->terminal=true;fastdds_dsoftbus::ros2_host::ReacceptControlReceipt("TERMINAL");}
+                    if(owner->side==1&&observed->terminal&&!current.accepted_socket&&!observed->settled){observed->settled=true;fastdds_dsoftbus::ros2_host::ReacceptControlReceipt("SETTLED");}
+                    const auto id=owner->side==0?current.outgoing_socket:current.accepted_socket;
+                    const auto old=owner->side==0?observed->outgoing:observed->accepted;
+                    if(observed->terminal&&id&&id!=old&&!terminal&&!observed->replaced){
+                        observed->replaced=true;fastdds_dsoftbus::ros2_host::ReacceptControlReceipt("REPLACED");
+                        std::fprintf(stderr,"HOST_REACCEPT_REPLACED run=%s side=%u old_id=%d new_id=%d source=HOST_PUBLIC_C_API sdk_epoch=NOT_PROVEN\n",owner->run.c_str(),owner->side,*old,*id);std::fflush(stderr);
+                    }
+                }
+                return permitted;
+            };
+        }
         if(!owner->runtime->SetPreConnectGate([]{return fastdds_dsoftbus::ros2_host::WaitPeerListener(15000);}))throw std::runtime_error("gate installation");
         if(m.count("runtime_close_release")) {
             if(!std::filesystem::path(m.at("runtime_close_release")).is_absolute())throw std::runtime_error("absolute close control required");

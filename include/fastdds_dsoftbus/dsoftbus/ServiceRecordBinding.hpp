@@ -314,6 +314,9 @@ private:
     friend class ServiceRecordBindingTestAccess;
     friend struct phase0::detail::ProviderAdapterState;
     NativeOwnerLease OriginalOwner() const noexcept;
+    // Host-only dual lane control: retain the exposing record, never publish a
+    // second receiver. The previous immutable owner must already be settled.
+    NativeStatus PrepareHostDialReplacement() noexcept;
     // The record-scoped ingress dispatch control, defined in the implementation.
     // It pins one binding's state and is the only other reader of the private
     // State; both are implementation details of the same translation unit.

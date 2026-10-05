@@ -267,6 +267,13 @@ int main(int argc,char** argv) {
         const auto observed=public_socket_fake::Observe();if(observed.sockets[0]||observed.sockets[1]||observed.live)return 4;
         std::cout<<"V1_IDENTITY_REJECTED_BEFORE_NATIVE_AND_ISSUANCE_PASS\n";return 0;
     }
+    if(std::strcmp(mode,"--reaccept-real-rejected")==0){
+        public_socket_fake::Configure(std::make_shared<host_dds::Trace>(),true);
+        auto c=config(0);c.bounded_reaccept_host=true;experimental::Runtime runtime(c);
+        if(runtime.MakeDescriptor(descriptor(0)))return 1;
+        const auto observed=public_socket_fake::Observe();if(observed.sockets[0]||observed.sockets[1]||observed.live)return 2;
+        std::cout<<"HOST_REACCEPT_FLAG_REJECTED_BY_REAL_COMPILED_SHIM_BEFORE_NATIVE_PASS\n";return 0;
+    }
     if(std::strcmp(mode,"--gate")==0)return Gate();
     if(std::strcmp(mode,"--refusal")==0)return Refusal();
     if(std::strcmp(mode,"--ownership")==0)return Ownership();

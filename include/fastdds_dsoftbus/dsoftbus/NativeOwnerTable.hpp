@@ -43,6 +43,7 @@ struct NativeTableConfiguration
     // Fixed directed-lane profile: accepted may receive but cannot be selected
     // as a replacement TX owner. Default Both fallback behavior is unchanged.
     bool dial_only_egress=false;
+    bool bounded_reaccept_host=false;
 };
 enum class NativeStatus
 {
@@ -181,6 +182,9 @@ public:
     NativeStatus RequestClose() const noexcept;
     NativeResult<ShutdownCallTicket> TryClaimShutdown() const noexcept;
     NativeOwnerObservation Observe() const noexcept;
+    // Adapter counters and original close responsibility only, never SDK drain.
+    bool AdapterSettled() const noexcept;
+    std::optional<NativeSocketId> RetainedId() const noexcept;
 private:
     friend class NativeOwnerTable;
     friend class NamespaceLease;
@@ -384,6 +388,8 @@ public:
     NativeResult<NativeOwnerLease> PrepareInbound(const NamespaceLease&, NativeSocketId,
             const ObservedPeerKey&) noexcept;
     NativeStatus CommitInbound(const NativeOwnerLease&, NativeSocketId) noexcept;
+    NativeStatus QuarantineHostId(const Locator& local, NativeSocketId) noexcept;
+    bool HostIdWasSeen(NativeSocketId) const noexcept;
     NativeResult<SendConnectionSnapshot> TryResolve(const RouteKey&, std::uint64_t expected_route_version) const noexcept;
     void RequestServiceClose() noexcept;
     NativeUsageSnapshot SnapshotUsage() const noexcept;

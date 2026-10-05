@@ -130,3 +130,23 @@ kind/address/port，profile 1、slot 0、port `0x01000001`。SDK-correlated
 侧 19 个 `InvalidState` callback、B 侧 0 个及 startup cleanup flag 0 按
 原始记录保留。A5/C1 `NO_REACCEPT`、PF/P4、正式 reconnect 缺口和其他
 设计限制不变；未生成 QualificationProfile，未启动性能 100 轮或新设计。
+
+<!-- A5/C1 bounded Host package disposition, 2026-10-05 -->
+
+本轮另有明确授权的 A5/C1 有界 Host 实现，证据索引见
+[A5C1 Host acceptance](A5C1_BOUNDED_REACCEPT_HOST_ACCEPTANCE_20261005.md)。
+当前状态为 `A5C1_BOUNDED_REACCEPT_HOST_VERIFIED`，并已完成 API23 TargetBridge
+编译、链接及安装 consumer 静态核对（`API23_REACCEPT_BUILD_VERIFIED`）；
+Post-review targeted Release `19/19` 与受影响 ASan 选择 `117/117` 通过。
+Host 双端结束顺序、同一 ROS 实体存活、Topic 恢复、graph/
+service、原始 DDS 删除、Runtime close 和 public return 0 已通过。
+
+该结果只适用于显式 Host opaque-callback 实验和有界 never-used native ID
+模型。默认真实 backend 仍保持 `NO_REACCEPT`；SDK epoch/drain、同 ID 复用、
+对端进程重启、route/permission rediscovery、任意长期 reconnect 及设备
+reconnect 均未验证。冻结的全 CONFIG 运行是 `574/576`（574 PASS、2 FAIL）；
+随后两个未变化 targeted case 加一个新注册 control case，使 577 个 case
+在多个运行中均有覆盖，但没有取得单次 577 项全绿运行；历史
+timeout/loader/PowerShell/configuration 失败保留。
+因此正式 reconnect 要求仍未满足，`FULL_REQUIREMENTS_COMPLETE`、
+`SDK_RECONNECT_QUALIFIED` 和 `PF01/PF02_PASS` 均未成立。

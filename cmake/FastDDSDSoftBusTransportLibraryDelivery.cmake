@@ -76,6 +76,7 @@ if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME OR FASTDDS_DSOFTBUS_BUILD_EXPERIM
         # across two live pairs, so each case runs as its own process.
         add_test(NAME dsoftbus.library.experimental_assembly COMMAND experimental_runtime_tests)
         add_test(NAME dsoftbus.library.v1_identity COMMAND experimental_runtime_tests --identity)
+        add_test(NAME dsoftbus.library.reaccept_real_rejected COMMAND experimental_runtime_tests --reaccept-real-rejected)
         add_test(NAME dsoftbus.library.v1_service_scope COMMAND experimental_runtime_tests --service-scope)
         add_test(NAME dsoftbus.library.v1_service_reject COMMAND experimental_runtime_tests --service-reject)
         add_test(NAME dsoftbus.library.experimental_preconnect_gate COMMAND experimental_runtime_tests --gate)

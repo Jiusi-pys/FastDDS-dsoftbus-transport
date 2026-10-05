@@ -13,18 +13,32 @@ struct Row {int id=0,side=0,role=0,peer=-1;bool active=false,bound=false,pending
 struct Record {int from=0,to=0,target_id=0;const ISocketListener* callback=nullptr;std::vector<std::uint8_t> bytes;host_dds::DetailStamp observation;};
 struct Link {std::mutex gate;std::condition_variable changed;std::array<Row,6> rows{};std::array<bool,2> binding{};Snapshot counts;bool backpressure=false,forwarding=true,delay_bind=false,release_bind=false;std::deque<Record> queue;std::shared_ptr<host_dds::Trace> trace;std::function<void(int,int)> send_observer;std::function<void(int,const std::uint8_t*,std::size_t)> packet_observer;};
 std::shared_ptr<Link> link;
+bool replacement_ids=false;
+int next_replacement_id=1000;
 std::array<std::int32_t,3> injected{};std::function<void()> shutdown_barrier;
 int Failure(InjectedOperation op){const auto i=static_cast<std::size_t>(op);const auto rc=injected[i];injected[i]=0;return rc;}
 std::string Name(int side,const char* role){return std::string("host.public.")+(side?"B.":"A.")+role;}
 std::string Network(int side){return side?"model.net.B":"model.net.A";}
-int Index(int id){for(int side=0;side<2;++side)for(int role=0;role<3;++role)if(id==100+side*100+role)return side*3+role;return -1;}
+int Index(int id){for(int i=0;i<6;++i)if(link->rows[i].id==id)return i;return -1;}
 void Event(const char* name,int side,std::string detail){link->trace->Add({name,"","",std::move(detail),side});}
 int Invalid(const char* why){++link->counts.invalid;link->trace->Add({"TRACE_ERROR","","",why,0});return -701;}
 }
 void Configure(std::shared_ptr<host_dds::Trace> trace,bool forwarding){
     auto p=std::make_shared<Link>();p->trace=std::move(trace);p->forwarding=forwarding;
     for(int i=0;i<2;++i)for(int role=0;role<3;++role){auto& r=p->rows[i*3+role];r.side=i;r.role=role;r.id=100+i*100+role;r.name=Name(i,role==0?"listener":role==1?"outgoing":"accepted");}
-    link=std::move(p);injected={};shutdown_barrier={};
+    link=std::move(p);injected={};shutdown_barrier={};replacement_ids=false;next_replacement_id=1000;
+}
+void EnableFreshReplacementIds(){std::lock_guard<std::mutex> lock(link->gate);replacement_ids=true;}
+int CurrentSocket(int side,int role){std::lock_guard<std::mutex> lock(link->gate);return link->rows[side*3+role].id;}
+void DisconnectDirection(int from,bool outgoing_first){
+    const ISocketListener *out=nullptr,*in=nullptr;int a=0,b=0;
+    {std::lock_guard<std::mutex> lock(link->gate);auto& x=link->rows[from*3+1];auto& y=link->rows[(1-from)*3+2];
+        if(!x.active||!y.active||x.peer!=y.id)throw std::runtime_error("disconnect requires original live connection");
+        x.active=false;y.active=false;a=x.id;b=y.id;out=x.listener;in=y.listener;++link->counts.notified[from];++link->counts.notified[1-from];}
+    // Scheduling only: the original public callbacks receive original numeric IDs.
+    if(outgoing_first){out->OnShutdown(a,SHUTDOWN_REASON_PEER);in->OnShutdown(b,SHUTDOWN_REASON_PEER);}
+    else{in->OnShutdown(b,SHUTDOWN_REASON_PEER);out->OnShutdown(a,SHUTDOWN_REASON_PEER);}
+    link->changed.notify_all();Event("FAKE_CONTROLLED_CONNECTION_END",from,"original_outgoing="+std::to_string(a)+",original_accepted="+std::to_string(b));
 }
 void FailNext(InjectedOperation op,std::int32_t rc){std::lock_guard<std::mutex> lock(link->gate);injected[static_cast<std::size_t>(op)]=rc;}
 void SetShutdownBarrier(std::function<void()> fn){std::lock_guard<std::mutex> lock(link->gate);shutdown_barrier=std::move(fn);}
@@ -65,6 +79,7 @@ int32_t Socket(SocketInfo info){using namespace public_socket_fake;std::lock_gua
     if(!info.name||!info.pkgName||info.dataType!=DATA_TYPE_BYTES)return Invalid("Fake Socket invalid config");
     for(auto& row:link->rows)if(row.role!=2&&row.name==info.name){
         if(row.active)return Invalid("Fake duplicate active Socket");
+        if(replacement_ids&&row.role==1&&row.listener){row.id=next_replacement_id++;row.bound=false;row.peer=-1;}
         if(row.role==0&&(info.peerName||info.peerNetworkId))return Invalid("listener has peer");
         if(row.role==1&&(!info.peerName||!info.peerNetworkId||link->rows[(1-row.side)*3].name!=info.peerName||Network(1-row.side)!=info.peerNetworkId))return Invalid("outgoing static peer mismatch");
         row.active=true;++link->counts.sockets[row.side];link->trace->Add({"FAKE_C_SOCKET","","","id="+std::to_string(row.id)+",role="+std::to_string(row.role),row.side});return row.id;
@@ -79,7 +94,7 @@ int32_t Bind(int32_t id,const QosTV* q,uint32_t n,const ISocketListener* cb){usi
         std::unique_lock<std::mutex> lock(link->gate);if(const auto rc=Failure(InjectedOperation::Bind))return rc;const auto k=Index(id);if(k<0||link->rows[k].role!=1||!link->rows[k].active||!q||!n||!cb||!cb->OnShutdown)return Invalid("Fake Bind invalid");
         auto& outgoing=link->rows[k];side=outgoing.side;if(n>8)return Invalid("Fake QoS capture bound");auto& observed=link->counts.bind_qos[side];observed.count=n;for(unsigned i=0;i<n;++i){observed.type[i]=q[i].qos;observed.value[i]=q[i].value;}destination=1-side;outgoing.listener=cb;link->binding[side]=true;++link->counts.binds[side];link->changed.notify_all();
         if(!link->changed.wait_for(lock,std::chrono::seconds(3),[&]{return link->binding[0]&&link->binding[1]&&link->rows[destination*3].listener;}))return Invalid("Fake bounded two-Bind setup barrier");
-        auto& accepted=link->rows[destination*3+2];if(accepted.active)return Invalid("Fake duplicate normal accepted");accepted.active=true;accepted.listener=link->rows[destination*3].listener;accepted.peer=id;outgoing.peer=accepted.id;server=accepted.listener;accepted_id=accepted.id;
+        auto& accepted=link->rows[destination*3+2];if(accepted.active)return Invalid("Fake duplicate normal accepted");if(replacement_ids&&accepted.listener){accepted.id=next_replacement_id++;accepted.bound=false;}accepted.active=true;accepted.listener=link->rows[destination*3].listener;accepted.peer=id;outgoing.peer=accepted.id;server=accepted.listener;accepted_id=accepted.id;
     }
     auto name=Name(side,"outgoing"),network=Network(side);std::string package="host.public.dds";PeerSocketInfo peer{};peer.name=name.data();peer.networkId=network.data();peer.pkgName=package.data();peer.dataType=DATA_TYPE_BYTES;
     Event("FAKE_C_BIND",side,"outgoing="+std::to_string(id)+",destination_accepted="+std::to_string(accepted_id));

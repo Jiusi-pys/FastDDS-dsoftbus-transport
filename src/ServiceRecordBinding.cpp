@@ -1459,6 +1459,20 @@ NativeStatus ServiceRecordBinding::ObserveProviderShutdown(NativeSocketId id) no
     if(result==NativeStatus::None){state_->provider_terminal=true;if(state_->phase==BindingPhase::Published)state_->phase=BindingPhase::Closing;}
     return result;
 }
+NativeStatus ServiceRecordBinding::PrepareHostDialReplacement() noexcept
+{
+    if(!state_||IsCallbackContext())return NativeStatus::WrongState;
+    std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
+    if(!s.request.config.bounded_reaccept_host||s.request.role!=RecordRole::Client||s.request.is_accepted||
+       !s.provider_terminal||(s.phase!=BindingPhase::Connected&&s.phase!=BindingPhase::Closing)||
+       s.membership||s.group||!s.owner.AdapterSettled())return NativeStatus::WrongState;
+    auto next=s.native.ReserveDial(s.ns,s.request.route);
+    if(!next)return next.issue.code;
+    if(next.value->creation!=NativeCreation::CreateRequired||!next.value->socket_call)return NativeStatus::OwnerUnavailable;
+    s.owner=std::move(next.value->owner);s.socket_call.emplace(std::move(*next.value->socket_call));
+    s.socket=-1;s.provider_terminal=false;s.phase=BindingPhase::Prepared;
+    return NativeStatus::None;
+}
 NativeStatus ServiceRecordBinding::Connect() noexcept
 { return state_ ? state_->Connect() : NativeStatus::InvalidHandle; }
 NativeStatus ServiceRecordBinding::Publish() noexcept

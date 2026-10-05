@@ -15,6 +15,8 @@ struct PublicSocketConfiguration {
     std::size_t max_message_size=0;
     // Admitted peer mapping for factory validation; never sent as an SDK override.
     std::string expected_peer_initiator_name;
+    // Explicit bounded Host model only. Real API23 builds must reject this mode.
+    bool bounded_reaccept_host=false;
 };
 enum class PublicSocketOperation {Socket,Listen,Bind,Send,Shutdown,Count};
 struct PublicSocketCall {
@@ -48,6 +50,8 @@ public:
     BackendKind Kind()const noexcept override;
     BackendIdentity Identity()const override;
     BackendTopology Topology()const noexcept override;
+    bool BoundedReacceptHost()const noexcept override;
+    BackendStatus ResetHostConnection(RecordRole,const NativeOwnerLease&) override;
     std::size_t MaxMessageSize()const noexcept override;
     BackendIdentity ListenerIdentity()const override;
     BackendStatus ConfigureEntrance(const RecordEntrance&) override;
