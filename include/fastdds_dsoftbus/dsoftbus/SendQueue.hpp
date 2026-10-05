@@ -23,6 +23,9 @@ struct SendTargetView
     // Borrowed only for the duration of EnqueueBatch; never stored in a record.
     const Route* route = nullptr;
     std::uint64_t generation = 0;
+    // New submissions capture the current authority version; old queued work
+    // never refreshes its original tag. Zero preserves static-fixture behavior.
+    std::uint64_t route_version = 0;
 };
 
 struct SendQueueLimits

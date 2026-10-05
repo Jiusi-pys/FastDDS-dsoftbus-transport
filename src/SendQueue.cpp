@@ -282,6 +282,7 @@ try
             if (hooks_.before_copy) hooks_.before_copy();
             auto storage = std::make_unique<OwnedSendRecord::Storage>(std::move(charges[target]), *targets[target].route);
             storage->generation = targets[target].generation;
+            if(targets[target].route_version)storage->route.route_version=targets[target].route_version;
             storage->priority = priority;
             storage->deadline = original_deadline;
             storage->payload.resize(total_bytes);

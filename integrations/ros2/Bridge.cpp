@@ -32,7 +32,7 @@ std::map<std::string,std::string> read(const char* path) {
         auto p=line.find('=');if(p==std::string::npos)throw std::runtime_error("configuration syntax");
         if(!m.emplace(line.substr(0,p),line.substr(p+1)).second)throw std::runtime_error("duplicate key");
     }
-    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order")throw std::runtime_error("unknown key");
+    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="route_lifecycle"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order")throw std::runtime_error("unknown key");
     return m;
 }
 unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsigned max) {
@@ -54,6 +54,8 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         bool forward=integer(m,"forward",1)!=0;
         const bool reaccept=m.count("host_reaccept")&&integer(m,"host_reaccept",1)!=0;
         const bool owned_normal=m.count("owned_normal_reaccept")&&integer(m,"owned_normal_reaccept",1)!=0;
+        const bool routes=m.count("route_lifecycle")&&integer(m,"route_lifecycle",1)!=0;
+        if(routes&&!owned_normal)throw std::runtime_error("route model requires original retained-entity scene");
         if(owned_normal&&(!reaccept||!m.count("native_reaccept_order")||(m.at("native_reaccept_order")!="outgoing-first"&&m.at("native_reaccept_order")!="accepted-first")))throw std::runtime_error("explicit owned normal Host model required");
         if(reaccept&&(!m.count("reaccept_control")||!std::filesystem::path(m.at("reaccept_control")).is_absolute()))throw std::runtime_error("Host reaccept control must be explicit absolute path");
         if(GetModuleHandleA("fastdds-3.6.dll")||GetModuleHandleA("fastcdr-2.3.dll"))throw std::runtime_error("mixed Fast DDS/Fast CDR ABI");
@@ -84,18 +86,19 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         const auto remote=config.directory.routes.front().key.remote_locator;
         const auto& local_name=config.directory.locals.front().local_listen_name;
         const auto& peer_name=config.directory.routes.front().fields.remote_listen_name;
-        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",local_name,peer_name,name(1-side,"outgoing"),forward,reaccept,reaccept?m.at("reaccept_control"):std::string{}});
+        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",local_name,peer_name,name(1-side,"outgoing"),forward,reaccept,reaccept?m.at("reaccept_control"):std::string{},routes,identity(1-side).udid});
         phase0::PublicSocketConfiguration b;
         b.identity={name(side,"outgoing"),{910+side*4},{1010+side*4}};
         b.listener_identity={local_name,{911+side*4},{1011+side*4}};
         b.package_name=m.at("authorized_package");b.expected_peer_initiator_name=name(1-side,"outgoing");b.peer_network_id=side?"host.net.A":"host.net.B";b.peer_name=peer_name;
         b.max_message_size=65536;b.bind_qos={{0,80},{1,2000}};b.listen_qos=b.bind_qos;
         b.bounded_reaccept_host=reaccept;
+        b.route_lifecycle=routes;
         owner->runtime=std::make_unique<experimental::Runtime>(b);
         if(owned_normal){
-            auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,m.at("native_reaccept_order")=="outgoing-first",m.at("reaccept_control"),true);
+            auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,m.at("native_reaccept_order")=="outgoing-first",m.at("reaccept_control"),true,routes);
             if(!phase0::RuntimeProbeAccess::BoundedReplacementGate(*owner->runtime,[control]{return control->PermitReplacement();}))throw std::runtime_error("model replacement gate installation");
-            owner->before_pump=[control]{try{return control->Step();}catch(...){control->Refuse();return true;}};
+            owner->before_pump=[control,routes]{try{if(routes)fastdds_dsoftbus::ros2_host::NodeControlStep();return control->Step();}catch(...){control->Refuse();return true;}};
         }else if(reaccept){
             struct Observation {std::optional<std::int32_t> outgoing,accepted;bool terminal=false,settled=false,replaced=false;};
             auto observed=std::make_shared<Observation>();

@@ -23,7 +23,7 @@ if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME OR FASTDDS_DSOFTBUS_BUILD_EXPERIM
     # Compile the exact existing real backend. Fake C functions are linked only by
     # the Host test executable; neither a Fake implementation nor a HostMock is installed.
     add_library(${_socket} STATIC src/PublicSocketBackend.cpp)
-    target_include_directories(${_socket} PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+    target_include_directories(${_socket} PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
     target_link_libraries(${_socket} PUBLIC fastdds_dsoftbus_service_record_binding)
     add_library(${_entry} STATIC src/ExperimentalRuntime.cpp src/ProviderAdapter.cpp
         src/HostProviderLoop.cpp src/DSoftBusTransport.cpp src/DSoftBusTransportDescriptor.cpp)
@@ -41,17 +41,17 @@ if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME OR FASTDDS_DSOFTBUS_BUILD_EXPERIM
         if(CMAKE_CROSSCOMPILING OR NOT BUILD_TESTING)
             message(FATAL_ERROR "Experimental library Fake seam is Host test-only")
         endif()
-        add_executable(experimental_runtime_tests tests/experimental_runtime_tests.cpp tests/FakePublicSocketLink.cpp)
-        target_include_directories(experimental_runtime_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+        add_executable(experimental_runtime_tests tests/experimental_runtime_tests.cpp tests/FakePublicSocketLink.cpp tests/FakeNodeDirectory.cpp)
+        target_include_directories(experimental_runtime_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
         target_link_libraries(experimental_runtime_tests PRIVATE ${_entry})
         include("${CMAKE_CURRENT_SOURCE_DIR}/integrations/ros2/RuntimeSources.cmake")
         add_library(fastdds_dsoftbus_startup_diagnostic_host STATIC ${_files})
-        target_include_directories(fastdds_dsoftbus_startup_diagnostic_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+        target_include_directories(fastdds_dsoftbus_startup_diagnostic_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
         target_compile_definitions(fastdds_dsoftbus_startup_diagnostic_host PRIVATE FASTDDS_DSOFTBUS_STARTUP_OBSERVATION=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1)
         target_link_libraries(fastdds_dsoftbus_startup_diagnostic_host PUBLIC fastdds_dsoftbus_fastdds_binding)
-        add_executable(ros2_startup_diagnostics_tests tests/ros2_host/startup_diagnostics_tests.cpp tests/FakePublicSocketLink.cpp
+        add_executable(ros2_startup_diagnostics_tests tests/ros2_host/startup_diagnostics_tests.cpp tests/FakePublicSocketLink.cpp tests/FakeNodeDirectory.cpp
             integrations/ros2/target/NativeObservation.cpp probes/PublicSocketRtpsObservation.cpp)
-        target_include_directories(ros2_startup_diagnostics_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+        target_include_directories(ros2_startup_diagnostics_tests PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
         target_link_libraries(ros2_startup_diagnostics_tests PRIVATE fastdds_dsoftbus_startup_diagnostic_host)
         target_compile_definitions(ros2_startup_diagnostics_tests PRIVATE FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST=1)
         if(MSVC)

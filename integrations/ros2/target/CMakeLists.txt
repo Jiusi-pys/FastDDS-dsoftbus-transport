@@ -25,7 +25,7 @@ include(../RuntimeSources.cmake)
 add_library(fastdds_dsoftbus_ros2_214_target_runtime STATIC ${_files})
 target_include_directories(fastdds_dsoftbus_ros2_214_target_runtime PUBLIC
     "$<BUILD_INTERFACE:${_transport_root}/include>" "$<INSTALL_INTERFACE:include>"
-    PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+    PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
 target_compile_definitions(fastdds_dsoftbus_ros2_214_target_runtime PUBLIC FASTDDS_DSOFTBUS_FASTDDS_214=1
     PRIVATE FASTDDS_DSOFTBUS_STARTUP_OBSERVATION=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1)
 target_link_libraries(fastdds_dsoftbus_ros2_214_target_runtime PUBLIC fastrtps fastcdr Threads::Threads)

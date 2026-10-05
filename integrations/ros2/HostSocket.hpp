@@ -9,6 +9,8 @@ struct LinkConfiguration {
     bool forward=true;
     bool bounded_reaccept=false;
     std::string reaccept_control;
+    bool route_lifecycle=false;
+    std::string peer_udid;
 };
 void ConfigureLink(LinkConfiguration);
 bool WaitPeerListener(unsigned milliseconds);
@@ -18,4 +20,5 @@ LinkObservation ObserveLink();
 // Host fixture scheduling/connection-ending only; never rebuilds a Runtime.
 bool ReacceptControlStep();
 void ReacceptControlReceipt(const char* action);
+void NodeControlStep();
 }

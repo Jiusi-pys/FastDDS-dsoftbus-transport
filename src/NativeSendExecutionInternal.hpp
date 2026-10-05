@@ -46,6 +46,7 @@ class NativeGenerationAdapter final : public ConnectionGenerationSource
 {
 public:
     bool TryResolve(const Route&,SendConnectionSnapshot&) const override;
+    bool CurrentRouteVersions() const noexcept override {return true;}
 private:
 friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecution;
     explicit NativeGenerationAdapter(std::shared_ptr<RuntimeCeilingLease> l) noexcept : ceiling_(std::move(l)) {}

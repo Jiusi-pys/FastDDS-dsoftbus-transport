@@ -7,6 +7,7 @@ namespace fastdds_dsoftbus::dsoftbus::phase0 {
 namespace detail {struct PublicSocketState;}
 struct PublicSocketQos {std::int32_t type=0,value=0;};
 struct PublicSocketConfiguration {
+    bool route_lifecycle=false; // explicit, default-off node subscription
     BackendIdentity identity;
     BackendIdentity listener_identity; // explicit dual topology; empty keeps legacy single owner
     RecordRole role=RecordRole::Client;
@@ -48,6 +49,11 @@ struct PublicSocketObservation {
 // headers. Real Kind is NOT admitted by the normal ProviderAdapter/facade gate.
 class PublicSocketBackend final:public NativeBackend {
 public:
+    bool RouteLifecycleEnabled()const noexcept override;
+    BackendStatus SubscribeNodes(std::function<void(bool,std::string_view)>) override;
+    BackendStatus UnsubscribeNodes() override;
+    v1::RouteResult ResolveNode(const v1::DeviceIdentity&,const std::string&) override;
+    BackendStatus ConfigurePeerRoute(const Route&) override;
     explicit PublicSocketBackend(PublicSocketConfiguration);
     ~PublicSocketBackend() override;
     BackendKind Kind()const noexcept override;

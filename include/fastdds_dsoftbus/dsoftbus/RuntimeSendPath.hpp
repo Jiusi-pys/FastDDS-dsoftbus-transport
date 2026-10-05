@@ -70,6 +70,7 @@ public:
     // Bind/network wait, permission writes or sender/runtime reentry. This
     // value is NOT a Socket lease or proof of native callback quiescence.
     virtual bool TryResolve(const Route& selected_route, SendConnectionSnapshot& output) const = 0;
+    virtual bool CurrentRouteVersions() const noexcept {return false;}
 };
 
 using RuntimeIdentityHandle = std::shared_ptr<const detail::RuntimeIdentity>;

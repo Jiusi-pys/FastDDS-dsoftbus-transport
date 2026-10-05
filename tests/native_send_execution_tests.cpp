@@ -157,6 +157,19 @@ void Windows()
     CHECK(f.table->SnapshotUsage().send.entered==0);CHECK(fresh.SnapshotUsage().records==0);
     CHECK(!Send(*b.front()));CHECK(!e.Attach(fresh,b).ok());
 }
+void OfflineIsolation()
+{
+    Fixture f;NativeSendExecution e(*f.table);auto r=Registration(e,f.config);
+    rtps::SendResourceList senders;CHECK(e.Attach(r,senders).ok());auto* retained=senders.front().get();
+    auto provider=std::make_shared<Provider>();CHECK(Send(*retained,10));auto initial=e.Take(r);CHECK(initial);
+    auto admitted=e.TryAdmit(*initial.value,provider);CHECK(admitted);CHECK(admitted.value->Run().outcome==NativeSendOutcome::ReturnedSdkCode);
+    CHECK(f.table->ObserveNodeOffline("network-original-0")==NativeStatus::None);
+    CHECK(senders.front().get()==retained&&!Send(*retained,10));
+    CHECK(Send(*retained,11));auto unaffected=e.Take(r);CHECK(unaffected);auto other=e.TryAdmit(*unaffected.value,provider);CHECK(other);
+    CHECK(other.value->Run().outcome==NativeSendOutcome::ReturnedSdkCode&&provider->calls==2);
+    CHECK(f.table->ObserveNodeOffline("unknown-node")==NativeStatus::NotFound&&Send(*retained,12));
+    CHECK(e.Revoke(r)==NativeStatus::None);
+}
 void Retention()
 {
     Fixture f;NativeSendExecution e(*f.table),second(*f.table);std::vector<rtps::SendResourceList> retained(16);
@@ -491,6 +504,7 @@ int main()
     static_assert(!std::is_constructible_v<NativeSendWork,RuntimeIdentityHandle,OwnedSendRecord>);
     try {
         Creation();std::cout<<"PASS N2-CREATE\n";
+        OfflineIsolation();std::cout<<"PASS ROUTE-OFFLINE-ISOLATION\n";
         Windows();std::cout<<"PASS N2-WINDOWS\n";
         Retention();std::cout<<"PASS N2-RETENTION\n";
         QuotasAndBlockedCall();std::cout<<"PASS N2-QUOTAS\n";

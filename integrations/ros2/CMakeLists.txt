@@ -19,7 +19,7 @@ add_library(fastdds_dsoftbus_ros2_214_runtime STATIC ${_files})
 target_include_directories(fastdds_dsoftbus_ros2_214_runtime PUBLIC
     "$<BUILD_INTERFACE:${_transport_root}/include>" "$<INSTALL_INTERFACE:include>")
 target_include_directories(fastdds_dsoftbus_ros2_214_runtime PRIVATE
-    "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+    "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
 target_compile_definitions(fastdds_dsoftbus_ros2_214_runtime PUBLIC FASTDDS_DSOFTBUS_FASTDDS_214=1
     PRIVATE FASTDDS_DSOFTBUS_STARTUP_OBSERVATION=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1
         FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM=1)
@@ -29,7 +29,7 @@ set_property(TARGET fastdds_dsoftbus_ros2_214_runtime APPEND PROPERTY COMPATIBLE
 add_library(fastdds_dsoftbus_ros2_host_bridge SHARED Bridge.cpp HostSocket.cpp target/NativeObservation.cpp "${_transport_root}/probes/PublicSocketRtpsObservation.cpp")
 target_compile_definitions(fastdds_dsoftbus_ros2_host_bridge PRIVATE FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1)
 target_link_libraries(fastdds_dsoftbus_ros2_host_bridge PRIVATE fastdds_dsoftbus_ros2_214_runtime ws2_32)
-target_include_directories(fastdds_dsoftbus_ros2_host_bridge PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport")
+target_include_directories(fastdds_dsoftbus_ros2_host_bridge PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
 target_compile_features(fastdds_dsoftbus_ros2_host_bridge PRIVATE cxx_std_17)
 include(CTest)
 if(BUILD_TESTING)

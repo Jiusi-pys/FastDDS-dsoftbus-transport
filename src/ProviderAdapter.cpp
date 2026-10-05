@@ -100,6 +100,12 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
             creating = true;
         }
         try {
+            if(backend->RouteLifecycleEnabled()&&request.role==RecordRole::Client) {
+                auto route=native.OperationalRoute(binding->OriginalOwner());
+                if(!route||backend->ConfigurePeerRoute(*route.value)!=BackendStatus::None) {
+                    std::lock_guard<std::mutex> lock(gate);creating=false;return NativeSocketResult::Error(-1);
+                }
+            }
             auto result = backend->Create(ProviderCallbacks{weak_from_this(),request.role});
             if (result.status == BackendStatus::None && result.socket && *result.socket >= 0) {
                 std::lock_guard<std::mutex> lock(gate);
@@ -333,10 +339,11 @@ BackendStatus RequestNormalEnd(RecordRole role) noexcept {
     {std::lock_guard<std::mutex> lock(gate);
         if(lane>=2||!request.config.bounded_reaccept_host||!dual||
            phase!=AdapterPhase::Published||stopped||listener_stopped)return BackendStatus::InvalidState;
-        if(normal_end_done[lane])return BackendStatus::None;
         child=accepted;selected=role==RecordRole::Client?binding.get():child.get();
         if(!selected)return BackendStatus::InvalidState;
         const auto incarnation=selected->OriginalOwner().Observe().incarnation;
+        if(backend->RouteLifecycleEnabled()&&normal_end_owner[lane]!=incarnation){normal_end_done[lane]=false;normal_end_owner[lane]=0;}
+        if(normal_end_done[lane])return BackendStatus::None;
         if(normal_end_owner[lane]&&normal_end_owner[lane]!=incarnation)return BackendStatus::InvalidIdentity;
         normal_end_owner[lane]=incarnation;
     }
@@ -352,6 +359,40 @@ BackendStatus RequestNormalEnd(RecordRole role) noexcept {
     return BackendStatus::None;
 }
 
+    BackendStatus AdvanceNodeLifecycle() noexcept {
+    if(backend->RouteLifecycleEnabled()) {
+        NativeResult<NodeRouteRequest> resolution;
+        bool resolving=false;
+        {
+            std::unique_lock<std::mutex> control(control_gate,std::try_to_lock);
+            if(control.owns_lock()) {
+                std::lock_guard<std::mutex> lock(gate);
+                if(phase==AdapterPhase::Published&&!stopped&&!listener_stopped) {
+                    resolution=native.TakeNodeResolution();
+                    if(resolution){++controls;resolving=true;}
+                }
+            }
+        }
+        if(resolving){
+            struct ResolutionDone{ProviderAdapterState& s;~ResolutionDone(){std::lock_guard<std::mutex> lock(s.gate);--s.controls;s.idle.notify_all();}} done{*this};
+            v1::RouteResult result;
+            // Keep lifetime accounting, without holding an adapter/control gate
+            // across a potentially reentrant public directory call.
+            try{result=backend->ResolveNode(resolution.value->identity(),resolution.value->network_hint());}catch(...){result={};}
+            (void)native.CompleteNodeResolution(*resolution.value,result);
+        }
+        bool dial=false,accepted=false;
+        {std::lock_guard<std::mutex> lock(gate);
+            if(phase==AdapterPhase::Published&&!stopped&&!listener_stopped) {
+                dial=binding&&!outgoing_stopped&&binding->OriginalOwner().Observe().close_intent;
+                accepted=this->accepted&&accepted_phase==AcceptedPhase::Active&&this->accepted->OriginalOwner().Observe().close_intent;
+            }
+        }
+        if(dial){const auto ended=RequestNormalEnd(RecordRole::Client);if(ended!=BackendStatus::None&&ended!=BackendStatus::NoWork)return ended;}
+        if(accepted){const auto ended=RequestNormalEnd(RecordRole::Server);if(ended!=BackendStatus::None&&ended!=BackendStatus::NoWork)return ended;}
+    }
+    return BackendStatus::None;
+    }
     BackendStatus AdvanceHostReaccept() noexcept {
         if(!request.config.bounded_reaccept_host)return BackendStatus::None;
         if(provider_callback_depth||ServiceRecordBinding::IsCallbackContext())return BackendStatus::InvalidState;
@@ -379,6 +420,9 @@ BackendStatus RequestNormalEnd(RecordRole role) noexcept {
             const auto original=binding->OriginalOwner();
             if(!original.AdapterSettled())return BackendStatus::NoWork;
             {std::lock_guard<std::mutex> lock(gate);retired_outgoing=original.Observe();}
+            // Settlement belongs to the retired owner even while its route is
+            // unavailable. Only creating the replacement requires a fresh route.
+            if(backend->RouteLifecycleEnabled()&&!native.RouteAvailable(request.route))return BackendStatus::NoWork;
             if(replacement_gate){
                 try {if(!replacement_gate())return BackendStatus::NoWork;}
                 catch(...){std::lock_guard<std::mutex> lock(gate);renewal_failed=true;return BackendStatus::CallbackFailure;}
@@ -626,6 +670,8 @@ BackendStatus ProviderAdapter::Publish() noexcept {
     return BackendStatus::None;
 }
 BackendStatus ProviderAdapter::DispatchOne() noexcept {
+    const auto node_control=state_->AdvanceNodeLifecycle();
+    if(node_control!=BackendStatus::None&&node_control!=BackendStatus::NoWork)return node_control;
     const auto control=state_->AdvanceHostReaccept();
     if(control!=BackendStatus::None&&control!=BackendStatus::NoWork)return control;
     detail::ProviderAdapterState::DispatchActivity activity{*state_};

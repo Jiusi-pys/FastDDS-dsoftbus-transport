@@ -1,5 +1,6 @@
 #ifndef FASTDDS_DSOFTBUS_NATIVE_BACKEND_HPP
 #define FASTDDS_DSOFTBUS_NATIVE_BACKEND_HPP
+#include <fastdds_dsoftbus/dsoftbus/V1Address.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -7,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <fastdds_dsoftbus/dsoftbus/ServiceRecordTable.hpp>
 #include <fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp>
 namespace fastdds_dsoftbus::dsoftbus { class NativeOwnerLease; }
@@ -95,6 +97,12 @@ public:
     virtual BackendStatus ResetBoundedConnection(RecordRole role,const NativeOwnerLease& old) {return ResetHostConnection(role,old);}
     virtual BackendIdentity ListenerIdentity() const {return {};}
     virtual BackendStatus ConfigureEntrance(const RecordEntrance&) {return BackendStatus::None;}
+    // Optional node-directory boundary; default paths do not subscribe/resolve.
+    virtual bool RouteLifecycleEnabled() const noexcept {return false;}
+    virtual BackendStatus SubscribeNodes(std::function<void(bool,std::string_view)>) {return BackendStatus::NotImplemented;}
+    virtual BackendStatus UnsubscribeNodes() {return BackendStatus::None;}
+    virtual v1::RouteResult ResolveNode(const v1::DeviceIdentity&,const std::string&) {return {};}
+    virtual BackendStatus ConfigurePeerRoute(const Route&) {return BackendStatus::None;}
     virtual BackendSocketResult Create(ProviderCallbacks) = 0;
     virtual BackendSocketResult CreateListener(ProviderCallbacks) {return {};}
     // Original opaque ownership, not a provider-created token or qualification.

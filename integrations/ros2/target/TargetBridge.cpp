@@ -34,7 +34,7 @@ Values read(const char* path) {
     while (std::getline(input, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         const auto equals = line.find('=');
-        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release"&&line.substr(0,equals)!="native_reaccept_order"&&line.substr(0,equals)!="native_reaccept_control") ||
+        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release"&&line.substr(0,equals)!="native_reaccept_order"&&line.substr(0,equals)!="native_reaccept_control"&&line.substr(0,equals)!="route_lifecycle") ||
                 !values.emplace(line.substr(0, equals), line.substr(equals + 1)).second)
             throw std::runtime_error("configuration syntax/duplicate/unknown key");
     }
@@ -110,6 +110,8 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         if(!v1::AddressCodec::ValidIdentity(local_identity)||!v1::AddressCodec::ValidIdentity(peer_identity))
             throw std::runtime_error("invalid deployment identity");
         const bool bounded_native=values.at("backend")=="OHOS_PUBLIC_SOCKET_BOUNDED_REACCEPT_EXPERIMENTAL";
+        const bool routes=values.count("route_lifecycle")&&integer(values,"route_lifecycle",1)!=0;
+        if(routes&&!bounded_native)throw std::runtime_error("route lifecycle requires explicit bounded experiment");
         if(!bounded_native&&values.at("backend")!="OHOS_PUBLIC_SOCKET_EXPERIMENTAL")throw std::runtime_error("target backend selection");
 #ifndef FASTDDS_DSOFTBUS_BOUNDED_NATIVE_REACCEPT_EXPERIMENT
         if(bounded_native)throw std::runtime_error("native reaccept experiment not compiled");
@@ -143,7 +145,7 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         backend.package_name = values.at("authorized_package");backend.expected_peer_initiator_name=values.at("peer_initiator_name"); backend.peer_network_id = values.at("peer_network_id");
         backend.peer_name = config.directory.routes.front().fields.remote_listen_name; backend.max_message_size = 65536;
         backend.bind_qos = {{0,80},{1,2000}}; backend.listen_qos = backend.bind_qos;
-        backend.bounded_native_reaccept_experiment=bounded_native;
+        backend.bounded_native_reaccept_experiment=bounded_native;backend.route_lifecycle=routes;
         owner->runtime = std::make_unique<experimental::Runtime>(backend);
         if(bounded_native){
             const auto expected="/data/local/tmp/mdds_dds_"+owner->run+"_"+(side?"B":"A")+"/control.NATIVE_REACCEPT";

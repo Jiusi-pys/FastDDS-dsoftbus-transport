@@ -27,7 +27,7 @@ class BoundedNativeControl final {
     using Probe=dsoftbus::phase0::RuntimeProbeAccess;
     BridgeOwner& owner;
     const unsigned domain;
-    const bool outgoing_first,host_model;
+    const bool outgoing_first,host_model,route_model;
     const std::string path;
     bool armed=false,requested=false,ended=false,settled=false,ready=false,published=false;
     int old_id=-1,listener=-1;
@@ -90,8 +90,8 @@ class BoundedNativeControl final {
             static_cast<unsigned long long>(close.calls-initial_shutdown_calls),static_cast<unsigned long long>(close.returns-initial_shutdown_returns),static_cast<unsigned long long>(last_wall),sdk.outgoing_socket.value_or(-1),sdk.accepted_socket.value_or(-1));std::fflush(stdout);
     }
 public:
-    BoundedNativeControl(BridgeOwner& value,unsigned d,bool first,std::string control,bool model=false)
-        :owner(value),domain(d),outgoing_first(first),host_model(model),path(std::move(control)){}
+    BoundedNativeControl(BridgeOwner& value,unsigned d,bool first,std::string control,bool model=false,bool routes=false)
+        :owner(value),domain(d),outgoing_first(first),host_model(model),route_model(routes),path(std::move(control)){}
     void CheckClock(){std::lock_guard<std::mutex> lock(clock_gate);const auto wall=WallTime();if(last_wall&&wall<last_wall)throw std::runtime_error("wall clock rollback");last_wall=wall;}
     bool PermitReplacement(){
         if(refused.load()||!armed)return false;
@@ -136,7 +136,7 @@ public:
         }
         const auto& old=owner.side?view.adapter.retired_accepted:view.adapter.retired_outgoing;
         if(!settled&&old.incarnation==old_owner&&old.owned_id==old_id&&old.close_intent&&(old.shutdown_returned||old.on_shutdown_seen)&&!old.callback_inflight&&!old.receive_inflight&&!old.entered_context_lost){settled=true;Emit("OLD_OWNER_SETTLED",-1,0,old);}
-        if(owner.side&&settled&&!ready&&view.adapter.accepted_phase==dsoftbus::phase0::AcceptedPhase::Empty){ready=true;Emit("PEER_READY",-1,0,old);}
+        if((owner.side||route_model)&&settled&&!ready&&view.adapter.accepted_phase==dsoftbus::phase0::AcceptedPhase::Empty){ready=true;Emit("PEER_READY",-1,0,old);}
         if(settled&&!published&&lane.socket>=0&&lane.socket!=old_id&&lane.owner_incarnation&&lane.owner_incarnation!=old_owner&&
             (owner.side?view.adapter.accepted_phase==dsoftbus::phase0::AcceptedPhase::Active:!view.adapter.outgoing_stopped)){
             Endpoints("AFTER");published=true;Emit("OWNER_PUBLISHED",lane.socket,lane.owner_incarnation,old);

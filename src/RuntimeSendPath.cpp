@@ -144,12 +144,14 @@ RuntimeSendReport RuntimeSendPath::Submit(const std::vector<NetworkBuffer>& buff
             if (!generations_->TryResolve(*target.route, snapshot)) {
                 report.status = RuntimeSendStatus::UnresolvedConnection; return report;
             }
-            if (snapshot.generation == 0 || snapshot.route_version != target.route->route_version ||
+            if (snapshot.generation == 0 || snapshot.route_version == 0 ||
+                    (!generations_->CurrentRouteVersions()&&snapshot.route_version!=target.route->route_version) ||
                     snapshot.key.local_locator != target.route->key.local_locator ||
                     snapshot.key.remote_locator != target.route->key.remote_locator) {
                 report.status = RuntimeSendStatus::InvalidConnectionSnapshot; return report;
             }
             target.generation = snapshot.generation;
+            target.route_version = snapshot.route_version;
         }
         std::vector<SendBufferView> views(std::size_t{0});
         // Only used, nonempty prefix pieces need metadata. Each accounts for

@@ -1,5 +1,7 @@
 #ifndef FASTDDS_DSOFTBUS_DSOFTBUS_NATIVE_OWNER_TABLE_HPP
 #define FASTDDS_DSOFTBUS_DSOFTBUS_NATIVE_OWNER_TABLE_HPP
+#include <fastdds_dsoftbus/dsoftbus/V1Address.hpp>
+#include <string_view>
 
 #include <fastdds_dsoftbus/dsoftbus/RuntimeSendPath.hpp>
 #include <array>
@@ -148,6 +150,22 @@ struct NativeCompletion
 {
     NativeStatus status = NativeStatus::NotImplemented;
     NativeOwnerObservation owner{};
+};
+// Product-local request identity. This is NOT an SDK event epoch. The opaque
+// original state remains held until the resolver returns, even after shutdown.
+class NodeRouteRequest final {
+public:
+    const v1::DeviceIdentity& identity() const noexcept {return identity_;}
+    const std::string& network_hint() const noexcept {return hint_;}
+    const RouteKey& key() const noexcept {return key_;}
+private:
+    friend class NativeOwnerTable;
+    std::shared_ptr<detail::NativeState> state_;
+    std::size_t route_=0;
+    std::uint64_t revision_=0;
+    v1::DeviceIdentity identity_;
+    std::string hint_;
+    RouteKey key_;
 };
 struct NativeSocketResult
 {
@@ -392,6 +410,13 @@ public:
     NativeStatus QuarantineHostId(const Locator& local, NativeSocketId) noexcept;
     bool HostIdWasSeen(NativeSocketId) const noexcept;
     NativeResult<SendConnectionSnapshot> TryResolve(const RouteKey&, std::uint64_t expected_route_version) const noexcept;
+    // Authoritative node-directory input, never inferred from a Socket error.
+    NativeStatus ObserveNodeOffline(std::string_view network_id) noexcept;
+    NativeStatus ObserveNodeOnline(std::string_view network_hint) noexcept;
+    NativeResult<NodeRouteRequest> TakeNodeResolution() noexcept;
+    NativeStatus CompleteNodeResolution(const NodeRouteRequest&,const v1::RouteResult&) noexcept;
+    NativeResult<Route> OperationalRoute(const NativeOwnerLease&) const noexcept;
+    bool RouteAvailable(const RouteKey&) const noexcept;
     void RequestServiceClose() noexcept;
     NativeUsageSnapshot SnapshotUsage() const noexcept;
 private:

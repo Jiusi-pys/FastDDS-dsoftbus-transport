@@ -1,4 +1,5 @@
 #include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
+#include <limits>
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
 #include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
 #ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
@@ -115,6 +116,12 @@ struct HostProviderLoop::State {
     };
 };
 HostProviderLoop::HostProviderLoop(std::shared_ptr<NativeBackend> p, std::shared_ptr<ProcessReceiveObserver> o) : state_(new State(std::move(p),std::move(o))),view_(std::make_shared<View>()) {}
+NativeStatus HostProviderLoop::ObserveNodeOffline(const std::string& network_id) noexcept
+{
+    auto& s=*state_;std::lock_guard<std::mutex> lock(s.gate);
+    if(!s.started||s.stopping||!s.native)return NativeStatus::ServiceClosing;
+    return s.native->ObserveNodeOffline(network_id);
+}
 HostProviderLoop::HostProviderLoop(std::shared_ptr<State> s,std::shared_ptr<View> v):state_(std::move(s)),view_(std::move(v)){}
 HostProviderLoop::~HostProviderLoop() {
     if(Shutdown())return;
@@ -324,6 +331,7 @@ InputOpenResult HostProviderLoop::Open(const Locator& local, InputChannels::Rece
 }
 InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannels::Receiver* receiver) noexcept {
     auto& s=*state_;
+    struct NodeOpenActivity{State& s;bool armed=false;~NodeOpenActivity(){if(armed){std::lock_guard<std::mutex> lock(s.gate);--s.active;s.changed.notify_all();}}} node_open{s};
     {std::lock_guard<std::mutex> lock(s.gate);
         ++s.open_calls;
         if(!s.started||s.stopping){STARTUP_CAPTURE("LoopOpen_Disabled_result",UINT64_MAX,-1,-1,int(InputOpenResult::Disabled),0);return InputOpenResult::Disabled;}
@@ -332,6 +340,10 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
         if(local!=s.config.directory.locals[0].local_locator){STARTUP_CAPTURE("LoopOpen_InvalidLocal_result",UINT64_MAX,-1,-1,int(InputOpenResult::InvalidLocal),0);return InputOpenResult::InvalidLocal;}
         if(!receiver&&!s.shared){STARTUP_CAPTURE("LoopOpen_NullReceiver_result",UINT64_MAX,-1,-1,int(InputOpenResult::NullReceiver),0);return InputOpenResult::NullReceiver;}
         if(s.input_open)return s.receiver==receiver?InputOpenResult::AlreadyOpen:InputOpenResult::Conflict;
+        if(s.backend->RouteLifecycleEnabled()){
+            if(s.active==std::numeric_limits<std::size_t>::max())return InputOpenResult::Disabled;
+            ++s.active;node_open.armed=true;
+        }
     }
     if(s.adapter) {
         const auto result=s.adapter->ReopenInput(receiver);
@@ -344,7 +356,11 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
             STARTUP_CAPTURE("LocalCleanup_enter",UINT64_MAX,-1,-1,0,0);
 #endif
-            const auto receipt=pending->Close();
+            auto receipt=pending->Close();
+            if(s.backend->RouteLifecycleEnabled()){
+                try{const auto node=s.backend->UnsubscribeNodes();if(node!=BackendStatus::None)receipt.status=node;}
+                catch(...){receipt.status=BackendStatus::ProviderException;}
+            }
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
             STARTUP_CAPTURE("Close_primary_BackendStatus_result",UINT64_MAX,-1,-1,int(receipt.status),0);
             STARTUP_CAPTURE("Close_cleanup_BackendStatus_result",UINT64_MAX,-1,-1,int(receipt.cleanup_status),0);
@@ -393,6 +409,18 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
 #endif
         if(initialized!=BackendStatus::None||published!=BackendStatus::None) {
             settle_pending();return InputOpenResult::Disabled;
+        }
+        if(s.backend->RouteLifecycleEnabled()) {
+            const std::weak_ptr<State> weak=state_;
+            const auto subscribed=s.backend->SubscribeNodes([weak](bool online,std::string_view network){
+                if(auto current=weak.lock()) {
+                    std::lock_guard<std::mutex> lock(current->gate);
+                    if(current->stopping||current->closed||!current->native)return;
+                    if(online)(void)current->native->ObserveNodeOnline(network);
+                    else (void)current->native->ObserveNodeOffline(network);
+                }
+            });
+            if(subscribed!=BackendStatus::None){settle_pending();return InputOpenResult::Disabled;}
         }
     }
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
@@ -573,11 +601,22 @@ bool HostProviderLoop::ShutdownRuntime(bool owns_stop) noexcept {
         if(revoke)revoke.value->Progress();
     }
     if(s.adapter)s.adapter->SealIngress();
+    BackendStatus node_close=BackendStatus::None;
+    if(s.backend->RouteLifecycleEnabled()) {
+        if(s.native)s.native->RequestServiceClose();
+        try{node_close=s.backend->UnsubscribeNodes();}catch(...){node_close=BackendStatus::ProviderException;}
+    }
     RuntimeShutdownPoint point;
     {
         std::unique_lock<std::mutex> lock(s.gate);s.sealed=true;s.changed.notify_all();
         s.changed.wait(lock,[&]{return s.active==0;});
         point={s.stopping,s.sealed,s.active};
+    }
+    if(s.backend->RouteLifecycleEnabled()){
+        // A registration that was in flight at seal reconciles before active
+        // Open exits. Read its sticky cleanup result after that lifetime settles.
+        try{const auto late=s.backend->UnsubscribeNodes();if(late!=BackendStatus::None)node_close=late;}
+        catch(...){node_close=BackendStatus::ProviderException;}
     }
     if(s.before_native_close) {
         ShutdownObserverFrame frame(&s);
@@ -591,8 +630,9 @@ bool HostProviderLoop::ShutdownRuntime(bool owns_stop) noexcept {
     // this snapshot is not folded into `close`; it stays visible only through Observe().
     std::optional<BackendCloseResult> failed_cleanup;
     {std::lock_guard<std::mutex> lock(s.gate);failed_cleanup=s.failed_open_cleanup;}
-    const auto result=s.adapter?s.adapter->Close():
+    auto result=s.adapter?s.adapter->Close():
         failed_cleanup.value_or(BackendCloseResult{BackendStatus::None,true});
+    if(node_close!=BackendStatus::None)result.status=node_close;
     {std::lock_guard<std::mutex> lock(s.gate);s.close=result;s.input_open=false;s.closed=true;s.changed.notify_all();
         return result.status==BackendStatus::None&&result.adapter_drained&&!s.shutdown_observer_fault;}
 }

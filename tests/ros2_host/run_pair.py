@@ -2,9 +2,10 @@
 import argparse,json,os,subprocess,time,secrets,socket,re,hashlib
 from pathlib import Path
 from control_files import publish_control
-p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort','dual'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');p.add_argument('--host-close-error',choices=['0','1'],default='0');p.add_argument('--paired-close',action='store_true');p.add_argument('--asymmetric-cleanup',action='store_true');p.add_argument('--reaccept-host',action='store_true');p.add_argument('--reaccept-origin',choices=['A','B'],default='A');p.add_argument('--owned-normal-reaccept',action='store_true');a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort','dual'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');p.add_argument('--host-close-error',choices=['0','1'],default='0');p.add_argument('--paired-close',action='store_true');p.add_argument('--asymmetric-cleanup',action='store_true');p.add_argument('--reaccept-host',action='store_true');p.add_argument('--reaccept-origin',choices=['A','B'],default='A');p.add_argument('--owned-normal-reaccept',action='store_true');p.add_argument("--route-lifecycle",choices=["new","same"]);a=p.parse_args()
 if a.reaccept_host and (a.mode!='dual' or a.forward!='1'):raise ValueError('Reaccept fixture requires dual opaque-byte forwarding')
 if a.owned_normal_reaccept and not a.reaccept_host:raise ValueError('Owned normal model requires explicit Host reaccept')
+if a.route_lifecycle and not a.owned_normal_reaccept:raise ValueError("route fixture requires retained-entity scene")
 a.output.mkdir(parents=True,exist_ok=False);run=secrets.token_hex(8);domain=201
 # Optional test-only controller response, never an application/SDK injection.
 close_control=os.environ.get('FDDST_HOST_TEST_CLOSE_CONTROL','NORMAL_COMPLETION')
@@ -25,6 +26,8 @@ for index,side in enumerate('AB'):
   with conf.open('a') as stream:stream.write('host_reaccept=1\nreaccept_control='+str((a.output/(side+'-reaccept')).resolve())+'\n')
  if a.owned_normal_reaccept:
   with conf.open('a') as stream:stream.write('owned_normal_reaccept=1\nnative_reaccept_order='+('outgoing-first' if a.reaccept_origin=='A' else 'accepted-first')+'\n')
+ if a.route_lifecycle:
+  with conf.open("a") as stream:stream.write("route_lifecycle=1\n")
  if a.paired_close:
   with conf.open('a') as stream:stream.write('runtime_close_release='+str((a.output/(side+'-control.RUNTIME_CLOSE')).resolve())+'\n')
  env=os.environ.copy();env['PATH']=os.pathsep.join([str(a.fastdds_prefix/'bin'),str(a.ros_prefix/'bin'),str(a.pixi_prefix/'Library/bin'),env.get('PATH','')]);env['RMW_IMPLEMENTATION']='rmw_fastrtps_cpp';env['ROS_DOMAIN_ID']=str(domain);env['ROS_AUTOMATIC_DISCOVERY_RANGE']='SUBNET';env['FASTDDS_DSOFTBUS_REQUIRED_CONFIG']=str(conf.resolve());env['FASTDDS_ENVIRONMENT_FILE']='';env['SKIP_DEFAULT_XML']='1'
@@ -51,7 +54,24 @@ def native_control(side,phase):publish_control(reaccept_file(side,phase),f'NATIV
 def native_seen(text,stage):return bool(re.search(r'^NATIVE_REACCEPT_EVENT .*stage='+stage+r' ',text,re.M))
 while any(x.poll() is None for x in processes.values()):
  texts={s:(a.output/(s+'.stdout')).read_text(errors='replace') for s in 'AB'}
- if a.owned_normal_reaccept:
+ if a.route_lifecycle:
+  ready=all(re.search(r"^ROS_STAGE run="+run+r" side="+s+r" pid="+str(processes[s].pid)+r" stage=PRE_DONE$",texts[s],re.M) for s in "AB")
+  if reaccept_state=="WAIT_ORIGINAL" and ready:
+   for s in "AB":native_control(s,"ARM")
+   reaccept_state="ARMING"
+  elif reaccept_state=="ARMING" and all(native_seen(texts[s],"ARMED") for s in "AB"):
+   for s in "AB":native_control(s,"NODE_OFFLINE")
+   reaccept_state="OFFLINE"
+  elif reaccept_state=="OFFLINE" and all(native_seen(texts[s],"PEER_READY") for s in "AB"):
+   for s in "AB":native_control(s,"NODE_ONLINE_NEW" if a.route_lifecycle=="new" else "NODE_ONLINE_SAME")
+   reaccept_state="RESOLVING"
+  elif reaccept_state=="RESOLVING" and all("HOST_NODE_QUERY run="+run in texts[s] for s in "AB"):
+   for s in "AB":native_control(s,"REPLACE")
+   reaccept_state="REPLACING"
+  elif reaccept_state=="REPLACING" and all(native_seen(texts[s],"OWNER_PUBLISHED") for s in "AB"):
+   for s in "AB":publish_control(a.output/(s+"-control.REACCEPT_DONE"),f"ROS_RELEASE run={run} side={s} stage=REACCEPT_DONE\n")
+   reaccept_state="COMPLETE"
+ elif a.owned_normal_reaccept:
   ready=all(re.search(r'^ROS_STAGE run='+run+r' side='+s+r' pid='+str(processes[s].pid)+r' stage=PRE_DONE$',texts[s],re.M) for s in 'AB')
   if reaccept_state=='WAIT_ORIGINAL' and ready:
    for s in 'AB':native_control(s,'ARM')
@@ -124,7 +144,7 @@ if a.owned_normal_reaccept:
  import sys
  sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'scripts/public_socket'))
  from analyze_bounded_native_reaccept import analyze,rows
- ledger=analyze(texts,run,'outgoing-first' if a.reaccept_origin=='A' else 'accepted-first','HOST_OPAQUE_PUBLIC_API_SHAPE')
+ ledger=analyze(texts,run,'outgoing-first' if a.reaccept_origin=='A' else 'accepted-first','HOST_OPAQUE_PUBLIC_API_SHAPE',a.route_lifecycle)
  ledger['boards']={}
  for s in 'AB':
   emitted=rows(texts[s],'ROS_MAIN')

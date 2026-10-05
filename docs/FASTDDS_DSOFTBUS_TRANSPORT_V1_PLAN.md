@@ -194,3 +194,26 @@ cancel、SDK physical record/epoch/drain 和原编号 A5/C1 finding closure 均
 保持未满足、未证明或 source-incomplete。默认 `NO_REACCEPT`、PF/P4、平台
 策略和 `NOT_PRODUCTION_QUALIFIED` 不变，`FULL_REQUIREMENTS_COMPLETE`、
 `SDK_RECONNECT_QUALIFIED` 和 QualificationProfile 均未成立。
+
+<!-- Route lifecycle Host checkpoint, 2026-10-06 -->
+
+新增 [route lifecycle Host acceptance](ROUTE_LIFECYCLE_HOST_ACCEPTANCE_20261006.md)
+记录当前工作树中来自 `b6a2ee8` 的受限生命周期实现状态：route CTest `19/19`、affected
+Release `219/219`、受影响 ASan `219/219`，API23 OFF/ON 编译链接通过；两个
+canonical ROS Host run 分别为 `3392f80131a36504` 与 `9bfd49c4c7d94a9d`，各自
+PRE8 + POST12 = `20/20`，原 ROS/DDS entities、Runtime、Participant、V1
+locator 和 listener 保持，正常删除、public return、Runtime Close 和退出
+通过。
+
+该状态是 `IMPLEMENTED / BUILDS / HOST_TESTED / INTEGRATION_TESTED`，不是
+`DEVICE_TESTED`：target execution 和设备运行均未执行。当前标签为
+`OFFLINE_ROUTE_INVALIDATION_HOST_VERIFIED`、
+`ONLINE_ROUTE_RERESOLUTION_HOST_VERIFIED`、
+`API23_ROUTE_LIFECYCLE_BUILD_VERIFIED`、
+`DEVICE_OFFLINE_ONLINE_NOT_VERIFIED` 和 `NOT_PRODUCTION_QUALIFIED`。默认
+route/node feature 仍关闭、默认真实 backend 仍 `NO_REACCEPT`；SDK
+epoch/drain、PF/P4、生产资格、A5/C1 原编号文本和完整 reconnect 要求保持
+原状态。两个 skip mutation 均为 build exit 0/test exit 1；旧 mutant-2
+against-stale-mutant-1 是同一早先 resolver 尝试，因增量 mtime 未重新编译
+NativeOwner 而标为 `INVALID_MUTATION_EVIDENCE` 并排除。C1083、C0000135、
+R8 `fcf4721ef3eb8732` 及 577 分批覆盖继续保留。

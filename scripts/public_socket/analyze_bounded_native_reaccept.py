@@ -6,7 +6,7 @@ from pathlib import Path
 from analyze_ros2 import rows
 
 
-def analyze(texts, run, order, source='SDK_PUBLIC_SOCKET'):
+def analyze(texts, run, order, source='SDK_PUBLIC_SOCKET', route_lifecycle=False):
     errors=[]; result={'run':run,'order':order,'source':source,'errors':errors,'pre':{},'post':{}}
     def need(condition, reason):
         if not condition: errors.append(reason)
@@ -71,7 +71,21 @@ def analyze(texts, run, order, source='SDK_PUBLIC_SOCKET'):
             need(len(sent)==len(handled)==len(response)==1,'service:'+segment)
             if len(sent)==len(handled)==len(response)==1:need(sent[0].get('request_id')==handled[0].get('request_id')==response[0].get('request_id') and handled[0].get('sum')==response[0].get('sum')==total,'service_result:'+segment)
         origin='A' if order=='outgoing-first' else 'B';local=[x for x in records[origin]['NATIVE_REACCEPT_EVENT'] if x.get('stage')=='LOCAL_CLOSE_RETURNED']
-        need(len(local)==1 and local[0].get('sdk_shutdown_calls')=='1' and local[0].get('sdk_shutdown_returns')=='1','actual_local_close')
+        if not route_lifecycle:
+            need(len(local)==1 and local[0].get('sdk_shutdown_calls')=='1' and local[0].get('sdk_shutdown_returns')=='1','actual_local_close')
+        else:
+            for side in 'AB':
+                events=rows(texts[side],'HOST_NODE_EVENT');queries=rows(texts[side],'HOST_NODE_QUERY')
+                need([x.get('state') for x in events]==['OFFLINE','ONLINE'] and all(x.get('run')==run and x.get('side')==side and x.get('source')=='HOST_PUBLIC_NODE_API_MODEL' for x in events),'actual_node_boundary:'+side)
+                need(len(queries)==1 and queries[0].get('count')=='1' and queries[0].get('online')=='1','actual_directory_query:'+side)
+                identities=rows(texts[side],'HOST_NODE_IDENTITY');sockets=rows(texts[side],'HOST_SOCKET_ROUTE')
+                need(len(identities)==1 and identities[0].get('key')=='UDID' and identities[0].get('result')=='0','actual_identity_query:'+side)
+                need(len(sockets)==2 and sockets[0].get('queries')=='0' and sockets[1].get('queries')=='1','actual_socket_route:'+side)
+                if len(identities)==1 and len(sockets)==2:
+                    need(sockets[1].get('network')==identities[0].get('network'),'resolved_socket_destination:'+side)
+                    if route_lifecycle in ('new','same'):
+                        need((sockets[1].get('network')!=sockets[0].get('network'))==(route_lifecycle=='new'),'selected_route_mode:'+side)
+                need(all(x.get('run')==run and x.get('side')==side and x.get('source')=='HOST_PUBLIC_NODE_API_MODEL' for x in identities+sockets),'route_boundary_identity:'+side)
     except (ValueError,KeyError,TypeError,IndexError) as error:errors.append('MALFORMED:'+str(error))
     result.update(expected_pre=8,expected_post=12,expected_total=20,**{'pass':not errors});return result
 

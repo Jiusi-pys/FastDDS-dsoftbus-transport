@@ -4,6 +4,7 @@
 #include <windows.h>
 #undef SendMessage
 #include "HostSocket.hpp"
+#include <softbus_bus_center.h>
 #include <socket.h>
 #include <array>
 #include <atomic>
@@ -25,6 +26,10 @@ std::array<bool,socket_capacity> dial{},terminal{};
 std::condition_variable terminal_changed;
 int next_id=1,outgoing_id=-1,accepted_id=-1;
 bool controlled_end=false,pause_reported=false;
+INodeStateCb* node_callback=nullptr;
+bool node_online=true,node_offline_sent=false,node_online_sent=false;
+std::string node_network;
+unsigned node_queries=0;
 const ISocketListener* listener=nullptr;
 std::thread accept_thread,read_thread;
 std::atomic<bool> stop{false};
@@ -35,9 +40,11 @@ bool transfer(SOCKET s,char* p,int n,bool write) {
     while(n>0) {int k=write ? ::send(s,p,n,0) : ::recv(s,p,n,0);if(k<=0)return false;p+=k;n-=k;}return true;
 }
 void peer(PeerSocketInfo& p,bool incoming) {
+    thread_local std::string network_copy;
+    {std::lock_guard<std::mutex> lock(gate);network_copy=node_network;}
     p.name=const_cast<char*>((incoming?cfg.peer_outgoing:cfg.peer_listener).c_str());
     p.pkgName=const_cast<char*>(cfg.package.c_str());
-    p.networkId=const_cast<char*>(cfg.side?"host.net.A":"host.net.B");p.dataType=DATA_TYPE_BYTES;
+    p.networkId=const_cast<char*>(network_copy.c_str());p.dataType=DATA_TYPE_BYTES;
 }
 void receive(SOCKET s,int id,const ISocketListener* callback) {
     while(!stop.load()) {
@@ -54,7 +61,7 @@ void receive(SOCKET s,int id,const ISocketListener* callback) {
 }
 }
 void ConfigureLink(LinkConfiguration c) {
-    cfg=std::move(c);WSADATA data;if(WSAStartup(MAKEWORD(2,2),&data)!=0)throw std::runtime_error("WSAStartup");
+    cfg=std::move(c);node_network=cfg.side?"host.net.A":"host.net.B";WSADATA data;if(WSAStartup(MAKEWORD(2,2),&data)!=0)throw std::runtime_error("WSAStartup");
     const auto name="Local\\FastddsDsoftbusRos_"+cfg.run+"_"+std::to_string(cfg.side);
     ready=CreateEventA(nullptr,TRUE,FALSE,name.c_str());if(!ready||GetLastError()==ERROR_ALREADY_EXISTS)throw std::runtime_error("stale listener event");
 }
@@ -100,11 +107,38 @@ bool ReacceptControlStep(){
     }
     return false;
 }
+void NodeControlStep(){
+    if(!cfg.route_lifecycle)return;
+    const auto selected=[&](const char* phase){std::ifstream file(cfg.reaccept_control+"."+phase);std::string line;if(!std::getline(file,line))return false;if(!line.empty()&&line.back()=='\r')line.pop_back();return line=="NATIVE_CONTROL run="+cfg.run+" side="+(cfg.side?"B":"A")+" phase="+phase;};
+    INodeStateCb* cb=nullptr;NodeBasicInfo info{};bool emit=false,online=false;
+    {std::lock_guard<std::mutex> lock(gate);if(!node_callback)return;
+        if(!node_offline_sent&&selected("NODE_OFFLINE")){node_offline_sent=true;node_online=false;emit=true;}
+        else if(node_offline_sent&&!node_online_sent&&(selected("NODE_ONLINE_NEW")||selected("NODE_ONLINE_SAME"))){node_online_sent=true;node_online=true;online=true;emit=true;if(selected("NODE_ONLINE_NEW"))node_network+=".return";}
+        if(emit){cb=node_callback;std::copy(node_network.begin(),node_network.end(),info.networkId);}}
+    if(cb){if(online)cb->onNodeOnline(&info);else cb->onNodeOffline(&info);
+        std::fprintf(stdout,"HOST_NODE_EVENT run=%s side=%c state=%s source=HOST_PUBLIC_NODE_API_MODEL\n",cfg.run.c_str(),cfg.side?'B':'A',online?"ONLINE":"OFFLINE");std::fflush(stdout);}
+}
+}
+extern "C" {
+int32_t RegNodeDeviceStateCb(const char*,INodeStateCb* cb){std::lock_guard<std::mutex> lock(fastdds_dsoftbus::ros2_host::gate);fastdds_dsoftbus::ros2_host::node_callback=cb;return 0;}
+int32_t UnregNodeDeviceStateCb(INodeStateCb* cb){std::lock_guard<std::mutex> lock(fastdds_dsoftbus::ros2_host::gate);if(fastdds_dsoftbus::ros2_host::node_callback==cb)fastdds_dsoftbus::ros2_host::node_callback=nullptr;return 0;}
+int32_t GetAllNodeDeviceInfo(const char*,NodeBasicInfo** info,int32_t* count){using namespace fastdds_dsoftbus::ros2_host;std::lock_guard<std::mutex> lock(gate);++node_queries;*count=node_online?1:0;*info=*count?static_cast<NodeBasicInfo*>(std::calloc(1,sizeof(NodeBasicInfo))):nullptr;if(*count&&!*info)return -1;if(*info)std::copy(node_network.begin(),node_network.end(),(*info)->networkId);std::fprintf(stdout,"HOST_NODE_QUERY run=%s side=%c count=%u online=%d source=HOST_PUBLIC_NODE_API_MODEL\n",cfg.run.c_str(),cfg.side?'B':'A',node_queries,int(node_online));std::fflush(stdout);return 0;}
+void FreeNodeInfo(NodeBasicInfo* info){std::free(info);}
+int32_t GetNodeKeyInfo(const char*,const char* network,NodeDeviceInfoKey key,uint8_t* info,int32_t size){
+    using namespace fastdds_dsoftbus::ros2_host;std::lock_guard<std::mutex> lock(gate);
+    if(!node_online||!network||node_network!=network||key!=NODE_KEY_UDID||!info||size<=static_cast<int32_t>(cfg.peer_udid.size()))return -1;
+    std::memcpy(info,cfg.peer_udid.c_str(),cfg.peer_udid.size()+1);
+    std::fprintf(stdout,"HOST_NODE_IDENTITY run=%s side=%c network=%s key=UDID result=0 source=HOST_PUBLIC_NODE_API_MODEL\n",cfg.run.c_str(),cfg.side?'B':'A',network);std::fflush(stdout);return 0;
+}
 }
 extern "C" int32_t Socket(SocketInfo info) {
     using namespace fastdds_dsoftbus::ros2_host;
     if(info.dataType!=DATA_TYPE_BYTES||!info.name||!info.pkgName)return -601;
     std::lock_guard<std::mutex> l(gate);
+    if(cfg.route_lifecycle&&info.peerName){
+        if(!node_online||!info.peerNetworkId||node_network!=info.peerNetworkId)return -609;
+        std::fprintf(stdout,"HOST_SOCKET_ROUTE run=%s side=%c network=%s queries=%u source=HOST_PUBLIC_NODE_API_MODEL\n",cfg.run.c_str(),cfg.side?'B':'A',info.peerNetworkId,node_queries);std::fflush(stdout);
+    }
     if(!cfg.bounded_reaccept){if(socket_count==2)return -602;return ++socket_count;}
     if(next_id>=int(socket_capacity))return -602;
     const int id=next_id++;dial[id]=info.peerName!=nullptr;++socket_count;return id;

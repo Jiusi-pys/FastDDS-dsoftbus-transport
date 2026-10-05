@@ -3,6 +3,7 @@
 #include <socket.h>
 #include <map>
 #include <set>
+#include "FakeNodeDirectory.hpp"
 
 namespace reaccept_fake {
 std::mutex gate;
@@ -13,6 +14,7 @@ const ISocketListener *server=nullptr,*client=nullptr;
 std::function<void()> in_socket,in_bind,in_send;
 std::function<void(int)> in_shutdown;
 std::vector<int> sent_ids;
+std::vector<std::string> socket_networks;
 void Terminal(int id,bool outgoing=false){
     {std::lock_guard<std::mutex> lock(gate);alive[id]=false;}
     (outgoing?client:server)->OnShutdown(id,SHUTDOWN_REASON_PEER);
@@ -20,7 +22,7 @@ void Terminal(int id,bool outgoing=false){
 }
 extern "C" {
 int32_t Socket(SocketInfo info){using namespace reaccept_fake;int id;
-    {std::lock_guard<std::mutex> lock(gate);id=info.peerName?(forced_socket>=0?forced_socket:next_dial++):10;forced_socket=-1;++socket_calls;alive[id]=true;}
+    {std::lock_guard<std::mutex> lock(gate);id=info.peerName?(forced_socket>=0?forced_socket:next_dial++):10;forced_socket=-1;++socket_calls;alive[id]=true;if(info.peerName)socket_networks.emplace_back(info.peerNetworkId);}
     if(info.peerName&&in_socket)in_socket();return id;
 }
 int32_t Listen(int32_t,const QosTV*,uint32_t,const ISocketListener* cb){reaccept_fake::server=cb;return 0;}
@@ -56,6 +58,21 @@ struct Fixture {
     void Close(){facade->shutdown();auto v=loop->Observe();Check(v.close.status==BackendStatus::None&&v.close.cleanup_status==BackendStatus::None&&v.close.adapter_drained&&v.receive.records==0&&v.tx.records==0&&v.native.callbacks==0&&v.native.receives==0,"settled real adapter resources and original close success");}
 };
 void DefaultGuard(){Fixture f(false);f.Accept(30);f.Retire(30);Check(!f.Prepare(31),"default NO_REACCEPT remains");f.Close();}
+void RouteOfflineRetainedSender(){
+    Fixture f;f.Accept(30);const auto* retained=f.senders.front().get();
+    f.Enqueue(1);Check(f.loop->PumpSend().outcome==NativeSendOutcome::ReturnedSdkCode,"R1 initial real native work");
+    Check(f.loop->ObserveNodeOffline("model.net")==NativeStatus::None,"R1 authoritative node input accepted");
+    const auto before=reaccept_fake::sent_ids.size();unsigned char value=9;
+    std::vector<rtps::NetworkBuffer> buffers{{&value,1}};std::vector<Locator> peers{L(3)};
+    rtps::Locators begin(peers.begin()),end(peers.end());
+    const bool admitted=f.senders.front()->send(buffers,1,&begin,&end,std::chrono::steady_clock::now()+2s,0);
+    if(admitted)(void)f.loop->PumpSend();
+    const auto after=reaccept_fake::sent_ids.size();
+    Check(f.senders.front().get()==retained,"R1 original SenderResource held");
+    std::cout<<"R1_OFFLINE admitted="<<admitted<<" native_before="<<before<<" native_after="<<after<<std::endl;
+    f.Close();Check(!admitted&&after==before,"R1 retained sender admitted native work on offline route");
+}
+#include "RouteLifecycleCases.hpp"
 void LocalNormalEnd(){Fixture f;f.Accept(30);auto before=f.loop->Observe();
     Check(f.loop->RequestNormalEnd(RecordRole::Client)==BackendStatus::None,"normal end uses original owned close without self callback");
     Check(reaccept_fake::closes[20]==1&&reaccept_fake::closes[10]==0&&reaccept_fake::closes[30]==0,"only selected outgoing closes");
@@ -114,4 +131,4 @@ void EnteredCopy(){auto observer=std::make_shared<CopyBarrier>();Fixture f(true,
 void CloseDuringBind(){Fixture f;f.Accept(30);Event entered,release;reaccept_fake::Terminal(20,true);reaccept_fake::in_bind=[&]{entered.Signal();release.Wait();};std::thread control,closing;std::atomic<bool> done{false};BackendStatus result=BackendStatus::None;Cleanup join{[&]{release.Signal();if(control.joinable())control.join();if(closing.joinable())closing.join();}};control=std::thread([&]{result=f.loop->PumpReceive();});entered.Wait();closing=std::thread([&]{f.facade->shutdown();done=true;});Until([&]{return f.loop->Observe().sealed;});Check(!done&&reaccept_fake::closes[21]==0,"close cannot release entered new Bind");release.Signal();control.join();closing.join();reaccept_fake::in_bind={};Check(result!=BackendStatus::None&&f.loop->Observe().closed,"closing control suppresses successful replacement");Check(reaccept_fake::closes[21]==1,"losing fresh dial retains exact close responsibility");}
 void CloseDuringPublication(){Fixture f;Check(f.Prepare(30),"prepared candidate");struct Context {Event entered,release;} ctx;f.backend->SetAcceptedCommitHookForTest([](void* p)noexcept{auto& c=*static_cast<Context*>(p);c.entered.Signal();c.release.Wait();},&ctx);std::thread callback,closing;std::atomic<bool> done{false};Cleanup join{[&]{ctx.release.Signal();if(callback.joinable())callback.join();if(closing.joinable())closing.join();f.backend->SetAcceptedCommitHookForTest(nullptr,nullptr);}};callback=std::thread([&]{reaccept_fake::server->OnBind(30,f.peer.Get());});ctx.entered.Wait();closing=std::thread([&]{f.facade->shutdown();done=true;});Until([&]{return f.loop->Observe().sealed;});Check(!done&&reaccept_fake::closes[30]==0,"close waits owned candidate callback before publication");ctx.release.Signal();callback.join();closing.join();f.backend->SetAcceptedCommitHookForTest(nullptr,nullptr);Check(f.loop->Observe().adapter.accepted_activation_count==0&&reaccept_fake::closes[30]==1,"losing candidate never publishes and closes once");}
 }
-int main(int argc,char** argv){try{Check(argc==2,"case required");std::string c=argv[1];if(c=="callback-before-local")CallbackBeforeLocalEnd();else if(c=="local-shutdown-exception")LocalShutdownException();else if(c=="replacement-gate")ReplacementGate();else if(c=="local-end-accepted")LocalAcceptedEnd();else if(c=="local-end")LocalNormalEnd();else if(c=="local-end-send")LocalEndEnteredSend();else if(c=="entered-copy")EnteredCopy();else if(c=="close-bind")CloseDuringBind();else if(c=="close-publication")CloseDuringPublication();else if(c=="ambiguous-first")AmbiguousFirstEffect();else if(c=="failed-dial-accept")FailedDialKeepsAccept();else if(c=="default")DefaultGuard();else if(c=="fresh-old")FreshAndOld();else if(c=="reused-ids")ReusedIds();else if(c=="wrong-peer")WrongPeer();else if(c=="candidates")Candidates();else if(c=="capacity")Capacity();else if(c=="old-send")OldSend();else if(c=="entered-send")EnteredSend();else if(c=="entered-receiver")EnteredReceiver();else if(c=="late-create")LateDuringCreate();else if(c=="close-once")CloseOnce();else throw std::runtime_error("unknown case");std::cout<<"PASS BOUNDED_REACCEPT_HOST "<<c<<std::endl;return 0;}catch(const std::exception& e){std::cerr<<"FIRST_FAILURE "<<e.what()<<std::endl;return 1;}}
+int main(int argc,char** argv){try{Check(argc==2,"case required");std::string c=argv[1];if(c=="route-resolution-collision")RouteResolutionCollision();else if(c=="route-failure-return")RouteFailureThenReturn();else if(c=="route-resolver-reentry")RouteResolverReentry();else if(c=="route-offline-no-allocation")RouteOfflineNoAllocation();else if(c=="route-reg-failed-close")RouteRegistrationClose(true);else if(c=="route-reg-close")RouteRegistrationClose();else if(c=="route-unrelated-hint")RouteUnrelatedHint();else if(c=="route-query-fail")RouteResolveFailure("query");else if(c=="route-identity-fail")RouteResolveFailure("identity");else if(c=="route-missing")RouteResolveFailure("missing");else if(c=="route-key-fail")RouteResolveFailure("key");else if(c=="route-ambiguous")RouteResolveFailure("ambiguous");else if(c=="route-late-resolve")RouteLateResolve();else if(c=="route-late-bind")RouteLateBind();else if(c=="route-close")RouteCloseAndDuplicates();else if(c=="route-new")RouteResolve(false);else if(c=="route-same")RouteResolve(true);else if(c=="route-entered")RouteEntered();else if(c=="route-offline")RouteOfflineRetainedSender();else if(c=="callback-before-local")CallbackBeforeLocalEnd();else if(c=="local-shutdown-exception")LocalShutdownException();else if(c=="replacement-gate")ReplacementGate();else if(c=="local-end-accepted")LocalAcceptedEnd();else if(c=="local-end")LocalNormalEnd();else if(c=="local-end-send")LocalEndEnteredSend();else if(c=="entered-copy")EnteredCopy();else if(c=="close-bind")CloseDuringBind();else if(c=="close-publication")CloseDuringPublication();else if(c=="ambiguous-first")AmbiguousFirstEffect();else if(c=="failed-dial-accept")FailedDialKeepsAccept();else if(c=="default")DefaultGuard();else if(c=="fresh-old")FreshAndOld();else if(c=="reused-ids")ReusedIds();else if(c=="wrong-peer")WrongPeer();else if(c=="candidates")Candidates();else if(c=="capacity")Capacity();else if(c=="old-send")OldSend();else if(c=="entered-send")EnteredSend();else if(c=="entered-receiver")EnteredReceiver();else if(c=="late-create")LateDuringCreate();else if(c=="close-once")CloseOnce();else throw std::runtime_error("unknown case");std::cout<<"PASS BOUNDED_REACCEPT_HOST "<<c<<std::endl;return 0;}catch(const std::exception& e){std::cerr<<"FIRST_FAILURE "<<e.what()<<std::endl;return 1;}}
