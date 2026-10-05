@@ -3,6 +3,7 @@
 extern "C" void FastddsDsoftbusFactoryFlushTeardownPending() noexcept;
 #include "../PlatformModule.hpp"
 #include "NativeObservation.hpp"
+#include "../BoundedNativeControl.hpp"
 #include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
 #include <fastrtps/attributes/LibrarySettingsAttributes.h>
 #include <fastrtps/xmlparser/XMLProfileManager.h>
@@ -33,7 +34,7 @@ Values read(const char* path) {
     while (std::getline(input, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         const auto equals = line.find('=');
-        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release") ||
+        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release"&&line.substr(0,equals)!="native_reaccept_order"&&line.substr(0,equals)!="native_reaccept_control") ||
                 !values.emplace(line.substr(0, equals), line.substr(equals + 1)).second)
             throw std::runtime_error("configuration syntax/duplicate/unknown key");
     }
@@ -108,7 +109,15 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         const v1::DeviceIdentity peer_identity{values.at("namespace"),domain,values.at("peer_udid")};
         if(!v1::AddressCodec::ValidIdentity(local_identity)||!v1::AddressCodec::ValidIdentity(peer_identity))
             throw std::runtime_error("invalid deployment identity");
-        if (values.at("backend") != "OHOS_PUBLIC_SOCKET_EXPERIMENTAL") throw std::runtime_error("target backend selection");
+        const bool bounded_native=values.at("backend")=="OHOS_PUBLIC_SOCKET_BOUNDED_REACCEPT_EXPERIMENTAL";
+        if(!bounded_native&&values.at("backend")!="OHOS_PUBLIC_SOCKET_EXPERIMENTAL")throw std::runtime_error("target backend selection");
+#ifndef FASTDDS_DSOFTBUS_BOUNDED_NATIVE_REACCEPT_EXPERIMENT
+        if(bounded_native)throw std::runtime_error("native reaccept experiment not compiled");
+#endif
+        if(bounded_native){
+            if(!values.count("native_reaccept_order")||!values.count("native_reaccept_control")||
+                (values.at("native_reaccept_order")!="outgoing-first"&&values.at("native_reaccept_order")!="accepted-first"))throw std::runtime_error("explicit finite native reaccept contract required");
+        }else if(values.count("native_reaccept_order")||values.count("native_reaccept_control"))throw std::runtime_error("native experiment fields require native selection");
         if (!std::regex_match(values.at("run"), std::regex("[0-9a-f]{16}")) ||
                 !std::regex_match(values.at("peer_network_id"), std::regex("[0-9a-f]{64}")))
             throw std::runtime_error("run/peer identity");
@@ -134,7 +143,15 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         backend.package_name = values.at("authorized_package");backend.expected_peer_initiator_name=values.at("peer_initiator_name"); backend.peer_network_id = values.at("peer_network_id");
         backend.peer_name = config.directory.routes.front().fields.remote_listen_name; backend.max_message_size = 65536;
         backend.bind_qos = {{0,80},{1,2000}}; backend.listen_qos = backend.bind_qos;
+        backend.bounded_native_reaccept_experiment=bounded_native;
         owner->runtime = std::make_unique<experimental::Runtime>(backend);
+        if(bounded_native){
+            const auto expected="/data/local/tmp/mdds_dds_"+owner->run+"_"+(side?"B":"A")+"/control.NATIVE_REACCEPT";
+            if(values.at("native_reaccept_control")!=expected)throw std::runtime_error("native control window path");
+            auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,values.at("native_reaccept_order")=="outgoing-first",expected);
+            if(!phase0::RuntimeProbeAccess::BoundedReplacementGate(*owner->runtime,[control]{return control->PermitReplacement();}))throw std::runtime_error("native replacement gate installation");
+            owner->before_pump=[control]{try{return control->Step();}catch(...){control->Refuse();return true;}};
+        }
         if (!owner->runtime->SetPreConnectGate([owner, release=values.at("connect_release")] { return await_connect(owner,release); }))
             throw std::runtime_error("gate installation failed");
         if(values.count("runtime_close_release")) {

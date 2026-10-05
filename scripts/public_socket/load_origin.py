@@ -81,6 +81,8 @@ def analyze(directory, config, side):
             'FASTDDS_DSOFTBUS_NATIVE_TOKEN':config['token'][side],
             'FASTDDS_DSOFTBUS_IDENTITY_ADMITTED':'1',
             'FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX':remote+'/control'}
+        if config.get('bounded_native_reaccept'):
+            expected_ros_environment['FDDST_BOUNDED_NATIVE_SCENE']='BOUNDED_NORMAL_ONCE'
         allowed_environment.update(expected_ros_environment)
         for name,value in expected_ros_environment.items():
             check(environment.get(name)==value,'ROS_ENVIRONMENT_MISMATCH:'+name)

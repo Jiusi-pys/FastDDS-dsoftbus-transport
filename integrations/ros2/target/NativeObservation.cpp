@@ -18,6 +18,7 @@ struct ObserverState {
     std::size_t count=0;
     std::mutex mutex;
     fastdds_dsoftbus::ros2_target_observation::V1LocatorSnapshot v1_locators;
+    fastdds_dsoftbus::ros2_target_observation::EndpointSnapshot endpoints;
     std::string run;
     unsigned side=0;
     std::atomic<std::uint64_t> observations{0},send_enter{0},send_return{0},send_error{0},ingress{0},overflow{0},malformed{0};
@@ -124,6 +125,14 @@ std::uint64_t SocketFrame(const char* event,std::int32_t socket,const std::uint8
     if(!decoded.valid){++state->malformed;return observation;}
     // Bounded structural metadata only. Never store payload or alter/forward it.
     std::lock_guard<std::mutex> lock(state->mutex);
+    if(sending){
+        const auto endpoints=fastdds_dsoftbus::experiment::ObserveSedpEndpoints(data,size,decoded);
+        if(!endpoints.valid)state->endpoints.complete=false;
+        else for(std::size_t i=0;i<endpoints.count;++i){const auto& value=endpoints.values[i];auto& stored=state->endpoints;
+            bool known=false;for(std::size_t j=0;j<stored.count;++j)if(stored.values[j].guid==value.guid){known=true;if(stored.values[j].topic!=value.topic||stored.values[j].reader!=value.reader)stored.complete=false;break;}
+            if(!known){if(stored.count==stored.values.size())stored.complete=false;else stored.values[stored.count++]=value;}
+        }
+    }
     const auto locators=fastdds_dsoftbus::experiment::ObserveSpdpLocators(data,size);
     if(!locators.valid||locators.unsupported||locators.overflow)++state->v1_locators.faults;
     else for(std::size_t i=0;i<locators.count;++i) {
@@ -139,6 +148,10 @@ std::uint64_t SocketFrame(const char* event,std::int32_t socket,const std::uint8
 }
 }
 namespace fastdds_dsoftbus::ros2_target_observation {
+bool CaptureEndpoints(EndpointSnapshot& output) noexcept {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
+    try {std::lock_guard<std::mutex> lock(state->mutex);output=state->endpoints;return true;}catch(...){return false;}
+}
 bool CaptureV1(V1LocatorSnapshot& output) noexcept {
     auto* state=published.load(std::memory_order_acquire);if(!state)return false;
     try {std::lock_guard<std::mutex> lock(state->mutex);output=state->v1_locators;return true;}catch(...){++state->capture_faults;return false;}

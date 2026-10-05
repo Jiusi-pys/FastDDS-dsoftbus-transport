@@ -150,3 +150,23 @@ reconnect 均未验证。冻结的全 CONFIG 运行是 `574/576`（574 PASS、2 
 timeout/loader/PowerShell/configuration 失败保留。
 因此正式 reconnect 要求仍未满足，`FULL_REQUIREMENTS_COMPLETE`、
 `SDK_RECONNECT_QUALIFIED` 和 `PF01/PF02_PASS` 均未成立。
+
+<!-- A5/C1 bounded native reaccept final status, 2026-10-05 -->
+
+本轮有界 native reaccept 已完成两种正常关闭顺序的真实双板验证：A
+outgoing-first run `6c66b902d5c05f36`，B accepted-first run
+`d533f8880e53a5e4`。两次均保持原 Runtime、Participant、ROS entities、
+listener、entries 与 V1 locator，实际 SDK Socket/Bind 路径产生了可判别的
+新 ID；每次 PRE 8/8、POST 12/12，合计 20/20，replacement 后业务、graph、
+service、DDS 删除、Runtime Close、public return 0、正常退出、加载和恢复
+均有独立收据。因此状态为 `BOUNDED_NATIVE_REACCEPT_VERIFIED`、
+`ROS2_SAME_ROUTE_RECONNECT_OBSERVED`。
+
+该结论只覆盖显式、默认关闭的有限正常 close/fresh-distinct-ID 实验。
+默认真实 backend 仍为 `NO_REACCEPT`；PF/P4、平台策略和服务名/V1 编码保持
+不变。SDK physical record incarnation、event epoch、drain、隐藏旧事件、
+同 ID 复用、对端重启、故障取消、一般无辅助自动恢复及正式 reconnect 的
+其它 hard requirements 仍为未满足或未证明。`FULL_REQUIREMENTS_COMPLETE`、
+`SDK_RECONNECT_QUALIFIED`、`PF01/PF02_PASS` 和 QualificationProfile 均未
+成立。历史失败、577 分批覆盖、旧 V1/device receipts、data17/data18 以及
+35/36 refusal evidence 保留原处分，不回填为成功。

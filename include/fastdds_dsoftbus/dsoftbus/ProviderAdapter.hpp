@@ -2,6 +2,7 @@
 #define FASTDDS_DSOFTBUS_PROVIDER_ADAPTER_HPP
 
 #include <fastdds_dsoftbus/dsoftbus/NativeBackend.hpp>
+#include <functional>
 #include <fastdds_dsoftbus/dsoftbus/ServiceRecordBinding.hpp>
 namespace fastdds_dsoftbus::dsoftbus { class NativeSendProvider; }
 namespace fastdds_dsoftbus::dsoftbus::host_test { class HostProviderLoop; }
@@ -36,6 +37,7 @@ struct AdapterObservation {
     bool accepted_closing=false;
     BackendStatus accepted_last_rejection=BackendStatus::None;
     NativeStatus accepted_last_native_rejection=NativeStatus::None;
+    NativeOwnerObservation retired_outgoing,retired_accepted; // value facts, no SDK epoch/authority
 };
 // Explicit bounded Host registration domain (8 live declarations), no singleton,
 // SDK object or future-application queue. Outlives no native resource by itself.
@@ -69,6 +71,9 @@ public:
     BackendStatus Publish() noexcept;
     BackendStatus DispatchOne() noexcept;
     BackendStatus CloseAccepted() noexcept;
+    // Explicit bounded experiment control; ends only the current owned lane.
+    BackendStatus RequestNormalEnd(RecordRole) noexcept;
+    bool SetBoundedReplacementGate(std::function<bool()>);
     static bool IsProviderCallbackContext() noexcept;
     BackendStatus CloseInput() noexcept;
     BackendStatus ReopenInput(InputChannels::Receiver*) noexcept;

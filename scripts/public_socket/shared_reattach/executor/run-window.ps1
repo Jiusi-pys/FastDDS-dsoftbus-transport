@@ -454,9 +454,11 @@ if ($cfg.scenario -ceq 'DDS214_LAYER_BASELINE') {
     }
 }
 if ($cfg.scenario -ceq 'ROS2_DSOFTBUS') {
-    $rosAnalyzer=Join-Path $repoRoot 'scripts/public_socket/analyze_ros2.py'
+    $nativeReaccept = $cfg.PSObject.Properties['bounded_native_reaccept'] -and $cfg.bounded_native_reaccept
+    $rosAnalyzer=Join-Path $repoRoot $(if($nativeReaccept){'scripts/public_socket/analyze_bounded_native_reaccept.py'}else{'scripts/public_socket/analyze_ros2.py'})
     if ((Get-FileHash -LiteralPath $rosAnalyzer).Hash.ToLowerInvariant() -cne $cfg.analyzer_sha256) {throw 'Formal ROS analyzer changed after admission'}
-    & python $rosAnalyzer --run $cfg.run --mode dual --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --output (Join-Path $windowRoot 'ros-analysis.json') 1> (Join-Path $windowRoot 'ros-analysis.stdout.log') 2> (Join-Path $windowRoot 'ros-analysis.stderr.log')
+    $sceneArgs = if($nativeReaccept){@('--order',[string]$cfg.bounded_native_reaccept.order)}else{@('--mode','dual')}
+    & python $rosAnalyzer --run $cfg.run @sceneArgs --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --output (Join-Path $windowRoot 'ros-analysis.json') 1> (Join-Path $windowRoot 'ros-analysis.stdout.log') 2> (Join-Path $windowRoot 'ros-analysis.stderr.log')
     $rosAnalysisExit=$LASTEXITCODE
     [IO.File]::WriteAllText((Join-Path $windowRoot 'ros-analysis.rc'),[string]$rosAnalysisExit,$utf8)
     if ($rosAnalysisExit -ne 0) {exit 1}

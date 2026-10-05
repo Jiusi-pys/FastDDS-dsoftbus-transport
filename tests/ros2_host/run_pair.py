@@ -2,8 +2,9 @@
 import argparse,json,os,subprocess,time,secrets,socket,re,hashlib
 from pathlib import Path
 from control_files import publish_control
-p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort','dual'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');p.add_argument('--host-close-error',choices=['0','1'],default='0');p.add_argument('--paired-close',action='store_true');p.add_argument('--asymmetric-cleanup',action='store_true');p.add_argument('--reaccept-host',action='store_true');p.add_argument('--reaccept-origin',choices=['A','B'],default='A');a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort','dual'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');p.add_argument('--host-close-error',choices=['0','1'],default='0');p.add_argument('--paired-close',action='store_true');p.add_argument('--asymmetric-cleanup',action='store_true');p.add_argument('--reaccept-host',action='store_true');p.add_argument('--reaccept-origin',choices=['A','B'],default='A');p.add_argument('--owned-normal-reaccept',action='store_true');a=p.parse_args()
 if a.reaccept_host and (a.mode!='dual' or a.forward!='1'):raise ValueError('Reaccept fixture requires dual opaque-byte forwarding')
+if a.owned_normal_reaccept and not a.reaccept_host:raise ValueError('Owned normal model requires explicit Host reaccept')
 a.output.mkdir(parents=True,exist_ok=False);run=secrets.token_hex(8);domain=201
 # Optional test-only controller response, never an application/SDK injection.
 close_control=os.environ.get('FDDST_HOST_TEST_CLOSE_CONTROL','NORMAL_COMPLETION')
@@ -22,17 +23,21 @@ for index,side in enumerate('AB'):
   'domain='+str(domain),'forward='+a.forward,'host_close_error='+a.host_close_error])+'\n')
  if a.reaccept_host:
   with conf.open('a') as stream:stream.write('host_reaccept=1\nreaccept_control='+str((a.output/(side+'-reaccept')).resolve())+'\n')
+ if a.owned_normal_reaccept:
+  with conf.open('a') as stream:stream.write('owned_normal_reaccept=1\nnative_reaccept_order='+('outgoing-first' if a.reaccept_origin=='A' else 'accepted-first')+'\n')
  if a.paired_close:
   with conf.open('a') as stream:stream.write('runtime_close_release='+str((a.output/(side+'-control.RUNTIME_CLOSE')).resolve())+'\n')
  env=os.environ.copy();env['PATH']=os.pathsep.join([str(a.fastdds_prefix/'bin'),str(a.ros_prefix/'bin'),str(a.pixi_prefix/'Library/bin'),env.get('PATH','')]);env['RMW_IMPLEMENTATION']='rmw_fastrtps_cpp';env['ROS_DOMAIN_ID']=str(domain);env['ROS_AUTOMATIC_DISCOVERY_RANGE']='SUBNET';env['FASTDDS_DSOFTBUS_REQUIRED_CONFIG']=str(conf.resolve());env['FASTDDS_ENVIRONMENT_FILE']='';env['SKIP_DEFAULT_XML']='1'
  env['FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX']=str((a.output/(side+'-control')).resolve())
- if a.reaccept_host:env['FDDST_HOST_REACCEPT_STAGE']='1'
- else:env.pop('FDDST_HOST_REACCEPT_STAGE',None)
+ if a.owned_normal_reaccept:env['FDDST_BOUNDED_NATIVE_SCENE']='BOUNDED_NORMAL_ONCE';env.pop('FDDST_HOST_REACCEPT_STAGE',None)
+ elif a.reaccept_host:env['FDDST_HOST_REACCEPT_STAGE']='1';env.pop('FDDST_BOUNDED_NATIVE_SCENE',None)
+ else:env.pop('FDDST_HOST_REACCEPT_STAGE',None);env.pop('FDDST_BOUNDED_NATIVE_SCENE',None)
  for k in ['FASTRTPS_DEFAULT_PROFILES_FILE','FASTDDS_DEFAULT_PROFILES_FILE','ROS_LOCALHOST_ONLY']:env.pop(k,None)
  out=(a.output/(side+'.stdout')).open('wb');err=(a.output/(side+'.stderr')).open('wb');streams[side]=(out,err)
  argv=[str(a.exe.resolve()),side,run,a.mode];commands[side]=argv;processes[side]=subprocess.Popen(argv,env=env,stdout=out,stderr=err)
 phase_stems=['RELIABLE','BEST_EFFORT'] if a.mode=='dual' else ['RELIABLE' if a.mode=='reliable' else 'BEST_EFFORT']
 stages=[stem+suffix for stem in phase_stems for suffix in ('_READY','_DONE')]+['TEARDOWN_READY']
+if a.owned_normal_reaccept:stages=['PRE_READY','PRE_DONE','POST_DONE','TEARDOWN_READY']
 releases=[];cleanup_sent=False;deadline=time.monotonic()+65;timed=False
 held_b_cleanup=False;early_peer_close=False;runtime_releases=[]
 reaccept_state='WAIT_ORIGINAL'
@@ -42,9 +47,23 @@ def signal_reaccept(side,action):publish_control(reaccept_file(side,action),reac
 def reaccept_seen(side,action):
  path=reaccept_file(side,action)
  return path.is_file() and path.read_text()==reaccept_text(side,action)
+def native_control(side,phase):publish_control(reaccept_file(side,phase),f'NATIVE_CONTROL run={run} side={side} phase={phase}\n')
+def native_seen(text,stage):return bool(re.search(r'^NATIVE_REACCEPT_EVENT .*stage='+stage+r' ',text,re.M))
 while any(x.poll() is None for x in processes.values()):
  texts={s:(a.output/(s+'.stdout')).read_text(errors='replace') for s in 'AB'}
- if a.reaccept_host:
+ if a.owned_normal_reaccept:
+  ready=all(re.search(r'^ROS_STAGE run='+run+r' side='+s+r' pid='+str(processes[s].pid)+r' stage=PRE_DONE$',texts[s],re.M) for s in 'AB')
+  if reaccept_state=='WAIT_ORIGINAL' and ready:
+   for s in 'AB':native_control(s,'ARM')
+   reaccept_state='ARMING'
+  elif reaccept_state=='ARMING' and all(native_seen(texts[s],'ARMED') for s in 'AB'):
+   native_control(a.reaccept_origin,'END');reaccept_state='ENDING'
+  elif reaccept_state=='ENDING' and native_seen(texts['A'],'OLD_OWNER_SETTLED') and native_seen(texts['B'],'PEER_READY'):
+   native_control('A','REPLACE');reaccept_state='REPLACING'
+  elif reaccept_state=='REPLACING' and all(native_seen(texts[s],'OWNER_PUBLISHED') for s in 'AB'):
+   for s in 'AB':publish_control(a.output/(s+'-control.REACCEPT_DONE'),f'ROS_RELEASE run={run} side={s} stage=REACCEPT_DONE\n')
+   reaccept_state='COMPLETE'
+ elif a.reaccept_host:
   ready=all(re.search(r'^ROS_STAGE run='+run+r' side='+s+r' pid='+str(processes[s].pid)+r' stage=RELIABLE_REACCEPT_READY$',texts[s],re.M) for s in 'AB')
   if reaccept_state=='WAIT_ORIGINAL' and ready:
    for s in 'AB':signal_reaccept(s,'PAUSE')
@@ -80,7 +99,7 @@ while any(x.poll() is None for x in processes.values()):
    reason='WINDOW_FAILED' if close_control=='WINDOW_FAILED' else 'NORMAL_COMPLETION'
    publish_control(a.output/(s+'-control.RUNTIME_CLOSE'),f'ROS_RUNTIME_CLOSE_RELEASE schema=1 run={run} side={s} pid={control_pid} stage=RUNTIME_CLOSE reason={reason}\n')
    runtime_releases.append(s)
- if not cleanup_sent and any(re.search(r'^ROS_FAILURE schema=1 ',(a.output/(s+'.stderr')).read_text(errors='replace'),re.M) for s in 'AB'):
+ if not cleanup_sent and any(re.search(r'^ROS_FAILURE schema=1 ',(a.output/(s+'.stderr')).read_text(errors='replace'),re.M) or 'NATIVE_REACCEPT_REFUSAL ' in texts[s] for s in 'AB'):
   for s in 'AB':
    f=a.output/(s+'-control.CLEANUP')
    if processes[s].poll() is None and not f.exists():publish_control(f,f'ROS_CLEANUP schema=1 run={run} side={s} pid={processes[s].pid} stage=CLEANUP reason=WINDOW_FAILED\n')
@@ -101,7 +120,17 @@ spec=importlib.util.spec_from_file_location('formal_ros_analysis',Path(__file__)
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 phases=['reliable','best_effort'] if a.mode=='dual' else [a.mode]
 texts={s:(a.output/(s+'.stdout')).read_text(errors='replace') for s in 'AB'}
-ledger=module.analyze(texts,run,phases);result['ledger']=ledger
+if a.owned_normal_reaccept:
+ import sys
+ sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'scripts/public_socket'))
+ from analyze_bounded_native_reaccept import analyze,rows
+ ledger=analyze(texts,run,'outgoing-first' if a.reaccept_origin=='A' else 'accepted-first','HOST_OPAQUE_PUBLIC_API_SHAPE')
+ ledger['boards']={}
+ for s in 'AB':
+  emitted=rows(texts[s],'ROS_MAIN')
+  ledger['boards'][s]={'pid':emitted[0].get('pid') if len(emitted)==1 else None,'phases':{q:{event:len([x for x in rows(texts[s],event) if x.get('run')==run and x.get('phase')==q]) for event in ('ROS_WRITE','ROS_TAKE')} for q in phases}}
+else:ledger=module.analyze(texts,run,phases)
+result['ledger']=ledger
 errors=list(ledger['errors'])
 if a.asymmetric_cleanup and early_peer_close:errors.append('peer_runtime_closed_before_b_cleanup')
 if a.paired_close and runtime_releases!=['A','B']:errors.append('paired_runtime_release_incomplete')
@@ -115,7 +144,10 @@ for s in 'AB':
  loaded=re.findall(r'FDDST_LOADED module=fastrtps-2.14.dll path=([^\r\n]+)',err)
  if len(loaded)!=1 or str(Path(loaded[0]).resolve()).lower()!=expected_load:errors.append('fastdds_load:'+s)
  result[s]={'writes':sum(x.get('ROS_WRITE',0) for x in ledger['boards'].get(s,{}).get('phases',{}).values()),'takes':sum(x.get('ROS_TAKE',0) for x in ledger['boards'].get(s,{}).get('phases',{}).values())}
-if a.reaccept_host:
+if a.owned_normal_reaccept:
+ result['reaccept_host']={'state':reaccept_state,'origin':a.reaccept_origin,'source':'HOST_OPAQUE_PUBLIC_API_SHAPE','sdk_epoch':'NOT_PROVEN'}
+ if reaccept_state!='COMPLETE' or not ledger['pass']:errors.append('owned_normal_incomplete')
+elif a.reaccept_host:
  result['reaccept_host']={'state':reaccept_state,'origin':a.reaccept_origin,'source':'HOST_OPAQUE_BYTES_PUBLIC_CALLBACK_SHAPE','sdk_epoch':'NOT_PROVEN'}
  if reaccept_state!='COMPLETE':errors.append('reaccept_incomplete')
  for side in 'AB':

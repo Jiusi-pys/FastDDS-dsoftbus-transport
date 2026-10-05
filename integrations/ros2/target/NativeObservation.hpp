@@ -3,6 +3,7 @@
 #include "../StartupDiagnostics.hpp"
 #include "../NativePrefix.hpp"
 #include "../../../probes/V1LocatorObservation.hpp"
+#include "../../../probes/SedpEndpointObservation.hpp"
 namespace fastdds_dsoftbus::ros2_target_observation {
 struct V1LocatorSnapshot {
     struct Advert {std::uint64_t observation=0;bool sending=false;std::int32_t socket=-1;experiment::SpdpLocatorObservation value{};};
@@ -12,6 +13,8 @@ struct V1LocatorSnapshot {
     std::uint64_t faults=0;
 };
 bool CaptureV1(V1LocatorSnapshot&) noexcept;
+struct EndpointSnapshot {std::array<experiment::SedpEndpoint,64> values{};std::size_t count=0;bool complete=true;};
+bool CaptureEndpoints(EndpointSnapshot&) noexcept;
 void Begin(const std::string&, unsigned);
 #ifdef FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST
 void SetSourceForHostInjection() noexcept;

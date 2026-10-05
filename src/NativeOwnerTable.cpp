@@ -196,14 +196,18 @@ struct NativeState
             if(owners[i].used&&(owners[i].facts.owned_id==id||owners[i].prepared_id==id))return i;
         return no_index;
     }
-    bool Settled(std::size_t slot) const noexcept
+    bool ActivitiesSettled(std::size_t slot) const noexcept
     {
         const auto& f=owners[slot].facts;
         if(!f.close_intent||f.callback_inflight||f.receive_inflight||f.entered_context_lost||
-           f.provider_fault!=NativeProviderFault::None||
-           (f.owned_id&&!f.on_shutdown_seen&&!f.shutdown_returned))return false;
+           f.provider_fault!=NativeProviderFault::None)return false;
         for(const auto& op:operations)if(op.owner==slot&&op.phase!=NativeOperationPhase::Free)return false;
         return true;
+    }
+    bool Settled(std::size_t slot) const noexcept
+    {
+        const auto& f=owners[slot].facts;
+        return ActivitiesSettled(slot)&&(!f.owned_id||f.on_shutdown_seen||f.shutdown_returned);
     }
     bool InboundAvailable(std::size_t route) const noexcept
     {
@@ -882,6 +886,12 @@ bool NativeOwnerLease::AdapterSettled() const noexcept
     if(!state_)return false;
     std::lock_guard<std::mutex> lock(state_->gate);
     return state_->CheckOwner(*this)==NativeStatus::None&&state_->Settled(slot_);
+}
+bool NativeOwnerLease::AdapterActivitiesSettled() const noexcept
+{
+    if(!state_)return false;
+    std::lock_guard<std::mutex> lock(state_->gate);
+    return state_->CheckOwner(*this)==NativeStatus::None&&state_->ActivitiesSettled(slot_);
 }
 std::optional<NativeSocketId> NativeOwnerLease::RetainedId() const noexcept
 {

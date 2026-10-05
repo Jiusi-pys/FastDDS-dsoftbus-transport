@@ -184,6 +184,7 @@ public:
     NativeOwnerObservation Observe() const noexcept;
     // Adapter counters and original close responsibility only, never SDK drain.
     bool AdapterSettled() const noexcept;
+    bool AdapterActivitiesSettled() const noexcept;
     std::optional<NativeSocketId> RetainedId() const noexcept;
 private:
     friend class NativeOwnerTable;

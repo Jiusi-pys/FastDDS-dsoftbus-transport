@@ -6,7 +6,13 @@
 #include <functional>
 #include <fastdds_dsoftbus/dsoftbus/HostRuntimeShutdownPoint.hpp>
 namespace fastdds_dsoftbus::dsoftbus::experimental { class Runtime; }
+namespace fastdds_dsoftbus::dsoftbus::host_test { struct HostLoopObservation; }
 namespace fastdds_dsoftbus::dsoftbus::phase0 {
+struct BoundedConnectionSnapshot {
+    AdapterObservation adapter;
+    NativeUsageSnapshot native;
+    bool started=false,sealed=false;
+};
 // Experiment assembly permission only. Not a platform capability or factory.
 class RuntimeProbeAccess final {
 public:
@@ -17,6 +23,10 @@ public:
     // issuance. No installed public entry and no authority over SDK drain.
     static bool BeforeNativeClose(experimental::Runtime&,
             std::function<void(const host_test::RuntimeShutdownPoint&)>);
+    static bool BoundedReplacementGate(experimental::Runtime&,std::function<bool()>);
+    static BackendStatus RequestNormalEnd(experimental::Runtime&,RecordRole) noexcept;
+    static BoundedConnectionSnapshot ObserveConnection(const experimental::Runtime&) noexcept;
+    static void SealBoundedAdmission(experimental::Runtime&) noexcept;
 };
 bool RuntimeProbeBeforeConnect() noexcept;
 bool InvokeArmedPreConnectGate() noexcept;

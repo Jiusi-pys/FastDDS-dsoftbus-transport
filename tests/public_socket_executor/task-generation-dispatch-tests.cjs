@@ -22,7 +22,7 @@ function test(attempt){
  const files=new Map([[grantPath,grantBytes],[contractPath,bytes],[path.join(window,'window.json'),Buffer.from(JSON.stringify(c))]]),checks=[];
  const inertFs={readFileSync:(name)=>{const value=files.get(String(name));if(!value)throw Error('UNDECLARED_FIXTURE_READ:'+name);return value;},mkdirSync:()=>{},
   writeFileSync:(name,value,options)=>{name=String(name);if(options?.flag==='wx'&&files.has(name))throw Error('EXCLUSIVE_FILE_ALREADY_EXISTS');files.set(name,Buffer.from(value));}};
- const context={fs:inertFs,path,process,Buffer,isDds214:()=>false,isRos:()=>true,isInstalled:()=>false,readBoundPrivate:()=>{},rosControl:()=>({STAGES:stages}),
+ const context={fs:inertFs,path,process,Buffer,isDds214:()=>false,isRos:()=>true,isInstalled:()=>false,readBoundPrivate:()=>{},rosControl:()=>({STAGES:stages,stagesFor:()=>stages}),
   require:name=>{if(name==='node:crypto')return crypto;if(name==='node:child_process')return {spawnSync:(exe,argv)=>{checks.push(argv);return {status:attempt===4?0:1,stdout:'INERT_SEQUENCE_SEAM',stderr:'',signal:null};}};throw Error('UNDECLARED_DEPENDENCY');}};
  vm.createContext(context);vm.runInContext(code+';globalThis.create=createDataDispatcher;',context);const dispatch=context.create(c,window);
  if(attempt===4){dispatch('A','INERT_NOT_EXECUTED',['UNIT']);assert.equal(checks.length,2);assert(checks.every(argv=>argv[1]==='--check-window'));assert.throws(()=>dispatch('A','INERT_NOT_EXECUTED',['UNIT']));}

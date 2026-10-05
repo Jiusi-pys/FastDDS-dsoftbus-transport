@@ -17,6 +17,8 @@ struct PublicSocketConfiguration {
     std::string expected_peer_initiator_name;
     // Explicit bounded Host model only. Real API23 builds must reject this mode.
     bool bounded_reaccept_host=false;
+    // Separate real, default-off normal-close experiment. Never a Host/Fake label.
+    bool bounded_native_reaccept_experiment=false;
 };
 enum class PublicSocketOperation {Socket,Listen,Bind,Send,Shutdown,Count};
 struct PublicSocketCall {
@@ -39,6 +41,7 @@ struct PublicSocketObservation {
     std::optional<PublicSocketOperation> first_exception;
     std::optional<std::int32_t> first_callback_error,shutdown_reason;
     std::uint64_t callback_entries=0,rejected_callbacks=0,negotiations_denied=0,unsupported_accepts=0,exceptions=0;
+    std::uint64_t negotiation_callbacks=0;
     // Fixed entry/parameter storage survives close; no SDK quiescence is inferred.
 };
 // SDK-free port declaration. Implementation alone includes the authorized public
@@ -51,7 +54,9 @@ public:
     BackendIdentity Identity()const override;
     BackendTopology Topology()const noexcept override;
     bool BoundedReacceptHost()const noexcept override;
+    bool BoundedReacceptExperiment()const noexcept override;
     BackendStatus ResetHostConnection(RecordRole,const NativeOwnerLease&) override;
+    BackendStatus ResetBoundedConnection(RecordRole,const NativeOwnerLease&) override;
     std::size_t MaxMessageSize()const noexcept override;
     BackendIdentity ListenerIdentity()const override;
     BackendStatus ConfigureEntrance(const RecordEntrance&) override;

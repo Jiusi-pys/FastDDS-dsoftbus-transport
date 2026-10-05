@@ -71,6 +71,9 @@ public:
     NativeSendRunResult PumpSendObserved(HostSendObservation&) noexcept;
     phase0::BackendStatus PumpReceive() noexcept;
     phase0::BackendStatus CloseAccepted() noexcept;
+    phase0::BackendStatus RequestNormalEnd(RecordRole) noexcept;
+    bool SetBoundedReplacementGate(std::function<bool()>);
+    void SealBoundedAdmission() noexcept;
     HostLoopObservation Observe() const noexcept;
     bool WaitSealed(std::chrono::steady_clock::time_point) const;
     bool WaitInputClosing(std::chrono::steady_clock::time_point) const;

@@ -46,6 +46,13 @@ struct PublicSocketState {
         observation.fake_sdk=true;
 #endif
         if(config.bounded_reaccept_host&&(!observation.fake_sdk||!dual))valid=false;
+        if(config.bounded_native_reaccept_experiment){
+#ifdef FASTDDS_DSOFTBUS_BOUNDED_NATIVE_REACCEPT_EXPERIMENT
+            valid=valid&&dual&&!observation.fake_sdk&&!config.bounded_reaccept_host;
+#else
+            valid=false;
+#endif
+        }
         if(!valid)return;
         auto copy=[](auto& dst,const std::string& s){std::copy(s.begin(),s.end(),dst.begin());dst[s.size()]='\0';};
         copy(name,config.identity.service_name);copy(package,config.package_name);copy(peer,config.peer_name);copy(network,config.peer_network_id);
@@ -77,6 +84,8 @@ struct PublicSocketState {
     mutable std::mutex gate;
     bool valid=false,attempted=false;
     BackendStatus close_status=BackendStatus::None;
+    std::array<unsigned,2> native_resets{};
+    bool BoundedRequested()const noexcept {return config.bounded_reaccept_host||config.bounded_native_reaccept_experiment;}
     std::int32_t socket=-1;
     RecordEntrance entry;
     ProviderCallbacks callbacks;
@@ -142,7 +151,7 @@ if(experiment_accepted&&::fastdds_dsoftbus::dsoftbus::dds_experiment::DropRegres
                 if(id==listener_socket){if(!error)listener_observed=true;else listener_failed=true;}
             }else if(role==config.role&&socket>=0&&id==socket){known=true;cb=callbacks;if(!error)primary_observed=true;else primary_failed=true;if(!dual)observation.stopped=true;}
             if(!known){++observation.rejected_callbacks;
-                ambiguous_first=config.bounded_reaccept_host&&role==config.role&&attempted&&socket<0;
+                ambiguous_first=BoundedRequested()&&role==config.role&&attempted&&socket<0;
                 if(!ambiguous_first)return;cb=callbacks;}
             if(error){if(!observation.first_callback_error)observation.first_callback_error=value;}
             else if(!observation.shutdown_reason)observation.shutdown_reason=value;
@@ -151,7 +160,7 @@ if(experiment_accepted&&::fastdds_dsoftbus::dsoftbus::dds_experiment::DropRegres
         if(error)(void)cb.OnError(id,value);else (void)cb.OnNativeShutdown(id);
         // The adapter has latched the exact terminal owner before this metadata
         // copy is released; control still holds the original close/drain state.
-        if(!error){std::lock_guard<std::mutex> lock(gate);if(is_accepted&&!config.bounded_reaccept_host)accepted_owner={};RefreshClosed();}
+        if(!error){std::lock_guard<std::mutex> lock(gate);if(is_accepted&&!BoundedRequested())accepted_owner={};RefreshClosed();}
     }
     void Bound(RecordRole role,std::int32_t id,PeerSocketInfo peer){
         ProviderCallbacks cb;
@@ -165,15 +174,16 @@ if(experiment_accepted&&::fastdds_dsoftbus::dsoftbus::dds_experiment::DropRegres
         }
         if(!dual){(void)cb.OnShutdown(socket);return;}
         BackendPeer value;
-        if(!PeerValue(peer,value)||cb.OnBind(id,value)!=BackendStatus::None){if(config.bounded_reaccept_host)(void)cb.OnNegotiationRejected(id);std::lock_guard<std::mutex> lock(gate);++observation.rejected_callbacks;}
+        if(!PeerValue(peer,value)||cb.OnBind(id,value)!=BackendStatus::None){if(BoundedRequested())(void)cb.OnNegotiationRejected(id);std::lock_guard<std::mutex> lock(gate);++observation.rejected_callbacks;}
     }
     bool Negotiate(RecordRole role,std::int32_t id,PeerSocketInfo peer,bool access_info){
         ProviderCallbacks cb;
+        {std::lock_guard<std::mutex> lock(gate);if(role==RecordRole::Server)++observation.negotiation_callbacks;}
         {std::lock_guard<std::mutex> lock(gate);++observation.callback_entries;
             if(!dual||role!=RecordRole::Server||listener_closed||listener_observed||listener_failed||observation.stopped||listener_socket<0){++observation.negotiations_denied;return false;}cb=listener_callbacks;}
         if(access_info){(void)cb.OnNegotiationRejected(id);std::lock_guard<std::mutex> lock(gate);++observation.negotiations_denied;return false;}
         BackendPeer value;
-        if(!PeerValue(peer,value)||cb.OnNegotiate(id,value)!=BackendStatus::None){if(config.bounded_reaccept_host)(void)cb.OnNegotiationRejected(id);std::lock_guard<std::mutex> lock(gate);++observation.negotiations_denied;return false;}
+        if(!PeerValue(peer,value)||cb.OnNegotiate(id,value)!=BackendStatus::None){if(BoundedRequested())(void)cb.OnNegotiationRejected(id);std::lock_guard<std::mutex> lock(gate);++observation.negotiations_denied;return false;}
         std::lock_guard<std::mutex> lock(gate);negotiated_id=id;return true;
     }
 
@@ -249,21 +259,37 @@ BackendSocketResult PublicSocketBackend::Create(ProviderCallbacks cb){return Cre
 bool PublicSocketBackend::BoundedReacceptHost()const noexcept {
     return state_->valid&&state_->dual&&state_->observation.fake_sdk&&state_->config.bounded_reaccept_host;
 }
+bool PublicSocketBackend::BoundedReacceptExperiment()const noexcept {
+    if(BoundedReacceptHost())return true;
+#ifdef FASTDDS_DSOFTBUS_BOUNDED_NATIVE_REACCEPT_EXPERIMENT
+    return state_->valid&&state_->dual&&!state_->observation.fake_sdk&&state_->config.bounded_native_reaccept_experiment;
+#else
+    return false;
+#endif
+}
 BackendStatus PublicSocketBackend::ResetHostConnection(RecordRole role,const NativeOwnerLease& old){
-    if(!BoundedReacceptHost()||!old.AdapterSettled())return BackendStatus::InvalidState;
+    if(!BoundedReacceptHost())return BackendStatus::InvalidState;
+    return ResetBoundedConnection(role,old);
+}
+BackendStatus PublicSocketBackend::ResetBoundedConnection(RecordRole role,const NativeOwnerLease& old){
+    if(!BoundedReacceptExperiment()||!old.AdapterSettled())return BackendStatus::InvalidState;
     const auto facts=old.Observe();const auto id=old.RetainedId();
     std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
     if(!id||s.listener_closed||s.listener_observed||s.listener_failed||s.observation.stopped)return BackendStatus::ProviderStopped;
+    if(role!=RecordRole::Client&&role!=RecordRole::Server)return BackendStatus::InvalidState;
+    const auto lane=static_cast<std::size_t>(role);
+    if(s.config.bounded_native_reaccept_experiment&&s.native_resets[lane]>=1)return BackendStatus::Capacity;
     if(role==RecordRole::Client){
-        if(facts.role!=NativeOwnerRole::Dial||s.socket!=*id||(!s.primary_observed&&!s.primary_closed)||s.primary_failed)return BackendStatus::InvalidIdentity;
+        if(facts.role!=NativeOwnerRole::Dial||s.socket!=*id||(!s.primary_observed&&!s.primary_closed)||s.primary_failed||s.close_status!=BackendStatus::None)return BackendStatus::InvalidIdentity;
         s.attempted=false;s.socket=-1;s.primary_observed=false;s.primary_closed=false;s.close_status=BackendStatus::None;
         s.observation.outgoing_socket.reset();
     }else{
         if(facts.role!=NativeOwnerRole::Accepted||(s.negotiated_id!=id&&s.observation.accepted_socket!=id)||
-           (s.accepted_owner&&s.accepted_owner!=old)||s.accepted_failed)return BackendStatus::InvalidIdentity;
+           (s.accepted_owner&&s.accepted_owner!=old)||s.accepted_failed||s.accepted_close_status!=BackendStatus::None)return BackendStatus::InvalidIdentity;
         s.accepted_owner={};s.negotiated_id.reset();s.observation.accepted_socket.reset();
         s.accepted_observed=false;s.accepted_closed=false;s.accepted_close_status=BackendStatus::None;
     }
+    if(s.config.bounded_native_reaccept_experiment)++s.native_resets[lane];
     s.RefreshClosed();return BackendStatus::None;
 }
 BackendSocketResult PublicSocketBackend::CreateListener(ProviderCallbacks cb){if(!state_->dual)return {};return CreateSocket(state_,std::move(cb),true);}

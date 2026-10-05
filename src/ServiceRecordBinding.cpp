@@ -1473,6 +1473,36 @@ NativeStatus ServiceRecordBinding::PrepareHostDialReplacement() noexcept
     s.socket=-1;s.provider_terminal=false;s.phase=BindingPhase::Prepared;
     return NativeStatus::None;
 }
+NativeStatus ServiceRecordBinding::RequestNormalConnectionEnd() noexcept
+{
+    if(!state_||IsCallbackContext())return NativeStatus::WrongState;
+    NativeOwnerLease original;NativeSocketId id=-1;
+    {std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
+        if(!s.request.config.bounded_reaccept_host||(!s.request.is_accepted&&s.request.role!=RecordRole::Client)||
+           (s.phase!=BindingPhase::Connected&&s.phase!=BindingPhase::Published&&s.phase!=BindingPhase::Closing))return NativeStatus::WrongState;
+        original=s.owner;id=s.socket;
+        if(!original||id<0)return NativeStatus::NoOwnedId;
+        const auto result=original.RequestClose();if(result!=NativeStatus::None)return result;
+        // Local close intent is separate from public OnShutdown evidence.
+        s.provider_terminal=true;
+    }
+    if(!original.AdapterActivitiesSettled())return NativeStatus::EnteredPending;
+    const auto facts=original.Observe();
+    if(facts.on_shutdown_seen||facts.shutdown_returned)return NativeStatus::None;
+    auto ticket=original.TryClaimShutdown();
+    if(!ticket){
+        const auto current=original.Observe();
+        return current.on_shutdown_seen||current.shutdown_returned?NativeStatus::None:ticket.issue.code;
+    }
+    const auto entered=ticket.value->CallEntered();
+    if(entered!=NativeStatus::None){
+        const auto current=original.Observe();
+        return current.on_shutdown_seen||current.shutdown_returned?NativeStatus::None:entered;
+    }
+    ProviderShutdownFrame context(&state_->native);
+    state_->provider.Shutdown(id); // original ticket, outside every binding gate
+    return ticket.value->CompleteShutdownReturned();
+}
 NativeStatus ServiceRecordBinding::Connect() noexcept
 { return state_ ? state_->Connect() : NativeStatus::InvalidHandle; }
 NativeStatus ServiceRecordBinding::Publish() noexcept

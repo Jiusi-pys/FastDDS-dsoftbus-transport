@@ -10,11 +10,12 @@ import re
 from analyze_ros2 import analyze,rows
 
 
-def correlate(texts,run):
-    ledger=analyze(texts,run,['reliable','best_effort'])
-    errors=list(ledger['errors']);frames={};matched={}
+def correlate(texts,run,ledger=None):
+    ledger=analyze(texts,run,['reliable','best_effort']) if ledger is None else ledger
+    errors=list(ledger['errors']);frames={};sockets={};matched={}
     for side in 'AB':
         frames[side]={'SDK_SEND':set(),'SDK_INGRESS':set()};matched[side]=0
+        sockets[side]={'SDK_SEND':{},'SDK_INGRESS':{}}
         try:
             records=rows(texts[side],'ROS_NATIVE_DATA');summaries=rows(texts[side],'ROS_NATIVE_SUMMARY')
             if len(summaries)!=1:raise ValueError('NATIVE_SUMMARY_REQUIRED')
@@ -37,6 +38,7 @@ def correlate(texts,run):
                 high=int(record['sequence_hi']);low=int(record['sequence_lo'])
                 if not -2147483648<=high<=2147483647 or not 0<=low<=4294967295:raise ValueError('NATIVE_SEQUENCE_RANGE')
                 frames[side][record['direction']].add((record['writer'],high*4294967296+low))
+                sockets[side][record['direction']].setdefault((record['writer'],high*4294967296+low),set()).add(int(record['socket']))
             real=rows(texts[side],'FDDST_REAL_SOCKET')
             if len(real)!=1 or real[0].get('run')!=run or real[0].get('side')!=('0' if side=='A' else '1') or real[0].get('fake_sdk')!='0':raise ValueError('REAL_BACKEND_REQUIRED')
             if rows(texts[side],'ROS_LOCAL_MODEL'):raise ValueError('LOCAL_MODEL_NOT_DEVICE_EVIDENCE')
@@ -55,8 +57,14 @@ def correlate(texts,run):
                 if key in seen:raise ValueError('DUPLICATE_TOPIC_NATIVE_IDENTITY')
                 seen.add(key)
                 if key not in frames[peer]['SDK_SEND'] or key not in frames[side]['SDK_INGRESS']:raise ValueError('TOPIC_NATIVE_CHAIN_MISSING:'+sample.get('phase','')+':'+sample.get('ordinal',''))
+                if sample.get('segment')=='POST':
+                    before={s:next(x for x in rows(texts[s],'NATIVE_REACCEPT_EVENT') if x.get('stage')=='ARMED') for s in 'AB'}
+                    after={s:next(x for x in rows(texts[s],'NATIVE_REACCEPT_EVENT') if x.get('stage')=='OWNER_PUBLISHED') for s in 'AB'}
+                    expected_send=int(after['A']['new_id']) if peer=='A' else int(before['B']['outgoing_id'])
+                    expected_receive=int(after['B']['new_id']) if side=='B' else int(before['A']['accepted_id'])
+                    if expected_send not in sockets[peer]['SDK_SEND'].get(key,set()) or expected_receive not in sockets[side]['SDK_INGRESS'].get(key,set()):raise ValueError('POST_REPLACEMENT_SOCKET_CHAIN_MISSING')
                 matched[side]+=1
-        except (ValueError,KeyError,TypeError) as error:errors.append('correlation:'+side+':'+str(error))
+        except (ValueError,KeyError,TypeError,StopIteration) as error:errors.append('correlation:'+side+':'+str(error))
     if matched!={'A':10,'B':10}:errors.append('DIRECTIONAL_NATIVE_TOPIC_SET_INCOMPLETE')
     return dict(run=run,**{'pass':not errors},errors=errors,matched_topic_takes=matched,
                 ros=ledger,scope='LOGICAL_DDS_SAMPLE_TO_STRUCTURAL_SDK_SEND_INGRESS_NOT_PHYSICAL_EPOCH',
@@ -65,5 +73,10 @@ def correlate(texts,run):
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--run',required=True);p.add_argument('--a',type=Path,required=True);p.add_argument('--b',type=Path,required=True);p.add_argument('--a-stderr',type=Path,required=True);p.add_argument('--b-stderr',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
     texts={s:Path(getattr(a,s.lower())).read_text(encoding='utf-8-sig')+'\n'+Path(getattr(a,s.lower()+'_stderr')).read_text(encoding='utf-8-sig') for s in 'AB'}
-    result=correlate(texts,a.run)
+    native=[x for x in rows(texts['A'],'NATIVE_REACCEPT_EVENT') if x.get('stage')=='ARMED']
+    if native:
+        from analyze_bounded_native_reaccept import analyze as bounded_analyze
+        origin_a=any(x.get('stage')=='LOCAL_CLOSE_RETURNED' for x in rows(texts['A'],'NATIVE_REACCEPT_EVENT'))
+        result=correlate(texts,a.run,bounded_analyze(texts,a.run,'outgoing-first' if origin_a else 'accepted-first'))
+    else:result=correlate(texts,a.run)
     a.output.write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8');raise SystemExit(0 if result['pass'] else 1)

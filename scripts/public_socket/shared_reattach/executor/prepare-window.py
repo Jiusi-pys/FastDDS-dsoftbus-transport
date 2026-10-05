@@ -60,6 +60,10 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
                    stages=list(contract.ROS_STAGES),service_prefix=contract.PRIVATE['ros2_service_prefix'],
                    package_name=contract.PRIVATE['ros2_package_name'],expected_writes={'A':10,'B':10},record_count=20,
                    payload_bytes=128,max_record_bytes=8192,timeout_seconds=300)
+        if frozen.get('bounded_native_reaccept'):
+            cfg['bounded_native_reaccept']=frozen['bounded_native_reaccept'];cfg['stages']=list(contract.ROS_NATIVE_STAGES)
+            cfg['analyzer_sha256']=digest(repo/'scripts/public_socket/analyze_bounded_native_reaccept.py')
+            cfg['executor_sha256']['bounded-native-scene.cjs']=digest(here/'bounded-native-scene.cjs')
         if frozen.get('v1_successor_authorization'):
             v1=contract.PRIVATE.get('v1_deployment')
             if not v1 or frozen.get('identity_qualification') is True:raise ValueError('V1 ROS requires verified private identity/configuration, not query prerequisite contract')
@@ -99,6 +103,7 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
     cfg['executor_sha256'].update({n:digest(here/n) for n in ('dds214-control.cjs','layered_contract.py')})
     contract.verify_window(cfg)
     destination.mkdir(parents=True,exist_ok=False)
+    if cfg.get('bounded_native_reaccept'):shutil.copyfile(here/'bounded-native-scene.cjs',destination/'bounded-native-scene.cjs')
     for source,name in [('runner-template.cjs','runner.cjs'),('dds214-control.cjs','dds214-control.cjs'),('ros-control.cjs','ros-control.cjs'),('shared-control.cjs','shared-control.cjs'),('observe-native.cjs','observe-native.cjs'),('record-pair.cjs','record-pair.cjs'),('bounded-output.cjs','bounded-output.cjs'),('rmw-debugger.cjs','rmw-debugger.cjs')]:shutil.copyfile(here/source,destination/name)
     for side in ['A','B']:
         aux=destination/side/'aux';aux.mkdir(parents=True)
@@ -122,6 +127,8 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
                 values.update(locator_version='V1',native_name_contract='PACKAGE_SCOPED_V1',namespace=v['namespace'],domain=str(v['domain']),profile=v['profile'],local_udid=v['udids'][side],peer_udid=v['udids'][other],service_slot=str(v['slots'][side]),peer_slot=str(v['slots'][other]),local_initiator_name=v['initiator_names'][side],peer_initiator_name=v['initiator_names'][other])
             if ros and cfg.get('paired_runtime_close') is True:
                 values['runtime_close_release']=cfg['remote'][side]+'/control.RUNTIME_CLOSE'
+            if ros and cfg.get('bounded_native_reaccept'):
+                values.update(backend='OHOS_PUBLIC_SOCKET_BOUNDED_REACCEPT_EXPERIMENTAL',native_reaccept_order=cfg['bounded_native_reaccept']['order'],native_reaccept_control=cfg['remote'][side]+'/control.NATIVE_REACCEPT')
             (aux/('dds214.conf' if dds214 else 'ros.conf')).write_text(''.join(k+'='+v+'\n' for k,v in values.items()),encoding='utf-8',newline='\n')
         (aux/'required-load-paths.txt').write_text('\n'.join([cfg['remote'][side]+'/'+e['name'] for e in artifacts]+cfg['required_platform_paths'])+'\n',newline='\n')
     cfg['auxiliary_sha256']={s:{p.name:digest(p) for p in (destination/s/'aux').iterdir()} for s in ['A','B']}

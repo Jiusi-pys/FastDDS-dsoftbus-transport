@@ -82,7 +82,7 @@ const isShared=(...args)=>sharedControl().isShared(...args);
 const phasesFor=(...args)=>sharedControl().phasesFor(...args);
 const cycleCount=(...args)=>sharedControl().cycleCount(...args);
 const sharedReceipts=(...args)=>sharedControl().sharedReceipts(...args);
-const phases=c=>isDds214(c)?dds214Control().STAGES:isRos(c)?rosControl().STAGES:isInstalled(c)?INSTALLED_STAGES:isShared(c)?phasesFor(c):['LISTENER_READY','NATIVE_READY',...(c.scenario==='F1M'?['MATCH','SAMPLE_1','SAMPLE_2','SAMPLE_3']:['MATCH']),'DATA_DONE','DELETE','DDS_DELETED'];
+const phases=c=>isDds214(c)?dds214Control().STAGES:isRos(c)?rosControl().stagesFor(c):isInstalled(c)?INSTALLED_STAGES:isShared(c)?phasesFor(c):['LISTENER_READY','NATIVE_READY',...(c.scenario==='F1M'?['MATCH','SAMPLE_1','SAMPLE_2','SAMPLE_3']:['MATCH']),'DATA_DONE','DELETE','DDS_DELETED'];
 const LIBDIRS=['/system/lib64/platformsdk','/system/lib64/chipset-sdk-sp','/system/lib64/chipset-sdk','/system/lib64'];
 function buildCommands(c,expectedTokens){
  if(!expectedTokens)throw Error("Explicit token identity binding required");
@@ -151,11 +151,13 @@ function createControlRelease(c,directory,{spawn=require('node:child_process').s
  const release=(side,stage,metadata)=>new Promise((resolve,reject)=>{
   const cleanup=isRos(c)&&stage==='CLEANUP';
   const runtimeClose=isRos(c)&&c.paired_runtime_close===true&&stage==='RUNTIME_CLOSE';
-  if(!['A','B'].includes(side)||(!phases(c).includes(stage)&&!cleanup&&!runtimeClose)||active.size||sequence>=2*phases(c).length+(isRos(c)?2:0)+(isRos(c)&&c.paired_runtime_close===true?2:0)){reject(Error('CONTROL_SCOPE_OR_CAPACITY'));return;}
+  const nativeAction=isRos(c)&&c.bounded_native_reaccept&&require('./bounded-native-scene.cjs').ACTIONS.includes(stage);
+  if(nativeAction&&((stage==='NATIVE_END'&&side!==(c.bounded_native_reaccept.order==='outgoing-first'?'A':'B'))||(stage==='NATIVE_REPLACE'&&side!=='A'))){reject(Error('NATIVE_CONTROL_ROLE'));return;}
+  if(!['A','B'].includes(side)||(!phases(c).includes(stage)&&!cleanup&&!runtimeClose&&!nativeAction)||active.size||sequence>=2*phases(c).length+(isRos(c)?2:0)+(isRos(c)&&c.paired_runtime_close===true?2:0)){reject(Error('CONTROL_SCOPE_OR_CAPACITY'));return;}
   if((cleanup||runtimeClose)&&(!metadata||!/^[1-9][0-9]*$/.test(String(metadata.pid))||!['WINDOW_FAILED','NORMAL_COMPLETION'].includes(metadata.reason))){reject(Error('CLEANUP_CONTROL_IDENTITY'));return;}
-  const root=c.remote[side],filename=`${root}/control.${stage}`;
+  const root=c.remote[side],filename=nativeAction?`${root}/control.NATIVE_REACCEPT.${stage.slice(7)}`:`${root}/control.${stage}`;
   if(root!==`/data/local/tmp/mdds_dds_${c.run}_${side}`){reject(Error('CONTROL_REMOTE_IDENTITY'));return;}
-  const contents=runtimeClose?`ROS_RUNTIME_CLOSE_RELEASE schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=RUNTIME_CLOSE reason=${metadata.reason}`:cleanup?`ROS_CLEANUP schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=CLEANUP reason=${metadata.reason}`:isDds214(c)?`${stage==='LISTENER_READY'?'ROS_RELEASE':'DDS214_RELEASE'} run=${c.run} side=${side} stage=${stage}`:isRos(c)?`ROS_RELEASE run=${c.run} side=${side} stage=${stage}`:`${c.run} ${cycleCount(c)>1?side+" ":""}${stage}`;
+  const contents=nativeAction?`NATIVE_CONTROL run=${c.run} side=${side} phase=${stage.slice(7)}`:runtimeClose?`ROS_RUNTIME_CLOSE_RELEASE schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=RUNTIME_CLOSE reason=${metadata.reason}`:cleanup?`ROS_CLEANUP schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=CLEANUP reason=${metadata.reason}`:isDds214(c)?`${stage==='LISTENER_READY'?'ROS_RELEASE':'DDS214_RELEASE'} run=${c.run} side=${side} stage=${stage}`:isRos(c)?`ROS_RELEASE run=${c.run} side=${side} stage=${stage}`:`${c.run} ${cycleCount(c)>1?side+" ":""}${stage}`;
   const command=`env -i PATH=/system/bin:/system/xbin timeout 5 /system/bin/sh -c 'test ! -e ${filename} && printf "${contents}\\n" > ${filename}.tmp && mv ${filename}.tmp ${filename}'; rc=$?; echo CONTROL_REMOTE_EXIT=$rc; exit $rc`;
   const seq=++sequence,argv=['-t',c.targets[side],'shell',command];
   const r={run:c.run,side,stage,cycle:Number(/^C(\d+)_/.exec(stage)?.[1]||(isShared(c)&&cycleCount(c)===1&&!['LISTENER_READY','NATIVE_READY'].includes(stage)?1:0)),command_id:`${c.run}:${side}:${stage}:${seq}`,sequence:seq,observer_pid:process.pid,collector_pid:null,executable:c.hdc_path,argv_sha256:require('node:crypto').createHash('sha256').update(JSON.stringify(argv)).digest('hex'),cwd:process.cwd(),environment:'INHERITED_NOT_LOGGED',deadline_ms:timeoutMs,drain_ms:drainMs,events:[],termination:null,error:null};
@@ -291,7 +293,8 @@ function verifyTaskGrant(c){
    !(proof.task_root===path.join(grant.task_root,'iterations',`iteration-${frozen.execution_iteration_id}`)||(frozen.execution_iteration_id===1&&proof.task_root===grant.task_root)))throw Error('ROS_TASK_IMMUTABLE_EXECUTION_ROOT');
  const limits={timeout_seconds:300,per_side_writes:10,per_side_takes:10,record_count:20,stdout_budget:25165824,max_record_bytes:8192,stages:7};
  for(const [k,v] of Object.entries(limits))if(grant.per_window_limits[k]!==v||frozen.limits[k]!==v)throw Error('ROS_TASK_WINDOW_LIMITS');
- if(c.timeout_seconds!==300||c.record_count!==20||c.stdout_budget!==25165824||c.max_record_bytes!==8192||JSON.stringify(c.stages)!==JSON.stringify(rosControl().STAGES))throw Error('ROS_TASK_ACTUAL_WINDOW_LIMITS');
+ if(JSON.stringify(c.bounded_native_reaccept)!==JSON.stringify(frozen.bounded_native_reaccept))throw Error('ROS_TASK_NATIVE_SCENE_BINDING');
+ if(c.timeout_seconds!==300||c.record_count!==20||c.stdout_budget!==25165824||c.max_record_bytes!==8192||JSON.stringify(c.stages)!==JSON.stringify(rosControl().stagesFor(c)))throw Error('ROS_TASK_ACTUAL_WINDOW_LIMITS');
  return grant;
 }
 function readBoundPrivate(c){
@@ -313,10 +316,11 @@ function readBoundPrivate(c){
  const materialization=JSON.parse(materializationBytes),legacyRequired=["executor-route-query/launch.ps1", "executor-route-query/prepare-query.py", "executor-route-query/query_receipt.py", "executor-route-query/route_query.py", "executor-route-query/run-window.ps1", "executor/bounded-output.cjs", "executor/capture-load.sh", "executor/load_origin.py", "executor/observe-native.cjs", "executor/prepare-window.py", "executor/private_config.py", "executor/record-pair.cjs", "executor/route_binding.py", "executor/run-window.ps1", "executor/runner-template.cjs", "executor/ros-control.cjs", "executor/shared-control.cjs", "executor/task_contract.py"];
  if(materialization.scope!=='LOCAL_MATERIALIZATION_ONLY_NO_EXECUTION_AUTHORITY'||materialization.task!==proof.task_root||materialization.private_config_sha256!==c.private_config_sha256)throw Error('Materialization identity mismatch');
  const rows=materialization.files||[],names=rows.map(e=>e.destination.split(String.fromCharCode(92)).join('/')).sort(),priorRequired=[...legacyRequired,'executor/dds214-control.cjs','executor/layered_contract.py'],recoveryRequired=[...priorRequired,'recovery/pregrant_recovery.py','recovery/recovery-guard.ps1','recovery/readonly_preflight.py'],currentRequired=[...recoveryRequired,'executor/rmw_debugger.py','executor/rmw-debugger.cjs','executor/rmw_lldb_trace.py'];
+ const nativeRequired=[...currentRequired,'executor/bounded-native-scene.cjs'];
  const strict=isDds214(c)||frozen.authorization==='ONE_CONDITIONAL_ROS_AFTER_DDS214_DEVICE_VALIDATION';
- const required=JSON.stringify(names)===JSON.stringify(currentRequired.slice().sort())?currentRequired:JSON.stringify(names)===JSON.stringify(recoveryRequired.slice().sort())?recoveryRequired:JSON.stringify(names)===JSON.stringify(priorRequired.slice().sort())?priorRequired:legacyRequired;
+ const required=frozen.bounded_native_reaccept?nativeRequired:JSON.stringify(names)===JSON.stringify(currentRequired.slice().sort())?currentRequired:JSON.stringify(names)===JSON.stringify(recoveryRequired.slice().sort())?recoveryRequired:JSON.stringify(names)===JSON.stringify(priorRequired.slice().sort())?priorRequired:legacyRequired;
  if((strict&&required===legacyRequired)||JSON.stringify(names)!==JSON.stringify(required.slice().sort()))throw Error('Materialization membership mismatch');
- if(frozen.authorization==='TASK_SCOPED_ROS2_DEVICE_VALIDATION'&&(frozen.rmw_debugger?required!==currentRequired:![currentRequired,recoveryRequired].includes(required)))throw Error('Task recovery materialization required');
+ if(frozen.authorization==='TASK_SCOPED_ROS2_DEVICE_VALIDATION'&&(frozen.bounded_native_reaccept?required!==nativeRequired:frozen.rmw_debugger?required!==currentRequired:![currentRequired,recoveryRequired].includes(required)))throw Error('Task recovery materialization required');
  const declared=new Map((frozen.execution_files||[]).map(e=>[path.resolve(privateConfig.repo_root,e.path),e.sha256]));
  if(declared.size!==(frozen.execution_files||[]).length)throw Error('Duplicate executor binding');
  const taskEntries=[...declared.keys()].filter(p=>['executor','executor-route-query','recovery'].some(folder=>p.startsWith(path.join(proof.task_root,folder)+path.sep))).sort();
@@ -326,16 +330,17 @@ function readBoundPrivate(c){
  const legacyExternal=['scripts/NativePermissionGuard.ps1','scripts/public_socket/analyze_shared.py'];
  const currentExternal=['scripts/NativePermissionGuard.ps1','scripts/public_socket/analyze_ros2.py','scripts/public_socket/analyze_shared.py'];
  const nativeExternal=[...currentExternal,'scripts/public_socket/analyze_ros2_native.py'].sort(),directExternal=[...nativeExternal,'scripts/public_socket/analyze_dds214.py'].sort();
- if(required!==legacyRequired&&JSON.stringify(externalNames)!==JSON.stringify(directExternal))throw Error('Current materialization requires all five external execution inputs');
- if((isDds214(c)&&JSON.stringify(externalNames)!==JSON.stringify(directExternal))||(isRos(c)&&JSON.stringify(externalNames)!==JSON.stringify(nativeExternal)&&JSON.stringify(externalNames)!==JSON.stringify(directExternal)))throw Error('ROS requires the current four external execution inputs');
+ const boundedExternal=[...directExternal,'scripts/public_socket/analyze_bounded_native_reaccept.py'].sort(),selectedExternal=frozen.bounded_native_reaccept?boundedExternal:directExternal;
+ if(required!==legacyRequired&&JSON.stringify(externalNames)!==JSON.stringify(selectedExternal))throw Error('Current materialization external execution inputs mismatch');
+ if((isDds214(c)&&JSON.stringify(externalNames)!==JSON.stringify(directExternal))||(isRos(c)&&JSON.stringify(externalNames)!==JSON.stringify(nativeExternal)&&JSON.stringify(externalNames)!==JSON.stringify(selectedExternal)))throw Error('ROS external execution inputs mismatch');
  if(JSON.stringify(externalNames)!==JSON.stringify(directExternal)&&JSON.stringify(externalNames)!==JSON.stringify(nativeExternal)&&JSON.stringify(externalNames)!==JSON.stringify(currentExternal)&&
-    (isRos(c)||JSON.stringify(externalNames)!==JSON.stringify(legacyExternal)))throw Error('Required external membership mismatch');
+    JSON.stringify(externalNames)!==JSON.stringify(boundedExternal)&&(isRos(c)||JSON.stringify(externalNames)!==JSON.stringify(legacyExternal)))throw Error('Required external membership mismatch');
  for(const e of external){const file=path.resolve(privateConfig.repo_root,e.path);if(declared.get(file)!==e.sha256||digest(fs.readFileSync(file))!==e.sha256)throw Error('Required external code missing/changed');}
  if(Object.keys(c.shared_script_sha256||{}).length!==1||c.shared_script_sha256['NativePermissionGuard.ps1']!==declared.get(guard))throw Error('Window external guard not bound');
- if(c.analyzer_sha256!==declared.get(path.join(privateConfig.repo_root,'scripts','public_socket',isDds214(c)?'analyze_dds214.py':isRos(c)?'analyze_ros2.py':'analyze_shared.py')))throw Error('Window analyzer not bound');
+ if(c.analyzer_sha256!==declared.get(path.join(privateConfig.repo_root,'scripts','public_socket',isDds214(c)?'analyze_dds214.py':c.bounded_native_reaccept?'analyze_bounded_native_reaccept.py':isRos(c)?'analyze_ros2.py':'analyze_shared.py')))throw Error('Window analyzer not bound');
  if(isRos(c)&&!localInstalled&&c.native_analyzer_sha256!==declared.get(path.join(privateConfig.repo_root,'scripts','public_socket','analyze_ros2_native.py')))throw Error('ROS native analyzer not bound');
  if(path.dirname(path.resolve(c.window_root))!==path.join(proof.task_root,'windows'))throw Error('Foreign window');
- for(const [original,copy] of [['runner-template.cjs','runner.cjs'],...(required!==legacyRequired?[['dds214-control.cjs','dds214-control.cjs']]:[]),...(c.rmw_debugger?[['rmw-debugger.cjs','rmw-debugger.cjs']]:[]),['ros-control.cjs','ros-control.cjs'],['shared-control.cjs','shared-control.cjs'],['record-pair.cjs','record-pair.cjs'],['observe-native.cjs','observe-native.cjs'],['bounded-output.cjs','bounded-output.cjs']]){
+ for(const [original,copy] of [['runner-template.cjs','runner.cjs'],...(required!==legacyRequired?[['dds214-control.cjs','dds214-control.cjs']]:[]),...(c.rmw_debugger?[['rmw-debugger.cjs','rmw-debugger.cjs']]:[]),...(c.bounded_native_reaccept?[['bounded-native-scene.cjs','bounded-native-scene.cjs']]:[]),['ros-control.cjs','ros-control.cjs'],['shared-control.cjs','shared-control.cjs'],['record-pair.cjs','record-pair.cjs'],['observe-native.cjs','observe-native.cjs'],['bounded-output.cjs','bounded-output.cjs']]){
   if(digest(fs.readFileSync(path.join(c.window_root,copy)))!==declared.get(path.join(proof.task_root,'executor',original)))throw Error('Window executable copy drift');
  }
  return privateConfig;

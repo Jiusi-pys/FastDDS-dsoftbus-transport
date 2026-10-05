@@ -63,5 +63,13 @@ class RosLoad(unittest.TestCase):
         self.config['simulated']=False;self.assertFalse(self.check()['complete'])
     def test_unapproved_environment(self):
         self.env['FASTRTPS_DEFAULT_PROFILES_FILE']='/tmp/bypass.xml';self.write_env();self.assertFalse(self.check()['complete'])
+    def test_native_scene_exact_environment(self):
+        self.config['bounded_native_reaccept']={'contract':'BOUNDED_NORMAL_ONCE'}
+        self.env['FDDST_BOUNDED_NATIVE_SCENE']='BOUNDED_NORMAL_ONCE';self.write_env()
+        r=self.check();self.assertTrue(r['complete'],r['errors'])
+        self.env['FDDST_BOUNDED_NATIVE_SCENE']='ARBITRARY';self.write_env();self.assertFalse(self.check()['complete'])
+        self.env.pop('FDDST_BOUNDED_NATIVE_SCENE');self.write_env();self.assertFalse(self.check()['complete'])
+    def test_ordinary_scene_refuses_native_environment(self):
+        self.env['FDDST_BOUNDED_NATIVE_SCENE']='BOUNDED_NORMAL_ONCE';self.write_env();self.assertFalse(self.check()['complete'])
 
 if __name__=='__main__':unittest.main()

@@ -128,8 +128,9 @@ function createLoadObserver({config,directory,spawn=require('node:child_process'
   if(config.scenario==='ROS2_DSOFTBUS'){
    const main=/^ROS_MAIN scenario=ROS2_DSOFTBUS run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) mode=dual$/.exec(line);
    if(main){if(main[1]!==config.run||main[2]!==side||rosPids[side])inputErrors[side]||='ROS_MAIN_IDENTITY';else rosPids[side]=Number(main[3]);return;}
-   const ready=/^ROS_STAGE run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) stage=RELIABLE_READY$/.exec(line);
-   if(ready){if(ended.has(side)||ready[1]!==config.run||ready[2]!==side||Number(ready[3])!==rosPids[side]||states[side]){inputErrors[side]||='ROS_LOAD_PID_OR_STAGE';return;}start(side,rosPids[side]);states[side].pid_source='ROS_MAIN_AND_RELIABLE_READY_BOUND';onRosReady(side,rosPids[side]);}
+   const readyStage=config.bounded_native_reaccept?'PRE_READY':'RELIABLE_READY';
+   const ready=new RegExp('^ROS_STAGE run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) stage='+readyStage+'$').exec(line);
+   if(ready){if(ended.has(side)||ready[1]!==config.run||ready[2]!==side||Number(ready[3])!==rosPids[side]||states[side]){inputErrors[side]||='ROS_LOAD_PID_OR_STAGE';return;}start(side,rosPids[side]);states[side].pid_source='ROS_MAIN_AND_'+readyStage+'_BOUND';onRosReady(side,rosPids[side]);}
    return;
   }
   const m=new RegExp('^'+(config.main_prefix||'DDS_MAIN')+' run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) mode='+(config.main_mode||'dds')+' ').exec(line);if(m){if(ended.has(side)){inputErrors[side]||='PID_OBSERVED_AFTER_STREAM_END';return;}if(m[1]!==config.run||m[2]!==side)throw Error('Process identity mismatch');if(!states[side])start(side,Number(m[3]));else states[side].error='MULTIPLE_NATIVE_PIDS';}

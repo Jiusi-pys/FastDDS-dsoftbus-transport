@@ -47,6 +47,10 @@ ROS_V1_RECOVERED_SOURCE_SHA256='7e3cd32f3496216847b6ba15c62077c65f2485174d0fbb4f
 ROS_TASK_WINDOW_LIMITS=dict(timeout_seconds=300,per_side_writes=10,per_side_takes=10,record_count=20,stdout_budget=25165824,max_record_bytes=8192,stages=7)
 ROS_ONE_WINDOW_AUTHORIZATIONS=(ROS_OBSERVED_AUTHORIZATION,ROS_SERVICE_NAME_AUTHORIZATION,ROS_LAYERED_AUTHORIZATION)
 ROS_STAGES=['LISTENER_READY','RELIABLE_READY','RELIABLE_DONE','BEST_EFFORT_READY','BEST_EFFORT_DONE','TEARDOWN_READY','DDS_DELETED']
+ROS_NATIVE_STAGES=['LISTENER_READY','PRE_READY','PRE_DONE','REACCEPT_DONE','POST_DONE','TEARDOWN_READY','DDS_DELETED']
+ROS_NATIVE_AUTHORIZATION='TASK_SCOPED_BOUNDED_NATIVE_REACCEPT_VALIDATION'
+ROS_NATIVE_GRANT_RELATIVE='.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/BOUNDED_NATIVE_REACCEPT_AUTHORIZATION.json'
+ROS_NATIVE_GRANT_SHA256='1b8973cc792c0a94e411901511920ef75e141eb2aa23e79e97230fa9ce5ad583'
 ROS_LIMITS=dict(canonical_windows=1,repair_retries=1,total_attempts=2,query_pairs_per_attempt=1,
                 total_query_pairs=2,max_record_bytes=8192,per_side_writes=10,per_side_takes=10,stages=7)
 ROS_LIMITS_ONCE=dict(ROS_LIMITS,repair_retries=0,total_attempts=1,total_query_pairs=1)
@@ -67,6 +71,12 @@ def ros_task_mode(frozen=None):
  return frozen.get('authorization')==ROS_TASK_AUTHORIZATION
 
 def verify_v1_successor(frozen,grant):
+ if frozen.get('bounded_native_authorization') is not None:
+  native=verify_bounded_native_authorization(frozen,grant)
+  legacy=dict(frozen);legacy.pop('bounded_native_authorization')
+  previous=verify_v1_successor(legacy,grant)
+  need(previous is not None,'Native continuation requires exact historical V1 authority chain')
+  return dict(native,authorized_predecessors=[previous['predecessor'],native['predecessor']])
  # An additional human task authorization, never a platform permission grant.
  # It exempts exactly the old accepted checkpoint; a new PASS remains terminal.
  binding=frozen.get('v1_successor_authorization')
@@ -86,6 +96,22 @@ def verify_v1_successor(frozen,grant):
  accepted=json.loads(acceptance.read_text(encoding='utf-8-sig'));config=json.loads((window/'window.json').read_text(encoding='utf-8-sig'))
  need(accepted.get('run')==prior['run'] and accepted.get('functional_verdict')=='PASS_IN_STATED_DUAL_BOARD_ROS_SCOPE' and accepted.get('environment_restoration_verdict')=='PASS','V1 predecessor not independently accepted/restored')
  need(config.get('run')==prior['run'] and config.get('targets')==TARGETS and config.get('token')==TOKENS and config.get('package_name')==PRIVATE.get('ros2_package_name'),'V1 registered identity changed')
+ return record
+
+def verify_bounded_native_authorization(frozen,grant):
+ binding=frozen.get('bounded_native_authorization');need(binding==PRIVATE.get('bounded_native_authorization'),'Native private authority binding mismatch')
+ expected=(repo_root()/ROS_NATIVE_GRANT_RELATIVE).resolve()
+ need(isinstance(binding,dict) and set(binding)=={'path','sha256'} and Path(binding['path']).resolve()==expected and binding['sha256']==ROS_NATIVE_GRANT_SHA256 and digest(expected)==ROS_NATIVE_GRANT_SHA256,'Native exact task authority anchor')
+ record=json.loads(expected.read_text(encoding='utf-8-sig'))
+ need(record.get('schema')==1 and record.get('authorization')==ROS_NATIVE_AUTHORIZATION and record.get('work_package')=='A5C1_BOUNDED_NATIVE_REACCEPT_VALIDATION' and record.get('base_commit')=='b4bd67d00f436beb107d9f324932b74c81641359','Native authorization purpose/revision')
+ need(record.get('original_authorization_sha256')==ROS_TASK_GRANT_SHA256 and record.get('platform_permission_change') is False and record.get('git_authorized') is False,'Native authority is not a platform/Git grant')
+ mode=frozen.get('bounded_native_reaccept');need(isinstance(mode,dict) and set(mode)=={'contract','order','pre_ordinals','post_ordinals','pre_total','post_total','total','source'} and mode['contract']=='BOUNDED_NORMAL_ONCE' and mode['order'] in ('outgoing-first','accepted-first') and mode['pre_ordinals']==[1,2] and mode['post_ordinals']==[3,4,5] and (mode['pre_total'],mode['post_total'],mode['total'])==(8,12,20) and mode['source']=='SDK_PUBLIC_SOCKET','Native finite scene contract')
+ need(frozen.get('limits')==ROS_TASK_WINDOW_LIMITS and frozen.get('native_name_contract')=='PACKAGE_SCOPED_V1','Native window/naming bounds')
+ prior=record.get('predecessor');need(isinstance(prior,dict) and set(prior)=={'run','window','acceptance_sha256'},'Native predecessor shape')
+ window=Path(prior['window']).resolve();receipt=window.parent.parent/'INDEPENDENT_V1_RAW_ACCEPTANCE.json'
+ need(digest(receipt)==prior['acceptance_sha256'],'Native historical acceptance drift')
+ accepted=json.loads(receipt.read_text(encoding='utf-8-sig'));need(accepted.get('run')==prior['run'] and accepted.get('verdict')=='PASS_IN_STATED_V1_DUAL_BOARD_SCOPE' and accepted.get('V1_LOCATOR_DEVICE_VERIFIED') is True and accepted.get('ROS2_V1_DUAL_BOARD_VERIFIED') is True and accepted.get('ENVIRONMENT_RESTORATION')=='PASS','Native predecessor not accepted/restored')
+ _require_normal_restored(window)
  return record
 
 def verify_recovered_identity_source(window):
@@ -203,6 +229,34 @@ def appended_pregrant_recovery(window):
  need(Path(receipt['window']).resolve()==window,'Foreign appended recovery')
  return dict(receipt=receipt,result_path=str(result),result_sha256=digest(result),acceptance_sha256=digest(latest/'INDEPENDENT_ACCEPTANCE.json'))
 
+def granted_pre_dispatch_restoration(window,cfg):
+ # One known verifier failure before main launch, not a Runtime recovery path.
+ summary_path=window/'window-summary.json';summary=json.loads(summary_path.read_text(encoding='utf-8-sig'))
+ frozen_path=Path(cfg['task_contract']['freeze_path']);need(digest(frozen_path)==cfg['task_contract']['freeze_sha256'],'Original preparation freeze drift')
+ frozen=json.loads(frozen_path.read_text(encoding='utf-8-sig'))
+ need(frozen.get('bounded_native_reaccept')==cfg.get('bounded_native_reaccept') and frozen.get('bounded_native_authorization',{}).get('sha256')==ROS_NATIVE_GRANT_SHA256,'Granted preparation is not the bounded native task')
+ need(summary.get('attempted_grants')==['A','B'] and summary.get('cleanup_failures')==[] and summary.get('first_failure')=='Runner failed rc=1','Granted preparation terminal/cleanup mismatch')
+ absent=['DATA_ATTEMPT_STARTED','result.json','commands.json','A.raw.stdout.log','B.raw.stdout.log','A.raw.stderr.log','B.raw.stderr.log']
+ need(not any((window/n).exists() for n in absent),'Main/dispatch observations forbid pre-runtime restoration')
+ authority=Path(frozen['task_authority_root']);need(not (authority/'ros2/task-ledger'/f"data-{cfg['ros_attempt']}.json").exists(),'Data claim forbids pre-runtime restoration')
+ stderr=window/'runner.stderr.log';exit_path=window/'runner-exit-code.txt';text=stderr.read_text(encoding='utf-8-sig')
+ need(exit_path.read_text().strip()=='1' and text.startswith('Error: ROS_TASK_ACTUAL_WINDOW_LIMITS\n') and all('at '+s in text for s in ['verifyTaskGrant','readBoundPrivate','main']),'Not the completed known pre-main verifier failure')
+ runner=window/'runner.cjs';template=Path(cfg['task_contract']['task_root'])/'executor/runner-template.cjs'
+ need(digest(runner)==digest(template)==cfg['executor_sha256']['runner-template.cjs'],'Original runner/materialization mismatch')
+ flow=runner.read_text();start=flow.index('async function main(){');read_at=flow.index('readBoundPrivate(c).tokens',start);open_at=flow.index("side+'.raw.stdout.log'",start);launch_at=flow.index('await runRecordPair(',start)
+ need(read_at<open_at<launch_at,'Bound source does not fail before first main launch')
+ acceptance_path=window/'INDEPENDENT_GRANTED_PRE_DISPATCH_RESTORATION.json';accepted=json.loads(acceptance_path.read_text())
+ need(accepted.get('schema')=='NORMAL_RESTORATION_AFTER_GRANTED_PRE_DISPATCH_FAILURE' and accepted.get('verdict')=='PASS' and accepted.get('run')==cfg['run'] and accepted.get('window_sha256')==digest(window/'window.json') and accepted.get('freeze_sha256')==digest(frozen_path) and accepted.get('runner_sha256')==digest(runner) and accepted.get('first_main_launch_not_reached') is True,'Independent granted preparation restoration not accepted')
+ evidence=accepted.get('evidence_sha256',{});required=[summary_path,stderr,exit_path,runner]
+ required += [window/s/n for s in 'AB' for n in ['baseline.json','after.json','final-guard.json','ownership-guard.json','final-snapshot-guard.json']]
+ required += [window/s/folder/name for s in 'AB' for folder in ['metadata-before','metadata-after','processes-after'] for name in ['command.json','stdout.log','stderr.log','exit-code.txt','remote-result.json']]
+ checks=accepted.get('independent_checks',{})
+ need(set(checks)=={'A','B'} and all(checks[s].get(k) is True for s in 'AB' for k in ['permission_bytes_restored','security_metadata_restored','DENIED','process_absent']),'Independent raw restoration checks missing')
+ need(all(str(p) in evidence and evidence[str(p)]==digest(p) for p in required),'Independent original restoration evidence incomplete')
+ for p,sha in evidence.items():need(Path(p).resolve().is_relative_to(window) and digest(p)==sha,'Independent restoration raw binding drift')
+ _require_window_guards_restored(window) # Original normal guards only; no appended substitute.
+ return dict(scope='NORMAL_RESTORATION_AFTER_GRANTED_PRE_DISPATCH_FAILURE',result_path=str(summary_path),result_sha256=digest(summary_path),acceptance_sha256=digest(acceptance_path))
+
 def task_preparation_failures(authority,exclude_window=None):
  result=[];roots=[authority]+[p for p in (authority/'iterations').glob('iteration-*') if re.fullmatch('iteration-[1-9][0-9]*',p.name)]
  for root in roots:
@@ -212,7 +266,8 @@ def task_preparation_failures(authority,exclude_window=None):
    cfg=json.loads((window/'window.json').read_text(encoding='utf-8-sig'))
    if cfg.get('scenario')!=ROS_SCENARIO or (window/'DATA_ATTEMPT_STARTED').exists():continue
    need(cfg.get('ros_authorization_mode')==ROS_TASK_AUTHORIZATION,'Foreign task preparation authority')
-   recovery=appended_pregrant_recovery(window)
+   summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'))
+   recovery=granted_pre_dispatch_restoration(window,cfg) if cfg.get('bounded_native_reaccept') and summary.get('attempted_grants') else appended_pregrant_recovery(window)
    result.append((cfg['ros_attempt'],'preparation',window/'window-summary.json',dict(window=str(window),run=cfg['run']),recovery))
  return result
 
@@ -240,13 +295,19 @@ def ros_task_next_attempt(exclude_window=None):
   summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'))
   if kind=='data':
    outcome=ros_task_data_outcome(window,config)
-   predecessor=successor and successor['predecessor']
-   need(outcome['status']!='PASS' or (predecessor and row.get('run')==predecessor['run'] and window==Path(predecessor['window']).resolve()),'Successful task data window ends further dispatch')
+   predecessors=(successor.get('authorized_predecessors',[successor['predecessor']]) if successor else [])
+   native_order=frozen.get('bounded_native_reaccept',{}).get('order')
+   previous_native=config.get('bounded_native_reaccept',{})
+   admitted_other_order=(native_order=='accepted-first' and previous_native.get('order')=='outgoing-first' and original_frozen.get('bounded_native_authorization')==frozen.get('bounded_native_authorization') and config.get('bounded_native_reaccept',{}).get('contract')=='BOUNDED_NORMAL_ONCE')
+   need(outcome['status']!='PASS' or admitted_other_order or any(row.get('run')==p['run'] and window==Path(p['window']).resolve() for p in predecessors),'Successful task data window ends further dispatch')
  current=[r for r in rows if r[0]==latest]
  query=next((r for r in current if r[1]=='query'),None);data=next((r for r in current if r[1]=='data'),None)
  prep=next((r for r in preparations if r[0]==latest),None)
  if successor and data and data[3].get('run')==successor['predecessor']['run']:
   return latest+1
+ if frozen.get('bounded_native_reaccept',{}).get('order')=='accepted-first' and data:
+  previous=Path(data[3]['window']);prior=json.loads((previous/'window.json').read_text(encoding='utf-8-sig'))
+  if prior.get('bounded_native_reaccept',{}).get('order')=='outgoing-first' and ros_task_data_outcome(previous,prior)['status']=='PASS':return latest+1
  if query and not data and not prep:
   window=Path(query[3]['window']);summary=json.loads((window/'window-summary.json').read_text(encoding='utf-8-sig'))
   if successor and (repo_root()/ROS_V1_RECOVERED_SOURCE_RELATIVE).is_file():
@@ -326,13 +387,18 @@ def verify_ros_observed_grant(frozen):
 def is_ros(c):return isinstance(c,dict) and c.get('scenario')==ROS_SCENARIO
 def ros_shape(c):
  need(c.get('work_package')==ROS_SCOPE and c.get('main_member')=='ordinary_ros2_transport_consumer','ROS scope/main mismatch')
+ frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text(encoding='utf-8-sig'))
+ need(c.get('bounded_native_reaccept')==frozen.get('bounded_native_reaccept'),'Native scene omitted or changed from frozen contract')
+ if c.get('bounded_native_reaccept'):
+  need(c['bounded_native_reaccept']==frozen.get('bounded_native_reaccept') and frozen.get('bounded_native_authorization') is not None,'Native scene is not bound to task authority')
+  verify_v1_successor(frozen,verify_ros_task_grant(frozen))
  need(c.get('main_prefix')=='ROS_MAIN' and c.get('main_mode')=='dual','ROS main output/mode mismatch')
  need(not any(k in c for k in ('cycles','delete_first','shared','shared_receipts')),'ROS is not a shared/cycle alias')
  assert_fresh_run(c['run'])
  need(c['targets']==TARGETS and c['token']==TOKENS,'ROS board/token mismatch')
  need(c['remote']=={s:f"/data/local/tmp/mdds_dds_{c['run']}_{s}" for s in ['A','B']},'ROS remote path mismatch')
  need(c.get('expected_writes')=={'A':10,'B':10} and c.get('record_count')==20,'ROS directional/aggregate sample contract')
- need(c.get('stages')==ROS_STAGES and c.get('timeout_seconds')==300 and c.get('stdout_budget')==25165824,'ROS frozen stage/budget mismatch')
+ need(c.get('stages')==(ROS_NATIVE_STAGES if c.get('bounded_native_reaccept') else ROS_STAGES) and c.get('timeout_seconds')==300 and c.get('stdout_budget')==25165824,'ROS frozen stage/budget mismatch')
  need(c['system_library_dirs']==LIBDIRS and c.get('max_record_bytes')==8192,'ROS loader/log budget mismatch')
  need(type(c.get('ros_attempt')) is int and (c['ros_attempt']>=1 if ros_task_mode() else c['ros_attempt'] in (1,2)),'ROS attempt identity')
  names=[x['name'] for x in c['package_artifacts']]
@@ -502,6 +568,7 @@ LEGACY_MATERIALIZED_FILES=('executor-route-query/launch.ps1', 'executor-route-qu
 PRIOR_MATERIALIZED_FILES=LEGACY_MATERIALIZED_FILES+('executor/dds214-control.cjs','executor/layered_contract.py')
 RECOVERY_MATERIALIZED_FILES=PRIOR_MATERIALIZED_FILES+('recovery/pregrant_recovery.py','recovery/recovery-guard.ps1','recovery/readonly_preflight.py')
 MATERIALIZED_FILES=RECOVERY_MATERIALIZED_FILES+('executor/rmw_debugger.py','executor/rmw-debugger.cjs','executor/rmw_lldb_trace.py')
+NATIVE_MATERIALIZED_FILES=MATERIALIZED_FILES+('executor/bounded-native-scene.cjs',)
 def verify_local_driver(x):
  # Shared local-mode binding. These are exactly the fields the PowerShell bootstrap
  # reads, so both layers validate and bind one frozen contract instead of keeping
@@ -567,10 +634,10 @@ def materialization_record(frozen):
  p=TASK_ROOT/'MATERIALIZATION.json';need(digest(p)==frozen.get('materialization_sha256'),'Materialization descriptor missing/changed')
  record=json.loads(p.read_text(encoding='utf-8'));need(record.get('scope')=='LOCAL_MATERIALIZATION_ONLY_NO_EXECUTION_AUTHORITY' and record.get('task')==str(TASK_ROOT) and record.get('repo')==str(repo_root()) and record.get('private_config_sha256')==frozen.get('private_config_sha256'),'Materialization identity mismatch')
  rows=record.get('files',[]);names=[e['destination'].replace(chr(92),'/') for e in rows]
- current_members=set(names) in (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES),set(PRIOR_MATERIALIZED_FILES))
+ current_members=set(names) in (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES),set(PRIOR_MATERIALIZED_FILES),set(NATIVE_MATERIALIZED_FILES))
  strict=frozen.get('scope')==layered().SCOPE or frozen.get('authorization')==ROS_LAYERED_AUTHORIZATION
  need(len(names)==len(set(names)) and (current_members or (not strict and set(names)==set(LEGACY_MATERIALIZED_FILES))),'Materialized dependency membership mismatch')
- if frozen.get('authorization')==ROS_TASK_AUTHORIZATION:need(set(names) in ((set(MATERIALIZED_FILES),) if frozen.get('rmw_debugger') else (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES))),'Task recovery-capable execution requires current complete materialization')
+ if frozen.get('authorization')==ROS_TASK_AUTHORIZATION:need(set(names) in ((set(NATIVE_MATERIALIZED_FILES),) if frozen.get('bounded_native_authorization') else (set(MATERIALIZED_FILES),) if frozen.get('rmw_debugger') else (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES))),'Task recovery-capable execution requires current complete materialization')
  entries=frozen.get('execution_files',[]);mapped={str((repo_root()/e['path']).resolve()):e['sha256'] for e in entries};need(len(mapped)==len(entries),'Duplicate executor binding')
  required={str((TASK_ROOT/e['destination']).resolve()):e['sha256'] for e in rows}
  task_entries={p for p in mapped if any(Path(p).is_relative_to(TASK_ROOT/folder) for folder in ('executor','executor-route-query','recovery'))}
@@ -580,8 +647,9 @@ def materialization_record(frozen):
  current=legacy|{'scripts/public_socket/analyze_ros2.py'}
  native=current|{'scripts/public_socket/analyze_ros2_native.py'}
  direct=native|{'scripts/public_socket/analyze_dds214.py'}
- need(len(names)==len(set(names)) and set(names) in (legacy,current,native,direct) and
-      (not current_members or set(names)==direct) and (frozen.get('scope')!=ROS_SCOPE or set(names) in (native,direct)) and (frozen.get('scope')!=layered().SCOPE or set(names)==direct),'Required external execution membership mismatch')
+ bounded=direct|{'scripts/public_socket/analyze_bounded_native_reaccept.py'}
+ need(len(names)==len(set(names)) and set(names) in (legacy,current,native,direct,bounded) and
+      (not current_members or set(names)==(bounded if frozen.get('bounded_native_reaccept') else direct)) and (frozen.get('scope')!=ROS_SCOPE or set(names) in (native,direct,bounded)) and (frozen.get('scope')!=layered().SCOPE or set(names)==direct),'Required external execution membership mismatch')
  for e in external:
   path=str(repo_root()/e['path']);need(mapped.get(path)==e.get('sha256') and isinstance(e.get('sha256'),str),'Required external execution dependency omitted or changed');required[path]=e['sha256']
  return required
@@ -589,7 +657,7 @@ def materialization_record(frozen):
 def verify_shared_guard(c,frozen):
  required=materialization_record(frozen)
  need(c.get('shared_script_sha256')=={'NativePermissionGuard.ps1':required[str(repo_root()/'scripts/NativePermissionGuard.ps1')]},'Window must bind the exact reviewed external guard')
- analyzer='analyze_dds214.py' if is_dds214(c) else 'analyze_ros2.py' if is_ros(c) else 'analyze_shared.py'
+ analyzer='analyze_dds214.py' if is_dds214(c) else 'analyze_bounded_native_reaccept.py' if c.get('bounded_native_reaccept') else 'analyze_ros2.py' if is_ros(c) else 'analyze_shared.py'
  need(c.get('analyzer_sha256')==required[str(repo_root()/'scripts/public_socket'/analyzer)],'Window formal analyzer not bound')
  if is_ros(c) and frozen.get('local_contract_test') is not True:
   need(c.get('native_analyzer_sha256')==required[str(repo_root()/'scripts/public_socket/analyze_ros2_native.py')],'ROS native analyzer not bound')
@@ -1105,6 +1173,7 @@ def verify_v1_window(c,frozen):
   need(all(len(row)==2 for row in rows) and len({row[0] for row in rows})==len(rows),'Generated V1 ROS config duplicate/invalid field')
   values=dict(rows);other='B' if side=='A' else 'A'
   expected=dict(locator_version='V1',native_name_contract='PACKAGE_SCOPED_V1',namespace=v['namespace'],domain=str(v['domain']),profile=v['profile'],local_udid=v['udids'][side],peer_udid=v['udids'][other],service_slot=str(v['slots'][side]),peer_slot=str(v['slots'][other]),local_initiator_name=v['initiator_names'][side],peer_initiator_name=v['initiator_names'][other],authorized_package=c['package_name'],service_prefix=c['package_name']+'.'+c['service_prefix'])
+  if c.get('bounded_native_reaccept'):expected.update(backend='OHOS_PUBLIC_SOCKET_BOUNDED_REACCEPT_EXPERIMENTAL',native_reaccept_order=c['bounded_native_reaccept']['order'],native_reaccept_control=c['remote'][side]+'/control.NATIVE_REACCEPT')
   need(all(values.get(key)==value for key,value in expected.items()),'Generated V1 ROS endpoint/name contract mismatch')
   if 'auxiliary_sha256' in c:need(c['auxiliary_sha256'][side].get('ros.conf')==digest(path),'Generated V1 ROS config bytes drift')
 

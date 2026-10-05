@@ -63,7 +63,7 @@ Runtime::MakeDescriptor(const DSoftBusTransportDescriptor& config) {
         return {};
     }
     const auto& binding=impl_->binding;
-    if(binding.bounded_reaccept_host&&!impl_->backend->BoundedReacceptHost())return {};
+    if((binding.bounded_reaccept_host||binding.bounded_native_reaccept_experiment)&&!impl_->backend->BoundedReacceptExperiment())return {};
     if(config.native_name_scope.authorized_package!=binding.package_name || config.directory.locals.size()!=1 ||
        config.directory.routes.size()!=1 || config.directory.locals.front().local_listen_name!=binding.listener_identity.service_name ||
        config.directory.routes.front().fields.remote_listen_name!=binding.peer_name ||
@@ -86,5 +86,20 @@ bool RuntimeProbeAccess::BeforeNativeClose(experimental::Runtime& runtime,
     // Assembly and MakeDescriptor belong to the same external control thread.
     if(runtime.impl_->issued.load())return false;
     return runtime.impl_->loop->SetBeforeNativeClose(std::move(observer));
+}
+bool RuntimeProbeAccess::BoundedReplacementGate(experimental::Runtime& runtime,std::function<bool()> gate){
+    if(runtime.impl_->issued.load()||!runtime.impl_->backend->BoundedReacceptExperiment())return false;
+    return runtime.impl_->loop->SetBoundedReplacementGate(std::move(gate));
+}
+BackendStatus RuntimeProbeAccess::RequestNormalEnd(experimental::Runtime& runtime,RecordRole role) noexcept {
+    if(!runtime.impl_->backend->BoundedReacceptExperiment())return BackendStatus::InvalidState;
+    return runtime.impl_->loop->RequestNormalEnd(role);
+}
+BoundedConnectionSnapshot RuntimeProbeAccess::ObserveConnection(const experimental::Runtime& runtime) noexcept {
+    const auto value=runtime.impl_->loop->Observe();
+    return {value.adapter,value.native,value.started,value.sealed};
+}
+void RuntimeProbeAccess::SealBoundedAdmission(experimental::Runtime& runtime) noexcept {
+    runtime.impl_->loop->SealBoundedAdmission();
 }
 }

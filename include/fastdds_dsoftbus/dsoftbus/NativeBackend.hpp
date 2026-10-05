@@ -90,7 +90,9 @@ public:
     virtual BackendIdentity Identity() const = 0;
     virtual BackendTopology Topology() const noexcept {return BackendTopology::SingleOwner;}
     virtual bool BoundedReacceptHost() const noexcept {return false;}
+    virtual bool BoundedReacceptExperiment() const noexcept {return BoundedReacceptHost();}
     virtual BackendStatus ResetHostConnection(RecordRole,const NativeOwnerLease&) {return BackendStatus::NativeBackendUnavailable;}
+    virtual BackendStatus ResetBoundedConnection(RecordRole role,const NativeOwnerLease& old) {return ResetHostConnection(role,old);}
     virtual BackendIdentity ListenerIdentity() const {return {};}
     virtual BackendStatus ConfigureEntrance(const RecordEntrance&) {return BackendStatus::None;}
     virtual BackendSocketResult Create(ProviderCallbacks) = 0;

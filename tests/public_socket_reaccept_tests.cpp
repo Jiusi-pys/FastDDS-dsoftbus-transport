@@ -11,6 +11,7 @@ std::map<int,unsigned> closes;
 int next_dial=20,forced_socket=-1,socket_calls=0,bind_calls=0;
 const ISocketListener *server=nullptr,*client=nullptr;
 std::function<void()> in_socket,in_bind,in_send;
+std::function<void(int)> in_shutdown;
 std::vector<int> sent_ids;
 void Terminal(int id,bool outgoing=false){
     {std::lock_guard<std::mutex> lock(gate);alive[id]=false;}
@@ -25,7 +26,7 @@ int32_t Socket(SocketInfo info){using namespace reaccept_fake;int id;
 int32_t Listen(int32_t,const QosTV*,uint32_t,const ISocketListener* cb){reaccept_fake::server=cb;return 0;}
 int32_t Bind(int32_t,const QosTV*,uint32_t,const ISocketListener* cb){reaccept_fake::client=cb;++reaccept_fake::bind_calls;if(reaccept_fake::in_bind)reaccept_fake::in_bind();return 0;}
 int32_t SendBytes(int32_t id,const void*,uint32_t){if(reaccept_fake::in_send)reaccept_fake::in_send();std::lock_guard<std::mutex> lock(reaccept_fake::gate);reaccept_fake::sent_ids.push_back(id);return 0;}
-void Shutdown(int32_t id){std::lock_guard<std::mutex> lock(reaccept_fake::gate);Check(reaccept_fake::alive[id],"no unknown or duplicate public Shutdown");reaccept_fake::alive[id]=false;++reaccept_fake::closes[id];}
+void Shutdown(int32_t id){{std::lock_guard<std::mutex> lock(reaccept_fake::gate);Check(reaccept_fake::alive[id],"no unknown or duplicate public Shutdown");reaccept_fake::alive[id]=false;++reaccept_fake::closes[id];}if(reaccept_fake::in_shutdown)reaccept_fake::in_shutdown(id);}
 }
 namespace {
 struct Peer {
@@ -36,13 +37,13 @@ struct Fixture {
     Receiver receiver;Peer peer;DSoftBusTransportDescriptor config=Config();
     std::shared_ptr<PublicSocketBackend> backend;std::shared_ptr<HostProviderLoop> loop;
     std::unique_ptr<DSoftBusTransport> facade;rtps::SendResourceList senders;
-    explicit Fixture(bool enabled=true,std::shared_ptr<ProcessReceiveObserver> observer={}){
+    explicit Fixture(bool enabled=true,std::shared_ptr<ProcessReceiveObserver> observer={},std::function<bool()> gate={}){
         PublicSocketConfiguration c;c.identity={"model.dial",{701},{801}};c.listener_identity={"host.loop.local",{702},{802}};
         c.package_name="host.reaccept";c.peer_name="model.remote";c.peer_network_id="model.net";c.bind_qos={{0,64}};c.listen_qos=c.bind_qos;c.max_message_size=64;c.bounded_reaccept_host=enabled;
-        backend=std::make_shared<PublicSocketBackend>(c);loop=std::make_shared<HostProviderLoop>(backend,std::move(observer));facade=HostFacadeTestAccess::Create(config,loop);
+        backend=std::make_shared<PublicSocketBackend>(c);loop=std::make_shared<HostProviderLoop>(backend,std::move(observer));if(gate)Check(loop->SetBoundedReplacementGate(std::move(gate)),"bounded setup gate");facade=HostFacadeTestAccess::Create(config,loop);
         Check(facade->init()&&facade->OpenInputChannel(L(2),&receiver,64)&&facade->OpenOutputChannel(senders,L(3)),"real Host facade/owner/adapter/binding setup");
     }
-    ~Fixture(){reaccept_fake::in_socket={};reaccept_fake::in_bind={};reaccept_fake::in_send={};if(facade)facade->shutdown();}
+    ~Fixture(){reaccept_fake::in_socket={};reaccept_fake::in_bind={};reaccept_fake::in_send={};reaccept_fake::in_shutdown={};if(facade)facade->shutdown();}
     bool Prepare(int id,Peer* override_peer=nullptr){
         const bool ok=reaccept_fake::server->OnNegotiate(id,(override_peer?*override_peer:peer).Get());
         if(ok){std::lock_guard<std::mutex> lock(reaccept_fake::gate);reaccept_fake::alive[id]=true;}return ok;
@@ -55,6 +56,46 @@ struct Fixture {
     void Close(){facade->shutdown();auto v=loop->Observe();Check(v.close.status==BackendStatus::None&&v.close.cleanup_status==BackendStatus::None&&v.close.adapter_drained&&v.receive.records==0&&v.tx.records==0&&v.native.callbacks==0&&v.native.receives==0,"settled real adapter resources and original close success");}
 };
 void DefaultGuard(){Fixture f(false);f.Accept(30);f.Retire(30);Check(!f.Prepare(31),"default NO_REACCEPT remains");f.Close();}
+void LocalNormalEnd(){Fixture f;f.Accept(30);auto before=f.loop->Observe();
+    Check(f.loop->RequestNormalEnd(RecordRole::Client)==BackendStatus::None,"normal end uses original owned close without self callback");
+    Check(reaccept_fake::closes[20]==1&&reaccept_fake::closes[10]==0&&reaccept_fake::closes[30]==0,"only selected outgoing closes");
+    (void)f.loop->PumpReceive();auto after=f.loop->Observe();
+    Check(after.adapter.binding.socket==21&&after.adapter.binding.owner_incarnation!=before.adapter.binding.owner_incarnation,"automatic fresh dial after local void return");
+    Check(after.adapter.listener.owner_incarnation==before.adapter.listener.owner_incarnation&&after.adapter.accepted.owner_incarnation==before.adapter.accepted.owner_incarnation,"original anchors and opposite direction remain");
+    Check(f.loop->RequestNormalEnd(RecordRole::Client)==BackendStatus::None&&reaccept_fake::closes[21]==0,"repeated phase cannot close replacement");
+    f.Enqueue(9);Check(f.loop->PumpSend().outcome==NativeSendOutcome::ReturnedSdkCode&&reaccept_fake::sent_ids==std::vector<int>{21},"new traffic on new owner");f.Close();
+}
+void LocalAcceptedEnd(){Fixture f;f.Accept(30);auto before=f.loop->Observe();f.Bytes(30,1);
+    Check(f.loop->RequestNormalEnd(RecordRole::Server)==BackendStatus::None&&reaccept_fake::closes[30]==1,"accepted original closes without invented notification");
+    (void)f.loop->PumpReceive();f.Accept(31);f.Bytes(31,2);Check(f.loop->PumpReceive()==BackendStatus::None&&f.receiver.calls==1&&f.receiver.bytes[0]==2,"old queued copy cancelled, new accepted data delivered");
+    auto after=f.loop->Observe();Check(after.adapter.listener.owner_incarnation==before.adapter.listener.owner_incarnation&&after.adapter.binding.owner_incarnation==before.adapter.binding.owner_incarnation,"listener and opposite dial retained");f.Close();
+}
+void ReplacementGate(){bool permit=false;Fixture f(true,{},[&]{return permit;});f.Accept(30);
+    Check(f.loop->RequestNormalEnd(RecordRole::Client)==BackendStatus::None,"original normal close");const auto calls=reaccept_fake::socket_calls;
+    (void)f.loop->PumpReceive();Check(reaccept_fake::socket_calls==calls,"phase hold cannot invoke replacement Socket");
+    f.Bytes(30,3);Check(f.loop->PumpReceive()==BackendStatus::None&&f.receiver.calls==1,"unaffected accepted control/data remains live");
+    permit=true;(void)f.loop->PumpReceive();Check(f.loop->Observe().adapter.binding.socket==21&&reaccept_fake::socket_calls==calls+1,"phase permit drives one existing control attempt");f.Close();
+}
+void CallbackBeforeLocalEnd(){Fixture f;f.Accept(30);reaccept_fake::Terminal(20,true);
+    Check(f.loop->RequestNormalEnd(RecordRole::Client)==BackendStatus::None,"callback can discharge old responsibility");
+    Check(f.backend->Observe().operations[std::size_t(PublicSocketOperation::Shutdown)].calls==0,"callback is not local SDK call");
+    (void)f.loop->PumpReceive();auto retired=f.loop->Observe().adapter.retired_outgoing;
+    Check(retired.on_shutdown_seen&&!retired.shutdown_entered&&!retired.shutdown_returned,"callback fact not fabricated as void entry/return");f.Close();
+}
+void LocalShutdownException(){Fixture f;f.Accept(30);const auto calls=reaccept_fake::socket_calls;
+    reaccept_fake::in_shutdown=[](int){throw std::runtime_error("controlled public API exception");};
+    Check(f.loop->RequestNormalEnd(RecordRole::Client)==BackendStatus::ProviderException,"original shutdown exception retained");
+    reaccept_fake::in_shutdown={};(void)f.loop->PumpReceive();
+    Check(reaccept_fake::socket_calls==calls&&f.loop->Observe().adapter.binding.socket==20,"failure cannot expose replacement");
+    f.facade->shutdown();Check(f.loop->Observe().close.status==BackendStatus::ProviderException,"normal final close cannot erase original failure");
+}
+void LocalEndEnteredSend(){Fixture f;f.Accept(30);Event entered,release;reaccept_fake::in_send=[&]{entered.Signal();release.Wait();};f.Enqueue(1);
+    auto work=std::async(std::launch::async,[&]{return f.loop->PumpSend();});Cleanup unblock{[&]{release.Signal();}};entered.Wait();
+    Check(f.loop->RequestNormalEnd(RecordRole::Client)==BackendStatus::NoWork&&reaccept_fake::closes[20]==0,"entered original send defers normal close");
+    release.Signal();Check(work.get().outcome==NativeSendOutcome::ReturnedSdkCode,"original entered work settles");reaccept_fake::in_send={};
+    Check(f.loop->RequestNormalEnd(RecordRole::Client)==BackendStatus::None&&reaccept_fake::closes[20]==1,"original ticket closes after settlement");
+    (void)f.loop->PumpReceive();Check(f.loop->Observe().adapter.binding.socket==21,"replacement after original activity and close");f.Close();
+}
 void FreshAndOld(){Fixture f;f.Accept(30);auto before=f.loop->Observe();f.Bytes(30,1);Check(f.loop->Observe().receive.records==1,"old owned queue exists");f.Retire(30);Check(f.receiver.calls==0&&f.loop->Observe().receive.records==0,"old queue cancelled not delivered");f.Accept(31);f.Bytes(30,8);reaccept_fake::server->OnShutdown(30,SHUTDOWN_REASON_PEER);f.Bytes(31,2);Check(f.loop->PumpReceive()==BackendStatus::None&&f.receiver.calls==1&&f.receiver.bytes[0]==2,"new events live, old uncaptured callback cannot alias current route");auto after=f.loop->Observe();Check(after.adapter.accepted.owner_incarnation!=before.adapter.accepted.owner_incarnation&&after.adapter.binding.owner_incarnation==before.adapter.binding.owner_incarnation,"fresh accepted owner; opposite dial unchanged");f.Close();}
 void ReusedIds(){Fixture f;f.Accept(30);f.Retire(30);Check(!f.Prepare(30),"retained owned ID rejected");Check(f.Prepare(31),"prepared candidate");reaccept_fake::server->OnNegotiate2(31,f.peer.Get(),nullptr,nullptr);(void)f.loop->PumpReceive();Check(!f.Prepare(31),"abandoned SDK-visible prepared ID rejected");Check(reaccept_fake::closes[31]==0,"uncommitted ID never blindly Shutdown");f.Accept(32);f.Close();}
 void WrongPeer(){Fixture f;Peer bad;bad.network="wrong.network";Check(!f.Prepare(40,&bad),"wrong route rejected");Check(!f.Prepare(40),"denied ID cannot become future valid connection");auto p=f.peer.Get(DATA_TYPE_RAW_STREAM);Check(!reaccept_fake::server->OnNegotiate(41,p),"wrong data profile rejected");Check(!f.Prepare(41),"invalid-profile candidate ID retained");f.Accept(42);f.Close();}
@@ -73,4 +114,4 @@ void EnteredCopy(){auto observer=std::make_shared<CopyBarrier>();Fixture f(true,
 void CloseDuringBind(){Fixture f;f.Accept(30);Event entered,release;reaccept_fake::Terminal(20,true);reaccept_fake::in_bind=[&]{entered.Signal();release.Wait();};std::thread control,closing;std::atomic<bool> done{false};BackendStatus result=BackendStatus::None;Cleanup join{[&]{release.Signal();if(control.joinable())control.join();if(closing.joinable())closing.join();}};control=std::thread([&]{result=f.loop->PumpReceive();});entered.Wait();closing=std::thread([&]{f.facade->shutdown();done=true;});Until([&]{return f.loop->Observe().sealed;});Check(!done&&reaccept_fake::closes[21]==0,"close cannot release entered new Bind");release.Signal();control.join();closing.join();reaccept_fake::in_bind={};Check(result!=BackendStatus::None&&f.loop->Observe().closed,"closing control suppresses successful replacement");Check(reaccept_fake::closes[21]==1,"losing fresh dial retains exact close responsibility");}
 void CloseDuringPublication(){Fixture f;Check(f.Prepare(30),"prepared candidate");struct Context {Event entered,release;} ctx;f.backend->SetAcceptedCommitHookForTest([](void* p)noexcept{auto& c=*static_cast<Context*>(p);c.entered.Signal();c.release.Wait();},&ctx);std::thread callback,closing;std::atomic<bool> done{false};Cleanup join{[&]{ctx.release.Signal();if(callback.joinable())callback.join();if(closing.joinable())closing.join();f.backend->SetAcceptedCommitHookForTest(nullptr,nullptr);}};callback=std::thread([&]{reaccept_fake::server->OnBind(30,f.peer.Get());});ctx.entered.Wait();closing=std::thread([&]{f.facade->shutdown();done=true;});Until([&]{return f.loop->Observe().sealed;});Check(!done&&reaccept_fake::closes[30]==0,"close waits owned candidate callback before publication");ctx.release.Signal();callback.join();closing.join();f.backend->SetAcceptedCommitHookForTest(nullptr,nullptr);Check(f.loop->Observe().adapter.accepted_activation_count==0&&reaccept_fake::closes[30]==1,"losing candidate never publishes and closes once");}
 }
-int main(int argc,char** argv){try{Check(argc==2,"case required");std::string c=argv[1];if(c=="entered-copy")EnteredCopy();else if(c=="close-bind")CloseDuringBind();else if(c=="close-publication")CloseDuringPublication();else if(c=="ambiguous-first")AmbiguousFirstEffect();else if(c=="failed-dial-accept")FailedDialKeepsAccept();else if(c=="default")DefaultGuard();else if(c=="fresh-old")FreshAndOld();else if(c=="reused-ids")ReusedIds();else if(c=="wrong-peer")WrongPeer();else if(c=="candidates")Candidates();else if(c=="capacity")Capacity();else if(c=="old-send")OldSend();else if(c=="entered-send")EnteredSend();else if(c=="entered-receiver")EnteredReceiver();else if(c=="late-create")LateDuringCreate();else if(c=="close-once")CloseOnce();else throw std::runtime_error("unknown case");std::cout<<"PASS BOUNDED_REACCEPT_HOST "<<c<<std::endl;return 0;}catch(const std::exception& e){std::cerr<<"FIRST_FAILURE "<<e.what()<<std::endl;return 1;}}
+int main(int argc,char** argv){try{Check(argc==2,"case required");std::string c=argv[1];if(c=="callback-before-local")CallbackBeforeLocalEnd();else if(c=="local-shutdown-exception")LocalShutdownException();else if(c=="replacement-gate")ReplacementGate();else if(c=="local-end-accepted")LocalAcceptedEnd();else if(c=="local-end")LocalNormalEnd();else if(c=="local-end-send")LocalEndEnteredSend();else if(c=="entered-copy")EnteredCopy();else if(c=="close-bind")CloseDuringBind();else if(c=="close-publication")CloseDuringPublication();else if(c=="ambiguous-first")AmbiguousFirstEffect();else if(c=="failed-dial-accept")FailedDialKeepsAccept();else if(c=="default")DefaultGuard();else if(c=="fresh-old")FreshAndOld();else if(c=="reused-ids")ReusedIds();else if(c=="wrong-peer")WrongPeer();else if(c=="candidates")Candidates();else if(c=="capacity")Capacity();else if(c=="old-send")OldSend();else if(c=="entered-send")EnteredSend();else if(c=="entered-receiver")EnteredReceiver();else if(c=="late-create")LateDuringCreate();else if(c=="close-once")CloseOnce();else throw std::runtime_error("unknown case");std::cout<<"PASS BOUNDED_REACCEPT_HOST "<<c<<std::endl;return 0;}catch(const std::exception& e){std::cerr<<"FIRST_FAILURE "<<e.what()<<std::endl;return 1;}}

@@ -18,12 +18,14 @@ def materialize(repo,task,profile):
  spec=importlib.util.spec_from_file_location('private_input_validation',here/'executor/private_config.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
  module.validate_profile(config,task,repo)
  external_files=[dict(path=name,sha256=hashlib.sha256((repo/name).read_bytes()).hexdigest()) for name in ('scripts/NativePermissionGuard.ps1','scripts/public_socket/analyze_shared.py','scripts/public_socket/analyze_ros2.py','scripts/public_socket/analyze_ros2_native.py','scripts/public_socket/analyze_dds214.py')]
+ if config.get('bounded_native_authorization'):external_files.append(dict(path='scripts/public_socket/analyze_bounded_native_reaccept.py',sha256=hashlib.sha256((repo/'scripts/public_socket/analyze_bounded_native_reaccept.py').read_bytes()).hexdigest()))
  task.mkdir(parents=True,exist_ok=False)
  manifest=[]
  for folder in ('executor','executor-route-query'):
   (task/folder).mkdir()
   for src in sorted((here/folder).iterdir()):
    if src.is_file() and src.suffix in ('.py','.cjs','.ps1'):
+    if src.name=='bounded-native-scene.cjs' and not config.get('bounded_native_authorization'):continue
     dst=task/folder/src.name;shutil.copyfile(src,dst);manifest.append(dict(destination=dst.relative_to(task).as_posix(),source=src.relative_to(repo).as_posix(),sha256=hashlib.sha256(dst.read_bytes()).hexdigest()))
  for name in CANONICAL:
   src=here.parent/name;dst=task/'executor'/name;shutil.copyfile(src,dst);manifest.append(dict(destination=dst.relative_to(task).as_posix(),source=src.relative_to(repo).as_posix(),sha256=hashlib.sha256(dst.read_bytes()).hexdigest()))

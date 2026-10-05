@@ -21,6 +21,7 @@
 #endif
 
 using namespace std::chrono_literals;
+#include "BoundedReacceptRos.hpp"
 // Test/control metadata only. No business sample is read from this file.
 bool ControlStage(const std::string& run,const std::string& side,long pid,const std::string& stage,const std::function<void()>& progress={}) {
     const char* prefix=std::getenv("FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX");
@@ -68,6 +69,12 @@ int main(int argc,char** argv) {
         active_stage="NODE_CREATE";
         const auto ns="/fdds_"+run;
         auto node=std::make_shared<rclcpp::Node>("transport_"+side,ns,rclcpp::NodeOptions().use_intra_process_comms(false));
+        const char* native_scene=std::getenv("FDDST_BOUNDED_NATIVE_SCENE");
+        if(native_scene&&std::string(native_scene)=="BOUNDED_NORMAL_ONCE"){
+            if(mode!="dual")ros_failure_protocol::Fail(run,side,pid,"NATIVE_SCENE","FINITE_DUAL_CONTRACT_REQUIRED");
+            BoundedReacceptRos(node,side,run,pid,[&](const std::string& point,const std::function<void()>& progress){return ControlStage(run,side,pid,point,progress);});
+            FastddsDsoftbusTeardownCheckpoint("BEFORE_NODE_DELETE");result=0;
+        }else{
         const std::vector<std::string> phases=mode=="dual"?std::vector<std::string>{"reliable","best_effort"}:std::vector<std::string>{mode};
         for(const auto& phase:phases) {
         const auto topic_prefix=mode=="dual"?phase+"/":"";
@@ -153,6 +160,7 @@ int main(int argc,char** argv) {
         if(!ControlStage(run,side,pid,"TEARDOWN_READY"))ros_failure_protocol::Fail(run,side,pid,"TEARDOWN_READY","CLEANUP_CONTROL_MISSING");
         FastddsDsoftbusTeardownCheckpoint("BEFORE_NODE_DELETE");
         result=0;
+        }
     }catch(const ros_failure_protocol::PeerCleanup&){result=4;}
     catch(const std::exception& e){(void)e;ros_failure_protocol::Report(run,side,pid,active_stage,"ROS_OPERATION_EXCEPTION");}
     FastddsDsoftbusTeardownCheckpoint("AFTER_NODE_ENTITY_DELETE");

@@ -72,12 +72,47 @@ def load_recovered_identity_binding(private_path):
     for path in (Path(__file__).resolve(),task/'executor/task_contract.py',task/'executor-route-query/route_query.py'):files[str(path)]=digest(path)
     return dict(schema=1,query_run=config['run'],private_receipt=str(private_path),source_query_window=str(window),peer=parsed['peer'],local_id_sha256={side:hashlib.sha256(parsed['boards'][side]['local'].encode()).hexdigest() for side in 'AB'},proof_files_sha256=files,selection='ORIGINAL_CONSUMED_QUERY_RAW_CROSSMATCH_WITH_INDEPENDENT_APPENDED_EXPORT_RESTORATION')
 
+def completed_query_replay(source_window,archive_manifest=None):
+    """Original consumed-query proof; cross-iteration use stays in one native task."""
+    task=Path(__file__).resolve().parent.parent;window=Path(source_window).resolve();source=window.parent.parent
+    closure={}
+    if source!=task:
+        private=json.loads((task/'PRIVATE_CONFIG.json').read_text());current=json.loads((task/'DEVICE_CONTRACT.json').read_text())
+        repo=Path(private['repo_root']).resolve();authority=repo/'.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002'
+        require(source.parent==authority/'iterations' and re.fullmatch('iteration-[1-9][0-9]*',source.name) and window.parent==source/'windows' and re.fullmatch('query-[1-9][0-9]*',window.name),'Foreign replay authority/window')
+        config=json.loads((window/'window.json').read_text());proof=config['task_contract'];freeze=Path(proof['freeze_path']).resolve()
+        require(freeze.parent==source and proof['task_root']==str(source) and digest(freeze)==proof['freeze_sha256'] and Path(config['window_root']).resolve()==window,'Original replay freeze/window binding')
+        original=json.loads(freeze.read_text());other=json.loads((source/'PRIVATE_CONFIG.json').read_text());materialization=source/'MATERIALIZATION.json'
+        require(digest(materialization)==original['materialization_sha256'] and digest(source/'PRIVATE_CONFIG.json')==original['private_config_sha256'],'Original replay materialization/private drift')
+        require(current.get('authorization')==original.get('authorization')=='TASK_SCOPED_ROS2_DEVICE_VALIDATION' and current.get('task_authority_root')==original.get('task_authority_root')==str(authority) and current.get('task_id')==original.get('task_id') and current.get('bounded_native_authorization')==original.get('bounded_native_authorization') and current.get('bounded_native_authorization',{}).get('sha256')=='1b8973cc792c0a94e411901511920ef75e141eb2aa23e79e97230fa9ce5ad583','Replay task/native authority mismatch')
+        require(original.get('device_authorized') is True and not any(k in original for k in ('local_driver','local_test_basis','device_evidence')) and original.get('local_contract_test') is not True and config.get('simulated') is not True,'Replay source is not actual device query')
+        for key in ('targets','tokens','hdc_path','ros2_package_name','ros2_service_prefix','v1_deployment'):
+            require(private.get(key)==other.get(key),'Replay registered identity/scheme changed:'+key)
+        require(current.get('device_driver')==original.get('device_driver') and current.get('authorization_record')==original.get('authorization_record'),'Replay driver/original authority changed')
+        claim_path=authority/'ros2/task-ledger'/f"query-{config['ros_attempt']}.json";claim=json.loads(claim_path.read_text())
+        require(claim.get('window')==str(window) and claim.get('run')==config.get('run') and claim.get('contract_sha256')==proof['freeze_sha256'] and claim.get('materialization_sha256')==original['materialization_sha256'] and claim.get('task_id')==current['task_id'] and claim.get('kind')=='ROS_QUERY_DISPATCH_INTENT' and claim.get('authorization_record_sha256')==current['authorization_record']['sha256'],'Original consumed replay claim mismatch')
+        closure[str(claim_path)]=digest(claim_path)
+        for item in original['execution_files']:
+            p=(repo/item['path']).resolve();require(digest(p)==item['sha256'],'Original verifier dependency drift');closure[str(p)]=item['sha256']
+        for p in [window/'window.json',freeze,materialization,source/'PRIVATE_CONFIG.json'] :closure[str(p)]=digest(p)
+    verifier=source/'executor-route-query/query_receipt.py'
+    if source!=task:
+        require(str(verifier) in closure and all(str(source/p) in closure for p in ['executor/task_contract.py','executor/layered_contract.py']),'Original fixed verifier closure incomplete')
+    spec=importlib.util.spec_from_file_location('original_completed_query_verifier',verifier);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    result=module.verify_completed_query(window,archive_manifest)
+    if source!=task:
+        result['original_verifier_closure_sha256']=closure
+        current_closure={str(Path(__file__).resolve()):digest(__file__)}
+        for item in current['execution_files']:
+            p=(repo/item['path']).resolve();require(digest(p)==item['sha256'],'Current replay execution dependency drift');current_closure[str(p)]=item['sha256']
+        result['current_replay_closure_sha256']=current_closure
+    return result
+
 def load_replayed_binding(private_path):
     task=Path(__file__).resolve().parent.parent;directory=Path(private_path).parent
     private=json.loads(Path(private_path).read_text(encoding='utf-8-sig'));public=json.loads((directory/'ROUTE_QUERY_RESULT.json').read_text(encoding='utf-8-sig'));provenance=json.loads((directory/'REPLAY_PROVENANCE.json').read_text(encoding='utf-8-sig'))
     require(private.get('replay')==public.get('replay')==provenance,'Replay provenance mismatch')
-    spec=importlib.util.spec_from_file_location('replayed_query_receipt',task/'executor-route-query/query_receipt.py');receipt=importlib.util.module_from_spec(spec);spec.loader.exec_module(receipt)
-    verified=receipt.verify_completed_query(provenance['source_query_window'],provenance.get('archive_manifest'))
+    verified=completed_query_replay(provenance['source_query_window'],provenance.get('archive_manifest'))
     require(verified==provenance,'Original evidence or replay validator drift')
     spec=importlib.util.spec_from_file_location('replayed_parser',task/'executor-route-query/route_query.py');parser=importlib.util.module_from_spec(spec);spec.loader.exec_module(parser)
     window=Path(provenance['source_query_window']);parsed=parser.correlate(*(parser.decode(window/s/'directory-query/stdout.log') for s in 'AB'))
@@ -88,7 +123,7 @@ def load_replayed_binding(private_path):
     require(public.get('local_id_sha256')==expected,'Replay public identity mismatch')
     source_sha={s:digest(window/s/'directory-query/stdout.log') for s in 'AB'}
     require(private.get('source_sha256')==public.get('source_sha256')==source_sha,'Replay raw hash mismatch')
-    files=dict(provenance['original_files_sha256']);files.update(provenance['replay_validator_sha256'])
+    files=dict(provenance['original_files_sha256']);files.update(provenance['replay_validator_sha256']);files.update(provenance.get('original_verifier_closure_sha256',{}));files.update(provenance.get('current_replay_closure_sha256',{}))
     for p in (Path(private_path),directory/'ROUTE_QUERY_RESULT.json',directory/'REPLAY_PROVENANCE.json',Path(__file__).resolve()):files[str(p)]=digest(p)
     return dict(schema=1,query_run=provenance['query_run'],source_query_window=str(window),query_for_cycles=provenance['query_for_cycles'],private_receipt=str(Path(private_path).resolve()),peer=parsed['peer'],local_id_sha256=expected,proof_files_sha256=files,selection='OPPOSITE_ACTUAL_LOCAL_ID_EXACTLY_ONCE_IN_GUARDED_PUBLIC_QUERY')
 

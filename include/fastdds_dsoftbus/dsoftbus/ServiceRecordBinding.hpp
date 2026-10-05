@@ -317,6 +317,7 @@ private:
     // Host-only dual lane control: retain the exposing record, never publish a
     // second receiver. The previous immutable owner must already be settled.
     NativeStatus PrepareHostDialReplacement() noexcept;
+    NativeStatus RequestNormalConnectionEnd() noexcept;
     // The record-scoped ingress dispatch control, defined in the implementation.
     // It pins one binding's state and is the only other reader of the private
     // State; both are implementation details of the same translation unit.

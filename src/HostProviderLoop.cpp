@@ -98,6 +98,7 @@ struct HostProviderLoop::State {
     std::unique_ptr<ProviderAdapter> adapter;
     // Owned by this loop, so only this runtime's connect can consult it.
     std::function<bool()> pre_connect;
+    std::function<bool()> replacement_gate;
     std::function<void(const RuntimeShutdownPoint&)> before_native_close;
     bool shutdown_observer_installed=false,shutdown_observer_fault=false;
     std::shared_ptr<NativeSendProvider> send_provider;
@@ -304,7 +305,9 @@ bool HostProviderLoop::StartRuntime(const DSoftBusTransportDescriptor& d) noexce
     s.config.service_pkg_name="com.kaihong.mdds";
 #endif
     s.config.dial_only_egress=s.backend->Topology()==BackendTopology::ListenerAndOutgoing;
-    s.config.bounded_reaccept_host=s.backend->BoundedReacceptHost();
+    // Historical internal field names the shared bounded owner algorithm;
+    // real selection requires its separate compile/config capability.
+    s.config.bounded_reaccept_host=s.backend->BoundedReacceptExperiment();
     if(s.config.bounded_reaccept_host)s.config.allow_closed_dial_retry=true;
     auto native=NativeOwnerTable::Build(s.config);if(!native){STARTUP_CAPTURE("LoopStart_NativeStatus_result",UINT64_MAX,-1,-1,int(native.issue.code),0);return false;}s.native=std::move(*native.value);
     AttachmentLimits receive_limits;
@@ -371,6 +374,7 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
     // Unpublished ownership stays local until all steps succeed. Every failure
     // releases only this pending binding before false reaches the receiver owner.
     pending=std::move(result.adapter);
+    if(s.replacement_gate&&!pending->SetBoundedReplacementGate(s.replacement_gate))return InputOpenResult::Disabled;
     {
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
         // Armed only for this call, on this thread: the gate runs outside every
@@ -524,6 +528,25 @@ BackendStatus HostProviderLoop::PumpReceive() noexcept {
     }
     State::PumpGuard guard{s,true};
     return s.adapter->DispatchOne();
+}
+BackendStatus HostProviderLoop::RequestNormalEnd(RecordRole role) noexcept {
+    auto& s=*state_;
+    {std::lock_guard<std::mutex> lock(s.gate);
+        if(s.shared||!s.input_open||s.stopping||!s.adapter)return BackendStatus::InvalidState;
+        ++s.active;
+    }
+    State::PumpGuard guard{s};
+    return s.adapter->RequestNormalEnd(role);
+}
+bool HostProviderLoop::SetBoundedReplacementGate(std::function<bool()> gate){
+    auto& s=*state_;std::lock_guard<std::mutex> lock(s.gate);
+    if(s.shared||s.attempted||s.started)return false;
+    s.replacement_gate=std::move(gate);return true;
+}
+void HostProviderLoop::SealBoundedAdmission() noexcept {
+    ProviderAdapter* adapter=nullptr;
+    {std::lock_guard<std::mutex> lock(state_->gate);if(state_->backend->BoundedReacceptExperiment())adapter=state_->adapter.get();}
+    if(adapter)adapter->SealIngress();
 }
 bool HostProviderLoop::Shutdown() noexcept {
     return state_->shared?ShutdownShared():ShutdownRuntime();

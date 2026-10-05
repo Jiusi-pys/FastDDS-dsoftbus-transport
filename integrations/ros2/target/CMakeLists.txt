@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 project(FastDDSDSoftBusTransportRos2Target LANGUAGES CXX)
 include(RosTargetBuildOptions.cmake)
+option(FASTDDS_DSOFTBUS_BOUNDED_NATIVE_REACCEPT_EXPERIMENT "Explicit finite normal-close/fresh-ID experiment; default real reaccept remains refused" OFF)
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" OR NOT CMAKE_CROSSCOMPILING)
     message(FATAL_ERROR "This experiment requires the actual OHOS cross toolchain")
 endif()
@@ -31,6 +32,10 @@ target_link_libraries(fastdds_dsoftbus_ros2_214_target_runtime PUBLIC fastrtps f
 add_library(fastdds_dsoftbus_ros2_target_bridge SHARED TargetBridge.cpp NativeObservation.cpp
     "${_transport_root}/probes/PublicSocketRtpsObservation.cpp")
 target_compile_definitions(fastdds_dsoftbus_ros2_target_bridge PRIVATE FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1)
+if(FASTDDS_DSOFTBUS_BOUNDED_NATIVE_REACCEPT_EXPERIMENT)
+    target_compile_definitions(fastdds_dsoftbus_ros2_214_target_runtime PRIVATE FASTDDS_DSOFTBUS_BOUNDED_NATIVE_REACCEPT_EXPERIMENT=1)
+    target_compile_definitions(fastdds_dsoftbus_ros2_target_bridge PRIVATE FASTDDS_DSOFTBUS_BOUNDED_NATIVE_REACCEPT_EXPERIMENT=1)
+endif()
 target_link_libraries(fastdds_dsoftbus_ros2_target_bridge PRIVATE fastdds_dsoftbus_ros2_214_target_runtime
     "${FASTDDS_DSOFTBUS_SOCKET_LIBRARY}" tinyxml2 dl)
 add_library(factory_configuration INTERFACE)

@@ -1,6 +1,7 @@
 'use strict';
 // One explicit ROS scene in the existing dispatcher, not a transport or supervisor.
 const STAGES=['LISTENER_READY','RELIABLE_READY','RELIABLE_DONE','BEST_EFFORT_READY','BEST_EFFORT_DONE','TEARDOWN_READY','DDS_DELETED'];
+const stagesFor=c=>c.bounded_native_reaccept?require('./bounded-native-scene.cjs').STAGES:STAGES;
 const isRos=c=>c.scenario==='ROS2_DSOFTBUS';
 function kv(line){
  const fields={};
@@ -17,11 +18,12 @@ function commands(c,tokens,libdirs){
  for(const side of ['A','B']){
   const root=c.remote[side];
   if(root!==`/data/local/tmp/mdds_dds_${c.run}_${side}`||c.token[side]!==tokens[side]||!/^[1-9][0-9]*$/.test(tokens[side]))throw Error('ROS_COMMAND_IDENTITY');
-  result[side]=`cd ${root} && env -i PATH=/system/bin:/system/xbin LD_LIBRARY_PATH=${root}:${libdirs.join(':')} SKIP_DEFAULT_XML=1 ROS_LOG_DIR=${root}/ros-log RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=201 ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET FASTDDS_DSOFTBUS_REQUIRED_CONFIG=${root}/ros.conf FASTDDS_DSOFTBUS_NATIVE_TOKEN=${tokens[side]} FASTDDS_DSOFTBUS_IDENTITY_ADMITTED=1 FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX=${root}/control timeout ${c.timeout_seconds} ${root}/${c.main_member} ${side} ${c.run} dual; rc=$?; echo REMOTE_EXIT=$rc; exit $rc`;
+  result[side]=`cd ${root} && env -i ${c.bounded_native_reaccept?"FDDST_BOUNDED_NATIVE_SCENE=BOUNDED_NORMAL_ONCE ":""}PATH=/system/bin:/system/xbin LD_LIBRARY_PATH=${root}:${libdirs.join(':')} SKIP_DEFAULT_XML=1 ROS_LOG_DIR=${root}/ros-log RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=201 ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET FASTDDS_DSOFTBUS_REQUIRED_CONFIG=${root}/ros.conf FASTDDS_DSOFTBUS_NATIVE_TOKEN=${tokens[side]} FASTDDS_DSOFTBUS_IDENTITY_ADMITTED=1 FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX=${root}/control timeout ${c.timeout_seconds} ${root}/${c.main_member} ${side} ${c.run} dual; rc=$?; echo REMOTE_EXIT=$rc; exit $rc`;
  }
  return result;
 }
 function controller(c,release,admission){
+ const STAGES=stagesFor(c),bounded=!!c.bounded_native_reaccept;
  // One actual command at a time, including a peer whose main arrives during
  // failure cleanup. Each caller still receives its own original rejection.
  let dispatchChain=Promise.resolve();
@@ -69,6 +71,11 @@ function controller(c,release,admission){
   }
  }
  const fail=why=>{first ||= why;queueCleanup('WINDOW_FAILED');queueRuntimeClose();};
+ const nativeSend=async(s,p)=>{
+  const dispatched=await serialRelease(async()=>{if(first)return false;await release(s,p);return true;});
+  if(dispatched&&p==='REACCEPT_DONE'){issued.push(s+p);released.push(s+p);}return dispatched;
+ };
+ const native=bounded?require('./bounded-native-scene.cjs').create(c,{fail,send:nativeSend}):null;
  const capture=why=>{if(capture_failure.length<16)capture_failure.push(why);fail(why);};
  function terminal(side,text){
   if(text.startsWith('ROS_DIAGNOSTIC_CAPTURE ')){capture('ROS_DIAGNOSTIC_CAPTURE_INCOMPLETE');return true;}
@@ -141,8 +148,9 @@ function controller(c,release,admission){
    if(record.completeness==='INCOMPLETE')capture('ROS_STARTUP_CAPTURE_INCOMPLETE');
    return;
   }
-  if(!text.startsWith('ROS_')&&!text.startsWith('FDDST_ROS_CLOSED'))return;
+  if(!text.startsWith('ROS_')&&!text.startsWith('FDDST_ROS_CLOSED')&&!text.startsWith('NATIVE_'))return;
   let r;try{r=kv(text);}catch(e){fail(e.message);return;}
+  if(native&&(text.startsWith('NATIVE_')||text.startsWith('ROS_REACCEPT_ANCHOR '))){chain=chain.then(()=>native.line(side,text.split(' ')[0],r)).catch(e=>fail('NATIVE_CONTROL_FAILED:'+e.message));return;}
   if(text.startsWith('ROS_FAILURE ')||text.startsWith('ROS_BUSINESS_EXCEPTION ')){fail('ROS_APPLICATION_FAILURE_'+side);return;}
   if(text.startsWith('ROS_MAIN ')){
    if(r.run!==c.run||r.side!==side||r.scenario!=='ROS2_DSOFTBUS'||r.mode!=='dual'||pids[side]||!/^[1-9][0-9]*$/.test(r.pid||'')){fail('ROS_MAIN_IDENTITY');return;}
@@ -214,23 +222,24 @@ function controller(c,release,admission){
    return;
   }
   if(['ROS_PUBLISHER','ROS_WRITE','ROS_TAKE','ROS_GRAPH','ROS_BUSINESS_DONE','ROS_SERVICE_SENT','ROS_SERVICE_REQUEST','ROS_SERVICE_RESPONSE'].includes(event)){
-   if(r.run!==c.run||!['reliable','best_effort'].includes(phase)||(!event.startsWith('ROS_SERVICE_')&&r.side!==side)){fail('ROS_RECEIPT_IDENTITY');return;}
+   if(r.run!==c.run||!(bounded&&event.startsWith('ROS_SERVICE_')?['PRE','POST']:['reliable','best_effort']).includes(phase)||(!event.startsWith('ROS_SERVICE_')&&r.side!==side)){fail('ROS_RECEIPT_IDENTITY');return;}
    if(event==='ROS_PUBLISHER'){if(pub[k]||r.intra_process!=='0'||!/^([0-9a-f]{32,64})$/.test(r.gid||''))fail('ROS_PUBLISHER');else pub[k]=r;}
    if(event==='ROS_WRITE'||event==='ROS_TAKE'){
+    if(native){native.line(side,event,r);if(r.segment!==(Number(r.ordinal)<=2?'PRE':'POST')){fail('NATIVE_SAMPLE_SEGMENT');return;}}
     const map=event==='ROS_WRITE'?write:take,ordinal=Number(r.ordinal);
     if(!Number.isInteger(ordinal)||ordinal<1||ordinal>5||map[k]?.[ordinal])fail('ROS_SAMPLE_DUPLICATE_OR_RANGE');
     else{map[k] ||= {};map[k][ordinal]=r;}
    }
-   if(event==='ROS_GRAPH'){if(graph[k]||r.peer!==`/fdds_${c.run}/transport_${side==='A'?'B':'A'}`||r.visible!=='1'||r.subscription_count!=='1')fail('ROS_GRAPH');else graph[k]=r;}
+   if(event==='ROS_GRAPH'){const g=bounded?k+':'+r.segment:k;if(graph[g]||r.peer!==`/fdds_${c.run}/transport_${side==='A'?'B':'A'}`||r.visible!=='1'||r.subscription_count!=='1')fail('ROS_GRAPH');else graph[g]=r;}
    if(event==='ROS_BUSINESS_DONE'){if(done[k]||r.writes!=='5'||r.takes!=='5')fail('ROS_PHASE_DONE');else done[k]=r;}
    const services={'ROS_SERVICE_SENT':[sent,'A'],'ROS_SERVICE_REQUEST':[handled,'B'],'ROS_SERVICE_RESPONSE':[response,'A']};
    if(services[event]){
     const [map,expected]=services[event];
     if(side!==expected||map[phase])fail('ROS_SERVICE_SIDE_OR_DUPLICATE');
     else if(!/^[0-9]+$/.test(r.request_id||'')||
-       (event==='ROS_SERVICE_SENT'&&(r.a!=='3'||r.b!=='4'))||
-       (event==='ROS_SERVICE_REQUEST'&&(!/^[0-9a-f]{32}$/.test(r.writer||'')||r.a!=='3'||r.b!=='4'||r.sum!=='7'))||
-       (event==='ROS_SERVICE_RESPONSE'&&r.sum!=='7'))fail('ROS_SERVICE_IDENTITY');
+       (event==='ROS_SERVICE_SENT'&&(r.a!==(phase==='POST'?'5':'3')||r.b!==(phase==='POST'?'6':'4')))||
+       (event==='ROS_SERVICE_REQUEST'&&(!/^[0-9a-f]{32}$/.test(r.writer||'')||r.a!==(phase==='POST'?'5':'3')||r.b!==(phase==='POST'?'6':'4')||r.sum!==(phase==='POST'?'11':'7')))||
+       (event==='ROS_SERVICE_RESPONSE'&&r.sum!==(phase==='POST'?'11':'7')))fail('ROS_SERVICE_IDENTITY');
     else map[phase]=r;
    }
    return;
@@ -250,6 +259,9 @@ function controller(c,release,admission){
   if(event!=='ROS_STAGE')return;
   if(r.run!==c.run||r.side!==side||r.pid!==pids[side]||r.stage!==STAGES[progress[side]]){fail('ROS_STAGE_IDENTITY_OR_ORDER');return;}
   if(first)return;
+  if(bounded){
+   if(r.stage==='PRE_READY'&&!['reliable','best_effort'].every(q=>pub[key(side,q)]&&graph[key(side,q)+':PRE'])){fail('NATIVE_BEFORE_GRAPH_OR_PUBLISHER');return;}
+  }
   if(r.stage==='LISTENER_READY'&&!listeners[side]){fail('ROS_STAGE_BEFORE_LISTENER');return;}
   if(r.stage==='RELIABLE_READY'||r.stage==='BEST_EFFORT_READY'){
    const ready=key(side,r.stage==='RELIABLE_READY'?'reliable':'best_effort');
@@ -263,6 +275,17 @@ function controller(c,release,admission){
    // The SDK connect must precede DDS/ROS discovery. Capture dynamic ROS type
    // libraries once the same main PID reaches ready, before any formal write.
    if(index===1){const load=await admission();if(!load.A?.pass||!load.B?.pass){fail('ROS_LOAD_CAPTURE_FAILED');return;}}
+   if(bounded&&(r.stage==='PRE_DONE'||r.stage==='POST_DONE')){
+    const segment=r.stage==='PRE_DONE'?'PRE':'POST',lo=segment==='PRE'?1:3,hi=segment==='PRE'?2:5;
+    for(const s of ['A','B'])for(const q of ['reliable','best_effort'])for(let o=lo;o<=hi;o++){
+     const k=key(s,q),other=s==='A'?'B':'A',w=write[k]?.[o],t=take[k]?.[o];
+     if(!w||!t||w.payload!==`${c.run}:${q}:${s}:${o}`||t.payload!==`${c.run}:${q}:${other}:${o}`||t.gid!==pub[key(other,q)]?.gid||!graph[k+':'+segment]){fail('NATIVE_SEGMENT_LEDGER');return;}
+    }
+    if(!sent[segment]||!handled[segment]||!response[segment]||sent[segment].request_id!==handled[segment].request_id||sent[segment].request_id!==response[segment].request_id){fail('NATIVE_SERVICE_LEDGER');return;}
+    if(segment==='PRE')for(const s of ['A','B'])await nativeSend(s,'NATIVE_ARM');
+    else if(!native.complete()){fail('NATIVE_FINAL_IDENTITY');return;}
+   }
+   if(bounded&&r.stage==='REACCEPT_DONE')return; // Native publication, not a generic stage, grants POST.
    if((r.stage==='RELIABLE_DONE'||r.stage==='BEST_EFFORT_DONE')&&!phaseComplete(r.stage==='RELIABLE_DONE'?'reliable':'best_effort')){fail('ROS_PHASE_LEDGER_INCOMPLETE');return;}
    for(const board of ['A','B']){
     if(first)return;
@@ -280,4 +303,4 @@ function controller(c,release,admission){
   if(c.paired_runtime_close&&!['A','B'].every(s=>runtime_close_ready[s]&&runtime_close_controls[s]?.state==='COMPLETED'&&runtime_close_controls[s].reason==='NORMAL_COMPLETION'))fail('ROS_RUNTIME_CLOSE_COORDINATION_INCOMPLETE');
   const firstSide=/_(A|B)$/.exec(first||'')?.[1];const primarySide=firstSide?(primary_failure[firstSide]?firstSide:null):['A','B'].find(s=>primary_failure[s]);return{pass:!first&&released.length===10&&Object.values(cleanup_controls).every(x=>x.state==='COMPLETED'),first_failure:primarySide?'ROS_APPLICATION_FAILURE_'+primarySide:first,reported_first_host:first,primary_failure,cleanup_failure,capture_failure,application_exit,cleanup_controls,cleanup_control_failures,runtime_close_ready,runtime_close_controls,runtime_close_failures,teardown_events,residual_summaries,residual_objects,primary_selection:'FIRST_HOST_WITH_SAME_SIDE_PRIMARY_REFERENCE_NOT_CROSS_PROCESS_CAUSALITY',cross_side_failure_order:'UNKNOWN',released,issued,pids,progress,ros:{pub,write,take,graph,done,sent,handled,response,deleted,closed}};}};
 }
-module.exports={STAGES,isRos,commands,controller};
+module.exports={STAGES,stagesFor,isRos,commands,controller};
