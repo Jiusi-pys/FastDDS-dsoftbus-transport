@@ -2,10 +2,12 @@
 import argparse,json,os,subprocess,time,secrets,socket,re,hashlib
 from pathlib import Path
 from control_files import publish_control
-p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort','dual'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');p.add_argument('--host-close-error',choices=['0','1'],default='0');p.add_argument('--paired-close',action='store_true');p.add_argument('--asymmetric-cleanup',action='store_true');p.add_argument('--reaccept-host',action='store_true');p.add_argument('--reaccept-origin',choices=['A','B'],default='A');p.add_argument('--owned-normal-reaccept',action='store_true');p.add_argument("--route-lifecycle",choices=["new","same"]);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort','dual'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');p.add_argument('--host-close-error',choices=['0','1'],default='0');p.add_argument('--paired-close',action='store_true');p.add_argument('--asymmetric-cleanup',action='store_true');p.add_argument('--reaccept-host',action='store_true');p.add_argument('--reaccept-origin',choices=['A','B'],default='A');p.add_argument('--owned-normal-reaccept',action='store_true');p.add_argument("--route-lifecycle",choices=["new","same"])
+p.add_argument('--route-offline-writes',action='store_true');a=p.parse_args()
 if a.reaccept_host and (a.mode!='dual' or a.forward!='1'):raise ValueError('Reaccept fixture requires dual opaque-byte forwarding')
 if a.owned_normal_reaccept and not a.reaccept_host:raise ValueError('Owned normal model requires explicit Host reaccept')
 if a.route_lifecycle and not a.owned_normal_reaccept:raise ValueError("route fixture requires retained-entity scene")
+if a.route_offline_writes and not a.route_lifecycle:raise ValueError('offline-write fixture requires explicit route lifecycle')
 a.output.mkdir(parents=True,exist_ok=False);run=secrets.token_hex(8);domain=201
 # Optional test-only controller response, never an application/SDK injection.
 close_control=os.environ.get('FDDST_HOST_TEST_CLOSE_CONTROL','NORMAL_COMPLETION')
@@ -32,7 +34,7 @@ for index,side in enumerate('AB'):
   with conf.open('a') as stream:stream.write('runtime_close_release='+str((a.output/(side+'-control.RUNTIME_CLOSE')).resolve())+'\n')
  env=os.environ.copy();env['PATH']=os.pathsep.join([str(a.fastdds_prefix/'bin'),str(a.ros_prefix/'bin'),str(a.pixi_prefix/'Library/bin'),env.get('PATH','')]);env['RMW_IMPLEMENTATION']='rmw_fastrtps_cpp';env['ROS_DOMAIN_ID']=str(domain);env['ROS_AUTOMATIC_DISCOVERY_RANGE']='SUBNET';env['FASTDDS_DSOFTBUS_REQUIRED_CONFIG']=str(conf.resolve());env['FASTDDS_ENVIRONMENT_FILE']='';env['SKIP_DEFAULT_XML']='1'
  env['FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX']=str((a.output/(side+'-control')).resolve())
- if a.owned_normal_reaccept:env['FDDST_BOUNDED_NATIVE_SCENE']='BOUNDED_NORMAL_ONCE';env.pop('FDDST_HOST_REACCEPT_STAGE',None)
+ if a.owned_normal_reaccept:env['FDDST_BOUNDED_NATIVE_SCENE']='ROUTE_RETURN_ONCE' if a.route_offline_writes else 'BOUNDED_NORMAL_ONCE';env.pop('FDDST_HOST_REACCEPT_STAGE',None)
  elif a.reaccept_host:env['FDDST_HOST_REACCEPT_STAGE']='1';env.pop('FDDST_BOUNDED_NATIVE_SCENE',None)
  else:env.pop('FDDST_HOST_REACCEPT_STAGE',None);env.pop('FDDST_BOUNDED_NATIVE_SCENE',None)
  for k in ['FASTRTPS_DEFAULT_PROFILES_FILE','FASTDDS_DEFAULT_PROFILES_FILE','ROS_LOCALHOST_ONLY']:env.pop(k,None)
@@ -52,6 +54,30 @@ def reaccept_seen(side,action):
  return path.is_file() and path.read_text()==reaccept_text(side,action)
 def native_control(side,phase):publish_control(reaccept_file(side,phase),f'NATIVE_CONTROL run={run} side={side} phase={phase}\n')
 def native_seen(text,stage):return bool(re.search(r'^NATIVE_REACCEPT_EVENT .*stage='+stage+r' ',text,re.M))
+def app_stage_seen(text,side,stage):return bool(re.search(r'^ROS_STAGE run='+run+r' side='+side+r' pid='+str(processes[side].pid)+r' stage='+stage+r'$',text,re.M))
+def product_offline(text):return bool(re.search(r'^NATIVE_ROUTE_EVENT run='+run+r' .*stage=OFFLINE .*available=0 source=HOST_PUBLIC_NODE_MODEL ',text,re.M))
+def topic_refusals(text):
+ # PRE writes are sequence 1/2; the new OFFLINE ordinal 1001 is sequence 3.
+ # This reads observation only; never supplies IDs, route values or ownership.
+ # The record's submission_calls counts repeated submissions, not SDK calls;
+ # with the same refused status are legitimate and do not waive route admission.
+ publishers=dict(re.findall(r'^ROS_PUBLISHER .*gid=([0-9a-f]+).*phase=(reliable|best_effort) ',text,re.M))
+ offline_events=[dict(re.findall(r'(\w+)=([^ ]+)',line)) for line in text.splitlines() if line.startswith('NATIVE_ROUTE_EVENT ') and 'stage=OFFLINE ' in line]
+ if len(offline_events)!=1:return False
+ revision=offline_events[0].get('revision');pre={}
+ for line in text.splitlines():
+  if not line.startswith('NATIVE_SENDER_SUBMISSION '):continue
+  item=dict(re.findall(r'(\w+)=([^ ]+)',line))
+  if item.get('run')==run and item.get('segment')=='PRE' and item.get('status')=='0' and item.get('queue_admitted')=='1' and item.get('sequence_hi')=='0' and item.get('sequence_lo') in ('1','2'):
+   pre.setdefault((item.get('writer'),item.get('sender')),set()).add(item['sequence_lo'])
+ rejected=set()
+ for line in text.splitlines():
+  if not line.startswith('NATIVE_SENDER_SUBMISSION '):continue
+  item=dict(re.findall(r'(\w+)=([^ ]+)',line))
+  if item.get('run')==run and item.get('available')=='0' and item.get('status')=='7' and item.get('sequence_hi')=='0' and item.get('sequence_lo')=='3' and item.get('source')=='HOST_PUBLIC_NODE_MODEL' and item.get('segment')=='OFFLINE' and item.get('queue_admitted')=='0' and item.get('route_known')=='1' and item.get('route_sample')=='ADMISSION_GATE' and item.get('route_revision')==revision and pre.get((item.get('writer'),item.get('sender')))=={'1','2'}:
+   for gid,qos in publishers.items():
+    if gid[:32]==item.get('writer'):rejected.add(qos)
+ return rejected=={'reliable','best_effort'}
 while any(x.poll() is None for x in processes.values()):
  texts={s:(a.output/(s+'.stdout')).read_text(errors='replace') for s in 'AB'}
  if a.route_lifecycle:
@@ -63,8 +89,21 @@ while any(x.poll() is None for x in processes.values()):
    for s in "AB":native_control(s,"NODE_OFFLINE")
    reaccept_state="OFFLINE"
   elif reaccept_state=="OFFLINE" and all(native_seen(texts[s],"PEER_READY") for s in "AB"):
-   for s in "AB":native_control(s,"NODE_ONLINE_NEW" if a.route_lifecycle=="new" else "NODE_ONLINE_SAME")
-   reaccept_state="RESOLVING"
+   if a.route_offline_writes:
+    if all(product_offline(texts[s]) and app_stage_seen(texts[s],s,'OFFLINE_READY') for s in 'AB'):
+     for s in 'AB':publish_control(a.output/(s+'-control.OFFLINE_READY'),f'ROS_RELEASE run={run} side={s} stage=OFFLINE_READY\n')
+     reaccept_state='OFFLINE_WRITING'
+   else:
+    for s in "AB":native_control(s,"NODE_ONLINE_NEW" if a.route_lifecycle=="new" else "NODE_ONLINE_SAME")
+    reaccept_state="RESOLVING"
+  elif reaccept_state=='OFFLINE_WRITING' and all(app_stage_seen(texts[s],s,'OFFLINE_DONE') for s in 'AB'):
+   for s in 'AB':native_control(s,'OFFLINE_CAPTURE')
+   reaccept_state='OFFLINE_CAPTURE'
+  elif reaccept_state=='OFFLINE_CAPTURE' and all(topic_refusals(texts[s]) for s in 'AB'):
+   for s in 'AB':
+    publish_control(a.output/(s+'-control.OFFLINE_DONE'),f'ROS_RELEASE run={run} side={s} stage=OFFLINE_DONE\n')
+    native_control(s,'NODE_ONLINE_NEW' if a.route_lifecycle=='new' else 'NODE_ONLINE_SAME')
+   reaccept_state='RESOLVING'
   elif reaccept_state=="RESOLVING" and all("HOST_NODE_QUERY run="+run in texts[s] for s in "AB"):
    for s in "AB":native_control(s,"REPLACE")
    reaccept_state="REPLACING"
@@ -145,12 +184,30 @@ if a.owned_normal_reaccept:
  sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'scripts/public_socket'))
  from analyze_bounded_native_reaccept import analyze,rows
  ledger=analyze(texts,run,'outgoing-first' if a.reaccept_origin=='A' else 'accepted-first','HOST_OPAQUE_PUBLIC_API_SHAPE',a.route_lifecycle)
+ if a.route_offline_writes:
+  offline={'source':'HOST_PUBLIC_NODE_MODEL','expected_writes':4,'writes':{},'takes':{},'errors':[]}
+  for side,peer in (('A','B'),('B','A')):
+   events=rows(texts[side],'NATIVE_ROUTE_EVENT')
+   if [x.get('stage') for x in events]!=['OFFLINE','RESOLVED'] or not all(x.get('run')==run and x.get('side')==side and x.get('source')=='HOST_PUBLIC_NODE_MODEL' and x.get('sdk_epoch')=='NOT_PROVEN' for x in events):offline['errors'].append('product_route_events:'+side)
+   elif events[0].get('available')!='0' or events[1].get('available')!='1' or int(events[1]['revision'])<=int(events[0]['revision']):offline['errors'].append('product_route_revision:'+side)
+   if not topic_refusals(texts[side]):offline['errors'].append('original_topic_sender_offline_refusal:'+side)
+   writes=[x for x in rows(texts[side],'ROS_WRITE') if x.get('segment')=='OFFLINE']
+   takes=[x for x in rows(texts[side],'ROS_TAKE') if x.get('segment')=='OFFLINE']
+   offline['writes'][side]=len(writes);offline['takes'][side]=len(takes)
+   if len(writes)!=2 or {x.get('phase') for x in writes}!={'reliable','best_effort'} or not all(x.get('run')==run and x.get('side')==side and x.get('ordinal')=='1001' and x.get('payload')==f'{run}:{x["phase"]}:{side}:1001' and x.get('publish_return')=='OK' for x in writes):offline['errors'].append('offline_write_ledger:'+side)
+   if len(takes)>2 or len({x.get('phase') for x in takes})!=len(takes) or not all(x.get('run')==run and x.get('side')==side and x.get('ordinal')=='1001' and x.get('phase') in ('reliable','best_effort') and x.get('payload')==f'{run}:{x["phase"]}:{peer}:1001' for x in takes):offline['errors'].append('offline_history_ledger:'+side)
+   if len(events)==2:
+    lines=texts[side].splitlines();off=next((i for i,line in enumerate(lines) if line.startswith('NATIVE_ROUTE_EVENT ') and 'stage=OFFLINE ' in line),-1);resolved=next((i for i,line in enumerate(lines) if line.startswith('NATIVE_ROUTE_EVENT ') and 'stage=RESOLVED ' in line),-1)
+    if not all(off<i<resolved for i,line in enumerate(lines) if line.startswith('ROS_WRITE ') and 'segment=OFFLINE ' in line):offline['errors'].append('offline_write_causality:'+side)
+  offline['pass']=not offline['errors'];ledger['offline']=offline
+  ledger['errors'].extend(offline['errors']);ledger['pass']=not ledger['errors']
  ledger['boards']={}
  for s in 'AB':
   emitted=rows(texts[s],'ROS_MAIN')
   ledger['boards'][s]={'pid':emitted[0].get('pid') if len(emitted)==1 else None,'phases':{q:{event:len([x for x in rows(texts[s],event) if x.get('run')==run and x.get('phase')==q]) for event in ('ROS_WRITE','ROS_TAKE')} for q in phases}}
 else:ledger=module.analyze(texts,run,phases)
 result['ledger']=ledger
+result['route_offline_writes']=a.route_offline_writes
 errors=list(ledger['errors'])
 if a.asymmetric_cleanup and early_peer_close:errors.append('peer_runtime_closed_before_b_cleanup')
 if a.paired_close and runtime_releases!=['A','B']:errors.append('paired_runtime_release_incomplete')

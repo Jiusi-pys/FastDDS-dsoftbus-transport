@@ -33,6 +33,26 @@ int main(int argc,char** argv){
  assert(argc==2);const std::string mode=argv[1];
  public_socket_fake::Configure(std::make_shared<host_dds::Trace>(),true);public_socket_fake::SetListenerNames({listener(0),listener(1)});
  observation::Begin("1234567890abcdef",0);observation::SetSourceForHostInjection();
+ if(mode=="node_api_types"){
+  const char* entries[]={"RegNode_enter","UnregNode_enter","GetAllNodes_enter","GetNodeUdid_enter"};
+  const char* returns[]={"RegNode_return","UnregNode_return","GetAllNodes_return","GetNodeUdid_return"};
+  for(unsigned i=0;i<4;++i){runtime_probe::TraceEvent(entries[i],0,-1,-1,0,0);runtime_probe::TraceEvent(returns[i],0,-1,-1,0,0);}
+  runtime_probe::TraceEvent("OnNodeOffline_enter",0,-1,-1,0,0);
+  runtime_probe::TraceEvent("NodeOffline_processed",0,-1,-1,0,0);
+  diagnostic::Snapshot s;assert(observation::Capture(s)&&s.count==10);
+  for(unsigned i=0;i<4;++i){assert(s.events[2*i].entered&&!s.events[2*i].returned);assert(s.events[2*i+1].type==diagnostic::ValueType::SdkReturn&&s.events[2*i+1].value==0);}
+  assert(s.events[8].type==diagnostic::ValueType::CallbackStatus&&s.events[9].type==diagnostic::ValueType::LocalStatus);
+  for(unsigned i=0;i<5;++i)assert(s.entered[i]==0&&s.returned[i]==0);
+  runtime_probe::TraceEvent("NodeIdentity_match",0,-1,-1,1,0);
+  runtime_probe::TraceEvent("NodeSocket_route_binding",4,-1,-1,1,3);
+  for(unsigned i=0;i<300;++i)runtime_probe::TraceEvent("Sender_submit_result",17,-1,-1,7,128);
+  assert(observation::Capture(s)&&s.count==12&&!s.first_present&&!s.overflow&&s.omitted>=300);
+  assert(s.events[10].type==diagnostic::ValueType::LocalStatus&&s.events[10].value==1);
+  assert(s.events[11].type==diagnostic::ValueType::LocalStatus&&s.events[11].value==1&&s.events[11].length==3);
+  runtime_probe::TraceEvent("SendBytes_return",4,0,21,-777,128);
+  assert(observation::Capture(s)&&s.count==13&&s.first_present&&s.first.value==-777&&s.first.type==diagnostic::ValueType::SdkReturn);
+  return 0;
+ }
  if(mode=="v1_locator") {
   // Native observation receives original RTPS bytes, not codec expected values.
   std::vector<std::uint8_t> packet{'R','T','P','S',2,3,1,15};packet.insert(packet.end(),12,0xa7);

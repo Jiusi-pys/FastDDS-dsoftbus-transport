@@ -51,6 +51,34 @@ ROS_NATIVE_STAGES=['LISTENER_READY','PRE_READY','PRE_DONE','REACCEPT_DONE','POST
 ROS_NATIVE_AUTHORIZATION='TASK_SCOPED_BOUNDED_NATIVE_REACCEPT_VALIDATION'
 ROS_NATIVE_GRANT_RELATIVE='.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/BOUNDED_NATIVE_REACCEPT_AUTHORIZATION.json'
 ROS_NATIVE_GRANT_SHA256='1b8973cc792c0a94e411901511920ef75e141eb2aa23e79e97230fa9ce5ad583'
+ROS_ROUTE_NATIVE_STAGES=['LISTENER_READY','PRE_READY','PRE_DONE','OFFLINE_READY','OFFLINE_DONE','REACCEPT_DONE','POST_DONE','TEARDOWN_READY','DDS_DELETED']
+ROS_ROUTE_NATIVE_GRANT_RELATIVE='.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/ROUTE_LIFECYCLE_NATIVE_AUTHORIZATION_20261006.json'
+
+def validate_route_native_mode(mode):
+ need(isinstance(mode,dict) and set(mode)=={'contract','trigger','offline_ordinal','offline_total','authorization'},'Route native frozen shape')
+ need(mode['contract']=='A_ETH1_ONE_RETURN' and mode['trigger']==dict(side='A',interface='eth1',cycles=1,max_offline_seconds=90),'Route native trigger scope')
+ need(type(mode['trigger']['cycles']) is int and type(mode['trigger']['max_offline_seconds']) is int and type(mode['offline_ordinal']) is int and type(mode['offline_total']) is int and mode['offline_ordinal']==1001 and mode['offline_total']==4,'Route offline ledger scope')
+ binding=mode['authorization'];need(isinstance(binding,dict) and set(binding)=={'path','sha256'} and isinstance(binding['path'],str) and isinstance(binding['sha256'],str) and len(binding['sha256'])==64 and all(c in '0123456789abcdef' for c in binding['sha256']),'Route native authority binding')
+
+def verify_route_native_authorization(frozen):
+ mode=frozen.get('route_lifecycle_native');validate_route_native_mode(mode)
+ need(mode==PRIVATE.get('route_lifecycle_native'),'Route native private binding changed')
+ binding=mode['authorization'];path=(repo_root()/ROS_ROUTE_NATIVE_GRANT_RELATIVE).resolve()
+ need(Path(binding['path']).resolve()==path and digest(path)==binding['sha256'],'Route native authority bytes changed')
+ record=json.loads(path.read_text(encoding='utf-8-sig'))
+ need(record.get('schema')==1 and record.get('authorization')=='TASK_SCOPED_ROUTE_LIFECYCLE_DEVICE_VALIDATION' and record.get('task_id')=='ROUTE_LIFECYCLE_NATIVE_VALIDATION_FROM_EEA2759' and record.get('base_commit')=='eea2759cac4064f065a5995b2ac262acb9b5fde6','Route native authority purpose')
+ need(record.get('original_authorization_sha256')==ROS_TASK_GRANT_SHA256 and record.get('platform_permission_change') is False and record.get('git_authorized') is False,'Route authority cannot change platform/Git identity')
+ need(record.get('trigger')==dict(mode['trigger'],executor='HDC_USB') and record.get('instruction')=='无需我拔下，当前 hdc 为 usb 连接，你自动控制 eth1 断开即可','Route exact human operation authority')
+ predecessors=record.get('predecessors');need(isinstance(predecessors,list) and len(predecessors)==2 and {p.get('run') for p in predecessors}=={'6c66b902d5c05f36','d533f8880e53a5e4'},'Route exact predecessor pair')
+ expected={'6c66b902d5c05f36':('iteration-34','data-19','INDEPENDENT_BOUNDED_NATIVE_ACCEPTANCE.json','42e424239a7c184d6667da6b1fecff4727a43de16d9c62c93b375a9bf52ca1a8'),'d533f8880e53a5e4':('iteration-37','data-20','INDEPENDENT_SECOND_ORDER_REVIEW_ACCEPTANCE.json','4c61f8378bc4f233f4d4230eea30b892421c428051c11d70e247bd51aa64f59c')}
+ for prior in predecessors:
+  iteration,window_name,receipt_name,sha=expected[prior['run']]
+  window=repo_root()/'.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/iterations'/iteration/'windows'/window_name
+  receipt=window/receipt_name
+  need(Path(prior['window']).resolve()==window.resolve() and prior['independent_acceptance']==dict(path=str(receipt.resolve()),sha256=sha) and digest(receipt)==sha,'Route historical independent acceptance drift')
+  need(json.loads((window/'window.json').read_text(encoding='utf-8-sig')).get('run')==prior['run'],'Route predecessor run drift')
+  _require_normal_restored(window)
+ return record
 ROS_LIMITS=dict(canonical_windows=1,repair_retries=1,total_attempts=2,query_pairs_per_attempt=1,
                 total_query_pairs=2,max_record_bytes=8192,per_side_writes=10,per_side_takes=10,stages=7)
 ROS_LIMITS_ONCE=dict(ROS_LIMITS,repair_retries=0,total_attempts=1,total_query_pairs=1)
@@ -71,6 +99,12 @@ def ros_task_mode(frozen=None):
  return frozen.get('authorization')==ROS_TASK_AUTHORIZATION
 
 def verify_v1_successor(frozen,grant):
+ if frozen.get('route_lifecycle_native') is not None:
+  route=verify_route_native_authorization(frozen)
+  legacy=dict(frozen);legacy.pop('route_lifecycle_native')
+  prior=verify_v1_successor(legacy,grant)
+  need(prior is not None,'Route continuation requires original native/V1 identity authority')
+  return dict(route,predecessor=route['predecessors'][-1],authorized_predecessors=prior.get('authorized_predecessors',[prior['predecessor']])+route['predecessors'])
  if frozen.get('bounded_native_authorization') is not None:
   native=verify_bounded_native_authorization(frozen,grant)
   legacy=dict(frozen);legacy.pop('bounded_native_authorization')
@@ -389,6 +423,10 @@ def ros_shape(c):
  need(c.get('work_package')==ROS_SCOPE and c.get('main_member')=='ordinary_ros2_transport_consumer','ROS scope/main mismatch')
  frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text(encoding='utf-8-sig'))
  need(c.get('bounded_native_reaccept')==frozen.get('bounded_native_reaccept'),'Native scene omitted or changed from frozen contract')
+ need(c.get('route_lifecycle_native')==frozen.get('route_lifecycle_native'),'Route native scene omitted or changed')
+ if c.get('route_lifecycle_native'):
+  need(c.get('bounded_native_reaccept') is not None,'Route native requires explicit experiment')
+  verify_route_native_authorization(frozen)
  if c.get('bounded_native_reaccept'):
   need(c['bounded_native_reaccept']==frozen.get('bounded_native_reaccept') and frozen.get('bounded_native_authorization') is not None,'Native scene is not bound to task authority')
   verify_v1_successor(frozen,verify_ros_task_grant(frozen))
@@ -398,7 +436,7 @@ def ros_shape(c):
  need(c['targets']==TARGETS and c['token']==TOKENS,'ROS board/token mismatch')
  need(c['remote']=={s:f"/data/local/tmp/mdds_dds_{c['run']}_{s}" for s in ['A','B']},'ROS remote path mismatch')
  need(c.get('expected_writes')=={'A':10,'B':10} and c.get('record_count')==20,'ROS directional/aggregate sample contract')
- need(c.get('stages')==(ROS_NATIVE_STAGES if c.get('bounded_native_reaccept') else ROS_STAGES) and c.get('timeout_seconds')==300 and c.get('stdout_budget')==25165824,'ROS frozen stage/budget mismatch')
+ need(c.get('stages')==(ROS_ROUTE_NATIVE_STAGES if c.get('route_lifecycle_native') else ROS_NATIVE_STAGES if c.get('bounded_native_reaccept') else ROS_STAGES) and c.get('timeout_seconds')==300 and c.get('stdout_budget')==25165824,'ROS frozen stage/budget mismatch')
  need(c['system_library_dirs']==LIBDIRS and c.get('max_record_bytes')==8192,'ROS loader/log budget mismatch')
  need(type(c.get('ros_attempt')) is int and (c['ros_attempt']>=1 if ros_task_mode() else c['ros_attempt'] in (1,2)),'ROS attempt identity')
  names=[x['name'] for x in c['package_artifacts']]
@@ -569,6 +607,7 @@ PRIOR_MATERIALIZED_FILES=LEGACY_MATERIALIZED_FILES+('executor/dds214-control.cjs
 RECOVERY_MATERIALIZED_FILES=PRIOR_MATERIALIZED_FILES+('recovery/pregrant_recovery.py','recovery/recovery-guard.ps1','recovery/readonly_preflight.py')
 MATERIALIZED_FILES=RECOVERY_MATERIALIZED_FILES+('executor/rmw_debugger.py','executor/rmw-debugger.cjs','executor/rmw_lldb_trace.py')
 NATIVE_MATERIALIZED_FILES=MATERIALIZED_FILES+('executor/bounded-native-scene.cjs',)
+ROUTE_NATIVE_MATERIALIZED_FILES=NATIVE_MATERIALIZED_FILES+('executor/route-network-capture.py',)
 def verify_local_driver(x):
  # Shared local-mode binding. These are exactly the fields the PowerShell bootstrap
  # reads, so both layers validate and bind one frozen contract instead of keeping
@@ -634,10 +673,10 @@ def materialization_record(frozen):
  p=TASK_ROOT/'MATERIALIZATION.json';need(digest(p)==frozen.get('materialization_sha256'),'Materialization descriptor missing/changed')
  record=json.loads(p.read_text(encoding='utf-8'));need(record.get('scope')=='LOCAL_MATERIALIZATION_ONLY_NO_EXECUTION_AUTHORITY' and record.get('task')==str(TASK_ROOT) and record.get('repo')==str(repo_root()) and record.get('private_config_sha256')==frozen.get('private_config_sha256'),'Materialization identity mismatch')
  rows=record.get('files',[]);names=[e['destination'].replace(chr(92),'/') for e in rows]
- current_members=set(names) in (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES),set(PRIOR_MATERIALIZED_FILES),set(NATIVE_MATERIALIZED_FILES))
+ current_members=set(names) in (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES),set(PRIOR_MATERIALIZED_FILES),set(NATIVE_MATERIALIZED_FILES),set(ROUTE_NATIVE_MATERIALIZED_FILES))
  strict=frozen.get('scope')==layered().SCOPE or frozen.get('authorization')==ROS_LAYERED_AUTHORIZATION
  need(len(names)==len(set(names)) and (current_members or (not strict and set(names)==set(LEGACY_MATERIALIZED_FILES))),'Materialized dependency membership mismatch')
- if frozen.get('authorization')==ROS_TASK_AUTHORIZATION:need(set(names) in ((set(NATIVE_MATERIALIZED_FILES),) if frozen.get('bounded_native_authorization') else (set(MATERIALIZED_FILES),) if frozen.get('rmw_debugger') else (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES))),'Task recovery-capable execution requires current complete materialization')
+ if frozen.get('authorization')==ROS_TASK_AUTHORIZATION:need(set(names) in ((set(ROUTE_NATIVE_MATERIALIZED_FILES),) if frozen.get('route_lifecycle_native') else (set(NATIVE_MATERIALIZED_FILES),) if frozen.get('bounded_native_authorization') else (set(MATERIALIZED_FILES),) if frozen.get('rmw_debugger') else (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES))),'Task recovery-capable execution requires current complete materialization')
  entries=frozen.get('execution_files',[]);mapped={str((repo_root()/e['path']).resolve()):e['sha256'] for e in entries};need(len(mapped)==len(entries),'Duplicate executor binding')
  required={str((TASK_ROOT/e['destination']).resolve()):e['sha256'] for e in rows}
  task_entries={p for p in mapped if any(Path(p).is_relative_to(TASK_ROOT/folder) for folder in ('executor','executor-route-query','recovery'))}
@@ -666,6 +705,25 @@ def verify_materialized_execution(frozen):
  for p,sha in materialization_record(frozen).items():need(digest(p)==sha,'Materialized execution bytes changed')
  spec=importlib.util.spec_from_file_location('bound_private_config',TASK_ROOT/'executor/private_config.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
  module.validate_profile(PRIVATE,TASK_ROOT,repo_root())
+
+def route_network_capture_inputs(frozen):
+ need(frozen.get('route_lifecycle_native') is not None,'Network collector requires exact route task')
+ expected={}
+ execution={str((repo_root()/row['path']).resolve()):row['sha256'] for row in frozen.get('execution_files',[])}
+ for key,path in (('helper_sha256',TASK_ROOT/'executor/route-network-capture.py'),('collector_sha256',TASK_ROOT/'recovery/pregrant_recovery.py')):
+  value=execution.get(str(path.resolve()))
+  need(isinstance(value,str) and re.fullmatch('[0-9a-f]{64}',value) and digest(path)==value,'Frozen bounded network collector changed:'+key)
+  expected[key]=value
+ need(frozen.get('route_network_capture')==expected,'Frozen bounded network collector binding missing/changed')
+ return expected
+
+def verify_route_network_capture(c,frozen):
+ if not c.get('route_lifecycle_native'):
+  need('route_network_capture' not in c,'Network collector forbidden outside route task');return
+ expected=route_network_capture_inputs(frozen)
+ need(c.get('route_network_capture')==expected and c.get('executor_sha256',{}).get('route-network-capture.py')==expected['helper_sha256'],'Window bounded network helper binding changed')
+ window=Path(c['window_root'])
+ if window.exists():need((window/'route-network-capture.py').is_file() and digest(window/'route-network-capture.py')==expected['helper_sha256'],'Window bounded network helper copy changed')
 
 def require_accepted_n10(frozen,proof):
  need(frozen.get('final_n100_authorization')==FINAL_N100_AUTH and not frozen.get('resume_authorization'),'Invalid final N100 authorization')
@@ -1174,6 +1232,7 @@ def verify_v1_window(c,frozen):
   values=dict(rows);other='B' if side=='A' else 'A'
   expected=dict(locator_version='V1',native_name_contract='PACKAGE_SCOPED_V1',namespace=v['namespace'],domain=str(v['domain']),profile=v['profile'],local_udid=v['udids'][side],peer_udid=v['udids'][other],service_slot=str(v['slots'][side]),peer_slot=str(v['slots'][other]),local_initiator_name=v['initiator_names'][side],peer_initiator_name=v['initiator_names'][other],authorized_package=c['package_name'],service_prefix=c['package_name']+'.'+c['service_prefix'])
   if c.get('bounded_native_reaccept'):expected.update(backend='OHOS_PUBLIC_SOCKET_BOUNDED_REACCEPT_EXPERIMENTAL',native_reaccept_order=c['bounded_native_reaccept']['order'],native_reaccept_control=c['remote'][side]+'/control.NATIVE_REACCEPT')
+  if c.get('route_lifecycle_native'):expected['route_lifecycle']='1'
   need(all(values.get(key)==value for key,value in expected.items()),'Generated V1 ROS endpoint/name contract mismatch')
   if 'auxiliary_sha256' in c:need(c['auxiliary_sha256'][side].get('ros.conf')==digest(path),'Generated V1 ROS config bytes drift')
 
@@ -1189,6 +1248,7 @@ def verify_v1_identity_correspondence(c):
 def verify_window(c):
  validate_shape(c);need(c['task_contract']==load(c['task_contract']['freeze_path']),'Contract changed')
  frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text());verify_shared_guard(c,frozen)
+ verify_route_network_capture(c,frozen)
  need(not (frozen.get('v1_successor_authorization') and frozen.get('identity_qualification') is True),'Identity prerequisite contract cannot dispatch ROS data')
  if is_dds214(c):
   need(frozen['scope']==layered().SCOPE,'DDS214 work package mismatch')

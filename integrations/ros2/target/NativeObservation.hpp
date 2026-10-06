@@ -15,6 +15,11 @@ struct V1LocatorSnapshot {
 bool CaptureV1(V1LocatorSnapshot&) noexcept;
 struct EndpointSnapshot {std::array<experiment::SedpEndpoint,64> values{};std::size_t count=0;bool complete=true;};
 bool CaptureEndpoints(EndpointSnapshot&) noexcept;
+struct SubmissionSnapshot {
+    struct Item {std::uint64_t observation=0,last_observation=0,attempts=0,sender=0;std::array<std::uint8_t,16> writer{};std::int32_t high=0,status=0;std::uint32_t low=0;bool route_known=false,route_available=false;std::uint64_t route_revision=0;bool queue_admitted=false;};
+    std::array<Item,512> values{};std::size_t count=0;std::uint64_t overflow=0,uncorrelated=0;
+};
+bool CaptureSubmissions(SubmissionSnapshot&) noexcept;
 void Begin(const std::string&, unsigned);
 #ifdef FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST
 void SetSourceForHostInjection() noexcept;

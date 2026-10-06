@@ -165,9 +165,14 @@ void OfflineIsolation()
     auto admitted=e.TryAdmit(*initial.value,provider);CHECK(admitted);CHECK(admitted.value->Run().outcome==NativeSendOutcome::ReturnedSdkCode);
     CHECK(f.table->ObserveNodeOffline("network-original-0")==NativeStatus::None);
     CHECK(senders.front().get()==retained&&!Send(*retained,10));
+    const auto refused=dynamic_cast<DSoftBusSenderResource*>(retained)->last_report();
+    CHECK(refused&&refused->status==RuntimeSendStatus::UnresolvedConnection&&!refused->queue_result&&
+            refused->unresolved_route&&refused->unresolved_route->route_state_known&&!refused->unresolved_route->route_available&&
+            refused->unresolved_route->route_version>f.config.directory.routes.front().route_version);
     CHECK(Send(*retained,11));auto unaffected=e.Take(r);CHECK(unaffected);auto other=e.TryAdmit(*unaffected.value,provider);CHECK(other);
     CHECK(other.value->Run().outcome==NativeSendOutcome::ReturnedSdkCode&&provider->calls==2);
     CHECK(f.table->ObserveNodeOffline("unknown-node")==NativeStatus::NotFound&&Send(*retained,12));
+    CHECK(!refused->unresolved_route->route_available&&refused->status==RuntimeSendStatus::UnresolvedConnection);
     CHECK(e.Revoke(r)==NativeStatus::None);
 }
 void Retention()

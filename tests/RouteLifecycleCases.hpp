@@ -29,6 +29,9 @@ struct RouteFixture {
         if(close_race){Check(facade->init()&&!facade->OpenInputChannel(Local(),&receiver,64),"late registration cannot publish closed runtime");return;}
         Check(facade->init()&&facade->OpenInputChannel(Local(),&receiver,64)&&facade->OpenOutputChannel(senders,Remote()),"real canonical runtime/retained sender");
         Check(fake_node::registrations==1,"one designated node subscription");Accept(30);
+        const auto initial=loop->ObserveRoute();
+        Check(initial.found&&initial.available&&!initial.sealed&&!initial.resolution_pending&&!initial.resolution_inflight&&initial.route_version>0,
+                "read-only snapshot observes original Ready route");
     }
     ~RouteFixture(){reaccept_fake::in_send={};reaccept_fake::in_bind={};fake_node::before_query={};fake_node::before_registration={};if(facade)facade->shutdown();}
     Locator Local()const{return config.directory.locals.front().local_locator;}
@@ -36,12 +39,19 @@ struct RouteFixture {
     bool Send(unsigned char value){std::vector<rtps::NetworkBuffer> b{{&value,1}};std::vector<Locator> p{Remote()};rtps::Locators begin(p.begin()),end(p.end());return senders.front()->send(b,1,&begin,&end,std::chrono::steady_clock::now()+2s,0);}
     void Pump(){const auto result=loop->PumpReceive();Check(result==BackendStatus::None||result==BackendStatus::NoWork,"lifecycle control/receiver pump");}
     void Accept(int id){Check(reaccept_fake::server->OnNegotiate(id,peer.Get()),"current operational accepted route");{std::lock_guard<std::mutex> l(reaccept_fake::gate);reaccept_fake::alive[id]=true;}reaccept_fake::server->OnBind(id,peer.Get());}
-    void Offline(){fake_node::Offline(peer.network);Check(!Send(9),"formal SDK node offline rejects retained SenderResource");Pump();
+    void Offline(){const auto before=loop->ObserveRoute();fake_node::Offline(peer.network);
+        const auto invalid=loop->ObserveRoute();
+        Check(invalid.found&&!invalid.available&&!invalid.sealed&&!invalid.resolution_pending&&invalid.route_version>before.route_version,
+                "read-only snapshot observes actual offline invalidation revision");
+        Check(!Send(9),"formal SDK node offline rejects retained SenderResource");Pump();
         const auto observation=loop->Observe();
         Check(observation.adapter.retired_outgoing.shutdown_returned||observation.adapter.retired_outgoing.on_shutdown_seen,"offline old outgoing settlement remains observable before fresh resolution");}
     void Online(const std::string& network){
         {std::lock_guard<std::mutex> lock(fake_node::gate);fake_node::nodes.clear();fake_node::nodes[network]=remote.udid;}
         fake_node::Online(network);
+        const auto pending=loop->ObserveRoute();
+        Check(pending.found&&!pending.available&&pending.resolution_pending&&!pending.sealed,
+                "online snapshot remains unavailable with actual pending resolution");
     }
     void Finish(){facade->shutdown();const auto v=loop->Observe();Check(v.close.status==BackendStatus::None&&v.close.adapter_drained,"normal original close");Check(fake_node::unregistrations==1,"one node unregister, no drain claim");}
 };
@@ -142,6 +152,9 @@ void RouteLateResolve(){
     RouteFixture f;f.Offline();Event entered,release;fake_node::before_query=[&]{entered.Signal();release.Wait();};
     f.Online("model.new.net");f.permit=true;const auto before=reaccept_fake::socket_calls;
     auto old=std::async(std::launch::async,[&]{return f.loop->PumpReceive();});entered.Wait();
+    const auto inflight=f.loop->ObserveRoute();
+    Check(inflight.found&&!inflight.available&&inflight.resolution_inflight&&inflight.request_version==inflight.route_version,
+            "read-only snapshot observes original in-flight resolver request");
     fake_node::Offline("model.new.net");f.Online("model.last.net");release.Signal();
     const auto outcome=old.get();const bool denied=!f.Send(3);
     std::cout<<"R6_LATE_RESOLVE status="<<static_cast<unsigned>(outcome)<<" denied="<<denied<<" sockets_before="<<before<<" sockets_after="<<reaccept_fake::socket_calls<<std::endl;
@@ -162,6 +175,8 @@ void RouteCloseAndDuplicates(){
     Event entered,release;fake_node::before_query=[&]{entered.Signal();release.Wait();};
     auto resolving=std::async(std::launch::async,[&]{return f.loop->PumpReceive();});entered.Wait();INodeStateCb* retained=fake_node::callback;
     auto close=std::async(std::launch::async,[&]{f.facade->shutdown();});Check(f.loop->WaitSealed(std::chrono::steady_clock::now()+2s),"final shutdown seals original authority");
+    const auto sealed=f.loop->ObserveRoute();
+    Check(sealed.found&&sealed.sealed&&!sealed.available,"read-only route snapshot observes final admission seal");
     release.Signal();(void)resolving.get();close.get();fake_node::before_query={};
     NodeBasicInfo late{};std::memcpy(late.networkId,"model.new.net",14);const auto calls=reaccept_fake::socket_calls;
     retained->onNodeOnline(&late);Check(reaccept_fake::socket_calls==calls&&fake_node::queries==1&&!f.Send(3),"copied late node callback cannot revive closed runtime or fan out attempts");

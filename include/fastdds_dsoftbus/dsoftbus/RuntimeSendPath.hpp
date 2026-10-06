@@ -61,6 +61,10 @@ struct SendConnectionSnapshot
     RouteKey key;
     std::uint64_t route_version = 0;
     std::uint64_t generation = 0;
+    // Diagnostic only, captured under the original native resolve gate.
+    // A false TryResolve can still describe why this exact request was refused.
+    bool route_state_known = false;
+    bool route_available = false;
 };
 class ConnectionGenerationSource
 {
@@ -84,6 +88,7 @@ struct RuntimeSendReport
     RuntimeSendStatus status = RuntimeSendStatus::InvalidInput;
     std::size_t visited = 0, owned_unique = 0, duplicates = 0, ignored = 0;
     std::optional<SendAdmission> queue_result;
+    std::optional<SendConnectionSnapshot> unresolved_route;
 };
 
 class RuntimeSendPath final

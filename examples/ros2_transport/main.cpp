@@ -70,9 +70,9 @@ int main(int argc,char** argv) {
         const auto ns="/fdds_"+run;
         auto node=std::make_shared<rclcpp::Node>("transport_"+side,ns,rclcpp::NodeOptions().use_intra_process_comms(false));
         const char* native_scene=std::getenv("FDDST_BOUNDED_NATIVE_SCENE");
-        if(native_scene&&std::string(native_scene)=="BOUNDED_NORMAL_ONCE"){
+        if(native_scene&&(std::string(native_scene)=="BOUNDED_NORMAL_ONCE"||std::string(native_scene)=="ROUTE_RETURN_ONCE")){
             if(mode!="dual")ros_failure_protocol::Fail(run,side,pid,"NATIVE_SCENE","FINITE_DUAL_CONTRACT_REQUIRED");
-            BoundedReacceptRos(node,side,run,pid,[&](const std::string& point,const std::function<void()>& progress){return ControlStage(run,side,pid,point,progress);});
+            BoundedReacceptRos(node,side,run,pid,[&](const std::string& point,const std::function<void()>& progress){return ControlStage(run,side,pid,point,progress);},std::string(native_scene)=="ROUTE_RETURN_ONCE");
             FastddsDsoftbusTeardownCheckpoint("BEFORE_NODE_DELETE");result=0;
         }else{
         const std::vector<std::string> phases=mode=="dual"?std::vector<std::string>{"reliable","best_effort"}:std::vector<std::string>{mode};

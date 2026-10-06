@@ -26,6 +26,7 @@ public:
     static bool BoundedReplacementGate(experimental::Runtime&,std::function<bool()>);
     static BackendStatus RequestNormalEnd(experimental::Runtime&,RecordRole) noexcept;
     static BoundedConnectionSnapshot ObserveConnection(const experimental::Runtime&) noexcept;
+    static NativeRouteSnapshot ObserveRoute(const experimental::Runtime&) noexcept;
     static void SealBoundedAdmission(experimental::Runtime&) noexcept;
 };
 bool RuntimeProbeBeforeConnect() noexcept;

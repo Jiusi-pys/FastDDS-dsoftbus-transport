@@ -73,6 +73,7 @@ public:
     phase0::BackendStatus CloseAccepted() noexcept;
     phase0::BackendStatus RequestNormalEnd(RecordRole) noexcept;
     NativeStatus ObserveNodeOffline(const std::string& network_id) noexcept;
+    NativeRouteSnapshot ObserveRoute() const noexcept;
     bool SetBoundedReplacementGate(std::function<bool()>);
     void SealBoundedAdmission() noexcept;
     HostLoopObservation Observe() const noexcept;

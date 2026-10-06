@@ -19,6 +19,7 @@ struct ObserverState {
     std::mutex mutex;
     fastdds_dsoftbus::ros2_target_observation::V1LocatorSnapshot v1_locators;
     fastdds_dsoftbus::ros2_target_observation::EndpointSnapshot endpoints;
+    fastdds_dsoftbus::ros2_target_observation::SubmissionSnapshot submissions;
     std::string run;
     unsigned side=0;
     std::atomic<std::uint64_t> observations{0},send_enter{0},send_return{0},send_error{0},ingress{0},overflow{0},malformed{0};
@@ -50,10 +51,16 @@ void capture(const char* name,std::uint64_t entry,int role,std::int32_t socket,s
     try {
         std::lock_guard<std::mutex> lock(state->startup_mutex);
         if(!name){++startup.omitted;return;}
+        // Sender admission is recorded in its separate bounded metadata ledger.
+        // Expected offline refusals/retries must not consume the SDK startup
+        // error capacity or become an SDK first failure. Real SendBytes errors
+        // and capture faults retain their existing diagnostics and counters.
+        if(!std::strcmp(name,"Sender_submit_result")){++startup.omitted;return;}
         Event e;e.seq=++startup.last_seq;e.entry=entry;e.role=role;e.socket=socket;e.length=length;e.value=value;
         std::size_t n=0;while(n<sizeof(e.operation)-1&&name[n]){const char ch=name[n];e.operation[n]=(ch>='A'&&ch<='Z')||(ch>='a'&&ch<='z')||(ch>='0'&&ch<='9')||ch=='_'?ch:'_';++n;}
         e.operation[n]='\0';e.truncated=name[n]!='\0';
-        const bool sdk=!std::strncmp(name,"Socket_",7)||!std::strncmp(name,"Listen_",7)||!std::strncmp(name,"Bind_",5)||!std::strncmp(name,"SendBytes_",10)||!std::strncmp(name,"Shutdown_",9);
+        const bool node_sdk=!std::strncmp(name,"RegNode_",8)||!std::strncmp(name,"UnregNode_",10)||!std::strncmp(name,"GetAllNodes_",12)||!std::strncmp(name,"GetNodeUdid_",12);
+        const bool sdk=node_sdk||!std::strncmp(name,"Socket_",7)||!std::strncmp(name,"Listen_",7)||!std::strncmp(name,"Bind_",5)||!std::strncmp(name,"SendBytes_",10)||!std::strncmp(name,"Shutdown_",9);
         int operation=-1;
         if(!std::strncmp(name,"Socket_",7))operation=0;else if(!std::strncmp(name,"Listen_",7))operation=1;
         else if(!std::strncmp(name,"Bind_",5))operation=2;else if(!std::strncmp(name,"SendBytes_",10))operation=3;else if(!std::strncmp(name,"Shutdown_",9))operation=4;
@@ -70,7 +77,7 @@ void capture(const char* name,std::uint64_t entry,int role,std::int32_t socket,s
         e.cleanup=cleanup_started;
         // A diagnosis is not automatically the application's primary failure.
         if(failed&&!e.cleanup&&!startup.first_present){startup.first=e;startup.first_present=true;}
-        const bool ordinary_data=!std::strcmp(name,"OnBytes")||!std::strncmp(name,"SendBytes_",10);
+        const bool ordinary_data=!std::strcmp(name,"OnBytes")||!std::strncmp(name,"SendBytes_",10)||!std::strcmp(name,"Sender_submit_result");
         if(ordinary_data&&!failed){++startup.omitted;return;}
         if(startup.count<startup_capacity)startup.events[startup.count++]=e;else ++startup.overflow;
     }catch(...){++state->capture_faults;}
@@ -147,7 +154,26 @@ std::uint64_t SocketFrame(const char* event,std::int32_t socket,const std::uint8
     return observation;
 }
 }
+extern "C" void FastddsDsoftbusObserveSenderSubmission(std::uint64_t sender,const void* data,std::size_t bytes,int status,bool route_known,bool route_available,std::uint64_t route_revision,bool queue_admitted) noexcept {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return;
+    if(!data||!bytes){std::lock_guard<std::mutex> lock(state->mutex);++state->submissions.uncorrelated;return;}
+    const auto packet=fastdds_dsoftbus::experiment::ObserveRtps(data,bytes);
+    std::lock_guard<std::mutex> lock(state->mutex);
+    auto& ledger=state->submissions;
+    if(!packet.valid){++ledger.uncorrelated;return;}
+    for(const auto& frame:packet.data){
+        const auto observation=++state->observations;
+        auto found=std::find_if(ledger.values.begin(),ledger.values.begin()+ledger.count,[&](const auto& item){return item.sender==sender&&item.status==status&&item.writer==frame.writer_guid&&item.high==frame.sequence_hi&&item.low==frame.sequence_lo&&item.route_known==route_known&&item.route_available==route_available&&item.route_revision==route_revision&&item.queue_admitted==queue_admitted;});
+        if(found!=ledger.values.begin()+ledger.count){++found->attempts;found->last_observation=observation;continue;}
+        if(ledger.count==ledger.values.size()){++ledger.overflow;continue;}
+        ledger.values[ledger.count++]={observation,observation,1,sender,frame.writer_guid,frame.sequence_hi,status,frame.sequence_lo,route_known,route_available,route_revision,queue_admitted};
+    }
+}
 namespace fastdds_dsoftbus::ros2_target_observation {
+bool CaptureSubmissions(SubmissionSnapshot& output) noexcept {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
+    std::lock_guard<std::mutex> lock(state->mutex);output=state->submissions;return true;
+}
 bool CaptureEndpoints(EndpointSnapshot& output) noexcept {
     auto* state=published.load(std::memory_order_acquire);if(!state)return false;
     try {std::lock_guard<std::mutex> lock(state->mutex);output=state->endpoints;return true;}catch(...){return false;}

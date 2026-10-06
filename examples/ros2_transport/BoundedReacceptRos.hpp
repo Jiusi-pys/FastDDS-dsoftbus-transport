@@ -4,7 +4,8 @@
 #include <functional>
 
 inline void BoundedReacceptRos(const std::shared_ptr<rclcpp::Node>& node,const std::string& side,
-        const std::string& run,long pid,const std::function<bool(const std::string&,const std::function<void()>&)>& stage){
+        const std::string& run,long pid,const std::function<bool(const std::string&,const std::function<void()>&)>& stage,
+        bool route_return=false){
     using Message=std_msgs::msg::String;
     using Service=example_interfaces::srv::AddTwoInts;
     struct Entities {
@@ -26,9 +27,10 @@ inline void BoundedReacceptRos(const std::shared_ptr<rclcpp::Node>& node,const s
             const auto prefix=run+":"+capture->qos+":"+peer+":";
             if(message.data.rfind(prefix,0)!=0){bad=true;return;}
             const auto ordinal=static_cast<unsigned>(std::stoul(message.data.substr(prefix.size())));
-            if(ordinal<1||ordinal>5||!capture->taken.insert(ordinal).second){bad=true;return;}
+            if((ordinal<1||ordinal>5)&&!(route_return&&ordinal==1001)){bad=true;return;}
+            if(!capture->taken.insert(ordinal).second){bad=true;return;}
             std::ostringstream source;for(auto byte:info.get_rmw_message_info().publisher_gid.data)source<<std::hex<<std::setw(2)<<std::setfill('0')<<unsigned(byte);
-            std::cout<<"ROS_TAKE run="<<run<<" side="<<side<<" ordinal="<<ordinal<<" gid="<<source.str()<<" payload="<<message.data<<" phase="<<capture->qos<<" segment="<<(ordinal<=2?"PRE":"POST")
+            std::cout<<"ROS_TAKE run="<<run<<" side="<<side<<" ordinal="<<ordinal<<" gid="<<source.str()<<" payload="<<message.data<<" phase="<<capture->qos<<" segment="<<(ordinal==1001?"OFFLINE":ordinal<=2?"PRE":"POST")
                 <<" topic="<<capture->qos<<"/from_"<<peer<<" publication_sequence="<<info.get_rmw_message_info().publication_sequence_number<<std::endl;
         });
     }
@@ -58,7 +60,8 @@ inline void BoundedReacceptRos(const std::shared_ptr<rclcpp::Node>& node,const s
             Message message;message.data=run+":"+item.qos+":"+side+":"+std::to_string(ordinal);item.publisher->publish(message);
             std::cout<<"ROS_WRITE run="<<run<<" side="<<side<<" ordinal="<<ordinal<<" payload="<<message.data<<" phase="<<item.qos<<" segment="<<segment<<" topic="<<item.publisher->get_topic_name()<<std::endl;
         }
-        until([&]{return entities[0].taken.size()==last&&entities[1].taken.size()==last;},segment);
+        until([&]{for(const auto& item:entities)for(unsigned ordinal=first;ordinal<=last;++ordinal)
+            if(!item.taken.count(ordinal))return false;return true;},segment);
         if(client){
             until([&]{return client->service_is_ready();},"SERVICE");
             auto request=std::make_shared<Service::Request>();request->a=first==1?3:5;request->b=first==1?4:6;
@@ -74,6 +77,19 @@ inline void BoundedReacceptRos(const std::shared_ptr<rclcpp::Node>& node,const s
     if(!stage("PRE_READY",spin))fail("PRE_READY","CONTROL_RELEASE_MISSING");
     business("PRE",1,2);
     if(!stage("PRE_DONE",spin))fail("PRE_DONE","CONTROL_RELEASE_MISSING");
+    if(route_return){
+        if(!stage("OFFLINE_READY",spin))fail("OFFLINE_READY","CONTROL_RELEASE_MISSING");
+        // Ordinary ROS writes, after controller observes product invalidation.
+        // publish return is separate from queue/native acceptance. Reliable
+        // history may deliver this sample after return; it never counts as POST.
+        for(auto& item:entities){Message message;message.data=run+":"+item.qos+":"+side+":1001";
+            item.publisher->publish(message);
+            std::cout<<"ROS_WRITE run="<<run<<" side="<<side<<" ordinal=1001 payload="<<message.data
+                <<" phase="<<item.qos<<" segment=OFFLINE topic="<<item.publisher->get_topic_name()
+                <<" publish_return=OK meaning=ROS_API_NOT_NATIVE_ACCEPTANCE"<<std::endl;
+        }
+        if(!stage("OFFLINE_DONE",spin))fail("OFFLINE_DONE","CONTROL_RELEASE_MISSING");
+    }
     if(!stage("REACCEPT_DONE",spin))fail("REACCEPT_DONE","CONTROL_RELEASE_MISSING");
     anchors("AFTER");graph("POST");
     business("POST",3,5);

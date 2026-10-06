@@ -123,6 +123,11 @@ NativeStatus HostProviderLoop::ObserveNodeOffline(const std::string& network_id)
     return s.native->ObserveNodeOffline(network_id);
 }
 HostProviderLoop::HostProviderLoop(std::shared_ptr<State> s,std::shared_ptr<View> v):state_(std::move(s)),view_(std::move(v)){}
+NativeRouteSnapshot HostProviderLoop::ObserveRoute() const noexcept {
+    auto& s=*state_;std::lock_guard<std::mutex> lock(s.gate);
+    if(!s.native||s.config.directory.routes.size()!=1)return {};
+    return s.native->ObserveRoute(s.config.directory.routes.front().key);
+}
 HostProviderLoop::~HostProviderLoop() {
     if(Shutdown())return;
     // A refused shutdown leaves this view a runtime member. Failing loudly here is what
@@ -416,8 +421,8 @@ InputOpenResult HostProviderLoop::OpenRuntime(const Locator& local, InputChannel
                 if(auto current=weak.lock()) {
                     std::lock_guard<std::mutex> lock(current->gate);
                     if(current->stopping||current->closed||!current->native)return;
-                    if(online)(void)current->native->ObserveNodeOnline(network);
-                    else (void)current->native->ObserveNodeOffline(network);
+                    const auto processed=online?current->native->ObserveNodeOnline(network):current->native->ObserveNodeOffline(network);
+                    STARTUP_CAPTURE(online?"NodeOnline_processed":"NodeOffline_processed",UINT64_MAX,-1,-1,int(processed),0);
                 }
             });
             if(subscribed!=BackendStatus::None){settle_pending();return InputOpenResult::Disabled;}

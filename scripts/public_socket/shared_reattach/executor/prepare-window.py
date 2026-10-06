@@ -64,6 +64,12 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
             cfg['bounded_native_reaccept']=frozen['bounded_native_reaccept'];cfg['stages']=list(contract.ROS_NATIVE_STAGES)
             cfg['analyzer_sha256']=digest(repo/'scripts/public_socket/analyze_bounded_native_reaccept.py')
             cfg['executor_sha256']['bounded-native-scene.cjs']=digest(here/'bounded-native-scene.cjs')
+        if frozen.get('route_lifecycle_native'):
+            contract.verify_route_native_authorization(frozen)
+            if not frozen.get('bounded_native_reaccept'):raise ValueError('Route return requires explicit bounded native experiment')
+            cfg['route_lifecycle_native']=frozen['route_lifecycle_native'];cfg['stages']=list(contract.ROS_ROUTE_NATIVE_STAGES)
+            cfg['route_network_capture']=contract.route_network_capture_inputs(frozen)
+            cfg['executor_sha256']['route-network-capture.py']=cfg['route_network_capture']['helper_sha256']
         if frozen.get('v1_successor_authorization'):
             v1=contract.PRIVATE.get('v1_deployment')
             if not v1 or frozen.get('identity_qualification') is True:raise ValueError('V1 ROS requires verified private identity/configuration, not query prerequisite contract')
@@ -104,6 +110,7 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
     contract.verify_window(cfg)
     destination.mkdir(parents=True,exist_ok=False)
     if cfg.get('bounded_native_reaccept'):shutil.copyfile(here/'bounded-native-scene.cjs',destination/'bounded-native-scene.cjs')
+    if cfg.get('route_lifecycle_native'):shutil.copyfile(here/'route-network-capture.py',destination/'route-network-capture.py')
     for source,name in [('runner-template.cjs','runner.cjs'),('dds214-control.cjs','dds214-control.cjs'),('ros-control.cjs','ros-control.cjs'),('shared-control.cjs','shared-control.cjs'),('observe-native.cjs','observe-native.cjs'),('record-pair.cjs','record-pair.cjs'),('bounded-output.cjs','bounded-output.cjs'),('rmw-debugger.cjs','rmw-debugger.cjs')]:shutil.copyfile(here/source,destination/name)
     for side in ['A','B']:
         aux=destination/side/'aux';aux.mkdir(parents=True)
@@ -129,6 +136,7 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
                 values['runtime_close_release']=cfg['remote'][side]+'/control.RUNTIME_CLOSE'
             if ros and cfg.get('bounded_native_reaccept'):
                 values.update(backend='OHOS_PUBLIC_SOCKET_BOUNDED_REACCEPT_EXPERIMENTAL',native_reaccept_order=cfg['bounded_native_reaccept']['order'],native_reaccept_control=cfg['remote'][side]+'/control.NATIVE_REACCEPT')
+            if ros and cfg.get('route_lifecycle_native'):values['route_lifecycle']='1'
             (aux/('dds214.conf' if dds214 else 'ros.conf')).write_text(''.join(k+'='+v+'\n' for k,v in values.items()),encoding='utf-8',newline='\n')
         (aux/'required-load-paths.txt').write_text('\n'.join([cfg['remote'][side]+'/'+e['name'] for e in artifacts]+cfg['required_platform_paths'])+'\n',newline='\n')
     cfg['auxiliary_sha256']={s:{p.name:digest(p) for p in (destination/s/'aux').iterdir()} for s in ['A','B']}

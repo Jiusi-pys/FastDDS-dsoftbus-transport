@@ -26,6 +26,7 @@ def materialize(repo,task,profile):
   for src in sorted((here/folder).iterdir()):
    if src.is_file() and src.suffix in ('.py','.cjs','.ps1'):
     if src.name=='bounded-native-scene.cjs' and not config.get('bounded_native_authorization'):continue
+    if src.name=='route-network-capture.py' and not config.get('route_lifecycle_native'):continue
     dst=task/folder/src.name;shutil.copyfile(src,dst);manifest.append(dict(destination=dst.relative_to(task).as_posix(),source=src.relative_to(repo).as_posix(),sha256=hashlib.sha256(dst.read_bytes()).hexdigest()))
  for name in CANONICAL:
   src=here.parent/name;dst=task/'executor'/name;shutil.copyfile(src,dst);manifest.append(dict(destination=dst.relative_to(task).as_posix(),source=src.relative_to(repo).as_posix(),sha256=hashlib.sha256(dst.read_bytes()).hexdigest()))

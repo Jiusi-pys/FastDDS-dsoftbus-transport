@@ -83,6 +83,21 @@ def analyze(directory, config, side):
             'FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX':remote+'/control'}
         if config.get('bounded_native_reaccept'):
             expected_ros_environment['FDDST_BOUNDED_NATIVE_SCENE']='BOUNDED_NORMAL_ONCE'
+        if 'route_lifecycle_native' in config:
+            mode=config['route_lifecycle_native'];native=config.get('bounded_native_reaccept')
+            valid=isinstance(mode,dict) and set(mode)=={'contract','trigger','offline_ordinal','offline_total','authorization'} and mode.get('contract')=='A_ETH1_ONE_RETURN' and mode.get('trigger')==dict(side='A',interface='eth1',cycles=1,max_offline_seconds=90) and mode.get('offline_ordinal')==1001 and mode.get('offline_total')==4 and isinstance(native,dict) and native.get('contract')=='BOUNDED_NORMAL_ONCE'
+            if valid:
+                valid=all(type(mode['trigger'][key]) is int for key in ('cycles','max_offline_seconds')) and type(mode['offline_ordinal']) is int and type(mode['offline_total']) is int
+                authority=mode['authorization'];valid=valid and isinstance(authority,dict) and set(authority)=={'path','sha256'} and isinstance(authority.get('path'),str) and bool(authority['path']) and isinstance(authority.get('sha256'),str) and re.fullmatch('[0-9a-f]{64}',authority['sha256']) is not None
+            check(valid,'INVALID_ROUTE_SCENE_CONFIGURATION')
+            frozen_matches=False
+            try:
+                proof=config['task_contract'];raw=Path(proof['freeze_path']).read_bytes()
+                frozen=json.loads(raw.decode('utf-8-sig'))
+                frozen_matches=hashlib.sha256(raw).hexdigest()==proof['freeze_sha256'] and frozen.get('route_lifecycle_native')==mode and frozen.get('bounded_native_reaccept')==native
+            except (OSError,ValueError,KeyError,TypeError,UnicodeError):pass
+            check(frozen_matches,'FROZEN_ROUTE_SCENE_MISMATCH')
+            if valid and frozen_matches:expected_ros_environment['FDDST_BOUNDED_NATIVE_SCENE']='ROUTE_RETURN_ONCE'
         allowed_environment.update(expected_ros_environment)
         for name,value in expected_ros_environment.items():
             check(environment.get(name)==value,'ROS_ENVIRONMENT_MISMATCH:'+name)

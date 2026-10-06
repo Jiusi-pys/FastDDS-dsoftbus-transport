@@ -1,7 +1,7 @@
 'use strict';
 // One explicit ROS scene in the existing dispatcher, not a transport or supervisor.
 const STAGES=['LISTENER_READY','RELIABLE_READY','RELIABLE_DONE','BEST_EFFORT_READY','BEST_EFFORT_DONE','TEARDOWN_READY','DDS_DELETED'];
-const stagesFor=c=>c.bounded_native_reaccept?require('./bounded-native-scene.cjs').STAGES:STAGES;
+const stagesFor=c=>c.route_lifecycle_native?['LISTENER_READY','PRE_READY','PRE_DONE','OFFLINE_READY','OFFLINE_DONE','REACCEPT_DONE','POST_DONE','TEARDOWN_READY','DDS_DELETED']:c.bounded_native_reaccept?require('./bounded-native-scene.cjs').STAGES:STAGES;
 const isRos=c=>c.scenario==='ROS2_DSOFTBUS';
 function kv(line){
  const fields={};
@@ -18,7 +18,7 @@ function commands(c,tokens,libdirs){
  for(const side of ['A','B']){
   const root=c.remote[side];
   if(root!==`/data/local/tmp/mdds_dds_${c.run}_${side}`||c.token[side]!==tokens[side]||!/^[1-9][0-9]*$/.test(tokens[side]))throw Error('ROS_COMMAND_IDENTITY');
-  result[side]=`cd ${root} && env -i ${c.bounded_native_reaccept?"FDDST_BOUNDED_NATIVE_SCENE=BOUNDED_NORMAL_ONCE ":""}PATH=/system/bin:/system/xbin LD_LIBRARY_PATH=${root}:${libdirs.join(':')} SKIP_DEFAULT_XML=1 ROS_LOG_DIR=${root}/ros-log RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=201 ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET FASTDDS_DSOFTBUS_REQUIRED_CONFIG=${root}/ros.conf FASTDDS_DSOFTBUS_NATIVE_TOKEN=${tokens[side]} FASTDDS_DSOFTBUS_IDENTITY_ADMITTED=1 FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX=${root}/control timeout ${c.timeout_seconds} ${root}/${c.main_member} ${side} ${c.run} dual; rc=$?; echo REMOTE_EXIT=$rc; exit $rc`;
+  result[side]=`cd ${root} && env -i ${c.bounded_native_reaccept?`FDDST_BOUNDED_NATIVE_SCENE=${c.route_lifecycle_native?'ROUTE_RETURN_ONCE':'BOUNDED_NORMAL_ONCE'} `:""}PATH=/system/bin:/system/xbin LD_LIBRARY_PATH=${root}:${libdirs.join(':')} SKIP_DEFAULT_XML=1 ROS_LOG_DIR=${root}/ros-log RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=201 ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET FASTDDS_DSOFTBUS_REQUIRED_CONFIG=${root}/ros.conf FASTDDS_DSOFTBUS_NATIVE_TOKEN=${tokens[side]} FASTDDS_DSOFTBUS_IDENTITY_ADMITTED=1 FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX=${root}/control timeout ${c.timeout_seconds} ${root}/${c.main_member} ${side} ${c.run} dual; rc=$?; echo REMOTE_EXIT=$rc; exit $rc`;
  }
  return result;
 }
@@ -70,9 +70,10 @@ function controller(c,release,admission){
    });
   }
  }
- const fail=why=>{first ||= why;queueCleanup('WINDOW_FAILED');queueRuntimeClose();};
+ let route_restore_failure=null;
+ const fail=why=>{first ||= why;if(c.route_lifecycle_native&&native)native.restore().catch(e=>{route_restore_failure=String(e.message||e);});queueCleanup('WINDOW_FAILED');queueRuntimeClose();};
  const nativeSend=async(s,p)=>{
-  const dispatched=await serialRelease(async()=>{if(first)return false;await release(s,p);return true;});
+  const dispatched=await serialRelease(async()=>{if(first&&p!=='ETH1_UP')return false;await release(s,p);return true;});
   if(dispatched&&p==='REACCEPT_DONE'){issued.push(s+p);released.push(s+p);}return dispatched;
  };
  const native=bounded?require('./bounded-native-scene.cjs').create(c,{fail,send:nativeSend}):null;
@@ -150,7 +151,7 @@ function controller(c,release,admission){
   }
   if(!text.startsWith('ROS_')&&!text.startsWith('FDDST_ROS_CLOSED')&&!text.startsWith('NATIVE_'))return;
   let r;try{r=kv(text);}catch(e){fail(e.message);return;}
-  if(native&&(text.startsWith('NATIVE_')||text.startsWith('ROS_REACCEPT_ANCHOR '))){chain=chain.then(()=>native.line(side,text.split(' ')[0],r)).catch(e=>fail('NATIVE_CONTROL_FAILED:'+e.message));return;}
+  if(native&&(text.startsWith('NATIVE_')||text.startsWith('ROS_REACCEPT_ANCHOR ')||(c.route_lifecycle_native&&text.startsWith('ROS_STARTUP_EVENT ')))){chain=chain.then(async()=>{await native.line(side,text.split(' ')[0],r);if(c.route_lifecycle_native&&text.startsWith('NATIVE_SENDER_SUBMISSION '))await native.finishOffline();}).catch(e=>fail('NATIVE_CONTROL_FAILED:'+e.message));return;}
   if(text.startsWith('ROS_FAILURE ')||text.startsWith('ROS_BUSINESS_EXCEPTION ')){fail('ROS_APPLICATION_FAILURE_'+side);return;}
   if(text.startsWith('ROS_MAIN ')){
    if(r.run!==c.run||r.side!==side||r.scenario!=='ROS2_DSOFTBUS'||r.mode!=='dual'||pids[side]||!/^[1-9][0-9]*$/.test(r.pid||'')){fail('ROS_MAIN_IDENTITY');return;}
@@ -225,7 +226,7 @@ function controller(c,release,admission){
    if(r.run!==c.run||!(bounded&&event.startsWith('ROS_SERVICE_')?['PRE','POST']:['reliable','best_effort']).includes(phase)||(!event.startsWith('ROS_SERVICE_')&&r.side!==side)){fail('ROS_RECEIPT_IDENTITY');return;}
    if(event==='ROS_PUBLISHER'){if(pub[k]||r.intra_process!=='0'||!/^([0-9a-f]{32,64})$/.test(r.gid||''))fail('ROS_PUBLISHER');else pub[k]=r;}
    if(event==='ROS_WRITE'||event==='ROS_TAKE'){
-    if(native){native.line(side,event,r);if(r.segment!==(Number(r.ordinal)<=2?'PRE':'POST')){fail('NATIVE_SAMPLE_SEGMENT');return;}}
+    if(native){native.line(side,event,r);if(c.route_lifecycle_native&&Number(r.ordinal)===1001){if(r.segment!=='OFFLINE'){fail('OFFLINE_SAMPLE_SEGMENT');return;}const target=event==='ROS_WRITE'?write:take;target[k] ||= {};if(target[k][1001]){fail('OFFLINE_SAMPLE_DUPLICATE');return;}target[k][1001]=r;return;}if(r.segment!==(Number(r.ordinal)<=2?'PRE':'POST')){fail('NATIVE_SAMPLE_SEGMENT');return;}}
     const map=event==='ROS_WRITE'?write:take,ordinal=Number(r.ordinal);
     if(!Number.isInteger(ordinal)||ordinal<1||ordinal>5||map[k]?.[ordinal])fail('ROS_SAMPLE_DUPLICATE_OR_RANGE');
     else{map[k] ||= {};map[k][ordinal]=r;}
@@ -285,6 +286,11 @@ function controller(c,release,admission){
     if(segment==='PRE')for(const s of ['A','B'])await nativeSend(s,'NATIVE_ARM');
     else if(!native.complete()){fail('NATIVE_FINAL_IDENTITY');return;}
    }
+   if(c.route_lifecycle_native&&r.stage==='OFFLINE_READY')return;
+   if(c.route_lifecycle_native&&r.stage==='OFFLINE_DONE'){
+    for(const s of ['A','B'])for(const q of ['reliable','best_effort'])if(!write[key(s,q)]?.[1001]){fail('OFFLINE_WRITE_MISSING');return;}
+    await native.offlineDone();return;
+   }
    if(bounded&&r.stage==='REACCEPT_DONE')return; // Native publication, not a generic stage, grants POST.
    if((r.stage==='RELIABLE_DONE'||r.stage==='BEST_EFFORT_DONE')&&!phaseComplete(r.stage==='RELIABLE_DONE'?'reliable':'best_effort')){fail('ROS_PHASE_LEDGER_INCOMPLETE');return;}
    for(const board of ['A','B']){
@@ -294,13 +300,13 @@ function controller(c,release,admission){
    }
   }).catch(e=>fail('ROS_CONTROL_RELEASE_FAILED:'+e.message));
  }
- return{line,stop:capture,end(side,confirmed){ended[side]=true;if(!confirmed)capture('ROS_COLLECTOR_INCOMPLETE_'+side);else if(progress[side]!==STAGES.length)fail('ROS_COLLECTOR_INCOMPLETE_'+side);},async finish(){await chain;await cleanupChain;for(const side of ['A','B']){
+ return{line,stop:capture,end(side,confirmed){ended[side]=true;if(!confirmed)capture('ROS_COLLECTOR_INCOMPLETE_'+side);else if(progress[side]!==STAGES.length)fail('ROS_COLLECTOR_INCOMPLETE_'+side);},async finish(){await chain;if(c.route_lifecycle_native){try{await native.restore();}catch(e){route_restore_failure=String(e.message||e);fail('ETH1_RESTORE_FAILED:'+e.message);}}await cleanupChain;for(const side of ['A','B']){
    if(primary_failure[side]?.identity_origin==='APPLICATION_SCHEMA_1'&&primary_failure[side].pid!==pids[side]){capture('ROS_FAILURE_WITHOUT_MAIN_IDENTITY');delete primary_failure[side];}
    for(const r of cleanup_failure[side]||[])if(r.identity_origin==='APPLICATION_SCHEMA_1'&&(r.pid!==pids[side]||(r.failure_ref!=='0'&&r.failure_ref!==primary_failure[side]?.seq)))capture('ROS_CLEANUP_FAILURE_UNBOUND');
    if(!closed[side]||!deleted[side])fail('ROS_FINAL_LIFECYCLE_INCOMPLETE_'+side);
    if(c.require_residual_snapshot&&(!residual_summaries[side].length||residual_summaries[side].some(s=>residual_objects[side].filter(o=>o.snapshot===s.snapshot).length!==Number(s.object_stored))))capture('ROS_REQUIRED_RESIDUAL_EVIDENCE_MISSING_'+side);
   }await cleanupChain;await runtimeCloseChain;
   if(c.paired_runtime_close&&!['A','B'].every(s=>runtime_close_ready[s]&&runtime_close_controls[s]?.state==='COMPLETED'&&runtime_close_controls[s].reason==='NORMAL_COMPLETION'))fail('ROS_RUNTIME_CLOSE_COORDINATION_INCOMPLETE');
-  const firstSide=/_(A|B)$/.exec(first||'')?.[1];const primarySide=firstSide?(primary_failure[firstSide]?firstSide:null):['A','B'].find(s=>primary_failure[s]);return{pass:!first&&released.length===10&&Object.values(cleanup_controls).every(x=>x.state==='COMPLETED'),first_failure:primarySide?'ROS_APPLICATION_FAILURE_'+primarySide:first,reported_first_host:first,primary_failure,cleanup_failure,capture_failure,application_exit,cleanup_controls,cleanup_control_failures,runtime_close_ready,runtime_close_controls,runtime_close_failures,teardown_events,residual_summaries,residual_objects,primary_selection:'FIRST_HOST_WITH_SAME_SIDE_PRIMARY_REFERENCE_NOT_CROSS_PROCESS_CAUSALITY',cross_side_failure_order:'UNKNOWN',released,issued,pids,progress,ros:{pub,write,take,graph,done,sent,handled,response,deleted,closed}};}};
+  const firstSide=/_(A|B)$/.exec(first||'')?.[1];const primarySide=firstSide?(primary_failure[firstSide]?firstSide:null):['A','B'].find(s=>primary_failure[s]);return{pass:!first&&released.length===10&&Object.values(cleanup_controls).every(x=>x.state==='COMPLETED'),first_failure:primarySide?'ROS_APPLICATION_FAILURE_'+primarySide:first,reported_first_host:first,route_restore_failure,primary_failure,cleanup_failure,capture_failure,application_exit,cleanup_controls,cleanup_control_failures,runtime_close_ready,runtime_close_controls,runtime_close_failures,teardown_events,residual_summaries,residual_objects,primary_selection:'FIRST_HOST_WITH_SAME_SIDE_PRIMARY_REFERENCE_NOT_CROSS_PROCESS_CAUSALITY',cross_side_failure_order:'UNKNOWN',released,issued,pids,progress,ros:{pub,write,take,graph,done,sent,handled,response,deleted,closed}};}};
 }
 module.exports={STAGES,stagesFor,isRos,commands,controller};

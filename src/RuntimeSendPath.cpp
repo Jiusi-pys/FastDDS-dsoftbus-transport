@@ -142,6 +142,7 @@ RuntimeSendReport RuntimeSendPath::Submit(const std::vector<NetworkBuffer>& buff
             if (Now() >= original_deadline) { report.status = RuntimeSendStatus::DeadlineExpired; return report; }
             SendConnectionSnapshot snapshot;
             if (!generations_->TryResolve(*target.route, snapshot)) {
+                if(snapshot.route_state_known)report.unresolved_route=snapshot;
                 report.status = RuntimeSendStatus::UnresolvedConnection; return report;
             }
             if (snapshot.generation == 0 || snapshot.route_version == 0 ||

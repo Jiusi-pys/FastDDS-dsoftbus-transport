@@ -266,9 +266,76 @@ function Invoke-Permission([string]$Board,[string]$Step,[string]$Action) {
     return Invoke-Remote -Board $Board -Step $Step -CommandText ('env -i PATH=/system/bin:/system/xbin LD_LIBRARY_PATH='+$loader+' '+$root+'/native_permission_probe --'+$Action+' --expected-token '+$cfg.token.$Board+' --preflight-confirmed')
 }
 
-$baselines = @{}; $beforeMetadata = @{}
+function Get-NormalizedRouteNetworkState([string]$Link,[string]$Address,[string]$Routes) {
+    # Compare meaningful kernel fields, excluding only elapsed lifetimes.
+    $header=[regex]::Match($Link,'(?m)^\d+:\s+eth1(?:@\S+)?:\s+<([^>]+)>[^\r\n]*\bmtu\s+(\d+)[^\r\n]*\bstate\s+(\S+)')
+    $ether=[regex]::Match($Link,'(?m)^\s*(link/ether\s+[^\r\n]+)')
+    if(-not $header.Success -or -not $ether.Success){throw 'ETH1_NETWORK_CAPTURE_UNPARSEABLE'}
+    $flags=@($header.Groups[1].Value.Split(',')|Sort-Object)
+    $addresses=@([regex]::Matches($Address,'(?m)^\s*(inet\s+[^\r\n]+)')|ForEach-Object {$_.Groups[1].Value.Trim() -replace '\s+',' '}|Sort-Object)
+    if($addresses.Count -eq 0){throw 'ETH1_IPV4_BASELINE_OR_RESTORATION_MISSING'}
+    $routeLines=@($Routes -split '\r?\n'|ForEach-Object {
+        $line=$_.Trim();if($line -and $line -notmatch '^MDDS_REMOTE_EXIT='){
+            ($line -replace '\s+expires\s+\S+','' -replace '\s+',' ')
+        }
+    }|Sort-Object)
+    return [pscustomobject][ordered]@{flags=$flags;mtu=$header.Groups[2].Value;state=$header.Groups[3].Value;
+        ethernet=($ether.Groups[1].Value.Trim() -replace '\s+',' ');ipv4=$addresses;routes=$routeLines}
+}
+function Invoke-RouteNetworkCapture([string]$Step,[Diagnostics.Stopwatch]$GroupClock=$null) {
+    $helper=Join-Path $windowRoot 'route-network-capture.py'
+    $collector=Join-Path $taskRoot 'recovery/pregrant_recovery.py'
+    if((Get-FileHash -LiteralPath $helper).Hash.ToLowerInvariant() -cne $cfg.route_network_capture.helper_sha256 -or
+       (Get-FileHash -LiteralPath $collector).Hash.ToLowerInvariant() -cne $cfg.route_network_capture.collector_sha256){throw 'ROUTE_BOUND_CAPTURE_INPUT_DRIFT'}
+    $budget=15.0
+    # Reserve collector drain/wait and the exceptional owned-client wait.
+    if($null -ne $GroupClock){$budget=[Math]::Min(15.0,21.0-$GroupClock.Elapsed.TotalSeconds-6.0);if($budget -le 0){throw 'ROUTE_NETWORK_GROUP_DEADLINE'}}
+    $budgetText=$budget.ToString('0.000',[Globalization.CultureInfo]::InvariantCulture)
+    $savedErrorPreference=$ErrorActionPreference
+    try {
+        $ErrorActionPreference='Continue'
+        & python $helper --window (Join-Path $windowRoot 'window.json') --step $Step --budget-seconds $budgetText 1> (Join-Path $windowRoot ('A/'+$Step+'.adapter.stdout.log')) 2> (Join-Path $windowRoot ('A/'+$Step+'.adapter.stderr.log'))
+        $adapterExit=$LASTEXITCODE
+    }finally{$ErrorActionPreference=$savedErrorPreference}
+    $root=Join-Path $windowRoot ('A/'+$Step)
+    if($adapterExit -ne 0 -or -not(Test-Path -LiteralPath (Join-Path $root 'result.json'))){throw 'ROUTE_NETWORK_CAPTURE_INCOMPLETE'}
+    $captured=Get-Content -Raw -LiteralPath (Join-Path $root 'result.json')|ConvertFrom-Json
+    if($captured.exit_code -ne 0 -or $captured.timeout -or -not $captured.capture_complete -or $captured.failure){throw 'ROUTE_NETWORK_CAPTURE_INCOMPLETE'}
+    $record=[pscustomobject]@{Root=$root;Text=[IO.File]::ReadAllText((Join-Path $root 'stdout.log'),$utf8Strict);LocalExitCode=[int]$captured.exit_code;OutputBytes=(Get-Item -LiteralPath (Join-Path $root 'stdout.log')).Length;CollectionComplete=$captured.capture_complete}
+    if($Step -cne 'route-usb-adjacent'){
+        $checked=Test-RemoteCommandReceipt $record
+        [IO.File]::WriteAllText((Join-Path $root 'remote-result.json'),($checked|ConvertTo-Json -Depth 6),$utf8)
+        if($checked.status -cne 'COMPLETE'){throw 'ROUTE_NETWORK_CAPTURE_INCOMPLETE'}
+    }
+    return $record
+}
+function Read-RouteNetworkState([string]$Phase,[Diagnostics.Stopwatch]$GroupClock=$null) {
+    $link=Invoke-RouteNetworkCapture -Step ($Phase+'-link') -GroupClock $GroupClock
+    $addr=Invoke-RouteNetworkCapture -Step ($Phase+'-addr') -GroupClock $GroupClock
+    $routes=Invoke-RouteNetworkCapture -Step ($Phase+'-routes') -GroupClock $GroupClock
+    return Get-NormalizedRouteNetworkState -Link $link.Text -Address $addr.Text -Routes $routes.Text
+}
+function Assert-RouteUsbTransport {
+    # This subcommand was established by the locked read-only HDC preflight.
+    $record=Invoke-RouteNetworkCapture -Step 'route-usb-adjacent'
+    $matches=@(($record.Text -split '\r?\n')|Where-Object {
+        $_ -match ('^\s*'+[regex]::Escape([string]$cfg.targets.A)+'\s+USB\s+Connected\s+')
+    })
+    if($matches.Count -ne 1){throw 'ROUTE_BOUND_TARGET_USB_NOT_PROVEN'}
+}
+
+$baselines = @{}; $beforeMetadata = @{}; $routeNetworkBaseline=$null;$routeNetworkBaselineHash=$null
 try {
 Assert-PairReady
+if($cfg.PSObject.Properties['route_lifecycle_native']){
+    Assert-RouteUsbTransport
+    $routeNetworkBaseline=Read-RouteNetworkState 'route-eth1-baseline'
+    if($routeNetworkBaseline.flags -notcontains 'UP' -or $routeNetworkBaseline.flags -notcontains 'LOWER_UP' -or $routeNetworkBaseline.state -cne 'UP'){throw 'ETH1_ORIGINAL_LINK_AND_ADMIN_UP_REQUIRED'}
+    $baselinePath=Join-Path $windowRoot 'ETH1_NETWORK_BASELINE.private.json'
+    if(Test-Path -LiteralPath $baselinePath){throw 'Refusing network baseline overwrite'}
+    [IO.File]::WriteAllText($baselinePath,($routeNetworkBaseline|ConvertTo-Json -Depth 8),$utf8)
+    $routeNetworkBaselineHash=(Get-FileHash -LiteralPath $baselinePath).Hash
+}
 foreach ($board in @('A','B')) {
     Assert-Platform -Board $board -Phase 'baseline'
     Invoke-Remote -Board $board -Step 'tools-before' -CommandText 'env -i PATH=/system/bin:/system/xbin /system/bin/sh -c ''for mdds_tool in cat readlink stat sha256sum mv env timeout; do command -v "$mdds_tool" || exit 3; done''' | Out-Null
@@ -355,6 +422,37 @@ try {
     $windowFailure = $_.Exception.Message
     [IO.File]::WriteAllText((Join-Path $windowRoot 'window-failure.txt'), $windowFailure, $utf8)
 } finally {
+    if ($cfg.PSObject.Properties['route_lifecycle_native']) {
+        # Compensate even if the data controller/down acknowledgement was lost.
+        # Only the explicitly authorized A/eth1 is touched; no route/IP rewrite.
+        $upCaptureConfirmed=$false
+        try {
+            Invoke-RouteNetworkCapture -Step 'route-eth1-finally-up'|Out-Null
+            $upCaptureConfirmed=$true
+        }catch{$cleanupFailures.Add('ETH1_UP_COMMAND_UNCONFIRMED:'+ $_.Exception.Message)}
+        try {
+            $baselinePath=Join-Path $windowRoot 'ETH1_NETWORK_BASELINE.private.json'
+            if($null -eq $routeNetworkBaseline -or (Get-FileHash -LiteralPath $baselinePath).Hash -cne $routeNetworkBaselineHash){throw 'ETH1_FROZEN_NETWORK_BASELINE_CHANGED_OR_MISSING'}
+            $expected=$routeNetworkBaseline|ConvertTo-Json -Depth 8 -Compress
+            $restored=$false;$restoreClock=[Diagnostics.Stopwatch]::StartNew()
+            # Bounded read-only recovery observation, not repeated UP or a
+            # rewrite of addresses, routes, another interface or permissions.
+            for($poll=0;$poll -lt 10;$poll++){
+                try {
+                    $current=Read-RouteNetworkState ('route-eth1-finally-'+$poll) -GroupClock $restoreClock
+                    if(($current|ConvertTo-Json -Depth 8 -Compress) -ceq $expected){$restored=$true;break}
+                }catch{
+                    if($_.Exception.Message -in @('ROUTE_NETWORK_CAPTURE_INCOMPLETE','ROUTE_NETWORK_GROUP_DEADLINE','ROUTE_BOUND_CAPTURE_INPUT_DRIFT')){throw}
+                    # A complete temporary address-less observation can be
+                    # rechecked within the same group deadline, never by mutation.
+                }
+                if($restoreClock.Elapsed.TotalSeconds -ge 17){break}
+                if($poll -lt 9){Start-Sleep -Milliseconds 1000}
+            }
+            if(-not $restored){throw 'ETH1_ORIGINAL_LINK_IPV4_AND_ROUTES_NOT_RESTORED'}
+            [IO.File]::WriteAllText((Join-Path $windowRoot 'ETH1_RESTORATION.json'),(@{side='A';interface='eth1';up_command_capture_confirmed=$upCaptureConfirmed;physical_state_verified=$true;admin_up_verified=$true;link_verified=$true;ipv4_verified=$true;routes_verified=$true;baseline_sha256=$routeNetworkBaselineHash.ToLowerInvariant();sdk_quiescence='NOT_PROVEN'}|ConvertTo-Json),$utf8)
+        } catch { $cleanupFailures.Add('ETH1_RESTORATION_FAILED:'+ $_.Exception.Message) }
+    }
     $guardBoards = @($attempted.ToArray())
     foreach ($board in $guardBoards) {
         try {
@@ -458,7 +556,8 @@ if ($cfg.scenario -ceq 'ROS2_DSOFTBUS') {
     $rosAnalyzer=Join-Path $repoRoot $(if($nativeReaccept){'scripts/public_socket/analyze_bounded_native_reaccept.py'}else{'scripts/public_socket/analyze_ros2.py'})
     if ((Get-FileHash -LiteralPath $rosAnalyzer).Hash.ToLowerInvariant() -cne $cfg.analyzer_sha256) {throw 'Formal ROS analyzer changed after admission'}
     $sceneArgs = if($nativeReaccept){@('--order',[string]$cfg.bounded_native_reaccept.order)}else{@('--mode','dual')}
-    & python $rosAnalyzer --run $cfg.run @sceneArgs --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --output (Join-Path $windowRoot 'ros-analysis.json') 1> (Join-Path $windowRoot 'ros-analysis.stdout.log') 2> (Join-Path $windowRoot 'ros-analysis.stderr.log')
+    [string[]]$routeArgs = @(if($cfg.PSObject.Properties['route_lifecycle_native']){'--route-lifecycle-native'})
+    & python $rosAnalyzer --run $cfg.run @sceneArgs @routeArgs --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --output (Join-Path $windowRoot 'ros-analysis.json') 1> (Join-Path $windowRoot 'ros-analysis.stdout.log') 2> (Join-Path $windowRoot 'ros-analysis.stderr.log')
     $rosAnalysisExit=$LASTEXITCODE
     [IO.File]::WriteAllText((Join-Path $windowRoot 'ros-analysis.rc'),[string]$rosAnalysisExit,$utf8)
     if ($rosAnalysisExit -ne 0) {exit 1}
@@ -467,7 +566,7 @@ if ($cfg.scenario -ceq 'ROS2_DSOFTBUS') {
     } else {
         $nativeAnalyzer=Join-Path $repoRoot 'scripts/public_socket/analyze_ros2_native.py'
         if ((Get-FileHash -LiteralPath $nativeAnalyzer).Hash.ToLowerInvariant() -cne $cfg.native_analyzer_sha256) {throw 'ROS native analyzer changed after admission'}
-        & python $nativeAnalyzer --run $cfg.run --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --a-stderr (Join-Path $windowRoot 'A.raw.stderr.log') --b-stderr (Join-Path $windowRoot 'B.raw.stderr.log') --output (Join-Path $windowRoot 'ros-native-analysis.json') 1> (Join-Path $windowRoot 'ros-native-analysis.stdout.log') 2> (Join-Path $windowRoot 'ros-native-analysis.stderr.log')
+        & python $nativeAnalyzer --run $cfg.run @routeArgs --a (Join-Path $windowRoot 'A.raw.stdout.log') --b (Join-Path $windowRoot 'B.raw.stdout.log') --a-stderr (Join-Path $windowRoot 'A.raw.stderr.log') --b-stderr (Join-Path $windowRoot 'B.raw.stderr.log') --output (Join-Path $windowRoot 'ros-native-analysis.json') 1> (Join-Path $windowRoot 'ros-native-analysis.stdout.log') 2> (Join-Path $windowRoot 'ros-native-analysis.stderr.log')
         $nativeExit=$LASTEXITCODE
         [IO.File]::WriteAllText((Join-Path $windowRoot 'ros-native-analysis.rc'),[string]$nativeExit,$utf8)
         if ($nativeExit -ne 0) {

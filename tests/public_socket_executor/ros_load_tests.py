@@ -71,5 +71,26 @@ class RosLoad(unittest.TestCase):
         self.env.pop('FDDST_BOUNDED_NATIVE_SCENE');self.write_env();self.assertFalse(self.check()['complete'])
     def test_ordinary_scene_refuses_native_environment(self):
         self.env['FDDST_BOUNDED_NATIVE_SCENE']='BOUNDED_NORMAL_ONCE';self.write_env();self.assertFalse(self.check()['complete'])
+    def route_scene(self):
+        import hashlib
+        self.config['bounded_native_reaccept']={'contract':'BOUNDED_NORMAL_ONCE'}
+        self.config['route_lifecycle_native']=dict(contract='A_ETH1_ONE_RETURN',trigger=dict(side='A',interface='eth1',cycles=1,max_offline_seconds=90),offline_ordinal=1001,offline_total=4,authorization=dict(path=str(self.directory/'synthetic-authority.json'),sha256='a'*64))
+        freeze=self.directory/'route-freeze.json'
+        freeze.write_text(json.dumps(dict(route_lifecycle_native=self.config['route_lifecycle_native'],bounded_native_reaccept=self.config['bounded_native_reaccept'])),encoding='utf-8')
+        self.config['task_contract']=dict(freeze_path=str(freeze),freeze_sha256=hashlib.sha256(freeze.read_bytes()).hexdigest())
+        self.env['FDDST_BOUNDED_NATIVE_SCENE']='ROUTE_RETURN_ONCE';self.write_env()
+    def test_route_scene_matches_exact_frozen_mode(self):
+        self.route_scene();result=self.check();self.assertTrue(result['complete'],result['errors'])
+    def test_route_scene_refuses_legacy_or_arbitrary_environment(self):
+        self.route_scene()
+        for scene in ('BOUNDED_NORMAL_ONCE','ARBITRARY',''):
+            with self.subTest(scene=scene):
+                self.env['FDDST_BOUNDED_NATIVE_SCENE']=scene;self.write_env();self.assertFalse(self.check()['complete'])
+    def test_route_scene_requires_native_and_frozen_contract(self):
+        self.route_scene();self.config.pop('bounded_native_reaccept');self.assertFalse(self.check()['complete'])
+        self.route_scene();self.config.pop('route_lifecycle_native');self.assertFalse(self.check()['complete'])
+        self.route_scene();self.config['route_lifecycle_native']['trigger']['interface']='wlan0';self.assertFalse(self.check()['complete'])
+        self.route_scene();self.config['task_contract']['freeze_sha256']='0'*64;self.assertFalse(self.check()['complete'])
+        self.route_scene();self.config.pop('task_contract');self.assertFalse(self.check()['complete'])
 
 if __name__=='__main__':unittest.main()

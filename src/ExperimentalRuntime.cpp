@@ -102,4 +102,7 @@ BoundedConnectionSnapshot RuntimeProbeAccess::ObserveConnection(const experiment
 void RuntimeProbeAccess::SealBoundedAdmission(experimental::Runtime& runtime) noexcept {
     runtime.impl_->loop->SealBoundedAdmission();
 }
+NativeRouteSnapshot RuntimeProbeAccess::ObserveRoute(const experimental::Runtime& runtime) noexcept {
+    return runtime.impl_->loop->ObserveRoute();
+}
 }

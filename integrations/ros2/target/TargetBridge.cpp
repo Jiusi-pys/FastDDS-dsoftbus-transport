@@ -150,9 +150,10 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         if(bounded_native){
             const auto expected="/data/local/tmp/mdds_dds_"+owner->run+"_"+(side?"B":"A")+"/control.NATIVE_REACCEPT";
             if(values.at("native_reaccept_control")!=expected)throw std::runtime_error("native control window path");
-            auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,values.at("native_reaccept_order")=="outgoing-first",expected);
+            auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,values.at("native_reaccept_order")=="outgoing-first",expected,false,routes);
+            if(routes)owner->node_diagnostic_close=[control]{control->ExportNodeDiagnostics();};
             if(!phase0::RuntimeProbeAccess::BoundedReplacementGate(*owner->runtime,[control]{return control->PermitReplacement();}))throw std::runtime_error("native replacement gate installation");
-            owner->before_pump=[control]{try{return control->Step();}catch(...){control->Refuse();return true;}};
+            owner->before_pump=[control]{try{return control->Step();}catch(const std::exception& error){control->Refuse(error.what());return true;}catch(...){control->Refuse();return true;}};
         }
         if (!owner->runtime->SetPreConnectGate([owner, release=values.at("connect_release")] { return await_connect(owner,release); }))
             throw std::runtime_error("gate installation failed");

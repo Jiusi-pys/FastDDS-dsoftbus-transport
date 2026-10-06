@@ -444,11 +444,12 @@ bool NativeEgressBridge::Resolve(const RuntimeCeilingLease& lease,const Route& r
     if(s.sealed) return false;
     const auto route=NativeFindRoute(s.config.directory,r.key);
     if(route==no_index||s.config.directory.routes[route].route_version!=r.route_version) return false;
+    output={r.key,s.operational[route].version,0,true,s.operational[route].online};
     const auto owner=s.ReadyRouteOwner(route);
     if(owner==no_index) return false;
     const auto& f=s.owners[owner].facts;
     if(f.close_intent||f.phase!=NativeOwnerPhase::Ready) return false;
-    output={r.key,s.operational[route].version,f.generation};return true;
+    output.generation=f.generation;return true;
 }
 NativeStatus NativeEgressBridge::Admit(const std::shared_ptr<NativeState>& s,EgressState& r,
         const RuntimeIdentityHandle& identity,const Route& route,std::uint64_t generation,
@@ -731,6 +732,17 @@ try {
 bool NativeOwnerTable::RouteAvailable(const RouteKey& key) const noexcept {
     std::lock_guard<std::mutex> lock(state_->gate);const auto route=NativeFindRoute(state_->config.directory,key);
     return !state_->sealed&&route!=no_index&&state_->operational[route].online;
+}
+NativeRouteSnapshot NativeOwnerTable::ObserveRoute(const RouteKey& key) const noexcept {
+    std::lock_guard<std::mutex> lock(state_->gate);
+    NativeRouteSnapshot out;out.sealed=state_->sealed;
+    const auto route=NativeFindRoute(state_->config.directory,key);
+    if(route==no_index)return out;
+    const auto& op=state_->operational[route];out.found=true;
+    out.available=!state_->sealed&&op.online;out.resolution_pending=op.pending;
+    out.resolution_inflight=op.inflight;out.route_version=op.version;
+    out.request_version=op.inflight?op.inflight_version:0;
+    return out;
 }
 NativeResult<std::unique_ptr<NativeOwnerTable>> NativeOwnerTable::Build(const NativeTableConfiguration& input) noexcept
 {

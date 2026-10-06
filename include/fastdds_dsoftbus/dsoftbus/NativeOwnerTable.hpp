@@ -11,6 +11,12 @@
 
 namespace fastdds_dsoftbus::dsoftbus {
 class NativeOwnerTable;
+// Read-only operational observation. Revisions are local request identities,
+// never SDK event epochs; no route or identity data is exposed.
+struct NativeRouteSnapshot {
+    bool found=false,available=false,resolution_pending=false,resolution_inflight=false,sealed=false;
+    std::uint64_t route_version=0,request_version=0;
+};
 class NativeOwnerTableTestAccess;
 class NamespaceLease;
 class NativeOwnerLease;
@@ -417,6 +423,7 @@ public:
     NativeStatus CompleteNodeResolution(const NodeRouteRequest&,const v1::RouteResult&) noexcept;
     NativeResult<Route> OperationalRoute(const NativeOwnerLease&) const noexcept;
     bool RouteAvailable(const RouteKey&) const noexcept;
+    NativeRouteSnapshot ObserveRoute(const RouteKey&) const noexcept;
     void RequestServiceClose() noexcept;
     NativeUsageSnapshot SnapshotUsage() const noexcept;
 private:

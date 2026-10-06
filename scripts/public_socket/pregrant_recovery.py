@@ -52,7 +52,52 @@ def process_still_live(identity):
     need(isinstance(identity,dict) and type(identity.get('pid')) is int and identity['pid']>0 and isinstance(identity.get('birth'),str) and re.fullmatch('[0-9]+',identity['birth']),'MISSING_LOCAL_PROCESS_IDENTITY')
     return process_identity(identity['pid'])==identity
 
-def collect_child(child,timeout):
+class CaptureLimitExceeded(RuntimeError):
+    def __init__(self,out,err):
+        super().__init__('OWNED_CHILD_CAPTURE_LIMIT');self.stdout=out;self.stderr=err
+
+def collect_child(child,timeout,max_output_bytes=None):
+    if max_output_bytes is not None:
+        need(os.name=='nt' and type(max_output_bytes) is int and max_output_bytes>0,'BOUNDED_WINDOWS_PIPE_CAPTURE_INPUT')
+        import ctypes, msvcrt
+        kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+        peek=kernel.PeekNamedPipe
+        peek.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_uint32,ctypes.c_void_p,ctypes.POINTER(ctypes.c_uint32),ctypes.c_void_p]
+        peek.restype=ctypes.c_int
+        chunks=[bytearray(),bytearray()];total=0;timed_out=False;overflow=False
+        deadline=time.monotonic()+timeout;drain_deadline=None
+        pipes=(child.stdout,child.stderr);eof=[False,False]
+        need(all(pipe is not None for pipe in pipes),'BOUNDED_CAPTURE_REQUIRES_OWNED_PIPES')
+        while True:
+            progress=False
+            for index,pipe in enumerate(pipes):
+                if eof[index]:continue
+                available=ctypes.c_uint32()
+                if not peek(msvcrt.get_osfhandle(pipe.fileno()),None,0,None,ctypes.byref(available),None):
+                    need(ctypes.get_last_error() in (109,232),'OWNED_PIPE_PEEK_FAILED');eof[index]=True;continue
+                if available.value:
+                    data=os.read(pipe.fileno(),min(available.value,65536,max_output_bytes-total+1))
+                    if not data:eof[index]=True
+                    allowed=min(len(data),max_output_bytes-total)
+                    chunks[index].extend(data[:allowed]);total+=allowed;progress=bool(data) or progress
+                    if len(data)>allowed:overflow=True;break
+            now=time.monotonic()
+            if overflow or (not timed_out and now>=deadline and child.poll() is None):
+                timed_out=not overflow
+                if child.poll() is None:child.kill() # This client PID only, never HDC daemon/tree.
+                drain_deadline=now+2
+                if overflow:break
+            if child.poll() is not None:
+                if drain_deadline is None:drain_deadline=now+2
+                if all(eof):break
+            if drain_deadline is not None and now>=drain_deadline:break
+            time.sleep(.005)
+        complete=child.poll() is not None and all(eof)
+        if not complete:
+            try:child.wait(timeout=2)
+            except subprocess.TimeoutExpired:pass
+        if overflow:raise CaptureLimitExceeded(bytes(chunks[0]),bytes(chunks[1]))
+        return bytes(chunks[0]),bytes(chunks[1]),timed_out,complete
     try:
         out,err=child.communicate(timeout=timeout);return out,err,False,True
     except subprocess.TimeoutExpired:

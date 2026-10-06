@@ -1,6 +1,12 @@
 #include <fastdds_dsoftbus/dsoftbus/DSoftBusSenderResource.hpp>
 
 #include <utility>
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+#include "../probes/PublicSocketRuntimeTrace.hpp"
+extern "C" void FastddsDsoftbusObserveSenderSubmission(std::uint64_t sender,
+        const void* data,std::size_t bytes,int status,bool route_known,bool route_available,
+        std::uint64_t route_revision,bool queue_admitted) noexcept;
+#endif
 
 namespace fastdds_dsoftbus::dsoftbus {
 DSoftBusSenderResource::DSoftBusSenderResource(std::shared_ptr<RuntimeSendPath> runtime)
@@ -77,6 +83,20 @@ bool DSoftBusSenderResource::Send(const std::vector<NetworkBuffer>& buffers, std
     else if (expired_before_gate || runtime_->Now() >= deadline)
         last_report_ = RuntimeSendReport{RuntimeSendStatus::DeadlineExpired};
     else last_report_ = runtime_->Submit(buffers, bytes, begin, end, deadline, priority);
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+    // Process-local diagnostic token only. Never an owner, admission capability,
+    // device identity or SDK event epoch. Capture keeps no payload pointer.
+    runtime_probe::TraceEvent("Sender_submit_result",reinterpret_cast<std::uintptr_t>(this),
+            -1,-1,static_cast<int>(last_report_->status),bytes);
+    // The observer reads only a complete original single-buffer frame. Other
+    // layouts remain explicitly uncorrelated; do not flatten/copy/reframe them.
+    const bool complete=buffers.size()==1&&buffers.front().buffer&&buffers.front().size>=bytes;
+    FastddsDsoftbusObserveSenderSubmission(reinterpret_cast<std::uintptr_t>(this),
+            complete?buffers.front().buffer:nullptr,complete?bytes:0,static_cast<int>(last_report_->status),
+            last_report_->unresolved_route.has_value(),last_report_->unresolved_route&&last_report_->unresolved_route->route_available,
+            last_report_->unresolved_route?last_report_->unresolved_route->route_version:0,
+            last_report_->queue_result&&*last_report_->queue_result==SendAdmission::Accepted);
+#endif
     return last_report_->status == RuntimeSendStatus::Accepted;
 }
 bool DSoftBusSenderResource::Release()

@@ -17,6 +17,7 @@ struct BridgeOwner {
     unsigned side = 0;
     bool public_delete_completed = false;
     std::function<void()> diagnostic_control;
+    std::function<void()> node_diagnostic_close; // observation only, after local Close
     std::function<bool()> before_pump; // explicit Host scheduling fixture only
 
     void StartPump() {
@@ -44,7 +45,9 @@ struct BridgeOwner {
     int CloseLocal() {
         stop = true;
         if (pump.joinable()) pump.join();
-        if (!runtime || !runtime->Close()) return 1;
+        const bool closed=runtime&&runtime->Close();
+        if(node_diagnostic_close){try{node_diagnostic_close();}catch(...){failed=true;}}
+        if (!closed) return 1;
         return failed.load() ? 2 : 0;
     }
 };

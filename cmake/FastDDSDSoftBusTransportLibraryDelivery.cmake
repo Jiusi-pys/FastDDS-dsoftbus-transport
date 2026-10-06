@@ -59,7 +59,7 @@ if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME OR FASTDDS_DSOFTBUS_BUILD_EXPERIM
         else()
             target_compile_options(ros2_startup_diagnostics_tests PRIVATE -UNDEBUG)
         endif()
-        foreach(_case normal local socket listen gate gate_throw bind match cleanup capacity capacity_reject null_receiver v1_locator v1_locator_bad_text)
+        foreach(_case normal local socket listen gate gate_throw bind match cleanup capacity capacity_reject null_receiver v1_locator v1_locator_bad_text node_api_types)
             add_test(NAME dsoftbus.ros2_startup.${_case} COMMAND ros2_startup_diagnostics_tests ${_case})
             set_tests_properties(dsoftbus.ros2_startup.${_case} PROPERTIES TIMEOUT 20)
         endforeach()

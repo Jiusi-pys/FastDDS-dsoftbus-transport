@@ -10,9 +10,9 @@ import re
 from analyze_ros2 import analyze,rows
 
 
-def correlate(texts,run,ledger=None):
+def correlate(texts,run,ledger=None,route_lifecycle_native=False):
     ledger=analyze(texts,run,['reliable','best_effort']) if ledger is None else ledger
-    errors=list(ledger['errors']);frames={};sockets={};matched={}
+    errors=list(ledger['errors']);frames={};sockets={};matched={};offline_matched={s:0 for s in 'AB'}
     for side in 'AB':
         frames[side]={'SDK_SEND':set(),'SDK_INGRESS':set()};matched[side]=0
         sockets[side]={'SDK_SEND':{},'SDK_INGRESS':{}}
@@ -50,6 +50,7 @@ def correlate(texts,run,ledger=None):
         seen=set()
         try:
             for sample in rows(texts[side],'ROS_TAKE'):
+                is_offline=route_lifecycle_native and sample.get('segment')=='OFFLINE'
                 if not re.fullmatch(r'[1-9][0-9]*',sample.get('publication_sequence','')):raise ValueError('DDS_SEQUENCE_NOT_OBSERVED')
                 gid=sample.get('gid','')
                 if not re.fullmatch(r'(?:[0-9a-f]{32}|[0-9a-f]{48}|[0-9a-f]{64})',gid):raise ValueError('RMW_GID_FORMAT')
@@ -62,21 +63,24 @@ def correlate(texts,run,ledger=None):
                     after={s:next(x for x in rows(texts[s],'NATIVE_REACCEPT_EVENT') if x.get('stage')=='OWNER_PUBLISHED') for s in 'AB'}
                     expected_send=int(after['A']['new_id']) if peer=='A' else int(before['B']['outgoing_id'])
                     expected_receive=int(after['B']['new_id']) if side=='B' else int(before['A']['accepted_id'])
+                    if route_lifecycle_native:
+                        expected_send=int(after[peer]['outgoing_id']);expected_receive=int(after[side]['accepted_id'])
                     if expected_send not in sockets[peer]['SDK_SEND'].get(key,set()) or expected_receive not in sockets[side]['SDK_INGRESS'].get(key,set()):raise ValueError('POST_REPLACEMENT_SOCKET_CHAIN_MISSING')
-                matched[side]+=1
+                if is_offline:offline_matched[side]+=1
+                else:matched[side]+=1
         except (ValueError,KeyError,TypeError,StopIteration) as error:errors.append('correlation:'+side+':'+str(error))
     if matched!={'A':10,'B':10}:errors.append('DIRECTIONAL_NATIVE_TOPIC_SET_INCOMPLETE')
-    return dict(run=run,**{'pass':not errors},errors=errors,matched_topic_takes=matched,
+    return dict(run=run,**{'pass':not errors},errors=errors,matched_topic_takes=matched,offline_history_takes=offline_matched,
                 ros=ledger,scope='LOGICAL_DDS_SAMPLE_TO_STRUCTURAL_SDK_SEND_INGRESS_NOT_PHYSICAL_EPOCH',
                 sdk_epoch='NOT_PROVEN',sdk_drain='NOT_PROVEN')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--run',required=True);p.add_argument('--a',type=Path,required=True);p.add_argument('--b',type=Path,required=True);p.add_argument('--a-stderr',type=Path,required=True);p.add_argument('--b-stderr',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--run',required=True);p.add_argument('--a',type=Path,required=True);p.add_argument('--b',type=Path,required=True);p.add_argument('--a-stderr',type=Path,required=True);p.add_argument('--b-stderr',type=Path,required=True);p.add_argument('--route-lifecycle-native',action='store_true');p.add_argument('--output',type=Path,required=True);a=p.parse_args()
     texts={s:Path(getattr(a,s.lower())).read_text(encoding='utf-8-sig')+'\n'+Path(getattr(a,s.lower()+'_stderr')).read_text(encoding='utf-8-sig') for s in 'AB'}
     native=[x for x in rows(texts['A'],'NATIVE_REACCEPT_EVENT') if x.get('stage')=='ARMED']
     if native:
         from analyze_bounded_native_reaccept import analyze as bounded_analyze
         origin_a=any(x.get('stage')=='LOCAL_CLOSE_RETURNED' for x in rows(texts['A'],'NATIVE_REACCEPT_EVENT'))
-        result=correlate(texts,a.run,bounded_analyze(texts,a.run,'outgoing-first' if origin_a else 'accepted-first'))
+        result=correlate(texts,a.run,bounded_analyze(texts,a.run,'outgoing-first' if origin_a or a.route_lifecycle_native else 'accepted-first',route_lifecycle='native' if a.route_lifecycle_native else False),route_lifecycle_native=a.route_lifecycle_native)
     else:result=correlate(texts,a.run)
     a.output.write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8');raise SystemExit(0 if result['pass'] else 1)

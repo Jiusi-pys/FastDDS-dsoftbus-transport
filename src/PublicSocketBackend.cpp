@@ -68,6 +68,8 @@ struct PublicSocketState {
     bool node_subscribed=false,node_sealed=false,node_registering=false;
     BackendStatus node_cleanup_status=BackendStatus::None;
     std::shared_ptr<const std::array<char,65>> peer_snapshot;
+    std::uint64_t peer_snapshot_version=0;
+    bool peer_snapshot_changed=false;
     const bool dual;
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK
     void(*before_capability)(void*) noexcept=nullptr;
@@ -210,6 +212,7 @@ template<std::size_t N>struct Entry {
         if(!info)return;
         const auto* end=static_cast<const char*>(std::memchr(info->networkId,0,sizeof(info->networkId)));
         if(!end||end==info->networkId||end-info->networkId>64)return;
+        FASTDDS_DSOFTBUS_PROBE_EVENT(online?"OnNodeOnline_enter":"OnNodeOffline_enter",N,-1,-1,0,0);
         Dispatch<N>([&](auto& s){std::shared_ptr<const std::function<void(bool,std::string_view)>> sink;
             {std::lock_guard<std::mutex> lock(s.gate);if(s.node_sealed||!s.node_sink)return;sink=s.node_sink;}
             (*sink)(online,std::string_view(info->networkId,static_cast<std::size_t>(end-info->networkId)));});
@@ -261,13 +264,14 @@ BackendStatus PublicSocketBackend::ConfigureEntrance(const RecordEntrance& entry
 }
 namespace {
 BackendSocketResult CreateSocket(const std::shared_ptr<detail::PublicSocketState>& s,ProviderCallbacks callbacks,bool listening){
-    SocketInfo info{};std::shared_ptr<const std::array<char,65>> peer_snapshot;
+    SocketInfo info{};std::shared_ptr<const std::array<char,65>> peer_snapshot;std::uint64_t route_version=0;bool network_changed=false;
     {std::lock_guard<std::mutex> lock(s->gate);
         auto& attempted=listening?s->listener_attempted:s->attempted;
         const bool configured=listening?s->observation.listener_configured:s->observation.configured;
         if(!s->valid||!configured||attempted||s->observation.closed||!callbacks){s->Reject(PublicSocketOperation::Socket,BackendStatus::InvalidState);return {BackendStatus::InvalidState,{}};}
         attempted=true;(listening?s->listener_callbacks:s->callbacks)=std::move(callbacks);s->Enter(PublicSocketOperation::Socket);
-        info=listening?s->listener_info:s->info;peer_snapshot=s->peer_snapshot;if(!listening&&peer_snapshot)info.peerNetworkId=const_cast<char*>(peer_snapshot->data());}
+        info=listening?s->listener_info:s->info;peer_snapshot=s->peer_snapshot;route_version=s->peer_snapshot_version;network_changed=s->peer_snapshot_changed;if(!listening&&peer_snapshot)info.peerNetworkId=const_cast<char*>(peer_snapshot->data());}
+    if(!listening&&peer_snapshot)FASTDDS_DSOFTBUS_PROBE_EVENT("NodeSocket_route_binding",s->observation.entry_index,-1,-1,network_changed?1:0,route_version);
     try{FASTDDS_DSOFTBUS_PROBE_EVENT("Socket_enter",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),-1,0,0);const auto id=::Socket(info);FASTDDS_DSOFTBUS_PROBE_EVENT("Socket_return",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),id,id,0);std::lock_guard<std::mutex> lock(s->gate);
         if(id>=0){(listening?s->listener_socket:s->socket)=id;
             if(listening||s->config.role==RecordRole::Server)s->observation.listener_socket=id;else s->observation.outgoing_socket=id;
@@ -283,13 +287,17 @@ BackendStatus PublicSocketBackend::SubscribeNodes(std::function<void(bool,std::s
     std::size_t index;
     {std::lock_guard<std::mutex> lock(state_->gate);if(state_->node_subscribed||state_->node_sealed||state_->node_registering)return BackendStatus::InvalidState;
         index=state_->observation.entry_index;if(index>=detail::bridge_count)return BackendStatus::InvalidState;state_->node_sink=std::make_shared<const std::function<void(bool,std::string_view)>>(std::move(sink));state_->node_registering=true;}
+    FASTDDS_DSOFTBUS_PROBE_EVENT("RegNode_enter",index,-1,-1,0,0);
     const auto code=::RegNodeDeviceStateCb(state_->package.data(),&detail::NodeListener(index));
+    FASTDDS_DSOFTBUS_PROBE_EVENT("RegNode_return",index,-1,-1,code,0);
     {std::lock_guard<std::mutex> lock(state_->gate);state_->node_registering=false;
         if(code!=0){state_->node_sink={};state_->node_sealed=true;return BackendStatus::CallbackFailure;}
         if(!state_->node_sealed){state_->node_subscribed=true;return BackendStatus::None;}}
     // Close may seal during Reg. Reconcile the successful original registration
     // before Open finishes; never publish it into a closed runtime.
+    FASTDDS_DSOFTBUS_PROBE_EVENT("UnregNode_enter",index,-1,-1,0,0);
     const auto cleanup=::UnregNodeDeviceStateCb(&detail::NodeListener(index));
+    FASTDDS_DSOFTBUS_PROBE_EVENT("UnregNode_return",index,-1,-1,cleanup,0);
     if(cleanup!=0){std::lock_guard<std::mutex> lock(state_->gate);state_->node_cleanup_status=BackendStatus::CallbackFailure;return BackendStatus::CallbackFailure;}
     return BackendStatus::ProviderStopped;
 }
@@ -297,7 +305,9 @@ BackendStatus PublicSocketBackend::UnsubscribeNodes(){
     std::size_t index;
     {std::lock_guard<std::mutex> lock(state_->gate);state_->node_sealed=true;state_->node_sink={};
         if(!state_->node_subscribed)return state_->node_cleanup_status;state_->node_subscribed=false;index=state_->observation.entry_index;}
+    FASTDDS_DSOFTBUS_PROBE_EVENT("UnregNode_enter",index,-1,-1,0,0);
     const auto cleanup=::UnregNodeDeviceStateCb(&detail::NodeListener(index));
+    FASTDDS_DSOFTBUS_PROBE_EVENT("UnregNode_return",index,-1,-1,cleanup,0);
     std::lock_guard<std::mutex> lock(state_->gate);if(cleanup!=0)state_->node_cleanup_status=BackendStatus::CallbackFailure;
     return state_->node_cleanup_status;
 }
@@ -308,12 +318,16 @@ BackendStatus PublicSocketBackend::ConfigurePeerRoute(const Route& route){
        route.fields.local_initiator_name!=state_->config.identity.service_name)return BackendStatus::InvalidIdentity;
     auto buffer=std::make_shared<std::array<char,65>>();std::copy(route.fields.remote_network_id.begin(),route.fields.remote_network_id.end(),buffer->begin());
     std::lock_guard<std::mutex> lock(state_->gate);if(state_->attempted||state_->observation.closed)return BackendStatus::InvalidState;
+    state_->peer_snapshot_version=route.route_version;state_->peer_snapshot_changed=route.fields.remote_network_id!=state_->config.peer_network_id;
     state_->peer_snapshot=std::move(buffer);return BackendStatus::None;
 }
 v1::RouteResult PublicSocketBackend::ResolveNode(const v1::DeviceIdentity& expected,const std::string&){
     if(!RouteLifecycleEnabled())return {};
     NodeBasicInfo* nodes=nullptr;int32_t count=0;
-    if(::GetAllNodeDeviceInfo(state_->package.data(),&nodes,&count)!=0)return {};
+    FASTDDS_DSOFTBUS_PROBE_EVENT("GetAllNodes_enter",0,-1,-1,0,0);
+    const auto query=::GetAllNodeDeviceInfo(state_->package.data(),&nodes,&count);
+    FASTDDS_DSOFTBUS_PROBE_EVENT("GetAllNodes_return",0,-1,-1,query,count>0?static_cast<std::uint64_t>(count):0);
+    if(query!=0)return {};
     struct Release{NodeBasicInfo* p;~Release(){if(p)::FreeNodeInfo(p);}} release{nodes};
     if(count<0||count>32||(count&&!nodes))return {};
     v1::RouteResult result;
@@ -321,9 +335,14 @@ v1::RouteResult PublicSocketBackend::ResolveNode(const v1::DeviceIdentity& expec
         const auto* end=static_cast<const char*>(std::memchr(nodes[i].networkId,0,sizeof(nodes[i].networkId)));
         if(!end||end==nodes[i].networkId||end-nodes[i].networkId>64)continue;
         std::array<uint8_t,UDID_BUF_LEN> identity{};
-        if(::GetNodeKeyInfo(state_->package.data(),nodes[i].networkId,NODE_KEY_UDID,identity.data(),identity.size())!=0)continue;
+        FASTDDS_DSOFTBUS_PROBE_EVENT("GetNodeUdid_enter",i,-1,-1,0,0);
+        const auto key_result=::GetNodeKeyInfo(state_->package.data(),nodes[i].networkId,NODE_KEY_UDID,identity.data(),identity.size());
+        FASTDDS_DSOFTBUS_PROBE_EVENT("GetNodeUdid_return",i,-1,-1,key_result,0);
+        if(key_result!=0)continue;
         const auto* finish=static_cast<const uint8_t*>(std::memchr(identity.data(),0,identity.size()));
-        if(!finish||std::string(reinterpret_cast<const char*>(identity.data()),reinterpret_cast<const char*>(finish))!=expected.udid)continue;
+        const bool matched=finish&&std::string(reinterpret_cast<const char*>(identity.data()),reinterpret_cast<const char*>(finish))==expected.udid;
+        FASTDDS_DSOFTBUS_PROBE_EVENT("NodeIdentity_match",i,-1,-1,matched?1:0,0);
+        if(!matched)continue;
         if(result.route)return {v1::DirectoryStatus::Collision,{}};
         result={v1::DirectoryStatus::Ok,v1::DeviceRoute{expected,std::string(nodes[i].networkId,static_cast<std::size_t>(end-nodes[i].networkId))}};
     }

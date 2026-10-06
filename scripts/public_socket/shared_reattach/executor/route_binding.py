@@ -79,7 +79,7 @@ def completed_query_replay(source_window,archive_manifest=None):
     if source!=task:
         private=json.loads((task/'PRIVATE_CONFIG.json').read_text());current=json.loads((task/'DEVICE_CONTRACT.json').read_text())
         repo=Path(private['repo_root']).resolve();authority=repo/'.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002'
-        require(source.parent==authority/'iterations' and re.fullmatch('iteration-[1-9][0-9]*',source.name) and window.parent==source/'windows' and re.fullmatch('query-[1-9][0-9]*',window.name),'Foreign replay authority/window')
+        require(source.parent==authority/'iterations' and re.fullmatch('iteration-[1-9][0-9]*',source.name) and window.parent==source/'windows' and re.fullmatch('query-[1-9][0-9]*(?:-r(?:[2-9]|[1-9][0-9]+))?',window.name),'Foreign replay authority/window')
         config=json.loads((window/'window.json').read_text());proof=config['task_contract'];freeze=Path(proof['freeze_path']).resolve()
         require(freeze.parent==source and proof['task_root']==str(source) and digest(freeze)==proof['freeze_sha256'] and Path(config['window_root']).resolve()==window,'Original replay freeze/window binding')
         original=json.loads(freeze.read_text());other=json.loads((source/'PRIVATE_CONFIG.json').read_text());materialization=source/'MATERIALIZATION.json'

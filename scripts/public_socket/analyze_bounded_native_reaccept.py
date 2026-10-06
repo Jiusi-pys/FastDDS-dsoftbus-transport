@@ -73,6 +73,9 @@ def analyze(texts, run, order, source='SDK_PUBLIC_SOCKET', route_lifecycle=False
         origin='A' if order=='outgoing-first' else 'B';local=[x for x in records[origin]['NATIVE_REACCEPT_EVENT'] if x.get('stage')=='LOCAL_CLOSE_RETURNED']
         if not route_lifecycle:
             need(len(local)==1 and local[0].get('sdk_shutdown_calls')=='1' and local[0].get('sdk_shutdown_returns')=='1','actual_local_close')
+        elif route_lifecycle=='native':
+            result['route']=analyze_native_route(texts,run)
+            errors.extend(result['route']['errors'])
         else:
             for side in 'AB':
                 events=rows(texts[side],'HOST_NODE_EVENT');queries=rows(texts[side],'HOST_NODE_QUERY')
@@ -90,6 +93,78 @@ def analyze(texts, run, order, source='SDK_PUBLIC_SOCKET', route_lifecycle=False
     result.update(expected_pre=8,expected_post=12,expected_total=20,**{'pass':not errors});return result
 
 
+def analyze_native_route(texts,run):
+    """SDK boundary evidence and rejected new work, separate from DDS write RC."""
+    errors=[];result={'source':'SDK_PUBLIC_NODE','offline_writes':{},'offline_takes':{},'network_id_changed':{},'errors':errors}
+    def need(value,reason):
+        if not value:errors.append(reason)
+    try:
+        for side in 'AB':
+            raw_sdk=rows(texts[side],'ROS_STARTUP_EVENT');by_observation={}
+            for item in raw_sdk:
+                key=item.get('observation_seq');old=by_observation.get(key)
+                # The bounded control exporter and final diagnostic flush may
+                # expose the same immutable capture. Contradictions are errors.
+                if old is not None:
+                    need(all(old.get(k)==item.get(k) for k in ('operation','entry','value','value_type','detail_value','source','run','side','sdk_return_observed','callback_observed','local_result_observed')),'route_conflicting_sdk_capture:'+side)
+                else:by_observation[key]=item
+            sdk=list(by_observation.values())
+            need(all(x.get('source')=='REAL_TARGET' for x in sdk),'route_non_target_sdk:'+side)
+            def successful(operation,kind):
+                flag={'SDK_RC':'sdk_return_observed','CALLBACK_STATUS':'callback_observed','LOCAL_STATUS':'local_result_observed'}[kind]
+                return [x for x in sdk if x.get('operation')==operation and x.get('value_type')==kind and x.get('value')=='0' and x.get(flag)=='1' and x.get('run')==run and x.get('side')==side]
+            need(bool(successful('RegNode_return','SDK_RC')),'route_registration:'+side)
+            offline=successful('OnNodeOffline_enter','CALLBACK_STATUS');online=successful('OnNodeOnline_enter','CALLBACK_STATUS')
+            processed_off=successful('NodeOffline_processed','LOCAL_STATUS');processed_on=successful('NodeOnline_processed','LOCAL_STATUS')
+            need(bool(offline) and bool(online) and bool(processed_off) and bool(processed_on),'route_platform_callback_chain:'+side)
+            queries=successful('GetAllNodes_return','SDK_RC');identities=successful('GetNodeUdid_return','SDK_RC')
+            need(bool(queries) and bool(identities),'route_public_resolver:'+side)
+            if offline and online and processed_off and processed_on and queries and identities:
+                seq=lambda x:int(x['observation_seq'])
+                need(min(map(seq,offline))<min(map(seq,processed_off))<min(map(seq,online))<=min(map(seq,processed_on))<max(map(seq,queries))<max(map(seq,identities)),'route_sdk_causality:'+side)
+            events=rows(texts[side],'NATIVE_ROUTE_EVENT')
+            need([x.get('stage') for x in events]==['OFFLINE','RESOLVED'] and all(x.get('run')==run and x.get('side')==side and x.get('source')=='SDK_PUBLIC_NODE' and x.get('sdk_epoch')=='NOT_PROVEN' for x in events),'route_product_events:'+side)
+            if len(events)!=2:continue
+            off,on=events
+            need(off.get('available')=='0' and on.get('available')=='1' and int(on['revision'])>int(off['revision']),'route_publication:'+side)
+            matched_identities=[x for x in sdk if x.get('operation')=='NodeIdentity_match' and x.get('value_type')=='LOCAL_STATUS' and x.get('local_result_observed')=='1' and x.get('value')=='1']
+            bindings=[x for x in sdk if x.get('operation')=='NodeSocket_route_binding' and x.get('value_type')=='LOCAL_STATUS' and x.get('local_result_observed')=='1' and x.get('detail_value')==on['revision'] and x.get('value') in ('0','1')]
+            owners=[x for x in rows(texts[side],'NATIVE_REACCEPT_EVENT') if x.get('stage')=='OWNER_PUBLISHED']
+            need(bool(matched_identities) and len(bindings)==1 and len(owners)==1,'route_resolved_sdk_socket_binding:'+side)
+            if matched_identities and len(bindings)==1 and len(owners)==1:
+                binding=bindings[0];owner=owners[0];entry=binding.get('entry')
+                calls=[x for x in sdk if x.get('operation')=='Socket_enter' and x.get('sdk_entered')=='1' and x.get('entry')==entry and int(x['observation_seq'])>int(binding['observation_seq'])]
+                returned=[x for x in sdk if x.get('operation')=='Socket_return' and x.get('value_type')=='SOCKET_HANDLE' and x.get('sdk_return_observed')=='1' and x.get('entry')==entry and x.get('value')==owner.get('outgoing_id')]
+                need(entry==owner.get('client_entry') and bool(calls) and bool(returned) and max(int(x['observation_seq']) for x in matched_identities)<int(binding['observation_seq'])<min(int(x['observation_seq']) for x in calls)<max(int(x['observation_seq']) for x in returned),'route_real_replacement_socket:'+side)
+                result['network_id_changed'][side]=binding['value']=='1'
+            submissions=rows(texts[side],'NATIVE_SENDER_SUBMISSION')
+            rejected=[x for x in submissions if x.get('run')==run and x.get('side')==side and x.get('segment')=='OFFLINE' and x.get('route_known')=='1' and x.get('route_sample')=='ADMISSION_GATE' and x.get('available')=='0' and x.get('route_revision')==off['revision'] and x.get('status')=='7' and x.get('queue_admitted')=='0' and x.get('native_work')=='NOT_ENTERED_BY_SUBMISSION' and int(x.get('submission_calls','0'))>0 and x.get('source')=='SDK_PUBLIC_NODE']
+            need(bool(rejected) and all(re.fullmatch('[0-9a-f]{32}',x.get('writer','')) and x.get('sender') and int(x['sequence_lo'])>0 for x in rejected),'route_actual_sender_refusal:'+side)
+            publishers=rows(texts[side],'ROS_PUBLISHER')
+            for qos in ('reliable','best_effort'):
+                pubs=[x for x in publishers if x.get('phase')==qos]
+                need(len(pubs)==1,'route_offline_writer:'+side+qos)
+                if len(pubs)!=1:continue
+                writer=pubs[0].get('gid','')[:32]
+                pre=[x for x in submissions if x.get('segment')=='PRE' and x.get('writer')==writer and x.get('status')=='0' and x.get('queue_admitted')=='1' and x.get('run')==run and x.get('side')==side and x.get('source')=='SDK_PUBLIC_NODE']
+                sequences={int(x['sequence_hi'])*4294967296+int(x['sequence_lo']) for x in pre}
+                original_senders={x.get('sender') for x in pre}
+                # Exactly the two frozen PRE writes precede OFF1001 on the same
+                # original Writer. Retransmission repeats its old sequence;
+                # it cannot satisfy this next-new-write correlation.
+                need(sequences=={1,2},'route_pre_sequence_provenance:'+side+qos)
+                expected=max(sequences)+1 if sequences else -1
+                need(expected==3 and any(x.get('writer')==writer and x.get('sender') in original_senders and int(x['sequence_hi'])*4294967296+int(x['sequence_lo'])==expected for x in rejected),'route_exact_offline_topic_refusal:'+side+qos)
+            writes=[x for x in rows(texts[side],'ROS_WRITE') if x.get('segment')=='OFFLINE']
+            takes=[x for x in rows(texts[side],'ROS_TAKE') if x.get('segment')=='OFFLINE']
+            result['offline_writes'][side]=len(writes);result['offline_takes'][side]=len(takes)
+            need(len(writes)==2 and {x.get('phase') for x in writes}=={'reliable','best_effort'} and all(x.get('ordinal')=='1001' and x.get('payload')==f'{run}:{x["phase"]}:{side}:1001' for x in writes),'route_offline_write_ledger:'+side)
+            peer='B' if side=='A' else 'A'
+            need(len(takes)<=2 and len({x.get('phase') for x in takes})==len(takes) and all(x.get('ordinal')=='1001' and x.get('phase') in ('reliable','best_effort') and x.get('payload')==f'{run}:{x["phase"]}:{peer}:1001' for x in takes),'route_offline_history_ledger:'+side)
+    except (ValueError,KeyError,TypeError,IndexError) as error:errors.append('ROUTE_MALFORMED:'+str(error))
+    result['pass']=not errors;return result
+
+
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--a',type=Path,required=True);parser.add_argument('--b',type=Path,required=True);parser.add_argument('--run',required=True);parser.add_argument('--order',choices=('outgoing-first','accepted-first'),required=True);parser.add_argument('--output',type=Path,required=True)
-    args=parser.parse_args();result=analyze({'A':args.a.read_text(errors='replace'),'B':args.b.read_text(errors='replace')},args.run,args.order);args.output.write_text(json.dumps(result,indent=2)+'\n');raise SystemExit(0 if result['pass'] else 1)
+    parser=argparse.ArgumentParser();parser.add_argument('--a',type=Path,required=True);parser.add_argument('--b',type=Path,required=True);parser.add_argument('--run',required=True);parser.add_argument('--order',choices=('outgoing-first','accepted-first'),required=True);parser.add_argument('--route-lifecycle-native',action='store_true');parser.add_argument('--output',type=Path,required=True)
+    args=parser.parse_args();result=analyze({'A':args.a.read_text(errors='replace'),'B':args.b.read_text(errors='replace')},args.run,args.order,route_lifecycle='native' if args.route_lifecycle_native else False);args.output.write_text(json.dumps(result,indent=2)+'\n');raise SystemExit(0 if result['pass'] else 1)

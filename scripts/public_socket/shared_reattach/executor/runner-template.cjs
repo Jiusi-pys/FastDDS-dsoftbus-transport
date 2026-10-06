@@ -147,18 +147,23 @@ function createController(c,release,admission){
 }
 function createControlRelease(c,directory,{spawn=require('node:child_process').spawn,timeoutMs=7000,drainMs=250}={}){
  if(!path.isAbsolute(c.hdc_path)||!Number.isInteger(timeoutMs)||timeoutMs<1||!Number.isInteger(drainMs)||drainMs<1||drainMs>1000)throw Error('Explicit control executable/deadline required');
- const receipts=[],active=new Map();let sequence=0;const origin=process.hrtime.bigint();
+ const receipts=[],active=new Map();let sequence=0,eth1DownIssued=false;const origin=process.hrtime.bigint();
  const release=(side,stage,metadata)=>new Promise((resolve,reject)=>{
   const cleanup=isRos(c)&&stage==='CLEANUP';
   const runtimeClose=isRos(c)&&c.paired_runtime_close===true&&stage==='RUNTIME_CLOSE';
   const nativeAction=isRos(c)&&c.bounded_native_reaccept&&require('./bounded-native-scene.cjs').ACTIONS.includes(stage);
-  if(nativeAction&&((stage==='NATIVE_END'&&side!==(c.bounded_native_reaccept.order==='outgoing-first'?'A':'B'))||(stage==='NATIVE_REPLACE'&&side!=='A'))){reject(Error('NATIVE_CONTROL_ROLE'));return;}
-  if(!['A','B'].includes(side)||(!phases(c).includes(stage)&&!cleanup&&!runtimeClose&&!nativeAction)||active.size||sequence>=2*phases(c).length+(isRos(c)?2:0)+(isRos(c)&&c.paired_runtime_close===true?2:0)){reject(Error('CONTROL_SCOPE_OR_CAPACITY'));return;}
+  const networkAction=isRos(c)&&c.route_lifecycle_native&&['ETH1_DOWN','ETH1_UP'].includes(stage);
+  if(networkAction&&(side!=='A'||c.route_lifecycle_native.trigger.side!=='A'||c.route_lifecycle_native.trigger.interface!=='eth1'||c.route_lifecycle_native.trigger.cycles!==1)){reject(Error('NETWORK_TRIGGER_SCOPE'));return;}
+  if(stage==='ETH1_DOWN'&&eth1DownIssued){reject(Error('NETWORK_TRIGGER_ALREADY_ISSUED'));return;}
+  if(stage==='NATIVE_OFFLINE_CAPTURE'&&!c.route_lifecycle_native){reject(Error('NATIVE_ROUTE_CONTROL_REQUIRED'));return;}
+  if(nativeAction&&((stage==='NATIVE_END'&&(c.route_lifecycle_native||side!==(c.bounded_native_reaccept.order==='outgoing-first'?'A':'B')))||(stage==='NATIVE_REPLACE'&&!c.route_lifecycle_native&&side!=='A'))){reject(Error('NATIVE_CONTROL_ROLE'));return;}
+  if(!['A','B'].includes(side)||(!phases(c).includes(stage)&&!cleanup&&!runtimeClose&&!nativeAction&&!networkAction)||active.size||sequence>=2*phases(c).length+(isRos(c)?2:0)+(isRos(c)&&c.paired_runtime_close===true?2:0)+(c.route_lifecycle_native?8:0)){reject(Error('CONTROL_SCOPE_OR_CAPACITY'));return;}
   if((cleanup||runtimeClose)&&(!metadata||!/^[1-9][0-9]*$/.test(String(metadata.pid))||!['WINDOW_FAILED','NORMAL_COMPLETION'].includes(metadata.reason))){reject(Error('CLEANUP_CONTROL_IDENTITY'));return;}
   const root=c.remote[side],filename=nativeAction?`${root}/control.NATIVE_REACCEPT.${stage.slice(7)}`:`${root}/control.${stage}`;
   if(root!==`/data/local/tmp/mdds_dds_${c.run}_${side}`){reject(Error('CONTROL_REMOTE_IDENTITY'));return;}
   const contents=nativeAction?`NATIVE_CONTROL run=${c.run} side=${side} phase=${stage.slice(7)}`:runtimeClose?`ROS_RUNTIME_CLOSE_RELEASE schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=RUNTIME_CLOSE reason=${metadata.reason}`:cleanup?`ROS_CLEANUP schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=CLEANUP reason=${metadata.reason}`:isDds214(c)?`${stage==='LISTENER_READY'?'ROS_RELEASE':'DDS214_RELEASE'} run=${c.run} side=${side} stage=${stage}`:isRos(c)?`ROS_RELEASE run=${c.run} side=${side} stage=${stage}`:`${c.run} ${cycleCount(c)>1?side+" ":""}${stage}`;
-  const command=`env -i PATH=/system/bin:/system/xbin timeout 5 /system/bin/sh -c 'test ! -e ${filename} && printf "${contents}\\n" > ${filename}.tmp && mv ${filename}.tmp ${filename}'; rc=$?; echo CONTROL_REMOTE_EXIT=$rc; exit $rc`;
+  const command=networkAction?`env -i PATH=/system/bin:/system/xbin timeout 5 /system/bin/sh -c 'ip link set dev eth1 ${stage==='ETH1_DOWN'?'down':'up'}'; rc=$?; echo CONTROL_REMOTE_EXIT=$rc; exit $rc`:`env -i PATH=/system/bin:/system/xbin timeout 5 /system/bin/sh -c 'test ! -e ${filename} && printf "${contents}\\n" > ${filename}.tmp && mv ${filename}.tmp ${filename}'; rc=$?; echo CONTROL_REMOTE_EXIT=$rc; exit $rc`;
+  if(stage==='ETH1_DOWN')eth1DownIssued=true; // An uncertain dispatch cannot authorize another cycle.
   const seq=++sequence,argv=['-t',c.targets[side],'shell',command];
   const r={run:c.run,side,stage,cycle:Number(/^C(\d+)_/.exec(stage)?.[1]||(isShared(c)&&cycleCount(c)===1&&!['LISTENER_READY','NATIVE_READY'].includes(stage)?1:0)),command_id:`${c.run}:${side}:${stage}:${seq}`,sequence:seq,observer_pid:process.pid,collector_pid:null,executable:c.hdc_path,argv_sha256:require('node:crypto').createHash('sha256').update(JSON.stringify(argv)).digest('hex'),cwd:process.cwd(),environment:'INHERITED_NOT_LOGGED',deadline_ms:timeoutMs,drain_ms:drainMs,events:[],termination:null,error:null};
   let child,timer,drainTimer,done=false,bytes=0,retained=0;const chunks={stdout:[],stderr:[]},counts={stdout:0,stderr:0};
@@ -317,10 +322,11 @@ function readBoundPrivate(c){
  if(materialization.scope!=='LOCAL_MATERIALIZATION_ONLY_NO_EXECUTION_AUTHORITY'||materialization.task!==proof.task_root||materialization.private_config_sha256!==c.private_config_sha256)throw Error('Materialization identity mismatch');
  const rows=materialization.files||[],names=rows.map(e=>e.destination.split(String.fromCharCode(92)).join('/')).sort(),priorRequired=[...legacyRequired,'executor/dds214-control.cjs','executor/layered_contract.py'],recoveryRequired=[...priorRequired,'recovery/pregrant_recovery.py','recovery/recovery-guard.ps1','recovery/readonly_preflight.py'],currentRequired=[...recoveryRequired,'executor/rmw_debugger.py','executor/rmw-debugger.cjs','executor/rmw_lldb_trace.py'];
  const nativeRequired=[...currentRequired,'executor/bounded-native-scene.cjs'];
+ const routeRequired=[...nativeRequired,'executor/route-network-capture.py'];
  const strict=isDds214(c)||frozen.authorization==='ONE_CONDITIONAL_ROS_AFTER_DDS214_DEVICE_VALIDATION';
- const required=frozen.bounded_native_reaccept?nativeRequired:JSON.stringify(names)===JSON.stringify(currentRequired.slice().sort())?currentRequired:JSON.stringify(names)===JSON.stringify(recoveryRequired.slice().sort())?recoveryRequired:JSON.stringify(names)===JSON.stringify(priorRequired.slice().sort())?priorRequired:legacyRequired;
+ const required=frozen.route_lifecycle_native?routeRequired:frozen.bounded_native_reaccept?nativeRequired:JSON.stringify(names)===JSON.stringify(currentRequired.slice().sort())?currentRequired:JSON.stringify(names)===JSON.stringify(recoveryRequired.slice().sort())?recoveryRequired:JSON.stringify(names)===JSON.stringify(priorRequired.slice().sort())?priorRequired:legacyRequired;
  if((strict&&required===legacyRequired)||JSON.stringify(names)!==JSON.stringify(required.slice().sort()))throw Error('Materialization membership mismatch');
- if(frozen.authorization==='TASK_SCOPED_ROS2_DEVICE_VALIDATION'&&(frozen.bounded_native_reaccept?required!==nativeRequired:frozen.rmw_debugger?required!==currentRequired:![currentRequired,recoveryRequired].includes(required)))throw Error('Task recovery materialization required');
+ if(frozen.authorization==='TASK_SCOPED_ROS2_DEVICE_VALIDATION'&&(frozen.route_lifecycle_native?required!==routeRequired:frozen.bounded_native_reaccept?required!==nativeRequired:frozen.rmw_debugger?required!==currentRequired:![currentRequired,recoveryRequired].includes(required)))throw Error('Task recovery materialization required');
  const declared=new Map((frozen.execution_files||[]).map(e=>[path.resolve(privateConfig.repo_root,e.path),e.sha256]));
  if(declared.size!==(frozen.execution_files||[]).length)throw Error('Duplicate executor binding');
  const taskEntries=[...declared.keys()].filter(p=>['executor','executor-route-query','recovery'].some(folder=>p.startsWith(path.join(proof.task_root,folder)+path.sep))).sort();
@@ -340,7 +346,7 @@ function readBoundPrivate(c){
  if(c.analyzer_sha256!==declared.get(path.join(privateConfig.repo_root,'scripts','public_socket',isDds214(c)?'analyze_dds214.py':c.bounded_native_reaccept?'analyze_bounded_native_reaccept.py':isRos(c)?'analyze_ros2.py':'analyze_shared.py')))throw Error('Window analyzer not bound');
  if(isRos(c)&&!localInstalled&&c.native_analyzer_sha256!==declared.get(path.join(privateConfig.repo_root,'scripts','public_socket','analyze_ros2_native.py')))throw Error('ROS native analyzer not bound');
  if(path.dirname(path.resolve(c.window_root))!==path.join(proof.task_root,'windows'))throw Error('Foreign window');
- for(const [original,copy] of [['runner-template.cjs','runner.cjs'],...(required!==legacyRequired?[['dds214-control.cjs','dds214-control.cjs']]:[]),...(c.rmw_debugger?[['rmw-debugger.cjs','rmw-debugger.cjs']]:[]),...(c.bounded_native_reaccept?[['bounded-native-scene.cjs','bounded-native-scene.cjs']]:[]),['ros-control.cjs','ros-control.cjs'],['shared-control.cjs','shared-control.cjs'],['record-pair.cjs','record-pair.cjs'],['observe-native.cjs','observe-native.cjs'],['bounded-output.cjs','bounded-output.cjs']]){
+ for(const [original,copy] of [['runner-template.cjs','runner.cjs'],...(required!==legacyRequired?[['dds214-control.cjs','dds214-control.cjs']]:[]),...(c.rmw_debugger?[['rmw-debugger.cjs','rmw-debugger.cjs']]:[]),...(c.bounded_native_reaccept?[['bounded-native-scene.cjs','bounded-native-scene.cjs']]:[]),...(c.route_lifecycle_native?[['route-network-capture.py','route-network-capture.py']]:[]),['ros-control.cjs','ros-control.cjs'],['shared-control.cjs','shared-control.cjs'],['record-pair.cjs','record-pair.cjs'],['observe-native.cjs','observe-native.cjs'],['bounded-output.cjs','bounded-output.cjs']]){
   if(digest(fs.readFileSync(path.join(c.window_root,copy)))!==declared.get(path.join(proof.task_root,'executor',original)))throw Error('Window executable copy drift');
  }
  return privateConfig;

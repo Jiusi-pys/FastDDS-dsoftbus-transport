@@ -97,8 +97,9 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         owner->runtime=std::make_unique<experimental::Runtime>(b);
         if(owned_normal){
             auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,m.at("native_reaccept_order")=="outgoing-first",m.at("reaccept_control"),true,routes);
+            if(routes)owner->node_diagnostic_close=[control]{control->ExportNodeDiagnostics();};
             if(!phase0::RuntimeProbeAccess::BoundedReplacementGate(*owner->runtime,[control]{return control->PermitReplacement();}))throw std::runtime_error("model replacement gate installation");
-            owner->before_pump=[control,routes]{try{if(routes)fastdds_dsoftbus::ros2_host::NodeControlStep();return control->Step();}catch(...){control->Refuse();return true;}};
+            owner->before_pump=[control,routes]{try{if(routes)fastdds_dsoftbus::ros2_host::NodeControlStep();return control->Step();}catch(const std::exception& error){control->Refuse(error.what());return true;}catch(...){control->Refuse();return true;}};
         }else if(reaccept){
             struct Observation {std::optional<std::int32_t> outgoing,accepted;bool terminal=false,settled=false,replaced=false;};
             auto observed=std::make_shared<Observation>();
