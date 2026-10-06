@@ -9,8 +9,8 @@ if(NOT OHOS_STL STREQUAL "c++_shared")
     message(FATAL_ERROR "Factory/Runtime C++ object ABI requires the declared shared SDK runtime")
 endif()
 set(CMAKE_CXX_STANDARD 17)
-find_package(fastrtps 2.14.5 EXACT CONFIG REQUIRED)
-find_package(fastcdr 2 CONFIG REQUIRED)
+include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/Ros214Candidate.cmake")
+add_compile_definitions(FASTDDS_DSOFTBUS_ROS214_PATCH=${FASTDDS_DSOFTBUS_ROS214_PATCH})
 # This pinned upstream release does not ship a ConfigVersion.cmake. The real
 # header assertion and recorded source/ELF identity bind its version instead.
 find_package(tinyxml2 CONFIG REQUIRED)
@@ -39,6 +39,7 @@ endif()
 target_link_libraries(fastdds_dsoftbus_ros2_target_bridge PRIVATE fastdds_dsoftbus_ros2_214_target_runtime
     "${FASTDDS_DSOFTBUS_SOCKET_LIBRARY}" tinyxml2 dl)
 add_library(factory_configuration INTERFACE)
+target_compile_definitions(factory_configuration INTERFACE FASTDDS_DSOFTBUS_ROS214_PATCH=${FASTDDS_DSOFTBUS_ROS214_PATCH})
 target_link_libraries(factory_configuration INTERFACE fastrtps)
 foreach(_target IN ITEMS fastdds_dsoftbus_ros2_214_target_runtime factory_configuration)
     set_property(TARGET ${_target} PROPERTY INTERFACE_FASTDDS_DSOFTBUS_FACADE_VARIANT ros2-214-ohos-experiment)
@@ -51,6 +52,7 @@ install(TARGETS fastdds_dsoftbus_ros2_214_target_runtime fastdds_dsoftbus_ros2_t
 install(EXPORT Ros2TargetTargets NAMESPACE FastDDSDSoftBusTransportRos2Target::
     DESTINATION lib/cmake/FastDDSDSoftBusTransportRos2Target)
 install(FILES ../FactoryAbiProbe.cpp DESTINATION share/FastDDSDSoftBusTransportRos2Target)
+install(FILES ../Ros214Version.hpp DESTINATION share/FastDDSDSoftBusTransportRos2Target)
 install(FILES ../StartupDiagnostics.hpp ../TeardownDiagnostics.hpp "${_transport_root}/examples/ros2_transport/FailureProtocol.hpp" DESTINATION share/FastDDSDSoftBusTransportRos2Target)
 install(FILES ../ResidualDiagnostics.hpp DESTINATION share/FastDDSDSoftBusTransportRos2Target)
 install(FILES ../NativePrefix.hpp DESTINATION share/FastDDSDSoftBusTransportRos2Target)

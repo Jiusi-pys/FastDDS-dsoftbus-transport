@@ -199,10 +199,17 @@ void Begin(const std::string& identifier,unsigned board) {
 #ifdef FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST
 void SetSourceForHostInjection() noexcept {auto* state=trace_state();if(!state)return;try{std::lock_guard<std::mutex> lock(state->startup_mutex);state->startup.source=ros2_diagnostics::Source::HostInjected;}catch(...){++state->capture_faults;}}
 #endif
-bool Capture(ros2_diagnostics::Snapshot& output) noexcept {
-    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
-    try{std::unique_lock<std::mutex> lock(state->startup_mutex,std::try_to_lock);if(!lock.owns_lock())return false;output=state->startup;output.overflow+=state->capture_faults.load()+prebegin_faults.load();output.output_errors=state->output_errors.load();return output.initialized;}catch(...){++state->capture_faults;return false;}
+CaptureState TryCapture(ros2_diagnostics::Snapshot& output) noexcept {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return CaptureState::Unavailable;
+    try{std::unique_lock<std::mutex> lock(state->startup_mutex,std::try_to_lock);if(!lock.owns_lock())return CaptureState::Busy;output=state->startup;output.overflow+=state->capture_faults.load()+prebegin_faults.load();output.output_errors=state->output_errors.load();return output.initialized?CaptureState::Ready:CaptureState::Unavailable;}catch(...){++state->capture_faults;return CaptureState::Error;}
 }
+bool Capture(ros2_diagnostics::Snapshot& output) noexcept { return TryCapture(output)==CaptureState::Ready; }
+#ifdef FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST
+void WithStartupGateForHostTest(void (*call)(void*),void* context) {
+    auto* state=published.load(std::memory_order_acquire);if(!state)throw std::logic_error("observer not initialized");
+    std::lock_guard<std::mutex> lock(state->startup_mutex);call(context);
+}
+#endif
 bool ExportPending(ros2_diagnostics::Writer writer,void* context) noexcept {
     // Control-side prefix export is separate from this first-error exporter.
     auto* state=published.load(std::memory_order_acquire);if(!state)return false;

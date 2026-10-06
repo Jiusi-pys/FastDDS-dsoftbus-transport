@@ -93,7 +93,7 @@ int main(int argc,char** argv) {
     main_started = true;
     const char* mode=argc==2?argv[1]:"lifetime";
     if(std::strcmp(mode,"lifetime")&&std::strcmp(mode,"prebegin")&&
-            std::strcmp(mode,"invalid")&&std::strcmp(mode,"duplicate")&&std::strcmp(mode,"concurrent")&&std::strcmp(mode,"prefix"))return 2;
+            std::strcmp(mode,"invalid")&&std::strcmp(mode,"duplicate")&&std::strcmp(mode,"concurrent")&&std::strcmp(mode,"prefix")&&std::strcmp(mode,"busy"))return 2;
     if(!std::strcmp(mode,"prebegin")) {
         diag::Snapshot empty;
         diag::NativePrefix prefix;
@@ -114,6 +114,19 @@ int main(int argc,char** argv) {
         for(auto& thread:attempts)thread.join();
         if(accepted!=1||rejected!=7)return 5;
     }else obs::Begin("1234567890abcdef", 0);
+    if(!std::strcmp(mode,"busy")) {
+        struct Gate {std::atomic<bool> held{false},release{false};} gate;
+        std::thread holder([&]{obs::WithStartupGateForHostTest([](void* context) {
+            auto& gate=*static_cast<Gate*>(context);gate.held=true;
+            while(!gate.release.load())std::this_thread::yield();
+        },&gate);});
+        while(!gate.held.load())std::this_thread::yield();
+        diag::Snapshot busy;
+        const bool refused=obs::TryCapture(busy)==obs::CaptureState::Busy&&!obs::Capture(busy);
+        gate.release=true;holder.join();if(!refused)return 9;
+        diag::Snapshot value;
+        if(obs::TryCapture(value)!=obs::CaptureState::Ready||!value.initialized)return 9;
+    }
     obs::SetSourceForHostInjection();
     diag::NativePrefix prefix;
     const auto prefix_allocations=allocations.load();

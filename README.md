@@ -1,5 +1,22 @@
 # Fast DDS OpenHarmony DSoftBus Transport
 
+> **ROS 2 2.14 maintenance candidate (2026-10-07)**：源绑定候选使用 Fast DDS
+> 2.14.7 (`010b908dc3bb2b6f2818d61ac8db462d01b79a1f`) 与 Fast CDR 2.2.8
+> (`1bc9c919311ffce555b445560bf7ae062a4e1c72`)，保留接口 schema `21405`。
+> 最终独立验证的 test-time snapshot 记录 source hash `27/27`、无关 hash `6/6`；
+> 文档更新后不将该快照误称为当前工作树哈希。offline fixture preflight 为 `31/31`，
+> installed-prefix 正负例与 ABI guard 分开记录；
+> candidate `3/3`、Host/ASan `14/14`、定向 parser/RTTI/factory/observer、Host
+> QoS/graph/service close `20 writes/20 takes`、两路 reaccept 及迁移 prefix 后的
+> relocated consumer `PASS_CLOSED_RUNTIME` `20/20`。修正后的 moved trace 直接记录
+> moved DDS/CDR origins，并排除原任务 build/runtime/install 目录；早期 moved run
+> 因加载原始 CDR runtime 保留为 PARTIAL。API23 r4 ROS consumer 仅为
+> `PASS_STATIC_ONLY`；无 HDC、设备/SDK runtime 或平台 DSO body 分发。旧 2.14.5
+> 默认与历史证据保留；CVE-2026-63340、SDK epoch/drain、PF/P4、产品数值、SBOM、
+> 平台 SDK/DSO 权利、first-party license 和 QualificationProfile 仍未闭合。详见
+> [dependency security assessment](docs/DEPENDENCY_SECURITY_20261006.md) 与
+> [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)。
+
 本项目是 Fast DDS 的 OpenHarmony DSoftBus Socket Transport 适配层，不是独立的
 MDDS 中间件或新的 DDS/RMW 实现。公开命名已迁移为 `fastdds_dsoftbus`、
 `<fastdds_dsoftbus/dsoftbus/...>` 和 CMake 包 `FastDDSDSoftBusTransport`。

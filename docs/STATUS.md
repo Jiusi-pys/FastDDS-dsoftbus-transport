@@ -1,5 +1,45 @@
 # Project status
 
+## ROS 2 2.14 security maintenance candidate (2026-10-07)
+
+From baseline `d24c6e1af8ee6613e243270fb694bdd724cb440b`, the source-bound ROS 2
+maintenance candidate is **IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED / NOT
+PRODUCTION QUALIFIED**. Fast DDS 2.14.7 and Fast CDR 2.2.8 are pinned to their exact
+official commits; interface ABI schema `21405` remains unchanged and the old 2.14.5
+default/history is retained. Independent review R1 reports no actionable findings.
+
+The canonical final tester reports commit gate PASS. Its test-time snapshot records
+27/27 candidate source hashes and 6/6 unrelated hashes; these hashes bind the tested
+source tree before this documentation-only update. The offline fixture suite is
+31/31, with installed-prefix positives/negatives and ABI/import guards reported
+separately. Maintenance checks are 3/3, Host CTest 14/14,
+candidate ASan 14/14, targeted parser/RTTI/factory/observer checks, Host QoS/graph/
+service close 20 writes/20 takes, both reaccept branches, bounded route-offline
+contract 12 writes/11 takes per process, and relocated consumer `PASS_CLOSED_RUNTIME`
+20 writes/20 takes. The corrected moved trace records moved DDS/CDR origins directly
+and excludes original task-build/runtime/install directories from child PATH; the
+earlier moved run remains PARTIAL because it loaded the original CDR runtime.
+
+API23 target validation is `PASS_STATIC_ONLY` using target ament_index_cpp 1.8.2 and
+unchanged RMW/typesupport; no stale Host ament path or absolute `C:` DT_NEEDED was
+present. This package has no HDC/device/SDK runtime execution and no platform DSO body
+distribution. ASan dependencies were not instrumented, TSan was not run, malformed
+CDR sequence lengths were not executed, and the unbounded parser suite was skipped.
+Busy handling only defers coordinator actions; the final diagnostic capture being
+Busy still makes close fail. This is a local diagnostic branch, not an SDK
+`CloseBusy` method, and no SDK epoch/drain/cancellation guarantee is claimed.
+CVE-2026-63340 remains unresolved
+without a fixed version; standalone 3.6 remains separate. First-party licensing,
+platform SDK/DSO rights, SBOM closure, product `NEEDS_PRODUCT_VALUE`, PF-01/PF-02,
+P4 and QualificationProfile remain open. This section does not declare production
+readiness.
+The separate default Fast DDS 3.6 regression remains `134/134 PASS` and is not treated
+as a 2.14 maintenance or security qualification result.
+
+The final R2 metadata-only delta changed patch serialization/digest only. It preserved
+24/24 compiled inputs, 11/11 prepared outputs and 6/6 copied headers; the prior cached
+whitespace failure remains historical evidence and no waiver was used.
+
 ## Production foundation checkpoint (2026-10-06)
 
 From baseline `facca428ab9a15649f44f2bdf216e446c7d56d5d`, the local productionization

@@ -1,5 +1,6 @@
 #include "HostSocket.hpp"
 #include "BridgeOwner.hpp"
+#include "Ros214Version.hpp"
 #include "ShutdownCoordination.hpp"
 #include "BoundedNativeControl.hpp"
 #include "target/NativeObservation.hpp"
@@ -97,7 +98,7 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         owner->runtime=std::make_unique<experimental::Runtime>(b);
         if(owned_normal){
             auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,m.at("native_reaccept_order")=="outgoing-first",m.at("reaccept_control"),true,routes);
-            if(routes)owner->node_diagnostic_close=[control]{control->ExportNodeDiagnostics();};
+            if(routes)owner->node_diagnostic_close=[control]{if(!control->ExportNodeDiagnostics())throw std::runtime_error("incomplete node diagnostic capture");};
             if(!phase0::RuntimeProbeAccess::BoundedReplacementGate(*owner->runtime,[control]{return control->PermitReplacement();}))throw std::runtime_error("model replacement gate installation");
             owner->before_pump=[control,routes]{try{if(routes)fastdds_dsoftbus::ros2_host::NodeControlStep();return control->Step();}catch(const std::exception& error){control->Refuse(error.what());return true;}catch(...){control->Refuse();return true;}};
         }else if(reaccept){

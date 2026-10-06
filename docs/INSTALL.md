@@ -1,5 +1,25 @@
 # Fast DDS OpenHarmony DSoftBus Transport: installation and consumers
 
+## ROS 2 2.14 maintenance candidate checkpoint (2026-10-07)
+
+The source-bound ROS 2 candidate uses Fast DDS 2.14.7
+(`010b908dc3bb2b6f2818d61ac8db462d01b79a1f`) and Fast CDR 2.2.8
+(`1bc9c919311ffce555b445560bf7ae062a4e1c72`) with interface schema `21405`.
+The old 2.14.5 configuration remains the default and its historical evidence is
+retained. A fresh relocated Host consumer passed 20 writes/20 takes after explicit
+prefix migration, with the corrected closed-runtime trace directly showing moved
+Fast DDS/CDR origins and excluding original task-build/runtime/install directories
+from the child PATH; the target chain passed only static API23 build/link checks.
+
+The final candidate run passed preflight 31/31, maintenance checks 3/3, Host CTest
+14/14, candidate ASan 14/14, targeted parser/RTTI/factory/observer checks, Host
+QoS/graph/service close and both reaccept branches. ASan dependencies were not
+instrumented, TSan was not run, malformed CDR sequence-length cases were not executed,
+and no HDC/device/SDK runtime was used. This updates dependency/build evidence only;
+it does not make the package production-ready or qualify P4/PF.
+The separate default Fast DDS 3.6 regression remains independently recorded at
+`134/134`; it is not folded into the 2.14 candidate result.
+
 ## Production foundation checkpoint (2026-10-06)
 
 The first local productionization package adds a relocatable, read-only installation

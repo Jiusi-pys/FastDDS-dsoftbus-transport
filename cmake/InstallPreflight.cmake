@@ -83,8 +83,11 @@ function(fastdds_dsoftbus_install_preflight package experimental)
         string(APPEND _files "\"${_directory}/$<TARGET_FILE_NAME:${_target}>\"")
     endforeach()
     set(_output "${CMAKE_CURRENT_BINARY_DIR}/preflight-$<CONFIG>/install-manifest.json")
+    if(NOT FASTDDS_DSOFTBUS_ROS214_CANDIDATE_JSON)
+        set(FASTDDS_DSOFTBUS_ROS214_CANDIDATE_JSON "null")
+    endif()
     file(GENERATE OUTPUT "${_output}" CONTENT
-        "{\"schema\":1,\"package\":\"${package}\",\"system\":\"${CMAKE_SYSTEM_NAME}\",\"architecture\":\"${_architecture}\",\"compiler\":\"${CMAKE_CXX_COMPILER_ID}\",\"compiler_version\":\"${CMAKE_CXX_COMPILER_VERSION}\",\"sdk_api\":\"${_sdk_api}\",\"sdk_version\":\"${_sdk_version}\",\"stl\":\"${_stl}\",\"experimental\":${experimental},\"dependencies\":[${_dependencies}],\"files\":[${_files}]}\n")
+        "{\"schema\":1,\"package\":\"${package}\",\"system\":\"${CMAKE_SYSTEM_NAME}\",\"architecture\":\"${_architecture}\",\"compiler\":\"${CMAKE_CXX_COMPILER_ID}\",\"compiler_version\":\"${CMAKE_CXX_COMPILER_VERSION}\",\"sdk_api\":\"${_sdk_api}\",\"sdk_version\":\"${_sdk_version}\",\"stl\":\"${_stl}\",\"experimental\":${experimental},\"dependencies\":[${_dependencies}],\"files\":[${_files}],\"ros214_candidate\":${FASTDDS_DSOFTBUS_ROS214_CANDIDATE_JSON}}\n")
     install(FILES "${_output}" DESTINATION "${CMAKE_INSTALL_DATADIR}/${package}")
     install(FILES "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../scripts/install_preflight.py"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../examples/install_preflight.json"

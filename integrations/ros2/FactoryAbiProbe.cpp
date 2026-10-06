@@ -4,6 +4,7 @@
 #include "StartupDiagnostics.hpp"
 #include "TeardownDiagnostics.hpp"
 #include "NativePrefix.hpp"
+#include "Ros214Version.hpp"
 // A link-time import binds ordinary application consumption to the actual
 // patched 2.14 DLL. This performs no Runtime/Socket/thread work in static init.
 #if defined(_WIN32)

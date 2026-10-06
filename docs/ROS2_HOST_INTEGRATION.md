@@ -1,5 +1,39 @@
 # ROS 2 Jazzy Host integration
 
+## 2.14.7 maintenance candidate (2026-10-07)
+
+The current source-bound maintenance candidate is Fast DDS 2.14.7 at commit
+`010b908dc3bb2b6f2818d61ac8db462d01b79a1f` with Fast CDR 2.2.8 at commit
+`1bc9c919311ffce555b445560bf7ae062a4e1c72`; the factory interface schema remains
+`21405`. Existing 2.14.5 sections below are historical/default evidence and remain
+unchanged.
+
+The final tester's test-time snapshot reports 27/27 candidate source hashes and 6/6
+unrelated hashes; these bind the tested source tree before this documentation-only
+update,
+Host QoS/graph/service close 20 writes/20 takes, both reaccept branches, a bounded
+offline route contract with 12 writes/11 takes per process, and a relocated consumer
+that was reconfigured, linked and run from the moved prefix. The corrected
+`final-run-moved-r4b-closed` trace is `PASS_CLOSED_RUNTIME`: its child PATH excluded
+original task-build/runtime/install directories and the moved DDS/CDR origins were
+recorded directly. The earlier moved run remains PARTIAL because it loaded the
+original CDR runtime. The standalone consumer
+was built in the required project build isolation without source-tree inclusion.
+The original RMW and typesupport sources were rebuilt unchanged; application IDL and
+generated typesupport provenance are retained, including upstream Fast DDS Gen 3.3.3
+outputs.
+The official unchanged RMW source set contains 239 preserved raw files and the
+typesupport source set 74; both were rebuilt for this candidate.
+
+API23 target validation is `PASS_STATIC_ONLY` using target ament_index_cpp 1.8.2,
+rclcpp, unchanged RMW/typesupport and candidate Fast DDS/CDR prefixes, with no stale
+Host ament directory and no absolute `C:` DT_NEEDED. No target runtime, HDC,
+SDK/platform DSO body or device test was performed. Busy handling only defers
+coordinator actions; the final diagnostic capture being Busy still makes close fail.
+This is a local diagnostic branch, not an SDK `CloseBusy` method, and no SDK epoch/
+drain claim is made. Production readiness, P4/PF, platform SDK/DSO rights, first-party license,
+SBOM and product values remain open.
+
 本项目是 Fast DDS 的 OpenHarmony DSoftBus Socket Transport。ROS 2 集成使用原版
 `rmw_fastrtps` 和真实 `rclcpp` API；项目不提供 `rmw_mdds`，也不修改 `rcl`、
 `rclcpp` 或 `rmw_fastrtps` 的业务实现。

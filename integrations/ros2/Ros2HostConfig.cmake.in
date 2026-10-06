@@ -1,8 +1,8 @@
 @PACKAGE_INIT@
 set(_fdds_ros2_package_prefix "${PACKAGE_PREFIX_DIR}")
 include(CMakeFindDependencyMacro)
-find_dependency(fastrtps 2.14.5 EXACT CONFIG)
-find_dependency(fastcdr 2 CONFIG)
+find_dependency(fastrtps @FASTDDS_DSOFTBUS_ROS214_VERSION@ EXACT CONFIG)
+find_dependency(fastcdr @FASTDDS_DSOFTBUS_ROS214_CDR_REQUIREMENT@ CONFIG)
 find_dependency(Threads)
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(FastDDSDSoftBusTransportRos2Host_FOUND FALSE)

@@ -185,6 +185,12 @@ def preflight(prefix, config_path, runtime_dirs, readobj):
             raise ValueError('manifest must bind actual dependency binaries and installed files')
         pins = {x['name']: x['version'] for x in manifest['dependencies']}
         dep_name, dep_version = PACKAGES[package]
+        if package != 'FastDDSDSoftBusTransport' and pins.get(dep_name) == '2.14.7':
+            expected = dict(version='2.14.7', upstream_commit='010b908dc3bb2b6f2818d61ac8db462d01b79a1f',
+                            fastcdr_version='2.2.8', fastcdr_commit='1bc9c919311ffce555b445560bf7ae062a4e1c72', interface_abi=21405)
+            if manifest.get('ros214_candidate') != expected or pins.get('fastcdr') != '2.2.8':
+                raise ValueError('wrong maintenance candidate manifest/dependency identity')
+            dep_version = '2.14.7'
         if pins.get(dep_name) != dep_version or not pins.get('fastcdr'):
             raise ValueError('installed dependency version does not match this package ABI')
         for dep in manifest['dependencies']:

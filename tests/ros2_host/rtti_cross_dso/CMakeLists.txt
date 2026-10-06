@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 project(topic_rtti_cross_dso LANGUAGES CXX)
-find_package(fastrtps 2.14.5 EXACT CONFIG REQUIRED)
-find_package(fastcdr 2 CONFIG REQUIRED)
+include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/Ros214Candidate.cmake")
 set(CMAKE_CXX_STANDARD 17)
 add_library(topic_rtti_producer SHARED producer.cpp)
 target_link_libraries(topic_rtti_producer PRIVATE fastrtps fastcdr)

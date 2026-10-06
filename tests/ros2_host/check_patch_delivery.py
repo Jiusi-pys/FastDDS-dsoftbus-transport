@@ -21,8 +21,28 @@ from prepare_fastdds_source import HEADERS, SCRIPTS, lf_sha256, prepare  # noqa:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--upstream-git', type=Path, required=True)
+    parser.add_argument('--version', choices=['2.14.5', '2.14.7'], default='2.14.5')
+    parser.add_argument('--work', type=Path, help='Explicit isolated test workspace under repository build')
     args = parser.parse_args()
     integration = Path(__file__).resolve().parents[2] / 'integrations/ros2'
+    build = args.work.resolve() if args.work else integration.parents[1] / 'build'
+    if not build.is_relative_to(integration.parents[1] / 'build'):
+        raise ValueError('patch test workspace must be inside repository build')
+    build.mkdir(parents=True, exist_ok=True)
+    if args.version == '2.14.7':
+        meta = json.loads((integration/'candidates/2.14.7/UPSTREAM.json').read_text(encoding='utf-8'))
+        with tempfile.TemporaryDirectory(prefix='candidate-patch-', dir=build) as directory:
+            source = Path(directory).resolve()
+            for row in meta['files']:
+                blob = subprocess.check_output(['git','-C',str(args.upstream_git),'show',meta['upstream_commit']+':'+row['path']])
+                assert hashlib.sha256(blob).hexdigest() == row['official_blob_sha256'], row['path']
+                target=source/row['path'];target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(blob)
+            result = prepare(source, version='2.14.7')
+            assert {x['path'] for x in result['files']} == {x['path'] for x in meta['files'] if x['path']!='CMakeLists.txt'}
+            assert result['upstream_commit'] == meta['upstream_commit']
+            assert result['interface_abi'] == 21405
+        print('EXACT_MAINTENANCE_PATCH_DELIVERY_PASS')
+        return
     identity = json.loads((integration / 'UPSTREAM.json').read_text())
     originals = {}
     for name in [x['path'] for x in identity['files']] + ['CMakeLists.txt']:
@@ -59,8 +79,6 @@ def main():
                              'apply_residual_observation.py', 'apply_topic_rtti_key.py'], SCRIPTS
     assert sorted(HEADERS) == sorted(['FastddsHook.hpp', 'PlatformModule.hpp', 'StartupDiagnostics.hpp',
                                       'TeardownDiagnostics.hpp', 'ResidualDiagnostics.hpp', 'NativePrefix.hpp']), HEADERS
-    build = integration.parents[1] / 'build'
-    build.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='fdds-ros2-patch-', dir=build) as directory:
         target = Path(directory).resolve()
         for name, content in originals.items():

@@ -2,10 +2,124 @@
 
 This is a dependency inventory/applicability assessment against official public
 advisories, not a full repository security scan or a device exploit verification.
-No pinned version was upgraded and none of the integration patches is counted as
-a security fix. Advisory/version applicability and target exploitability are separate.
+The original 2.14.5 rows below are retained as dated baseline assessment. A later
+source-bound maintenance candidate is recorded in the 2026-10-07 section below;
+none of the integration patches is counted as a security fix. Advisory/version
+applicability and target exploitability are separate.
 
-## Actual release inputs
+## Source-bound ROS 2 maintenance candidate (2026-10-07)
+
+The candidate uses official Fast DDS `v2.14.7` at commit
+`010b908dc3bb2b6f2818d61ac8db462d01b79a1f` and Fast CDR `v2.2.8` at commit
+`1bc9c919311ffce555b445560bf7ae062a4e1c72` ([Fast DDS release](https://github.com/eProsima/Fast-DDS/releases/tag/v2.14.7),
+[Fast CDR release](https://github.com/eProsima/Fast-CDR/releases/tag/v2.2.8)).
+The private factory interface schema remains `21405`; it is not a dependency version.
+The legacy 2.14.5 default remains available and its historical rows are not rewritten.
+
+Other candidate inputs are bound from the actual CMake caches, imported targets,
+headers and version artifacts used by each build. Host TinyXML2, Asio, foonathan_memory,
+MSVC Release CRT and system/runtime inputs are kept distinct from the API23 target
+toolchain, libc++ and platform inputs; no Host version is inferred from the historical
+target TinyXML2 row. Where an exact supplier artifact, loaded scope or advisory mapping
+is not bound by those receipts it remains UNKNOWN and requires the release SBOM.
+The Host candidate selected inputs record MSVC `19.44.35228.0`, Asio `1.28.1`,
+TinyXML2 `10.0.0`, foonathan_memory `0.7.4`, Fast DDS `2.14.7` and Fast CDR `2.2.8`.
+The API23 target selected inputs record ament_index_cpp `1.8.2`, Asio `1.34.2`,
+TinyXML2 `6.0.0` (the TargetBridge major-6 assertion), foonathan_memory `0.7.4`,
+Fast DDS `2.14.7` and Fast CDR `2.2.8`. Supplier binary/source equivalence, loaded
+firmware ABI, complete SBOM and advisory coverage remain UNKNOWN; these version facts
+do not imply bundling or a new dependency upgrade.
+The separate Fast DDS 3.6 baseline regression remains a distinct package and passed
+`134/134`; that result is not evidence that the 3.6 dependency is maintenance-fixed
+by the 2.14 candidate.
+
+Candidate preparation verified official raw/blob inputs, applicable EOL maps and the
+integration patch. Eleven upstream source files were modified by the candidate patch
+and six project headers were hash-bound; CMake input and raw/blob/EOL receipts are in
+the committed `integrations/ros2/candidates/2.14.7/UPSTREAM.json` and the generated
+`FDDST_MAINTENANCE_PREPARED.json` preparation receipt. The final source-hash receipt
+is the separate 27-file task-time freeze.
+Five retained requirements remain transplanted: factory/configuration, endpoint/XML
+guards, DDS deletion/teardown observation, residual/native-prefix lifetime, and the
+TopicDescription RTTI key. These are integration changes, not upstream security fixes.
+
+The candidate matrix contains 20 newly source-bound repair rows:
+
+| Advisory | Candidate repair commit | Applicability / evidence state |
+| --- | --- | --- |
+| CVE-2026-102681 | `e787e2f1781ed015e740fd5417832343355720b3` | Fix included; common RTPS/discovery/QoS reachability remains open |
+| CVE-2026-45092 | `54a733d4d4a30c744e3412e9553f657783f7e950` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2025-67108 | `be882b5357e663434c134b9ae2e6ee6be1b45c7f` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2025-65865 | `54a733d4d4a30c744e3412e9553f657783f7e950` | Fix included; RTPS/discovery/QoS reachability remains open |
+| CVE-2025-63829 | `54a733d4d4a30c744e3412e9553f657783f7e950` | Fix included; RTPS/discovery/QoS reachability remains open |
+| CVE-2026-45093 | `54a733d4d4a30c744e3412e9553f657783f7e950` | Fix included; retained mixed TCP reachability remains open |
+| CVE-2026-45094 | `f76ca8a6cba1f212db7cb0935eb2de32a3bae39c` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2026-45095 | `f76ca8a6cba1f212db7cb0935eb2de32a3bae39c` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2026-45096 | `f76ca8a6cba1f212db7cb0935eb2de32a3bae39c` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2026-22590 | `1384c646ece0556e710df56d4dceeea6c0f281ff` | Fix included; RTPS/discovery/QoS reachability remains open |
+| CVE-2026-22591 | `d96f0ebf3244019f58a305494be47c0618369374` | Fix included; SQL/filter regression selected |
+| CVE-2025-65016 | `104a71d467ac4ebd5b1d3037a3b09afb2775d48f` | Fix included; RTPS/discovery/QoS reachability remains open |
+| CVE-2025-64438 | `65d5ef3b4fb1b67c4bf4ceb52bd0c85f95102f56` | Fix included; RTPS/discovery/QoS reachability remains open |
+| CVE-2025-62799 | `554a55ffedbe141e542b0d96efbf2947304a1ac1` | Fix included; RTPS/discovery/QoS reachability remains open |
+| CVE-2025-62603 | `8e94c7af7c2da05af6a3ce7c31f7e74e4ce91239` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2025-62602 | `8e94c7af7c2da05af6a3ce7c31f7e74e4ce91239` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2025-64098 | `8e94c7af7c2da05af6a3ce7c31f7e74e4ce91239` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2025-62601 | `8e94c7af7c2da05af6a3ce7c31f7e74e4ce91239` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2025-62600 | `8e94c7af7c2da05af6a3ce7c31f7e74e4ce91239` | Security-only condition excluded by current SECURITY=OFF build |
+| CVE-2025-62599 | `8e94c7af7c2da05af6a3ce7c31f7e74e4ce91239` | Security-only condition excluded by current SECURITY=OFF build |
+
+The 14 earlier historical fixed-range rows remain dated baseline records and were
+not newly executed as candidate repairs. CVE-2026-63340 remains deployment-dependent
+with no fixed version; standalone 3.6 remains separately unrelieved by this candidate.
+No advisory is dismissed solely because DSoftBus is underneath RTPS.
+The matrix marks the repair source as included where applicable; SECURITY_OFF rows
+mean the security-specific paths were not compiled or executed in this candidate.
+The source-preservation receipt records 100 rows, 82 unique files and 10 repair
+ancestors; these are provenance counts, not exploit-test coverage.
+
+R2 then reviewed a metadata-only patch serialization correction. The final patch
+digest is `a74a796925b435e40dfae4ac18863e8c8e280788a8b0368b0b3ba23000b5016b`;
+raw source, EOL maps and runtime code remained unchanged. Final delta evidence
+reports 24/24 compiled inputs, 11/11 prepared outputs and 6/6 copied headers
+unchanged, maintenance `3/3`, official blob delivery PASS and staged diff check PASS.
+The earlier cached-whitespace failure remains historical evidence; no whitespace
+waiver was used.
+
+## Candidate verification boundary
+
+The canonical final tester receipt is `build/ros214-security-20261007/FINAL_TESTER_RESULT.json`:
+preflight 31/31, maintenance checks 3/3, Host CTest 14/14, candidate ASan CTest
+14/14, targeted parser selection PASS, RTTI/factory/observer checks PASS, Host
+QoS/graph/service close 20 writes/20 takes, both Host reaccept branches PASS, and a
+relocated consumer `PASS_CLOSED_RUNTIME` 20 writes/20 takes after prefix migration;
+the corrected `final-run-moved-r4b-closed` trace used the moved `r4b/runtime` ROS
+prefix, excluded original task-build/runtime/install directories from child PATH,
+and directly recorded moved Fast DDS/CDR origins. The earlier moved run remains
+PARTIAL because it loaded the original CDR runtime. The parser run covers
+nine unique selected cases (four Builtin and five SQL); the direct five SQL cases
+overlap four earlier CTest executions. The initial Fast CDR supporting receipt covers
+13 normal cases; malformed sequence-length testing was not executed. ASan dependencies
+were not instrumented and TSan was not run.
+
+The API23 target bridge and ROS static consumer chain passed a fresh r4 configuration
+using only target ROS/ament inputs and candidate Fast DDS/CDR prefixes: ELF64/AArch64,
+no stale Host ament directory and no absolute `C:` DT_NEEDED. This is static evidence
+only; there was no HDC, target execution, SDK/platform DSO body distribution or device
+runtime proof. Unchanged upstream RMW and typesupport were rebuilt from official source;
+application IDL/generated-typesupport provenance and upstream Gen 3.3.3 outputs remain
+bound in the candidate receipts. The standalone consumer used the required project
+build isolation; no claim is made that it was outside the repository.
+The official unchanged RMW source set (239 raw files) and typesupport source set
+(74 raw files) were rebuilt; these counts are source-preservation evidence, not a
+new RMW implementation or a substitute for device execution.
+
+The final diagnostic capture being Busy still makes close fail; this is a verified
+local diagnostic branch, not an SDK `CloseBusy` method or an SDK drain guarantee.
+First-party release licensing,
+platform SDK/DSO rights, SBOM closure, product `NEEDS_PRODUCT_VALUE` decisions and
+PF-01/PF-02 remain open. This candidate is not production-ready.
+
+## Historical 2.14.5 release inputs (2026-10-06 baseline)
 
 | Delivery | Observed inputs / source of truth | Security implication |
 | --- | --- | --- |
@@ -88,7 +202,7 @@ is ambiguous or an integration build includes patches not reflected in the tag.
 | TinyXML2 6.0.0 | Old pinned major enforced by TargetBridge static_assert; full upstream issue/advisory coverage UNKNOWN | Evaluate same-major official fixes/backports first; changing to a current major requires explicit header/parser/symbol ABI and malformed XML regression. No fictitious fixed version asserted |
 | Asio / ROS / OpenSSL / libc++ / vendor DSOs | Exact artifact/source/loaded scope and complete supplier security advisories are not uniformly bound; UNKNOWN items remain release blockers for their use | Per-release SBOM from actual imported/module/source inputs, supplier advisories and patch hashes; no blind dependency download or bundling |
 
-## Version-bound migration proposal (PLANNED, no migration performed)
+## Historical version-bound migration proposal (2026-10-06; superseded by candidate)
 
 1. ROS 2: [2.14.6](https://github.com/eProsima/Fast-DDS/releases/tag/v2.14.6)
    is the first 2.14 patch for the ten fixes listed in its release. It is insufficient
@@ -120,8 +234,9 @@ is ambiguous or an integration build includes patches not reflected in the tag.
    authorized malicious peers and retained mixed transports still need analysis.
    Do not change RTPS/QoS semantics or claim DSoftBus authentication suffices.
 
-This package can complete locally while supplier/SBOM/maintenance decisions are
-pending. Dependency security qualification and production release remain unverified.
+The proposal above records the pre-candidate plan. The 2026-10-07 candidate now has
+source-bound 2.14.7/2.2.8 receipts, but supplier/SBOM/maintenance approval and
+dependency security qualification remain unverified.
 
 ## OpenSSL conditional inventory
 

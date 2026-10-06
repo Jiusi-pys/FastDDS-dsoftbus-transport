@@ -64,7 +64,7 @@ def main():
     compiled, _ = execute('build', command, 60)
     passed = compiled
     if compiled:
-        for mode in ('lifetime', 'prebegin', 'invalid', 'duplicate', 'concurrent','prefix'):
+        for mode in ('lifetime', 'prebegin', 'invalid', 'duplicate', 'concurrent','prefix','busy'):
             ok, text = execute(mode, prefix + ['timeout', '12', native(binary), mode], 20)
             passed = passed and ok and text.count('OBSERVER_EXIT_LIFETIME result=PASS ') == 1
             passed = passed and 'result=FAIL' not in text

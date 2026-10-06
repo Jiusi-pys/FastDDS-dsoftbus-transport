@@ -1,5 +1,17 @@
 # Offline installed-prefix preflight
 
+## 2.14.7 candidate note (2026-10-07)
+
+The installed preflight was exercised against the source-bound ROS 2 maintenance
+candidate (Fast DDS 2.14.7 / Fast CDR 2.2.8, interface schema 21405). The final
+candidate receipt reports 31/31 offline fixture/unit contracts. Separately, the
+actual installed-prefix positive and materialized negative CLI cases, plus compiler
+ABI/import guards, are recorded in the initial installed-prefix execution evidence;
+the final source hashes confirm the relevant implementation remained unchanged. They
+are not counted as the 31 fixture cases and are not device checks. The checker remains
+read-only and cannot turn a candidate or a `production` request into production
+eligibility; target validation remains static-only.
+
 Python 3.11+ and an explicitly supplied LLVM `llvm-readobj` are required. The tool
 is installed beside `install-manifest.json` under `share/<package>/` for each existing
 3.6, ROS 2 Host and ROS 2 OHOS package. Run the installed copy outside the checkout.

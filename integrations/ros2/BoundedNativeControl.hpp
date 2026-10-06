@@ -121,10 +121,12 @@ public:
         Probe::SealBoundedAdmission(*owner.runtime);owner.failed=true;
         std::fprintf(stdout,"NATIVE_REACCEPT_REFUSAL run=%s side=%c reason=ADMISSION_OR_CONTROL_REFUSED status=%s\n",owner.run.c_str(),owner.side?'B':'A',FailureStatus());std::fflush(stdout);
     }
-    void ExportNodeDiagnostics(){
+    bool ExportNodeDiagnostics(){
         if(route_model){
             ros2_diagnostics::Snapshot snapshot;
-            if(!ros2_target_observation::Capture(snapshot)||snapshot.overflow||snapshot.output_errors)throw std::runtime_error("incomplete node diagnostic capture");
+            const auto status=ros2_target_observation::TryCapture(snapshot);
+            if(status==ros2_target_observation::CaptureState::Busy)return false;
+            if(status!=ros2_target_observation::CaptureState::Ready||snapshot.overflow||snapshot.output_errors)throw std::runtime_error("incomplete node diagnostic capture");
             std::size_t kept=0;
             for(std::size_t i=0;i<snapshot.count;++i){const auto& value=snapshot.events[i];const auto* name=value.operation;
                 const bool node=!std::strncmp(name,"RegNode_",8)||!std::strncmp(name,"UnregNode_",10)||!std::strncmp(name,"GetAllNodes_",12)||!std::strncmp(name,"GetNodeUdid_",12)||!std::strncmp(name,"OnNode",6)||!std::strncmp(name,"Node",4);
@@ -135,6 +137,7 @@ public:
                 exported_node_observation=snapshot.events[kept-1].seq;
             }
         }
+        return true;
     }
     void ObserveRoute(){
         if(!route_model||!armed)return;
@@ -166,7 +169,7 @@ public:
     bool Step(){
         if(refused.load())return true;
         const auto now=std::chrono::steady_clock::now();if(now<next_poll)return true;next_poll=now+std::chrono::milliseconds(2);
-        ExportNodeDiagnostics();
+        if(!ExportNodeDiagnostics())return true;
         CheckClock();
         auto sdk=owner.runtime->ObserveSocket();auto view=Probe::ObserveConnection(*owner.runtime);
         if(sdk.fake_sdk!=host_model)throw std::runtime_error("native/model source mismatch");

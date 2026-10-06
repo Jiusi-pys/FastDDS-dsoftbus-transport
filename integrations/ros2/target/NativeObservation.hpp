@@ -25,6 +25,11 @@ void Begin(const std::string&, unsigned);
 void SetSourceForHostInjection() noexcept;
 #endif
 bool Capture(ros2_diagnostics::Snapshot&) noexcept;
+enum class CaptureState { Ready, Busy, Unavailable, Error };
+CaptureState TryCapture(ros2_diagnostics::Snapshot&) noexcept;
+#ifdef FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST
+void WithStartupGateForHostTest(void (*)(void*), void*);
+#endif
 bool CapturePrefix(ros2_diagnostics::NativePrefix&) noexcept;
 bool ExportPending(ros2_diagnostics::Writer=ros2_diagnostics::Stdout,void* context=nullptr) noexcept; // Control/pump context only; never callback I/O.
 bool Flush(); // Control thread only, after local close; not SDK drain proof.

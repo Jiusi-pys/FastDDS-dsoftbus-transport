@@ -262,6 +262,16 @@ class InstalledPreflight(unittest.TestCase):
         self.config['identity']['permissions'] = 'xohos.permission.DISTRIBUTED_DATASYNCx'
         self.assertNotIn('INSTALL_INPUTS_VALID', self.check()['statuses'])
 
+    def test_maintenance_candidate_identity_is_explicit(self):
+        self.manifest['dependencies'][0]['version'] = '2.14.7'
+        self.manifest['dependencies'][1]['version'] = '2.2.8'
+        self.assertNotIn('INSTALL_INPUTS_VALID', self.check()['statuses'])
+        self.manifest['ros214_candidate'] = dict(version='2.14.7', upstream_commit='010b908dc3bb2b6f2818d61ac8db462d01b79a1f',
+            fastcdr_version='2.2.8', fastcdr_commit='1bc9c919311ffce555b445560bf7ae062a4e1c72', interface_abi=21405)
+        self.assertIn('INSTALL_INPUTS_VALID', self.check()['statuses'])
+        self.manifest['ros214_candidate']['upstream_commit'] = '0' * 40
+        self.assertNotIn('INSTALL_INPUTS_VALID', self.check()['statuses'])
+
 
 if __name__ == '__main__':
     unittest.main()
