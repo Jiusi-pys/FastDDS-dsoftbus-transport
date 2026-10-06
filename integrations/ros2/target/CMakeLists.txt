@@ -65,3 +65,7 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/FastDDSDSoftBusTransportRos2TargetCon
     DESTINATION lib/cmake/FastDDSDSoftBusTransportRos2Target)
 install(DIRECTORY "${_transport_root}/examples/ros2_transport" DESTINATION share/FastDDSDSoftBusTransportRos2Target/examples)
 install(DIRECTORY "${_transport_root}/examples/dds214_layer_baseline" DESTINATION share/FastDDSDSoftBusTransportRos2Target/examples COMPONENT LayerBaselineExamples)
+include("${_transport_root}/cmake/InstallPreflight.cmake")
+fastdds_dsoftbus_install_preflight(FastDDSDSoftBusTransportRos2Target true
+    DEPENDENCIES fastrtps fastcdr
+    TARGETS fastdds_dsoftbus_ros2_214_target_runtime fastdds_dsoftbus_ros2_target_bridge)

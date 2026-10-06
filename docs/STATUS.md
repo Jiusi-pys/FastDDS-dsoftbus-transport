@@ -1,5 +1,32 @@
 # Project status
 
+## Production foundation checkpoint (2026-10-06)
+
+From baseline `facca428ab9a15649f44f2bdf216e446c7d56d5d`, the local productionization
+foundation is **IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED / NOT PRODUCTION
+QUALIFIED**. The final independent tester reports `Commit gate: PASS` for this
+tooling-only package: fresh Host/core/target builds and relocated installs passed,
+the offline install-preflight suite passed 30/30, naming checks passed, and the
+installed CLI negative cases returned their expected exit 2. Relocated Host/core
+positive inputs are valid but still report `EXPERIMENTAL_ONLY` and
+`PLATFORM_CONTRACT_UNVERIFIED`; native template input is a correct refusal because
+legal external identity/platform/runtime closure is missing.
+
+Evidence: [production foundation acceptance](PRODUCTION_FOUNDATION_ACCEPTANCE_20261006.md),
+`build/production-foundation-20261006/final-tester/FINAL_TESTER_RESULT.json`, and
+R3 closure `build/production-foundation-20261006/review/AGENTIC_REVIEW_R3.md`.
+The initial 22-contract run, review red/green runs, stale-input failures and old
+discriminator failure remain historical records and are not overwritten by the final
+30-case result. No HDC/device/data-plane test was run for this package.
+
+The support tuple, dependency maintenance candidates and PF-01/PF-02 target-input
+delta are recorded in the linked foundation documents. Product recovery/load/resource
+budgets remain `NEEDS_PRODUCT_VALUE`; supplier lifetime/drain/epoch mechanisms,
+first-party release licensing, platform contract and QualificationProfile remain
+open. P0/PF/P4, default `NativeBackendUnavailable`, `NO_REACCEPT` and prior native
+acceptance boundaries are unchanged. This checkpoint does not declare
+`PRODUCTION_READY` or `P4_PASS`.
+
 Historical sections in this file retain the exact names, counts, hashes, protocol
 markers and permission identifiers from their original runs. They are labeled by
 their work-package dates and artifact paths; they do not describe the current

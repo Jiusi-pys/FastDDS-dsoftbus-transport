@@ -6,6 +6,16 @@ MDDS 中间件或新的 DDS/RMW 实现。公开命名已迁移为 `fastdds_dsoft
 这次迁移改变源码/ABI/构建接口；旧设备证据仍绑定旧命名的原源码与包。
 迁移规则和保留的历史协议名称见 [命名说明](docs/NAMING.md)。
 
+> **生产化基础包（2026-10-06）**：基于基线 `facca428` 完成了可迁移安装
+> 前置检查与首版生产支持合同。最终独立验证通过 Host/core/target 构建、移动
+> prefix 消费、30/30 离线合同测试、命名边界和预期 exit 2 负例；有效输入仍明确
+> 为 `INSTALL_INPUTS_VALID` + `EXPERIMENTAL_ONLY` +
+> `PLATFORM_CONTRACT_UNVERIFIED`，native 模板在缺少合法外部身份/平台运行时输入
+> 时正确拒绝。该包没有运行 HDC、SDK 业务或设备数据面，也没有重跑 V1/reaccept/普通
+> ROS 验收。P0/PF/P4、默认 `NativeBackendUnavailable`、产品数值、供应方 drain/epoch
+> 机制和 `QualificationProfile` 均保持未资格化；不得据此声明 `PRODUCTION_READY` 或
+> `P4_PASS`。详见 [生产化基础验收](docs/PRODUCTION_FOUNDATION_ACCEPTANCE_20261006.md)。
+
 当前还提供一个隔离的 ROS 2 Jazzy Host 集成入口，使用原版 `rmw_fastrtps` 和
 版本绑定的 Fast DDS 2.14 Host 前端；它不创建 `rmw_mdds`，不改变默认 Fast DDS
 3.6 基线，也不构成设备或生产资格。构建、安装、外部 `find_package` 和已验证的

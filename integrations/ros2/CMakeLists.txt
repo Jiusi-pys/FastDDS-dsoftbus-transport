@@ -90,3 +90,7 @@ install(EXPORT Ros2HostTargets NAMESPACE FastDDSDSoftBusTransportRos2Host:: DEST
 configure_package_config_file(Ros2HostConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/FastDDSDSoftBusTransportRos2HostConfig.cmake"
     INSTALL_DESTINATION lib/cmake/FastDDSDSoftBusTransportRos2Host)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/FastDDSDSoftBusTransportRos2HostConfig.cmake" DESTINATION lib/cmake/FastDDSDSoftBusTransportRos2Host)
+include("${_transport_root}/cmake/InstallPreflight.cmake")
+fastdds_dsoftbus_install_preflight(FastDDSDSoftBusTransportRos2Host false
+    DEPENDENCIES fastrtps fastcdr
+    TARGETS fastdds_dsoftbus_ros2_214_runtime fastdds_dsoftbus_ros2_host_bridge)

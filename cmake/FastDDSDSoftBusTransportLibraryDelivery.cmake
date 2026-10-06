@@ -160,8 +160,26 @@ if(FASTDDS_DSOFTBUS_INSTALL_PACKAGE)
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/FastDDSDSoftBusTransportConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/FastDDSDSoftBusTransportConfigVersion.cmake"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/FastDDSDSoftBusTransport)
     install(DIRECTORY examples/installed_consumer DESTINATION ${CMAKE_INSTALL_DATADIR}/FastDDSDSoftBusTransport/examples)
+    include("${CMAKE_CURRENT_LIST_DIR}/InstallPreflight.cmake")
+    set(_preflight_experimental false)
+    set(_preflight_targets ${_core})
+    list(REMOVE_ITEM _preflight_targets fastdds_dsoftbus_fastdds_binding)
+    if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME)
+        set(_preflight_experimental true)
+        list(APPEND _preflight_targets fastdds_dsoftbus_experimental_runtime fastdds_dsoftbus_experimental_socket)
+    endif()
+    fastdds_dsoftbus_install_preflight(FastDDSDSoftBusTransport ${_preflight_experimental}
+        DEPENDENCIES fastdds fastcdr foonathan_memory TARGETS ${_preflight_targets})
     if(FASTDDS_DSOFTBUS_BUILD_EXPERIMENTAL_RUNTIME)
         install(DIRECTORY examples/experimental_socket DESTINATION ${CMAKE_INSTALL_DATADIR}/FastDDSDSoftBusTransport/examples)
     endif()
 
+endif()
+
+if(BUILD_TESTING)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME dsoftbus.install_preflight.contract
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/install_preflight_tests.py")
+    endif()
 endif()

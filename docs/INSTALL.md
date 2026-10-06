@@ -1,5 +1,27 @@
 # Fast DDS OpenHarmony DSoftBus Transport: installation and consumers
 
+## Production foundation checkpoint (2026-10-06)
+
+The first local productionization package adds a relocatable, read-only installation
+preflight. The final independent run rebuilt the Host, core and OHOS-target packages,
+tested moved prefixes, and passed the 30-case offline contract suite. Valid explicit
+inputs report `INSTALL_INPUTS_VALID` while retaining `EXPERIMENTAL_ONLY` and
+`PLATFORM_CONTRACT_UNVERIFIED`; a `production=true` request cannot grant readiness.
+Missing/ambiguous dependencies, wrong ABI, unknown profile, malformed identity,
+missing forward, equal ports and forged qualification requests fail with exit 2.
+
+Run the installed checker with explicit dependency/runtime inputs from the consumer's
+environment. It does not search the development checkout, load a library, call the
+SDK, grant permissions or alter system policy. The native installed template remains
+a deliberate `PASS_REFUSAL` until legal identity, platform/runtime and loader inputs
+are supplied. See [the acceptance record](PRODUCTION_FOUNDATION_ACCEPTANCE_20261006.md),
+[the support contract](PRODUCTION_SUPPORT_CONTRACT_V1.md) and
+[INSTALL_PREFLIGHT.md](INSTALL_PREFLIGHT.md).
+
+This checkpoint is installation evidence only. It does not change the default
+`NativeBackendUnavailable`, device qualification, PF/P4 status or production release
+boundary.
+
 ## Latest bounded device result
 
 The installed public consumer has one independently accepted dual-board window:
