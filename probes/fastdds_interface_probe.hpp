@@ -8,7 +8,7 @@
 #include <condition_variable>
 #include <mutex>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 
 namespace rtps = eprosima::fastdds::rtps;
 using Deadline = std::chrono::steady_clock::time_point;
@@ -116,4 +116,4 @@ private:
     bool stopped_ = false;
 };
 
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

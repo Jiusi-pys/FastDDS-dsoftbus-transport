@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/NativeOwnerTable.hpp>
+#include <fastdds_dsoftbus/dsoftbus/NativeOwnerTable.hpp>
 #include "../src/NativeReceiveInternal.hpp"
 #include <atomic>
 #include <chrono>
@@ -29,9 +29,9 @@ void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
 
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 #define CHECK(x) do { if (!(x)) throw std::runtime_error(std::string("line ")+std::to_string(__LINE__)+": " #x); } while(false)
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class NativeOwnerTableTestAccess
 {
 public:
@@ -618,9 +618,225 @@ void N3ReceiveBindingAndDrain()
     CHECK(owner.Observe().quiescence == NativeQuiescence::Unproven);
 }
 
+void BidirectionalRoute()
+{
+    const auto c=Config(1,RouteDirection::Both);auto t=Table(c);auto s=Space(*t,c);
+    const auto& route=c.directory.routes[0];
+    auto accepted=t->ObserveInbound(s,702,Peer(c));CHECK(accepted.accepted&&accepted.owner);
+    const auto accepted_generation=accepted.owner->Observe().generation;
+    CHECK(t->TryResolve(route.key,route.route_version).value->generation==accepted_generation);
+    auto dial=Ready(*t,s,c,0,703);
+    CHECK(t->TryResolve(route.key,route.route_version).value->generation==dial.Observe().generation);
+    CHECK(dial.RequestClose()==NativeStatus::None);
+    CHECK(t->TryResolve(route.key,route.route_version).value->generation==accepted_generation);
+    auto duplicate=t->ObserveInbound(s,704,Peer(c));
+    CHECK(!duplicate.accepted&&duplicate.status==NativeStatus::DuplicateConnection&&duplicate.owner);
+    CHECK(t->SnapshotUsage().owners==3);
+}
+
+void ClosedAcceptedRouteIsNotReaccepted()
+{
+    // Scope fact behind the one-shot accepted lane in the adapter and the public
+    // backend: the retired accepted owner keeps owning its route for the life of the
+    // table, so a later accepted socket on that route is refused here whatever the
+    // upper layers do. Only a closed Dial may be retried (allow_closed_dial_retry).
+    for(const bool dial_retry:{false,true}) {
+        auto c=Config(1,RouteDirection::Both);c.allow_closed_dial_retry=dial_retry;
+        auto t=Table(c);auto s=Space(*t,c);
+        auto first=t->ObserveInbound(s,900,Peer(c));CHECK(first.accepted&&first.owner);
+        CHECK(first.owner->RequestClose()==NativeStatus::None);
+        auto again=t->ObserveInbound(s,901,Peer(c));
+        CHECK(!again.accepted&&again.status==NativeStatus::DuplicateConnection);
+        auto prepared=t->PrepareInbound(s,902,Peer(c));
+        CHECK(!prepared&&prepared.issue.code==NativeStatus::DuplicateConnection);
+    }
+}
+
+void ClosedDialRetryPolicy()
+{
+    auto c=Config(1,RouteDirection::Both);c.allow_closed_dial_retry=true;
+    auto t=Table(c);auto s=Space(*t,c);auto old=Ready(*t,s,c,0,800);
+    auto callback=s.AdmitCallback(800);CHECK(callback);auto pin=callback.value->CaptureIdentity();CHECK(pin);
+    CHECK(old.RequestClose()==NativeStatus::None);
+    CHECK(!t->ReserveDial(s,c.directory.routes[0].key));
+    auto close=old.TryClaimShutdown();CHECK(close);CHECK(close.value->CallEntered()==NativeStatus::None);
+    CHECK(!t->ReserveDial(s,c.directory.routes[0].key));
+    CHECK(close.value->CompleteShutdownReturned()==NativeStatus::None);
+    CHECK(!t->ReserveDial(s,c.directory.routes[0].key)); // Old callback still owns its lease.
+    callback.value.reset();
+    auto fresh=t->ReserveDial(s,c.directory.routes[0].key);CHECK(fresh&&fresh.value->creation==NativeCreation::CreateRequired);
+    CHECK(fresh.value->owner.Observe().incarnation!=old.Observe().incarnation);
+    CHECK(fresh.value->socket_call->CallEntered()==NativeStatus::None);
+    CHECK(fresh.value->socket_call->Complete(NativeSocketResult::Id(801)).status==NativeStatus::None);
+    auto bind=t->BeginBind(fresh.value->owner);CHECK(bind);CHECK(bind.value->CallEntered()==NativeStatus::None);
+    CHECK(bind.value->Complete(SyncBindResult::Success()).status==NativeStatus::None);
+    CHECK(t->TryResolve(c.directory.routes[0].key,c.directory.routes[0].route_version).value->generation==fresh.value->owner.Observe().generation);
+    CHECK(NativeOwnerTableTestAccess::ReceiveStatus(*t,*pin.value)==NativeStatus::Revoked);
+    auto late=s.AdmitCallback(800);CHECK(late);CHECK(late.value->ObserveShutdown()==NativeStatus::None);
+    CHECK(fresh.value->owner.Observe().phase==NativeOwnerPhase::Ready);
+    auto invalid=Config();invalid.allow_closed_dial_retry=true;
+    CHECK(NativeOwnerTable::Build(invalid).issue.code==NativeStatus::InvalidConfiguration);
+}
+
+void ClosedDialRetryOutstandingLeases()
+{
+    for(unsigned mode=0;mode<3;++mode) {
+        auto c=Config(1,RouteDirection::Both);c.allow_closed_dial_retry=true;
+        auto t=Table(c);auto s=Space(*t,c);
+        auto old=mode==2?SocketKnown(*t,s,c,0,810):Ready(*t,s,c,0,810);
+        std::optional<BindCallTicket> bind;
+        std::optional<detail::NativeSendCallTicket> send;
+        detail::NativeReceiveLease receive;
+        if(mode==0) {
+            auto callback=s.AdmitCallback(810);CHECK(callback);auto pin=callback.value->CaptureIdentity();CHECK(pin);
+            receive=NativeOwnerTableTestAccess::Receive(*t,*pin.value);CHECK(receive);
+        } else if(mode==1) {
+            auto op=NativeOwnerTableTestAccess::Send(*t,old,old.Observe().route_version,old.Observe().generation);CHECK(op);
+            send.emplace(std::move(*op.value));CHECK(send->CallEntered()==NativeStatus::None);
+        } else {
+            auto op=t->BeginBind(old);CHECK(op);bind.emplace(std::move(*op.value));CHECK(bind->CallEntered()==NativeStatus::None);
+        }
+        CHECK(old.RequestClose()==NativeStatus::None);
+        auto close=old.TryClaimShutdown();CHECK(close);CHECK(close.value->CallEntered()==NativeStatus::None);
+        CHECK(close.value->CompleteShutdownReturned()==NativeStatus::None);
+        CHECK(!t->ReserveDial(s,c.directory.routes[0].key));
+        receive={};
+        if(send) CHECK(send->Complete(-1).status==NativeStatus::None);
+        if(bind) CHECK(bind->Complete(SyncBindResult::Error(-1)).status==NativeStatus::None);
+        auto fresh=t->ReserveDial(s,c.directory.routes[0].key);CHECK(fresh);
+        CHECK(fresh.value->owner.Observe().generation!=old.Observe().generation);
+        CHECK(fresh.value->socket_call->Abandon()==NativeStatus::Abandoned);
+    }
+    auto c=Config(1,RouteDirection::Both);c.limits.total_owners=2;
+    CHECK(NativeOwnerTable::Build(c).issue.code==NativeStatus::InvalidLimits);
+}
+
+void BoundedConcurrentSetupPool()
+{
+    auto c=Config(4);c.limits.setup_calls=2;
+    auto built=NativeOwnerTable::Build(c);CHECK(built);auto t=std::move(*built.value);auto space=Space(*t,c);
+    auto invalid=c;invalid.limits.setup_calls=0;CHECK(NativeOwnerTable::Build(invalid).issue.code==NativeStatus::InvalidLimits);
+    invalid.limits.setup_calls=3;CHECK(NativeOwnerTable::Build(invalid).issue.code==NativeStatus::InvalidLimits);
+    auto first=Ready(*t,space,c,0,501),second=Ready(*t,space,c,1,502);
+    auto listener=t->ReserveListener(space,L(2));CHECK(listener&&listener.value->socket_call);
+    auto dial=Dial(*t,space,c,2);const auto owners=t->SnapshotUsage().owners;
+    CHECK(t->SnapshotUsage().setup.reserved==2&&t->SnapshotUsage().setup.limit==2);
+    CHECK(t->ReserveDial(space,c.directory.routes[3].key).issue.code==NativeStatus::SetupBusy);
+    CHECK(t->SnapshotUsage().owners==owners); // Rejection creates no owner.
+    CHECK(listener.value->socket_call->CallEntered()==NativeStatus::None);
+    CHECK(dial.socket_call->CallEntered()==NativeStatus::None);
+    auto send1=NativeOwnerTableTestAccess::Send(*t,first,first.Observe().route_version,first.Observe().generation);
+    auto send2=NativeOwnerTableTestAccess::Send(*t,second,second.Observe().route_version,second.Observe().generation);
+    CHECK(send1&&send2&&send1.value->CallEntered()==NativeStatus::None&&send2.value->CallEntered()==NativeStatus::None);
+    CHECK(first.RequestClose()==NativeStatus::None);auto close1=first.TryClaimShutdown();CHECK(close1);
+    CHECK(close1.value->CallEntered()==NativeStatus::None);CHECK(second.RequestClose()==NativeStatus::None);
+    CHECK(second.TryClaimShutdown().issue.code==NativeStatus::CloseBusy);
+    const auto occupied=t->SnapshotUsage();
+    CHECK(occupied.setup.entered==2&&occupied.send.entered==2&&occupied.close.entered==1);
+    CHECK(close1.value->CompleteShutdownReturned()==NativeStatus::None);
+    auto close2=second.TryClaimShutdown();CHECK(close2&&close2.value->CallEntered()==NativeStatus::None);
+    CHECK(close2.value->CompleteShutdownReturned()==NativeStatus::None);
+    CHECK(send1.value->Complete(0).status==NativeStatus::None&&send2.value->Complete(0).status==NativeStatus::None);
+    CHECK(listener.value->socket_call->Complete(NativeSocketResult::Id(510)).status==NativeStatus::None);
+    auto listen=t->BeginListen(listener.value->owner);CHECK(listen);CHECK(listen.value->CallEntered()==NativeStatus::None);
+    CHECK(dial.socket_call->Complete(NativeSocketResult::Id(511)).status==NativeStatus::None);
+    CHECK(t->BeginListen(listener.value->owner).issue.code==NativeStatus::SetupBusy);
+    CHECK(t->SnapshotUsage().setup.entered==1&&t->SnapshotUsage().setup.reserved==0);
+    // Listen occupies one setup slot; Bind must choose the OTHER free slot,
+    // not overwrite a hard-coded operation cell belonging to the listener.
+    auto bind=t->BeginBind(dial.owner);CHECK(bind&&bind.value->CallEntered()==NativeStatus::None);
+    CHECK(t->SnapshotUsage().setup.entered==2);
+    CHECK(t->ReserveDial(space,c.directory.routes[3].key).issue.code==NativeStatus::SetupBusy);
+    CHECK(bind.value->Complete(SyncBindResult::Success()).status==NativeStatus::None);
+    CHECK(listen.value->Complete(SyncListenResult::Success()).status==NativeStatus::None);
+    CHECK(dial.owner.Observe().phase==NativeOwnerPhase::Ready&&listener.value->owner.Observe().phase==NativeOwnerPhase::Listening);
+    auto reused=Dial(*t,space,c,3);CHECK(reused.socket_call->Abandon()==NativeStatus::Abandoned);EmptyCalls(*t);
+}
+
+// Accepted negotiation holds the existing owner budget but owns no SDK handle.
+void PreparedInboundContract()
+{
+    auto c=Config(1,RouteDirection::Both);c.limits.total_owners=3;
+    auto t=Table(c);auto s=Space(*t,c);auto dial=Ready(*t,s,c,0,40);
+    auto listener=t->ReserveListener(s,L(2));CHECK(listener);
+    CHECK(listener.value->socket_call->CallEntered()==NativeStatus::None);
+    CHECK(listener.value->socket_call->Complete(NativeSocketResult::Id(41)).status==NativeStatus::None);
+    auto listen=t->BeginListen(listener.value->owner);CHECK(listen);
+    CHECK(listen.value->CallEntered()==NativeStatus::None);
+    CHECK(listen.value->Complete(SyncListenResult::Success()).status==NativeStatus::None);
+    const auto peer=Peer(c);auto wrong=peer;wrong.remote_network_id="not-the-peer";
+    CHECK(t->PrepareInbound(s,42,wrong).issue.code==NativeStatus::UnknownPeer);
+    CHECK(t->PrepareInbound(s,40,peer).issue.code==NativeStatus::ForeignIdCollision);
+    CHECK(t->SnapshotUsage().owners==2&&!t->SnapshotUsage().admission_sealed);
+    std::uint64_t previous=0;
+    for(int i=0;i<8;++i) {
+        auto pending=t->PrepareInbound(s,42+i,peer);CHECK(pending);
+        auto owner=*pending.value;const auto before=owner.Observe();
+        CHECK(before.role==NativeOwnerRole::Accepted&&before.phase==NativeOwnerPhase::Reserved&&!before.owned_id);
+        CHECK(before.incarnation>previous);previous=before.incarnation;
+        CHECK(t->SnapshotUsage().owners==3&&t->SnapshotUsage().owned_ids==2);
+        CHECK(s.AdmitCallback(42+i).issue.code==NativeStatus::UnknownSocket);
+        CHECK(owner.TryClaimShutdown().issue.code==NativeStatus::NoOwnedId);
+        CHECK(!t->PrepareInbound(s,80+i,peer));
+        CHECK(owner.RequestClose()==NativeStatus::None);
+        CHECK(owner.Observe().status==NativeStatus::StaleHandle);
+        CHECK(owner.RequestClose()==NativeStatus::StaleHandle);
+        CHECK(t->SnapshotUsage().owners==2&&!t->SnapshotUsage().admission_sealed);
+    }
+    auto prepared=t->PrepareInbound(s,99,peer);CHECK(prepared);auto accepted=*prepared.value;
+    CHECK(t->CommitInbound(accepted,98)==NativeStatus::InvalidResult);
+    CHECK(!accepted.Observe().owned_id);
+    CHECK(t->CommitInbound(accepted,99)==NativeStatus::None);
+    CHECK(t->CommitInbound(accepted,99)==NativeStatus::None);
+    CHECK(accepted.Observe().owned_id==99&&accepted.Observe().phase==NativeOwnerPhase::Ready);
+    CHECK(accepted.Observe().incarnation!=dial.Observe().incarnation);
+    auto selected=t->TryResolve(c.directory.routes[0].key,1);CHECK(selected&&selected.value->generation==dial.Observe().generation);
+    {auto callback=s.AdmitCallback(99);CHECK(callback);CHECK(callback.value->ObserveShutdown()==NativeStatus::None);}
+    CHECK(accepted.RequestClose()==NativeStatus::None);
+    CHECK(accepted.TryClaimShutdown().issue.code==NativeStatus::ShutdownAlreadyObserved);
+    CHECK(dial.Observe().phase==NativeOwnerPhase::Ready&&listener.value->owner.Observe().phase==NativeOwnerPhase::Listening);
+    EmptyCalls(*t);
+}
+
+void PreparedInboundCapacity()
+{
+    auto c=Config(1,RouteDirection::Both);c.limits.total_owners=3;c.allow_closed_dial_retry=true;
+    auto t=Table(c);auto s=Space(*t,c);auto old=Ready(*t,s,c,0,499);
+    {auto callback=s.AdmitCallback(499);CHECK(callback);CHECK(callback.value->ObserveShutdown()==NativeStatus::None);}
+    auto outgoing=Ready(*t,s,c,0,500); // existing model retry leaves charged terminal metadata
+
+    auto listener=t->ReserveListener(s,L(2));CHECK(listener);
+    CHECK(listener.value->socket_call->CallEntered()==NativeStatus::None);
+    CHECK(listener.value->socket_call->Complete(NativeSocketResult::Id(501)).status==NativeStatus::None);
+    CHECK(t->PrepareInbound(s,502,Peer(c)).issue.code==NativeStatus::AdmissionSaturated);
+    CHECK(t->SnapshotUsage().owners==3&&!t->SnapshotUsage().admission_sealed);
+    auto listen=t->BeginListen(listener.value->owner);CHECK(listen);CHECK(listen.value->CallEntered()==NativeStatus::None);CHECK(listen.value->Complete(SyncListenResult::Success()).status==NativeStatus::None);
+    CHECK(outgoing.Observe().phase==NativeOwnerPhase::Ready&&listener.value->owner.Observe().phase==NativeOwnerPhase::Listening);
+}
+
+void DirectedAcceptedReceiveOnly()
+{
+    auto c=Config(1,RouteDirection::Both);c.dial_only_egress=true;
+    auto t=Table(c);auto ns=Space(*t,c);auto outgoing=Ready(*t,ns,c,0,801);
+    auto prepared=t->PrepareInbound(ns,802,Peer(c));CHECK(prepared);CHECK(t->CommitInbound(*prepared.value,802)==NativeStatus::None);
+    auto other=c;other.dial_only_egress=false;CHECK(t->AcquireNamespace(L(2),other).issue.code==NativeStatus::ConfigurationMismatch);
+    {auto callback=ns.AdmitCallback(801);CHECK(callback);CHECK(callback.value->ObserveShutdown()==NativeStatus::None);}
+    CHECK(t->TryResolve(c.directory.routes[0].key,1).issue.code==NativeStatus::NotReady);
+    {auto callback=ns.AdmitCallback(802);CHECK(callback);auto original=callback.value->CaptureIdentity();CHECK(original);CHECK(NativeOwnerTableTestAccess::ReceiveStatus(*t,*original.value)==NativeStatus::None);}
+    CHECK(prepared.value->Observe().phase==NativeOwnerPhase::Ready);
+}
+
 int main(int argc,char** argv)
 {
     const std::pair<const char*,void(*)()> tests[]={
+        {"N5-PREPARED-INBOUND",PreparedInboundContract},
+        {"N5-PREPARED-CAPACITY",PreparedInboundCapacity},
+        {"N5-DIRECTED-ACCEPTED",DirectedAcceptedReceiveOnly},
+        {"N4-SETUP-POOL",BoundedConcurrentSetupPool},
+        {"N4-BIDIRECTIONAL",BidirectionalRoute},
+        {"N4-CLOSED-DIAL-RETRY",ClosedDialRetryPolicy},
+        {"N4-CLOSED-ACCEPTED-NO-REACCEPT",ClosedAcceptedRouteIsNotReaccepted},
+        {"N4-RETRY-OUTSTANDING",ClosedDialRetryOutstandingLeases},
         {"N1-CFG",N1Configuration},{"N1-CACHE",N1Cache},{"N1-TICKET",N1Tickets},
         {"N1-CLOSE-SOCKET",N1CloseBeforeSocket},{"N1-CLOSE-POOL",N1ClosePool},
         {"N1-LATE",N1LateShutdown},{"N1-INBOUND",N1Inbound},{"N1-LIFETIME",N1Lifetime},{"N1-QUOTA",N1Quota},

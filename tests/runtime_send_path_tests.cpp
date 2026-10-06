@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/DSoftBusSenderResource.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusSenderResource.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -34,7 +34,7 @@ void operator delete[](void* pointer) noexcept { std::free(pointer); }
 void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
 void operator delete[](void* pointer, std::size_t) noexcept { std::free(pointer); }
 
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 using namespace std::chrono_literals;
 namespace rtps = eprosima::fastdds::rtps;
 #define CHECK(condition) do { if (!(condition)) throw std::runtime_error( \
@@ -186,7 +186,7 @@ std::size_t DirectoryAllocationProbe(const std::string& mode, std::size_t fail_a
 }
 }
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class SendQueueTestAccess
 {
 public:

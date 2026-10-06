@@ -1,0 +1,41 @@
+{
+  "project": "eProsima/Fast-DDS",
+  "version": "2.14.5",
+  "commit": "ebcb5c05e9da9e262041e8616bbaff61ab40a296",
+  "files": [
+    {
+      "path": "src/cpp/fastdds/domain/DomainParticipantFactory.cpp",
+      "base_sha256": "179a1b3d6df18288a303ea0f946668d2329479c7aa72883ad0dab1a9832c71e5",
+      "patched_sha256": "ede5897b5f3499ce52a5fbc3eba8028370eab6b233cd481586e22fda5739f659"
+    },
+    {
+      "path": "src/cpp/fastdds/publisher/PublisherImpl.cpp",
+      "base_sha256": "7d4fab1b1d8b4e0b33e7362fe25b7ca7d65b1d8b2242a97ed7e3ac5cec1e7ae9",
+      "patched_sha256": "ca738227681a910ce5eabe7edb0082d02b0b324b54ba3d15cfd17dfd5d51f701"
+    },
+    {
+      "path": "src/cpp/fastdds/subscriber/SubscriberImpl.cpp",
+      "base_sha256": "e231bc81278db4cfe718ca5b4f796bf11fa8303bcb015c91593d2cfd914c2509",
+      "patched_sha256": "7726c48e84544256fa2dfdbe7dd983f116ec6a8d52a239d5cde3ad19039a9a56"
+    },
+    {
+      "path": "src/cpp/rtps/xmlparser/XMLProfileManager.cpp",
+      "base_sha256": "c708850baa26180cb5ef4c4299cd46813c415974d6ed08246a52eccb396971b0",
+      "patched_sha256": "9fb4b757b84c281b9fd8815d836c9f58361b8ef9e08586839c33ffc656e6af2f"
+    }
+  ],
+  "hook_sha256": "def3043e4d90cdf8cb98a699f8b5bc4e58847f5a47f66aa76c0105382911e559",
+  "scope": "EXPERIMENTAL_ROS2_HOST_FACTORY_ENDPOINT_AND_XML_DEFAULT_CONFIGURATION_NOT_PROTOCOL_CHANGE",
+  "platform_sha256": "bd9d9870b5bebff94570870b2d6e5a332f5f150af5fa09339bfb0ec05bbf7213",
+  "startup_diagnostics_sha256": "e4af01ab235c890e9767d1f07dfd7c828930001057eccd8b68799643678fb5b2",
+  "teardown_diagnostics_sha256": "9b8b0d96016765bcfbfb253c708980a771798ac25bef51df04dedfb873e70a79",
+  "teardown_source_observation": {
+    "tool": "apply_teardown_observation.py",
+    "patch": "fastdds-2.14.5-teardown.patch",
+    "scope": "PUBLIC_RETURN_OBSERVATION_PLUS_EXISTING_FACTORY_MAPPING_NOT_PROTOCOL_CHANGE",
+    "factory_after_combined_patch_sha256": "b019cfbed737fdb80d152f41b01387e53d31f54485b58953493d80ac19bfa273"
+  },
+  "residual_diagnostics_sha256": "051c56128eb4f1174ce287cc48942e080cfc58080dd8879f65291ea1035736f8",
+  "native_prefix_sha256": "8fa000c23afbe8dc395cda33c82aefd9c5c04d603a81ccf1a5e1c0a37be23bc5",
+  "header_hash_note": "SHA-256 of header content with CRLF folded to LF; independent of clone autocrlf"
+}

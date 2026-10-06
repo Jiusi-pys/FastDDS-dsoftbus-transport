@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/NativeOwnerTable.hpp>
+#include <fastdds_dsoftbus/dsoftbus/NativeOwnerTable.hpp>
 #include "NativeSendExecutionInternal.hpp"
 #include "NativeReceiveInternal.hpp"
 #include <algorithm>
@@ -6,7 +6,7 @@
 #include <mutex>
 #include <new>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace {
 constexpr std::size_t no_index = static_cast<std::size_t>(-1);
 constexpr std::size_t owner_capacity = 12, namespace_capacity = 8;
@@ -15,7 +15,7 @@ template<class T> NativeResult<T> NativeFailure(NativeStatus code) noexcept
 { return {std::nullopt, {code}}; }
 NativeIssue NativeIssueFor(NativeStatus code,ConfigIndex first={},ConfigIndex second={}) noexcept
 { return {code,first,second,{}}; }
-bool NativeBytesValid(const std::string& s,std::size_t max) noexcept
+bool NativeBytesValid(std::string_view s,std::size_t max) noexcept
 { return !s.empty()&&s.size()<=max&&s.find('\0')==std::string::npos; }
 bool NativeSameKey(const RouteKey& a,const RouteKey& b) noexcept
 { return a.local_locator==b.local_locator&&a.remote_locator==b.remote_locator; }
@@ -31,7 +31,8 @@ std::size_t NativeFindRoute(const DirectoryConfiguration& c,const RouteKey& key)
 }
 bool NativeSameConfiguration(const NativeTableConfiguration& a,const NativeTableConfiguration& b) noexcept
 {
-    if(a.service_pkg_name!=b.service_pkg_name||a.directions!=b.directions||
+    if(a.bounded_reaccept_host!=b.bounded_reaccept_host)return false;
+    if(a.service_pkg_name!=b.service_pkg_name||a.directions!=b.directions||a.allow_closed_dial_retry!=b.allow_closed_dial_retry||a.dial_only_egress!=b.dial_only_egress||
             a.directory.locals.size()!=b.directory.locals.size()||a.directory.routes.size()!=b.directory.routes.size()) return false;
     const auto& x=a.limits;const auto& y=b.limits;
     if(x.namespaces!=y.namespaces||x.total_owners!=y.total_owners||x.setup_calls!=y.setup_calls||
@@ -52,22 +53,27 @@ bool NativeSameConfiguration(const NativeTableConfiguration& a,const NativeTable
 }
 NativeIssue NativeValidateConfiguration(const NativeTableConfiguration& c)
 {
+    if(c.bounded_reaccept_host&&(!c.allow_closed_dial_retry||!c.dial_only_egress))return NativeIssueFor(NativeStatus::InvalidConfiguration);
     const auto& l=c.limits;
     if(!l.namespaces||l.namespaces>namespace_capacity||!l.total_owners||l.total_owners>owner_capacity||
-            l.setup_calls!=1||!l.send_calls||l.send_calls>2||l.close_calls!=1) return NativeIssueFor(NativeStatus::InvalidLimits);
+            !l.setup_calls||l.setup_calls>NativeLimits::setup_call_capacity||!l.send_calls||l.send_calls>2||l.close_calls!=1) return NativeIssueFor(NativeStatus::InvalidLimits);
     // Subtraction first: no size addition can overflow even for hostile sizes.
     if(c.directory.locals.size()>l.total_owners||c.directory.routes.size()>l.total_owners-c.directory.locals.size())
         return NativeIssueFor(NativeStatus::InvalidLimits);
     if(c.directions.size()!=c.directory.routes.size()||std::any_of(c.directions.begin(),c.directions.end(),
-            [](RouteDirection d){return d!=RouteDirection::Dial&&d!=RouteDirection::Accept;}))
+            [](RouteDirection d){return d!=RouteDirection::Dial&&d!=RouteDirection::Accept&&d!=RouteDirection::Both;}))
         return NativeIssueFor(NativeStatus::InvalidDirection);
+    if(c.allow_closed_dial_retry&&std::any_of(c.directions.begin(),c.directions.end(),
+            [](RouteDirection d){return d!=RouteDirection::Both;})) return NativeIssueFor(NativeStatus::InvalidConfiguration);
+    const auto both=static_cast<std::size_t>(std::count(c.directions.begin(),c.directions.end(),RouteDirection::Both));
+    if(both>l.total_owners-c.directory.locals.size()-c.directory.routes.size()) return NativeIssueFor(NativeStatus::InvalidLimits);
     if(!NativeBytesValid(c.service_pkg_name,64)) return NativeIssueFor(NativeStatus::InvalidString);
     constexpr char special[]="distributeddata-default";
     for(std::size_t i=0;i<c.directory.locals.size();++i)
         if(c.directory.locals[i].local_listen_name.compare(0,sizeof(special)-1,special)==0)
             return NativeIssueFor(NativeStatus::UnsupportedSpecialSocketName,{ConfigIndexKind::Local,i});
     for(std::size_t i=0;i<c.directory.routes.size();++i)
-        if(c.directions[i]==RouteDirection::Dial&&c.directory.routes[i].fields.local_initiator_name.compare(0,sizeof(special)-1,special)==0)
+        if(c.directions[i]!=RouteDirection::Accept&&c.directory.routes[i].fields.local_initiator_name.compare(0,sizeof(special)-1,special)==0)
             return NativeIssueFor(NativeStatus::UnsupportedSpecialSocketName,{ConfigIndexKind::Route,i});
     // The snapshot is only a construction validator. Runtime never calls its
     // value-copying Resolve/Find APIs, which would allocate in callback paths.
@@ -97,10 +103,10 @@ NativeIssue NativeValidateConfiguration(const NativeTableConfiguration& c)
         if(first&&++distinct>l.namespaces) return NativeIssueFor(NativeStatus::InvalidLimits);
     }
     for(std::size_t i=0;i<c.directory.routes.size();++i) {
-        if(c.directions[i]!=RouteDirection::Dial) continue;
+        if(c.directions[i]==RouteDirection::Accept) continue;
         const auto& a=c.directory.routes[i].fields;
         for(std::size_t j=0;j<i;++j) {
-            if(c.directions[j]!=RouteDirection::Dial) continue;
+            if(c.directions[j]==RouteDirection::Accept) continue;
             const auto& b=c.directory.routes[j].fields;
             if(a.local_initiator_name==b.local_initiator_name&&a.remote_listen_name==b.remote_listen_name&&a.remote_network_id==b.remote_network_id)
                 return NativeIssueFor(NativeStatus::CreateKeyConflict,{ConfigIndexKind::Route,j},{ConfigIndexKind::Route,i});
@@ -115,6 +121,7 @@ struct NativeOwnerCell
 {
     bool used=false;
     std::size_t local=no_index,route=no_index,ns=no_index;
+    std::optional<NativeSocketId> prepared_id; // candidate only; never FindId/Shutdown authority
     NativeOwnerObservation facts{};
 };
 enum class NativeOperationPhase { Free, Reserved, Entered };
@@ -129,6 +136,10 @@ struct NativeState
 {
     explicit NativeState(const NativeTableConfiguration& input) : config(input)
     {
+        for(std::size_t i=0;i<config.directory.routes.size();++i) {
+            operational[i].version=config.directory.routes[i].route_version;
+            operational[i].network=config.directory.routes[i].fields.remote_network_id;
+        }
         for(std::size_t i=0;i<config.directory.locals.size();++i) {
             std::size_t ns=0;
             for(;ns<namespace_count;++ns)
@@ -138,15 +149,24 @@ struct NativeState
         }
     }
     const NativeTableConfiguration config;
+    // Operational availability belongs to the existing bounded route slots.
+    // Immutable registration names/identity remain in config.
+    struct OperationalRouteState {
+        bool online=true,pending=false,inflight=false,online_seen=false;
+        std::uint64_t version=1,inflight_version=0;
+        std::string network,hint;
+    };
+    std::array<OperationalRouteState,owner_capacity> operational{};
     std::mutex gate;
     std::array<NativeOwnerCell,owner_capacity> owners{};
-    // Physical pool locations: setup[0], send[1..2], close[3].
-    std::array<NativeOperationCell,4> operations{};
+    // Disjoint physical pools: setup[0..1], send[2..3], close[4]. A
+    // configured setup limit of one keeps cell 1 unavailable to all kinds.
+    std::array<NativeOperationCell,NativeLimits::setup_call_capacity+2+1> operations{};
     std::array<std::size_t,owner_capacity> local_namespaces{};
     std::array<std::size_t,namespace_capacity> namespace_locals{};
     std::size_t namespace_count=0,owner_count=0,owner_high_water=0,callbacks=0,receives=0;
     std::uint64_t next_identity=1,generation_high_water=0;
-    bool sealed=false,entered_context_lost=false;
+    bool sealed=false,entered_context_lost=false,host_replacement_sealed=false;
     NativeStatus seal_reason=NativeStatus::None;
     NativeEgressUsage egress_usage{};
 
@@ -159,10 +179,11 @@ struct NativeState
         if (f.generation != pin.generation_) return NativeStatus::StaleGeneration;
         if (f.route_version != pin.route_version_) return NativeStatus::StaleVersion;
         if (cell.route >= config.directory.routes.size()) return NativeStatus::WrongRole;
+        if (!operational[cell.route].online) return NativeStatus::Revoked;
         const auto& route = config.directory.routes[cell.route];
         if (route.key.local_locator != pin.local_ || route.key.remote_locator != pin.remote_)
             return NativeStatus::InvalidHandle;
-        if (route.route_version != pin.route_version_) return NativeStatus::StaleVersion;
+        if (operational[cell.route].version != pin.route_version_) return NativeStatus::StaleVersion;
         if (sealed) return NativeStatus::ServiceClosing;
         if (f.close_intent) return NativeStatus::Revoked;
         if (f.phase == NativeOwnerPhase::Binding) return NativeStatus::NotReady;
@@ -182,10 +203,56 @@ struct NativeState
         for(std::size_t i=0;i<owners.size();++i) if(owners[i].used&&owners[i].facts.owned_id==id) return i;
         return no_index;
     }
+    std::size_t SeenId(NativeSocketId id) const noexcept
+    {
+        for(std::size_t i=0;i<owners.size();++i)
+            if(owners[i].used&&(owners[i].facts.owned_id==id||owners[i].prepared_id==id))return i;
+        return no_index;
+    }
+    bool ActivitiesSettled(std::size_t slot) const noexcept
+    {
+        const auto& f=owners[slot].facts;
+        if(!f.close_intent||f.callback_inflight||f.receive_inflight||f.entered_context_lost||
+           f.provider_fault!=NativeProviderFault::None)return false;
+        for(const auto& op:operations)if(op.owner==slot&&op.phase!=NativeOperationPhase::Free)return false;
+        return true;
+    }
+    bool Settled(std::size_t slot) const noexcept
+    {
+        const auto& f=owners[slot].facts;
+        return ActivitiesSettled(slot)&&(!f.owned_id||f.on_shutdown_seen||f.shutdown_returned);
+    }
+    bool InboundAvailable(std::size_t route) const noexcept
+    {
+        const auto old=FindPlan(NativeOwnerRole::Accepted,route);
+        return old==no_index||(config.bounded_reaccept_host&&Settled(old));
+    }
     std::size_t FindPlan(NativeOwnerRole role,std::size_t index) const noexcept
     {
+        std::size_t retired=no_index;
         for(std::size_t i=0;i<owners.size();++i) if(owners[i].used&&owners[i].facts.role==role&&
-                (role==NativeOwnerRole::Listener?owners[i].local:owners[i].route)==index) return i;
+                (role==NativeOwnerRole::Listener?owners[i].local:owners[i].route)==index) {
+            if(!owners[i].facts.close_intent) return i;
+            retired=i;
+        }
+        return retired;
+    }
+    std::size_t ReadyRouteOwner(std::size_t route,std::uint64_t original_generation=0) const noexcept
+    {
+        if(route>=config.directory.routes.size()||!operational[route].online)return no_index;
+        // A queued send keeps its original generation even if a preferred dial
+        // becomes READY later. Preference is applied only at initial selection.
+        const auto direction=config.directions[route];
+        for(const auto role:{NativeOwnerRole::Dial,NativeOwnerRole::Accepted}) {
+            if(config.dial_only_egress&&role==NativeOwnerRole::Accepted)continue;
+            if((role==NativeOwnerRole::Dial&&direction==RouteDirection::Accept)||
+                    (role==NativeOwnerRole::Accepted&&direction==RouteDirection::Dial)) continue;
+            for(std::size_t i=0;i<owners.size();++i) {
+                const auto& c=owners[i];const auto& f=c.facts;
+                if(c.used&&c.route==route&&f.route_version==operational[route].version&&f.role==role&&f.phase==NativeOwnerPhase::Ready&&
+                        !f.close_intent&&f.owned_id&&(!original_generation||f.generation==original_generation)) return i;
+            }
+        }
         return no_index;
     }
     bool IdentitiesAvailable(std::uint64_t count) const noexcept
@@ -198,8 +265,10 @@ struct NativeState
     }
     std::size_t FreeOperation(NativeCallKind kind) const noexcept
     {
-        const std::size_t first=kind==NativeCallKind::Shutdown?3:kind==NativeCallKind::Send?1:0;
-        const std::size_t count=kind==NativeCallKind::Send?config.limits.send_calls:1;
+        const std::size_t first=kind==NativeCallKind::Shutdown?NativeLimits::setup_call_capacity+2:
+                kind==NativeCallKind::Send?NativeLimits::setup_call_capacity:0;
+        const std::size_t count=kind==NativeCallKind::Shutdown?config.limits.close_calls:
+                kind==NativeCallKind::Send?config.limits.send_calls:config.limits.setup_calls;
         for(std::size_t i=first;i<first+count;++i) if(operations[i].phase==NativeOperationPhase::Free) return i;
         return no_index;
     }
@@ -213,7 +282,7 @@ struct NativeState
         auto& cell=owners[slot];cell=NativeOwnerCell{};cell.used=true;cell.local=local;cell.route=route;cell.ns=ns;
         auto& f=cell.facts;f.status=NativeStatus::None;f.slot=slot;f.role=role;
         f.incarnation=next_identity++;f.generation=f.incarnation;
-        if(route!=no_index) f.route_version=config.directory.routes[route].route_version;
+        if(route!=no_index) f.route_version=operational[route].version;
         generation_high_water=f.generation;
         ++owner_count;owner_high_water=std::max(owner_high_water,owner_count);
     }
@@ -251,6 +320,11 @@ struct NativeState
     void CloseOwner(std::size_t slot,bool observed=false) noexcept
     {
         auto& cell=owners[slot];auto& f=cell.facts;
+        if(cell.prepared_id && !f.owned_id && f.role==NativeOwnerRole::Accepted&&!config.bounded_reaccept_host) {
+            // No external ownership was acquired. Old leases become stale; the
+            // next allocation still gets a new incarnation from next_identity.
+            cell=NativeOwnerCell{};--owner_count;return;
+        }
         f.close_intent=true;if(observed) f.on_shutdown_seen=true;
         for(std::size_t i=0;i<operations.size();++i) {
             const auto& op=operations[i];
@@ -285,8 +359,14 @@ struct NativeState
                 return {std::move(value),{}};
             }
             const bool pending=!f.close_intent&&(f.phase==NativeOwnerPhase::Reserved||f.phase==NativeOwnerPhase::SocketKnown||f.phase==NativeOwnerPhase::Binding);
-            return NativeFailure<NativeReservation>(pending?NativeStatus::ExistingPending:NativeStatus::OwnerUnavailable);
+            const bool retry=role==NativeOwnerRole::Dial&&config.allow_closed_dial_retry&&
+                    config.directions[route]==RouteDirection::Both&&f.close_intent&&f.socket_returned&&
+                    (!f.owned_id||f.shutdown_returned||f.on_shutdown_seen)&&!f.callback_inflight&&!f.receive_inflight&&
+                    !HasOperation(existing,NativeCallKind::Socket)&&!HasOperation(existing,NativeCallKind::Bind)&&
+                    !HasOperation(existing,NativeCallKind::Send)&&!HasOperation(existing,NativeCallKind::Shutdown);
+            if(!retry) return NativeFailure<NativeReservation>(pending?NativeStatus::ExistingPending:NativeStatus::OwnerUnavailable);
         }
+        if(config.bounded_reaccept_host&&host_replacement_sealed)return NativeFailure<NativeReservation>(NativeStatus::AdmissionSaturated);
         const auto slot=FreeOwner(),op=FreeOperation(NativeCallKind::Socket);
         if(slot==no_index) return NativeFailure<NativeReservation>(NativeStatus::AdmissionSaturated);
         if(op==no_index) return NativeFailure<NativeReservation>(NativeStatus::SetupBusy);
@@ -305,6 +385,9 @@ struct NativeState
                 (kind==NativeCallKind::Bind&&f.role!=NativeOwnerRole::Dial)) return NativeStatus::WrongRole;
         if(f.close_intent) return NativeStatus::OwnerUnavailable;
         if(f.phase!=NativeOwnerPhase::SocketKnown) return NativeStatus::WrongState;
+        // More than one global setup cell must not permit concurrent Listen
+        // invocations against the same owner while its phase is SocketKnown.
+        if(HasOperation(owner,kind)) return NativeStatus::SetupBusy;
         if(FreeOperation(kind)==no_index) return NativeStatus::SetupBusy;
         if(!IdentitiesAvailable(1)) return NativeStatus::IdentityExhausted;
         return NativeStatus::None;
@@ -361,12 +444,12 @@ bool NativeEgressBridge::Resolve(const RuntimeCeilingLease& lease,const Route& r
     if(s.sealed) return false;
     const auto route=NativeFindRoute(s.config.directory,r.key);
     if(route==no_index||s.config.directory.routes[route].route_version!=r.route_version) return false;
-    const auto role=s.config.directions[route]==RouteDirection::Dial?NativeOwnerRole::Dial:NativeOwnerRole::Accepted;
-    const auto owner=s.FindPlan(role,route);
+    output={r.key,s.operational[route].version,0,true,s.operational[route].online};
+    const auto owner=s.ReadyRouteOwner(route);
     if(owner==no_index) return false;
     const auto& f=s.owners[owner].facts;
     if(f.close_intent||f.phase!=NativeOwnerPhase::Ready) return false;
-    output={r.key,r.route_version,f.generation};return true;
+    output.generation=f.generation;return true;
 }
 NativeStatus NativeEgressBridge::Admit(const std::shared_ptr<NativeState>& s,EgressState& r,
         const RuntimeIdentityHandle& identity,const Route& route,std::uint64_t generation,
@@ -381,10 +464,10 @@ NativeStatus NativeEgressBridge::Admit(const std::shared_ptr<NativeState>& s,Egr
     if(SendQueue::Clock::now()>=deadline) return NativeStatus::DeadlineExpired;
     const auto index=NativeFindRoute(s->config.directory,route.key);
     if(index==no_index) return NativeStatus::NotFound;
-    if(s->config.directory.routes[index].route_version!=route.route_version) return NativeStatus::StaleVersion;
-    const auto role=s->config.directions[index]==RouteDirection::Dial?NativeOwnerRole::Dial:NativeOwnerRole::Accepted;
-    const auto owner=s->FindPlan(role,index);
-    if(owner==no_index) return NativeStatus::NotReady;
+    if(!s->operational[index].online)return NativeStatus::Revoked;
+    if(s->operational[index].version!=route.route_version) return NativeStatus::StaleVersion;
+    const auto owner=s->ReadyRouteOwner(index,generation);
+    if(owner==no_index) return s->ReadyRouteOwner(index)==no_index?NativeStatus::NotReady:NativeStatus::StaleGeneration;
     const auto& f=s->owners[owner].facts;
     if(f.close_intent||f.phase!=NativeOwnerPhase::Ready||!f.owned_id) return NativeStatus::NotReady;
     if(f.generation!=generation) return NativeStatus::StaleGeneration;
@@ -416,6 +499,11 @@ NativeStatus NativeEgressBridge::EnterLocked(NativeSendCallTicket& ticket,SendQu
     const auto status=s.CheckToken(t,NativeCallKind::Send);if(status!=NativeStatus::None) return status;
     auto& op=s.operations[t.operation_slot_];
     if(op.phase==NativeOperationPhase::Entered) return NativeStatus::AlreadyEntered;
+    const auto route=s.owners[t.owner_slot_].route;
+    if(route>=s.config.directory.routes.size()||!s.operational[route].online||
+       s.owners[t.owner_slot_].facts.route_version!=s.operational[route].version) {
+        s.ReleaseReserved(t.operation_slot_);t.settled_=true;return NativeStatus::Revoked;
+    }
     // Sample AFTER waiting for this gate; no stale pre-lock deadline sample.
     if(SendQueue::Clock::now()>=deadline) {s.ReleaseReserved(t.operation_slot_);t.settled_=true;return NativeStatus::DeadlineExpired;}
     op.phase=NativeOperationPhase::Entered;return NativeStatus::None;
@@ -545,6 +633,117 @@ void NativeReceiveLease::Release() noexcept
 
 NativeOwnerTable::NativeOwnerTable(std::shared_ptr<detail::NativeState> s) noexcept : state_(std::move(s)) {}
 NativeOwnerTable::~NativeOwnerTable() noexcept { RequestServiceClose(); }
+NativeStatus NativeOwnerTable::ObserveNodeOffline(std::string_view network_id) noexcept
+{
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(state_->sealed)return NativeStatus::ServiceClosing;
+    if(!NativeBytesValid(network_id,64))return NativeStatus::InvalidString;
+    bool found=false;
+    for(std::size_t i=0;i<state_->config.directory.routes.size();++i)
+        if(state_->operational[i].network==network_id||
+           (!state_->operational[i].online&&state_->operational[i].hint==network_id)) {
+            auto& op=state_->operational[i];found=true;
+            op.online_seen=false;
+            if(op.online||op.pending||(op.inflight&&op.inflight_version==op.version)) {
+                op.online=false;op.pending=false;op.online_seen=false;
+                if(op.version!=identity_limit)++op.version;
+                for(auto& owner:state_->owners)if(owner.used&&owner.route==i) {
+                    owner.facts.close_intent=true;state_->RefreshStopped(owner);
+                }
+            }
+        }
+    return found?NativeStatus::None:NativeStatus::NotFound;
+}
+NativeStatus NativeOwnerTable::ObserveNodeOnline(std::string_view hint) noexcept
+try {
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(state_->sealed)return NativeStatus::ServiceClosing;
+    if(!NativeBytesValid(hint,64))return NativeStatus::InvalidString;
+    bool pending=false;
+    for(std::size_t i=0;i<state_->config.directory.routes.size();++i) {
+        auto& op=state_->operational[i];
+        // A new unknown node cannot invalidate a healthy unrelated route.
+        if(op.online||(op.online_seen&&op.hint==hint))continue;
+        if(op.version==identity_limit)return NativeStatus::IdentityExhausted;
+        op.hint=hint;++op.version;op.pending=true;op.online_seen=true;pending=true;
+    }
+    return pending?NativeStatus::None:NativeStatus::NotFound;
+} catch(...) {return NativeStatus::AllocationFailure;}
+NativeResult<NodeRouteRequest> NativeOwnerTable::TakeNodeResolution() noexcept
+try {
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(state_->sealed)return NativeFailure<NodeRouteRequest>(NativeStatus::ServiceClosing);
+    for(std::size_t i=0;i<state_->config.directory.routes.size();++i) {
+        auto& op=state_->operational[i];if(!op.pending||op.inflight)continue;
+        const auto& route=state_->config.directory.routes[i];
+        const auto& identities=state_->config.directory.identities;
+        const auto found=std::find_if(identities.begin(),identities.end(),[&](const auto& x){
+            return std::equal(x.key.begin(),x.key.end(),route.key.remote_locator.address);});
+        if(found==identities.end()){op.pending=false;return NativeFailure<NodeRouteRequest>(NativeStatus::ConfigurationMismatch);}
+        NodeRouteRequest request;request.state_=state_;request.route_=i;request.revision_=op.version;
+        request.identity_={found->name_space,found->domain,found->udid};request.hint_=op.hint;request.key_=route.key;
+        op.pending=false;op.inflight=true;op.inflight_version=request.revision_;
+        return {std::move(request),{}};
+    }
+    return NativeFailure<NodeRouteRequest>(NativeStatus::NotFound);
+} catch(...) {return NativeFailure<NodeRouteRequest>(NativeStatus::AllocationFailure);}
+NativeStatus NativeOwnerTable::CompleteNodeResolution(const NodeRouteRequest& request,const v1::RouteResult& result) noexcept
+try {
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(request.state_!=state_||request.route_>=state_->config.directory.routes.size())return NativeStatus::ForeignState;
+    auto& op=state_->operational[request.route_];
+    if(!op.inflight||op.inflight_version!=request.revision_)return NativeStatus::StaleVersion;
+    op.inflight=false;
+    if(state_->sealed)return NativeStatus::ServiceClosing;
+    if(op.version!=request.revision_||!op.online_seen)return NativeStatus::StaleVersion;
+    if(result.status!=v1::DirectoryStatus::Ok||!result.route)return NativeStatus::OwnerUnavailable;
+    const auto& expected=request.identity_;const auto& actual=result.route->identity;
+    EndpointId key{};
+    if(expected.name_space!=actual.name_space||expected.domain!=actual.domain||expected.udid!=actual.udid||
+       !v1::AddressCodec::DeriveKey(actual,key)||!std::equal(key.begin(),key.end(),request.key_.remote_locator.address)||
+       !NativeBytesValid(result.route->network_id,64))return NativeStatus::ConfigurationMismatch;
+    // Reuse the declaration validator on the bounded current operational view.
+    // A new network value must not create an ambiguous reverse/create tuple.
+    auto effective=state_->config.directory;
+    for(std::size_t i=0;i<effective.routes.size();++i)
+        effective.routes[i].fields.remote_network_id=i==request.route_?result.route->network_id:state_->operational[i].network;
+    const auto& candidate=effective.routes[request.route_].fields;
+    for(std::size_t i=0;i<effective.routes.size();++i)if(i!=request.route_){
+        const auto& other=effective.routes[i].fields;
+        if(candidate.remote_network_id==other.remote_network_id&&candidate.remote_listen_name==other.remote_listen_name&&
+           candidate.local_initiator_name==other.local_initiator_name)return NativeStatus::ConfigurationMismatch;
+    }
+    if(!EndpointDirectory::Build(effective).value)return NativeStatus::ConfigurationMismatch;
+    // Strong string assignment completes before availability publication.
+    op.network=result.route->network_id;op.hint.clear();op.online=true;return NativeStatus::None;
+} catch(...) {return NativeStatus::AllocationFailure;}
+NativeResult<Route> NativeOwnerTable::OperationalRoute(const NativeOwnerLease& owner) const noexcept
+try {
+    std::lock_guard<std::mutex> lock(state_->gate);
+    const auto status=state_->CheckOwner(owner);if(status!=NativeStatus::None)return NativeFailure<Route>(status);
+    const auto& cell=state_->owners[owner.slot_];
+    if(cell.route>=state_->config.directory.routes.size())return NativeFailure<Route>(NativeStatus::WrongRole);
+    const auto& op=state_->operational[cell.route];
+    if(state_->sealed||!op.online||cell.facts.close_intent)return NativeFailure<Route>(NativeStatus::Revoked);
+    if(cell.facts.route_version!=op.version)return NativeFailure<Route>(NativeStatus::StaleVersion);
+    Route route=state_->config.directory.routes[cell.route];route.fields.remote_network_id=op.network;route.route_version=op.version;
+    return {std::move(route),{}};
+} catch(...) {return NativeFailure<Route>(NativeStatus::AllocationFailure);}
+bool NativeOwnerTable::RouteAvailable(const RouteKey& key) const noexcept {
+    std::lock_guard<std::mutex> lock(state_->gate);const auto route=NativeFindRoute(state_->config.directory,key);
+    return !state_->sealed&&route!=no_index&&state_->operational[route].online;
+}
+NativeRouteSnapshot NativeOwnerTable::ObserveRoute(const RouteKey& key) const noexcept {
+    std::lock_guard<std::mutex> lock(state_->gate);
+    NativeRouteSnapshot out;out.sealed=state_->sealed;
+    const auto route=NativeFindRoute(state_->config.directory,key);
+    if(route==no_index)return out;
+    const auto& op=state_->operational[route];out.found=true;
+    out.available=!state_->sealed&&op.online;out.resolution_pending=op.pending;
+    out.resolution_inflight=op.inflight;out.route_version=op.version;
+    out.request_version=op.inflight?op.inflight_version:0;
+    return out;
+}
 NativeResult<std::unique_ptr<NativeOwnerTable>> NativeOwnerTable::Build(const NativeTableConfiguration& input) noexcept
 {
     try {
@@ -582,9 +781,10 @@ NativeResult<NativeReservation> NativeOwnerTable::ReserveDial(const NamespaceLea
     if(state_->sealed) return NativeFailure<NativeReservation>(NativeStatus::ServiceClosing);
     const auto route=NativeFindRoute(state_->config.directory,key);
     if(route==no_index) return NativeFailure<NativeReservation>(NativeStatus::NotFound);
+    if(!state_->operational[route].online)return NativeFailure<NativeReservation>(NativeStatus::Revoked);
     const auto local=NativeFindLocal(state_->config.directory,key.local_locator);
     if(state_->local_namespaces[local]!=ns.namespace_index_) return NativeFailure<NativeReservation>(NativeStatus::InvalidHandle);
-    if(state_->config.directions[route]!=RouteDirection::Dial) return NativeFailure<NativeReservation>(NativeStatus::DirectionMismatch);
+    if(state_->config.directions[route]==RouteDirection::Accept) return NativeFailure<NativeReservation>(NativeStatus::DirectionMismatch);
     return state_->Reserve(state_,NativeOwnerRole::Dial,local,route,ns.namespace_index_);
 }
 NativeResult<ListenCallTicket> NativeOwnerTable::BeginListen(const NativeOwnerLease& owner) noexcept
@@ -593,7 +793,7 @@ NativeResult<ListenCallTicket> NativeOwnerTable::BeginListen(const NativeOwnerLe
     auto status=state_->CheckOwner(owner);
     if(status==NativeStatus::None) status=state_->BeginSetup(owner.slot_,NativeCallKind::Listen);
     if(status!=NativeStatus::None) return NativeFailure<ListenCallTicket>(status);
-    ListenCallTicket ticket;state_->Mint(ticket.token_,state_,owner.slot_,0,NativeCallKind::Listen);
+    ListenCallTicket ticket;state_->Mint(ticket.token_,state_,owner.slot_,state_->FreeOperation(NativeCallKind::Listen),NativeCallKind::Listen);
     return {std::move(ticket),{}};
 }
 NativeResult<BindCallTicket> NativeOwnerTable::BeginBind(const NativeOwnerLease& owner) noexcept
@@ -602,9 +802,85 @@ NativeResult<BindCallTicket> NativeOwnerTable::BeginBind(const NativeOwnerLease&
     auto status=state_->CheckOwner(owner);
     if(status==NativeStatus::None) status=state_->BeginSetup(owner.slot_,NativeCallKind::Bind);
     if(status!=NativeStatus::None) return NativeFailure<BindCallTicket>(status);
-    BindCallTicket ticket;state_->Mint(ticket.token_,state_,owner.slot_,0,NativeCallKind::Bind);
+    BindCallTicket ticket;state_->Mint(ticket.token_,state_,owner.slot_,state_->FreeOperation(NativeCallKind::Bind),NativeCallKind::Bind);
     state_->owners[owner.slot_].facts.phase=NativeOwnerPhase::Binding;
     return {std::move(ticket),{}};
+}
+NativeResult<NativeOwnerLease> NativeOwnerTable::PrepareInbound(const NamespaceLease& ns,NativeSocketId id,const ObservedPeerKey& peer) noexcept
+{
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(!ns.state_) return NativeFailure<NativeOwnerLease>(NativeStatus::InvalidHandle);
+    if(ns.state_!=state_) return NativeFailure<NativeOwnerLease>(NativeStatus::ForeignState);
+    if(state_->sealed) return NativeFailure<NativeOwnerLease>(NativeStatus::ServiceClosing);
+    if(id<0) return NativeFailure<NativeOwnerLease>(NativeStatus::InvalidResult);
+    if(ns.namespace_index_>=state_->namespace_count) return NativeFailure<NativeOwnerLease>(NativeStatus::InvalidHandle);
+    const auto& config=state_->config;
+    const auto& name=config.directory.locals[state_->namespace_locals[ns.namespace_index_]].callback_namespace;
+    if(config.bounded_reaccept_host&&state_->host_replacement_sealed)return NativeFailure<NativeOwnerLease>(NativeStatus::AdmissionSaturated);
+    if(!NativeBytesValid(peer.callback_namespace,255)||!NativeBytesValid(peer.remote_network_id,64)||
+            !NativeBytesValid(peer.actual_remote_socket_name,255)||peer.callback_namespace!=name)
+        return NativeFailure<NativeOwnerLease>(NativeStatus::UnknownPeer);
+    if(peer.actual_data_type!=RecordDataType::Bytes)
+        return NativeFailure<NativeOwnerLease>(NativeStatus::UnsupportedDataType);
+    std::size_t route=no_index;
+    for(std::size_t i=0;i<config.directory.routes.size();++i) {
+        const auto& r=config.directory.routes[i];
+        const auto local=NativeFindLocal(config.directory,r.key.local_locator);
+        if(state_->local_namespaces[local]!=ns.namespace_index_||!state_->operational[i].online||state_->operational[i].network!=peer.remote_network_id)continue;
+        if(std::find(r.fields.expected_remote_initiator_names.begin(),r.fields.expected_remote_initiator_names.end(),
+                peer.actual_remote_socket_name)!=r.fields.expected_remote_initiator_names.end()){route=i;break;}
+    }
+    if(route==no_index) return NativeFailure<NativeOwnerLease>(NativeStatus::UnknownPeer);
+    if(config.directions[route]==RouteDirection::Dial) return NativeFailure<NativeOwnerLease>(NativeStatus::DirectionMismatch);
+    if((config.bounded_reaccept_host?state_->SeenId(id):state_->FindId(id))!=no_index) return NativeFailure<NativeOwnerLease>(NativeStatus::ForeignIdCollision);
+    for(const auto& cell:state_->owners)if(cell.used&&cell.prepared_id==id)
+        return NativeFailure<NativeOwnerLease>(NativeStatus::ExistingPending);
+    if(!state_->InboundAvailable(route))
+        return NativeFailure<NativeOwnerLease>(NativeStatus::DuplicateConnection);
+    const auto slot=state_->FreeOwner();
+    // A rejected negotiation has no externally owned ID. It neither mints a
+    // rejected owner nor seals otherwise healthy owners on capacity failure.
+    if(slot==no_index) return NativeFailure<NativeOwnerLease>(NativeStatus::AdmissionSaturated);
+    if(!state_->IdentitiesAvailable(1)) return NativeFailure<NativeOwnerLease>(NativeStatus::IdentityExhausted);
+    const auto local=NativeFindLocal(config.directory,config.directory.routes[route].key.local_locator);
+    state_->CreateOwner(slot,NativeOwnerRole::Accepted,local,route,ns.namespace_index_);
+    auto& cell=state_->owners[slot];cell.prepared_id=id;
+    return {NativeOwnerLease(state_,slot,cell.facts.incarnation),{}};
+}
+NativeStatus NativeOwnerTable::CommitInbound(const NativeOwnerLease& owner,NativeSocketId id) noexcept
+{
+    std::lock_guard<std::mutex> lock(state_->gate);
+    const auto status=state_->CheckOwner(owner);if(status!=NativeStatus::None)return status;
+    if(state_->sealed)return NativeStatus::ServiceClosing;
+    auto& cell=state_->owners[owner.slot_];auto& f=cell.facts;
+    if(f.role!=NativeOwnerRole::Accepted)return NativeStatus::WrongRole;
+    if(f.close_intent)return NativeStatus::Revoked;
+    if(f.phase==NativeOwnerPhase::Ready&&f.owned_id==id)return NativeStatus::None;
+    if(id<0||cell.prepared_id!=id)return NativeStatus::InvalidResult;
+    if(f.phase!=NativeOwnerPhase::Reserved||f.owned_id)return NativeStatus::WrongState;
+    if(state_->FindId(id)!=no_index)return NativeStatus::ForeignIdCollision;
+    f.owned_id=id;f.phase=NativeOwnerPhase::Ready;cell.prepared_id.reset();return NativeStatus::None;
+}
+NativeStatus NativeOwnerTable::QuarantineHostId(const Locator& local,NativeSocketId id) noexcept
+{
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(!state_->config.bounded_reaccept_host)return NativeStatus::NotImplemented;
+    if(id<0)return NativeStatus::InvalidResult;
+    const auto li=NativeFindLocal(state_->config.directory,local);
+    if(li==no_index)return NativeStatus::NotFound;
+    if(state_->SeenId(id)!=no_index)return NativeStatus::None;
+    const auto slot=state_->FreeOwner();
+    if(slot==no_index){state_->host_replacement_sealed=true;return NativeStatus::AdmissionSaturated;}
+    if(!state_->IdentitiesAvailable(1)){state_->host_replacement_sealed=true;return NativeStatus::IdentityExhausted;}
+    state_->CreateOwner(slot,NativeOwnerRole::Rejected,li,no_index,state_->local_namespaces[li]);
+    auto& c=state_->owners[slot];c.prepared_id=id;c.facts.close_intent=true;
+    c.facts.phase=NativeOwnerPhase::FailedRetained;c.facts.failure=NativeStatus::UnknownSocket;
+    return NativeStatus::None; // observed identity only; no external ownership/Shutdown right
+}
+bool NativeOwnerTable::HostIdWasSeen(NativeSocketId id) const noexcept
+{
+    std::lock_guard<std::mutex> lock(state_->gate);
+    return state_->config.bounded_reaccept_host&&state_->SeenId(id)!=no_index;
 }
 NativeInboundResult NativeOwnerTable::ObserveInbound(const NamespaceLease& ns,NativeSocketId id,const ObservedPeerKey& peer) noexcept
 {
@@ -624,14 +900,15 @@ NativeInboundResult NativeOwnerTable::ObserveInbound(const NamespaceLease& ns,Na
         for(std::size_t i=0;i<config.directory.routes.size();++i) {
             const auto& r=config.directory.routes[i];
             const auto local=NativeFindLocal(config.directory,r.key.local_locator);
-            if(state_->local_namespaces[local]!=ns.namespace_index_||r.fields.remote_network_id!=peer.remote_network_id) continue;
+            if(state_->local_namespaces[local]!=ns.namespace_index_||!state_->operational[i].online||state_->operational[i].network!=peer.remote_network_id) continue;
             if(std::find(r.fields.expected_remote_initiator_names.begin(),r.fields.expected_remote_initiator_names.end(),
                     peer.actual_remote_socket_name)!=r.fields.expected_remote_initiator_names.end()) {route=i;break;}
         }
         if(route==no_index) status=NativeStatus::UnknownPeer;
-        else if(config.directions[route]!=RouteDirection::Accept) status=NativeStatus::DirectionMismatch;
+        else if(config.directions[route]==RouteDirection::Dial) status=NativeStatus::DirectionMismatch;
     }
     const auto known=state_->FindId(id);
+    if(config.bounded_reaccept_host&&known==no_index&&state_->SeenId(id)!=no_index)return {NativeStatus::ForeignIdCollision};
     if(known!=no_index) {
         const auto& cell=state_->owners[known];const auto& f=cell.facts;
         if(status==NativeStatus::None&&cell.ns==ns.namespace_index_&&cell.route==route&&f.role==NativeOwnerRole::Accepted&&
@@ -640,14 +917,15 @@ NativeInboundResult NativeOwnerTable::ObserveInbound(const NamespaceLease& ns,Na
         // An observed numeric ID never transfers an existing owner's rights.
         return {NativeStatus::ForeignIdCollision};
     }
-    if(status==NativeStatus::None&&state_->FindPlan(NativeOwnerRole::Accepted,route)!=no_index) status=NativeStatus::DuplicateConnection;
+    if(status==NativeStatus::None&&!state_->InboundAvailable(route)) status=NativeStatus::DuplicateConnection;
+    if(config.bounded_reaccept_host&&state_->host_replacement_sealed)return {NativeStatus::AdmissionSaturated,std::nullopt,false,true};
     const auto slot=state_->FreeOwner();
     if(slot==no_index) {
-        state_->sealed=true;state_->seal_reason=NativeStatus::AdmissionSaturated;
+        if(!config.bounded_reaccept_host){state_->sealed=true;state_->seal_reason=NativeStatus::AdmissionSaturated;}
         return {NativeStatus::AdmissionSaturated,std::nullopt,false,true};
     }
     if(!state_->IdentitiesAvailable(1)) {
-        state_->sealed=true;state_->seal_reason=NativeStatus::IdentityExhausted;
+        if(!config.bounded_reaccept_host){state_->sealed=true;state_->seal_reason=NativeStatus::IdentityExhausted;}
         return {NativeStatus::IdentityExhausted,std::nullopt,false,true};
     }
     const bool accepted=status==NativeStatus::None;
@@ -664,9 +942,8 @@ NativeResult<SendConnectionSnapshot> NativeOwnerTable::TryResolve(const RouteKey
     if(state_->sealed) return NativeFailure<SendConnectionSnapshot>(NativeStatus::ServiceClosing);
     const auto route=NativeFindRoute(state_->config.directory,key);
     if(route==no_index) return NativeFailure<SendConnectionSnapshot>(NativeStatus::NotFound);
-    if(state_->config.directory.routes[route].route_version!=version) return NativeFailure<SendConnectionSnapshot>(NativeStatus::StaleVersion);
-    const auto role=state_->config.directions[route]==RouteDirection::Dial?NativeOwnerRole::Dial:NativeOwnerRole::Accepted;
-    const auto owner=state_->FindPlan(role,route);
+    if(state_->operational[route].version!=version) return NativeFailure<SendConnectionSnapshot>(NativeStatus::StaleVersion);
+    const auto owner=state_->ReadyRouteOwner(route);
     if(owner==no_index||state_->owners[owner].facts.close_intent||state_->owners[owner].facts.phase!=NativeOwnerPhase::Ready)
         return NativeFailure<SendConnectionSnapshot>(NativeStatus::NotReady);
     return {SendConnectionSnapshot{key,version,state_->owners[owner].facts.generation},{}};
@@ -736,6 +1013,25 @@ NativeStatus NativeOwnerLease::RequestClose() const noexcept
     std::lock_guard<std::mutex> lock(state_->gate);const auto status=state_->CheckOwner(*this);
     if(status==NativeStatus::None) state_->CloseOwner(slot_);
     return status;
+}
+bool NativeOwnerLease::AdapterSettled() const noexcept
+{
+    if(!state_)return false;
+    std::lock_guard<std::mutex> lock(state_->gate);
+    return state_->CheckOwner(*this)==NativeStatus::None&&state_->Settled(slot_);
+}
+bool NativeOwnerLease::AdapterActivitiesSettled() const noexcept
+{
+    if(!state_)return false;
+    std::lock_guard<std::mutex> lock(state_->gate);
+    return state_->CheckOwner(*this)==NativeStatus::None&&state_->ActivitiesSettled(slot_);
+}
+std::optional<NativeSocketId> NativeOwnerLease::RetainedId() const noexcept
+{
+    if(!state_)return {};
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(state_->CheckOwner(*this)!=NativeStatus::None)return {};
+    const auto& c=state_->owners[slot_];return c.facts.owned_id?c.facts.owned_id:c.prepared_id;
 }
 NativeResult<ShutdownCallTicket> NativeOwnerLease::TryClaimShutdown() const noexcept
 {
@@ -853,6 +1149,9 @@ NativeStatus NativeOperationToken::Enter(NativeCallKind kind) noexcept
     if(status!=NativeStatus::None) return status;
     auto& op=state_->operations[operation_slot_];auto& f=state_->owners[owner_slot_].facts;
     if(op.phase==NativeOperationPhase::Entered) return NativeStatus::AlreadyEntered;
+    const auto route=state_->owners[owner_slot_].route;
+    if(kind!=NativeCallKind::Shutdown&&route!=no_index&&
+       (!state_->operational[route].online||f.route_version!=state_->operational[route].version))return NativeStatus::StaleVersion;
     // RequestClose/OnShutdown atomically revoke all affected Reserved cells.
     // There is no unprotected Ready check between this gate and model admission.
     op.phase=NativeOperationPhase::Entered;
@@ -873,14 +1172,18 @@ NativeCompletion NativeOperationToken::Complete(NativeCallKind kind,bool success
     if(kind==NativeCallKind::Socket) {
         f.socket_returned=true;
         if(success) {
-            const auto existing=state_->FindId(result);
+            const auto existing=state_->config.bounded_reaccept_host?state_->SeenId(result):state_->FindId(result);
             if(existing!=no_index&&existing!=owner_slot_) {
                 f.failure=NativeStatus::ForeignIdCollision;f.close_intent=true;f.phase=NativeOwnerPhase::FailedRetained;
                 status=NativeStatus::ForeignIdCollision;
             } else {f.owned_id=result;f.phase=NativeOwnerPhase::SocketKnown;}
         } else {f.error_code=result;f.failure=NativeStatus::OwnerUnavailable;f.close_intent=true;f.phase=NativeOwnerPhase::FailedRetained;}
     } else if(kind==NativeCallKind::Listen||kind==NativeCallKind::Bind) {
-        if(success&&!f.close_intent) f.phase=kind==NativeCallKind::Listen?NativeOwnerPhase::Listening:NativeOwnerPhase::Ready;
+        if(kind==NativeCallKind::Bind&&cell.route!=no_index&&success&&
+           (!state_->operational[cell.route].online||f.route_version!=state_->operational[cell.route].version)) {
+            f.close_intent=true;f.failure=NativeStatus::StaleVersion;status=NativeStatus::StaleVersion;
+        }
+        else if(success&&!f.close_intent) f.phase=kind==NativeCallKind::Listen?NativeOwnerPhase::Listening:NativeOwnerPhase::Ready;
         else if(!success) {f.error_code=result;f.failure=NativeStatus::OwnerUnavailable;f.close_intent=true;}
     } else if(kind==NativeCallKind::Shutdown) f.shutdown_returned=true;
     else if(kind==NativeCallKind::Send&&!success) {f.error_code=result;f.failure=NativeStatus::OwnerUnavailable;f.close_intent=true;}
@@ -918,4 +1221,4 @@ NativeStatus BindCallTicket::Abandon() noexcept { return token_.Abandon(NativeCa
 NativeStatus ShutdownCallTicket::CallEntered() noexcept { return token_.Enter(NativeCallKind::Shutdown); }
 NativeStatus ShutdownCallTicket::CompleteShutdownReturned() noexcept { return token_.Complete(NativeCallKind::Shutdown,true,0).status; }
 NativeStatus ShutdownCallTicket::Abandon() noexcept { return token_.Abandon(NativeCallKind::Shutdown); }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

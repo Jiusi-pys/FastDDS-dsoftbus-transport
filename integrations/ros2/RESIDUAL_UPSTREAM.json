@@ -1,0 +1,19 @@
+{
+  "version": "2.14.5",
+  "commit": "ebcb5c05e9da9e262041e8616bbaff61ab40a296",
+  "prerequisite": "EXISTING_FACTORY_ENDPOINT_HOOK_AND_TEARDOWN_OBSERVATION",
+  "files": [
+    {
+      "path": "src/cpp/fastdds/domain/DomainParticipantImpl.hpp",
+      "base_sha256": "d97eb8205ade4a5ca06ea24fd70fc89ef0b005c5b2932e9b218d80cfb97944c2"
+    },
+    {
+      "path": "src/cpp/fastdds/domain/DomainParticipantImpl.cpp",
+      "base_sha256": "42a59eeb706bc513cfd62a95e23a4c25e3bc6248255e3ff7be9348514bc6a7c2"
+    },
+    {
+      "path": "src/cpp/fastdds/domain/DomainParticipantFactory.cpp",
+      "base_sha256": "b019cfbed737fdb80d152f41b01387e53d31f54485b58953493d80ac19bfa273"
+    }
+  ]
+}

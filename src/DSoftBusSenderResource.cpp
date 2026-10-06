@@ -1,18 +1,37 @@
-#include <mdds/dsoftbus/DSoftBusSenderResource.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusSenderResource.hpp>
 
 #include <utility>
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+#include "../probes/PublicSocketRuntimeTrace.hpp"
+extern "C" void FastddsDsoftbusObserveSenderSubmission(std::uint64_t sender,
+        const void* data,std::size_t bytes,int status,bool route_known,bool route_available,
+        std::uint64_t route_revision,bool queue_admitted) noexcept;
+#endif
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 DSoftBusSenderResource::DSoftBusSenderResource(std::shared_ptr<RuntimeSendPath> runtime)
     : SenderResource(LocatorCodec::kind), runtime_(std::move(runtime))
 {
     // Installed exactly once. Base send reads it outside our resource gate:
     // Release MUST NOT clear/reassign either std::function callback.
+#if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+    send_lambda_ = [this](const eprosima::fastrtps::rtps::octet* data, std::uint32_t bytes,
+            RuntimeSendPath::Iterator* begin, RuntimeSendPath::Iterator* end,
+            const RuntimeSendPath::Clock::time_point& deadline) {
+        try {
+            return Send(std::vector<NetworkBuffer>{NetworkBuffer(data, bytes)},
+                    bytes, begin, end, deadline, 0);
+        } catch (const std::bad_alloc&) {
+            return false;
+        }
+    };
+#else
     send_lambda_ = [this](const std::vector<NetworkBuffer>& buffers, std::uint32_t bytes,
             RuntimeSendPath::Iterator* begin, RuntimeSendPath::Iterator* end,
             const RuntimeSendPath::Clock::time_point& deadline, std::int32_t priority) {
         return Send(buffers, bytes, begin, end, deadline, priority);
     };
+#endif
 }
 DSoftBusSenderResource::~DSoftBusSenderResource() { Release(); }
 SenderAttachResult DSoftBusSenderResource::Attach(eprosima::fastdds::rtps::SendResourceList& resources,
@@ -64,6 +83,20 @@ bool DSoftBusSenderResource::Send(const std::vector<NetworkBuffer>& buffers, std
     else if (expired_before_gate || runtime_->Now() >= deadline)
         last_report_ = RuntimeSendReport{RuntimeSendStatus::DeadlineExpired};
     else last_report_ = runtime_->Submit(buffers, bytes, begin, end, deadline, priority);
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+    // Process-local diagnostic token only. Never an owner, admission capability,
+    // device identity or SDK event epoch. Capture keeps no payload pointer.
+    runtime_probe::TraceEvent("Sender_submit_result",reinterpret_cast<std::uintptr_t>(this),
+            -1,-1,static_cast<int>(last_report_->status),bytes);
+    // The observer reads only a complete original single-buffer frame. Other
+    // layouts remain explicitly uncorrelated; do not flatten/copy/reframe them.
+    const bool complete=buffers.size()==1&&buffers.front().buffer&&buffers.front().size>=bytes;
+    FastddsDsoftbusObserveSenderSubmission(reinterpret_cast<std::uintptr_t>(this),
+            complete?buffers.front().buffer:nullptr,complete?bytes:0,static_cast<int>(last_report_->status),
+            last_report_->unresolved_route.has_value(),last_report_->unresolved_route&&last_report_->unresolved_route->route_available,
+            last_report_->unresolved_route?last_report_->unresolved_route->route_version:0,
+            last_report_->queue_result&&*last_report_->queue_result==SendAdmission::Accepted);
+#endif
     return last_report_->status == RuntimeSendStatus::Accepted;
 }
 bool DSoftBusSenderResource::Release()
@@ -79,9 +112,9 @@ bool DSoftBusSenderResource::belongs_to(const RuntimeIdentityHandle& identity) c
 { return runtime_->identity() == identity; }
 std::optional<RuntimeSendReport> DSoftBusSenderResource::last_report() const
 { std::lock_guard<std::mutex> lock(gate_); return last_report_; }
-void DSoftBusSenderResource::add_locators_to_list(eprosima::fastdds::rtps::LocatorList_t& locals) const
+void DSoftBusSenderResource::add_locators_to_list(fastdds_dsoftbus::binding::LocatorList_t& locals) const
 {
     std::lock_guard<std::mutex> lock(gate_);
     if (!released_) for (const auto& local : runtime_->plan()->selected_locals()) locals.push_back(local);
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

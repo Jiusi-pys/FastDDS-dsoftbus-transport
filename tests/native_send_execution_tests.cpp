@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/NativeSendExecution.hpp>
+#include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
 #include "../src/NativeSendExecutionInternal.hpp"
 #include <chrono>
 #include <iostream>
@@ -16,7 +16,7 @@
 thread_local long fail_after=-1;
 thread_local std::size_t allocation_count=0;
 thread_local long close_after=-1;
-thread_local mdds::dsoftbus::NativeOwnerTable* close_target=nullptr;
+thread_local fastdds_dsoftbus::dsoftbus::NativeOwnerTable* close_target=nullptr;
 void* operator new(std::size_t n)
 {
     ++allocation_count;
@@ -32,11 +32,11 @@ void operator delete(void* p) noexcept {std::free(p);}
 void operator delete[](void* p) noexcept {std::free(p);}
 void operator delete(void* p,std::size_t) noexcept {std::free(p);}
 void operator delete[](void* p,std::size_t) noexcept {std::free(p);}
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 namespace rtps = eprosima::fastdds::rtps;
 using namespace std::chrono_literals;
 #define CHECK(x) do { if (!(x)) throw std::runtime_error(std::string("line ")+std::to_string(__LINE__)+": " #x); } while(false)
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class NativeSendExecutionTestAccess
 {
 public:
@@ -156,6 +156,24 @@ void Windows()
     CHECK(invocation.value->Run().status!=NativeStatus::None);CHECK(p->calls==1);
     CHECK(f.table->SnapshotUsage().send.entered==0);CHECK(fresh.SnapshotUsage().records==0);
     CHECK(!Send(*b.front()));CHECK(!e.Attach(fresh,b).ok());
+}
+void OfflineIsolation()
+{
+    Fixture f;NativeSendExecution e(*f.table);auto r=Registration(e,f.config);
+    rtps::SendResourceList senders;CHECK(e.Attach(r,senders).ok());auto* retained=senders.front().get();
+    auto provider=std::make_shared<Provider>();CHECK(Send(*retained,10));auto initial=e.Take(r);CHECK(initial);
+    auto admitted=e.TryAdmit(*initial.value,provider);CHECK(admitted);CHECK(admitted.value->Run().outcome==NativeSendOutcome::ReturnedSdkCode);
+    CHECK(f.table->ObserveNodeOffline("network-original-0")==NativeStatus::None);
+    CHECK(senders.front().get()==retained&&!Send(*retained,10));
+    const auto refused=dynamic_cast<DSoftBusSenderResource*>(retained)->last_report();
+    CHECK(refused&&refused->status==RuntimeSendStatus::UnresolvedConnection&&!refused->queue_result&&
+            refused->unresolved_route&&refused->unresolved_route->route_state_known&&!refused->unresolved_route->route_available&&
+            refused->unresolved_route->route_version>f.config.directory.routes.front().route_version);
+    CHECK(Send(*retained,11));auto unaffected=e.Take(r);CHECK(unaffected);auto other=e.TryAdmit(*unaffected.value,provider);CHECK(other);
+    CHECK(other.value->Run().outcome==NativeSendOutcome::ReturnedSdkCode&&provider->calls==2);
+    CHECK(f.table->ObserveNodeOffline("unknown-node")==NativeStatus::NotFound&&Send(*retained,12));
+    CHECK(!refused->unresolved_route->route_available&&refused->status==RuntimeSendStatus::UnresolvedConnection);
+    CHECK(e.Revoke(r)==NativeStatus::None);
 }
 void Retention()
 {
@@ -491,6 +509,7 @@ int main()
     static_assert(!std::is_constructible_v<NativeSendWork,RuntimeIdentityHandle,OwnedSendRecord>);
     try {
         Creation();std::cout<<"PASS N2-CREATE\n";
+        OfflineIsolation();std::cout<<"PASS ROUTE-OFFLINE-ISOLATION\n";
         Windows();std::cout<<"PASS N2-WINDOWS\n";
         Retention();std::cout<<"PASS N2-RETENTION\n";
         QuotasAndBlockedCall();std::cout<<"PASS N2-QUOTAS\n";

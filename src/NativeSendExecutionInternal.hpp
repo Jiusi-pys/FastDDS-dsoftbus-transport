@@ -1,8 +1,8 @@
-#ifndef MDDS_NATIVE_SEND_EXECUTION_INTERNAL_HPP
-#define MDDS_NATIVE_SEND_EXECUTION_INTERNAL_HPP
-#include <mdds/dsoftbus/NativeSendExecution.hpp>
+#ifndef FASTDDS_DSOFTBUS_NATIVE_SEND_EXECUTION_INTERNAL_HPP
+#define FASTDDS_DSOFTBUS_NATIVE_SEND_EXECUTION_INTERNAL_HPP
+#include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
 #include <mutex>
-namespace mdds::dsoftbus::detail {
+namespace fastdds_dsoftbus::dsoftbus::detail {
 class NativeEgressBridge;
 class RuntimeCeilingLease final
 {
@@ -12,7 +12,7 @@ private:
     friend class NativeEgressBridge;
     friend class EgressState;
     friend class NativeGenerationAdapter;
-    friend class ::mdds::dsoftbus::NativeSendExecution;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecution;
     RuntimeCeilingLease(std::shared_ptr<NativeState> s,SendQueueLimits l) noexcept : state_(std::move(s)),limits_(l) {}
     const std::shared_ptr<NativeState> state_;
     const SendQueueLimits limits_;
@@ -24,10 +24,10 @@ public:
     ~EgressState() noexcept;
 private:
     friend class NativeEgressBridge;
-    friend class ::mdds::dsoftbus::EgressRegistration;
-    friend class ::mdds::dsoftbus::NativeSendExecution;
-    friend class ::mdds::dsoftbus::NativeSendExecutionTestAccess;
-    friend class ::mdds::dsoftbus::NativeRevokeTicket;
+friend class ::fastdds_dsoftbus::dsoftbus::EgressRegistration;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecution;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecutionTestAccess;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeRevokeTicket;
     EgressState(std::shared_ptr<RuntimeCeilingLease> l,std::shared_ptr<RuntimeSendPath> r) noexcept
         : ceiling_(std::move(l)),runtime_(std::move(r)),identity_(runtime_->identity()) {}
     const std::shared_ptr<RuntimeCeilingLease> ceiling_;
@@ -46,8 +46,9 @@ class NativeGenerationAdapter final : public ConnectionGenerationSource
 {
 public:
     bool TryResolve(const Route&,SendConnectionSnapshot&) const override;
+    bool CurrentRouteVersions() const noexcept override {return true;}
 private:
-    friend class ::mdds::dsoftbus::NativeSendExecution;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecution;
     explicit NativeGenerationAdapter(std::shared_ptr<RuntimeCeilingLease> l) noexcept : ceiling_(std::move(l)) {}
     const std::shared_ptr<RuntimeCeilingLease> ceiling_;
 };
@@ -55,8 +56,8 @@ class NativeSendWorkState final
 {
 private:
     friend class NativeSendInvocationState;
-    friend class ::mdds::dsoftbus::NativeSendExecution;
-    friend class ::mdds::dsoftbus::NativeSendInvocation;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecution;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendInvocation;
     explicit NativeSendWorkState(std::shared_ptr<EgressState> r) noexcept : registration_(std::move(r)) {}
     std::shared_ptr<EgressState> registration_;
     std::optional<OwnedSendRecord> record_;
@@ -67,8 +68,8 @@ public:
     ~NativeSendResources() noexcept;
 private:
     friend class NativeEgressBridge;
-    friend class ::mdds::dsoftbus::NativeSendExecution;
-    friend class ::mdds::dsoftbus::NativeSendInvocation;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecution;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendInvocation;
     NativeSendResources() noexcept = default;
     std::unique_ptr<NativeSendWorkState> work_;
     std::shared_ptr<NativeSendProvider> provider_;
@@ -81,8 +82,8 @@ public:
     ~NativeSendInvocationState() noexcept;
 private:
     friend class NativeEgressBridge;
-    friend class ::mdds::dsoftbus::NativeSendExecution;
-    friend class ::mdds::dsoftbus::NativeSendInvocation;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecution;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendInvocation;
     NativeSendInvocationState() noexcept = default;
     enum class Phase { Created, Reserved, Entered, Settling, Terminal };
     std::shared_ptr<EgressState> registration_;
@@ -101,10 +102,10 @@ class NativeEgressBridge final
     friend class EgressState;
     friend class NativeGenerationAdapter;
     friend class NativeSendInvocationState;
-    friend class ::mdds::dsoftbus::NativeRevokeTicket;
-    friend class ::mdds::dsoftbus::NativeSendExecution;
-    friend class ::mdds::dsoftbus::NativeSendInvocation;
-    friend class ::mdds::dsoftbus::NativeSendExecutionTestAccess;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeRevokeTicket;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecution;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendInvocation;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecutionTestAccess;
     static std::shared_ptr<NativeState> Bind(NativeOwnerTable&) noexcept;
     static NativeStatus Reserve(RuntimeCeilingLease&,const NativeTableConfiguration&) noexcept;
     static NativeStatus Publish(EgressState&) noexcept;

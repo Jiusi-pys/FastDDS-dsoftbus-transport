@@ -3,7 +3,7 @@
 #include <iostream>
 #include <stdexcept>
 
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 namespace {
 using Clock = std::chrono::steady_clock;
 void Check(bool ok, const char* why) { if (!ok) throw std::runtime_error(why); }

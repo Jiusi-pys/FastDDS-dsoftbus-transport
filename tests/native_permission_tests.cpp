@@ -7,7 +7,7 @@
 #include <vector>
 
 namespace {
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 
 #define CHECK(condition) do { if (!(condition)) throw std::runtime_error( \
         std::string("line ") + std::to_string(__LINE__) + ": " #condition); } while (false)
@@ -424,6 +424,39 @@ void recover_owned_unregistered_requires_post_verification()
     CHECK(!result.success && result.restored && post_not_native.count("verify") == 0);
 }
 
+void verify_denied_has_no_mutators()
+{
+    for (int permission : {-1, 0, -71})
+    {
+        FakeApi api; api.permission = permission;
+        const auto result = run(api, static_cast<NativePermissionMode>(3));
+        CHECK(result.success == (permission == -1));
+        CHECK(!api.wrote && api.set_ids.empty() && api.shutdown_ids.empty());
+        CHECK(api.count("reload") == 0 && api.count("socket") == 0);
+        CHECK(api.current == api.original);
+    }
+    for (int failure = 0; failure < 4; ++failure)
+    {
+        FakeApi api; api.permission = -1;
+        if (failure == 0) api.service_token = 0;
+        if (failure == 1) api.native = false;
+        if (failure == 2) api.lookup_error_on = 1;
+        if (failure == 3) api.throw_on = "verify";
+        CHECK(!run(api, static_cast<NativePermissionMode>(3)).success);
+        CHECK(!api.wrote && api.set_ids.empty() && api.shutdown_ids.empty());
+        CHECK(api.count("reload") == 0 && api.count("socket") == 0);
+    }
+    FakeApi invalid; invalid.permission = -1;
+    CHECK(!run(invalid, static_cast<NativePermissionMode>(3), 0).success);
+    CHECK(!run(invalid, static_cast<NativePermissionMode>(3), 999).success);
+    CHECK(!run(invalid, static_cast<NativePermissionMode>(3), 123, true).success);
+    CHECK(!invalid.wrote && invalid.set_ids.empty() && invalid.count("socket") == 0);
+    FakeApi log_failure; log_failure.permission = -1;
+    std::ostringstream broken; broken.setstate(std::ios::badbit);
+    CHECK(!RunNativePermissionProbe({static_cast<NativePermissionMode>(3),123,false},log_failure,broken).success);
+    CHECK(!log_failure.wrote && log_failure.set_ids.empty() && log_failure.count("socket") == 0);
+}
+
 struct TestCase { const char* id; void (*run)(); };
 } // namespace
 
@@ -434,7 +467,8 @@ int main(int argc, char** argv)
         {"NP-05", grant_verification_failures}, {"NP-06", socket_mode_read_only_permissions},
         {"NP-07", revoke_requires_explicit_denied}, {"NP-08", restoration_failure_is_failure},
         {"NP-09", api_exceptions_restore_and_never_chain_writes},
-        {"NP-10", recover_owned_unregistered_requires_post_verification}};
+        {"NP-10", recover_owned_unregistered_requires_post_verification},
+        {"NP-11", verify_denied_has_no_mutators}};
     if (argc > 2) return 2;
     unsigned ran = 0, failed = 0;
     for (const auto& test : cases)

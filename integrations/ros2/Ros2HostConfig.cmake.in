@@ -1,0 +1,15 @@
+@PACKAGE_INIT@
+set(_fdds_ros2_package_prefix "${PACKAGE_PREFIX_DIR}")
+include(CMakeFindDependencyMacro)
+find_dependency(fastrtps 2.14.5 EXACT CONFIG)
+find_dependency(fastcdr 2 CONFIG)
+find_dependency(Threads)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(FastDDSDSoftBusTransportRos2Host_FOUND FALSE)
+    set(FastDDSDSoftBusTransportRos2Host_NOT_FOUND_MESSAGE "This package is the explicit Windows Host-only opaque-byte test profile")
+    return()
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/Ros2HostTargets.cmake")
+set_property(TARGET FastDDSDSoftBusTransportRos2Host::factory_configuration APPEND PROPERTY
+    INTERFACE_SOURCES "${_fdds_ros2_package_prefix}/share/FastDDSDSoftBusTransportRos2Host/FactoryAbiProbe.cpp")
+check_required_components(FastDDSDSoftBusTransportRos2Host)

@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "scope": "Pre-device interface mapping, not second measurement expectation table",
+  "plan_sha256": "dce5de2da33010dcd60df84363f2012d645a8d394d10c0e1fdb7a4c8c61bc1ef",
+  "records": "PERF_SAMPLE/PERF_SUMMARY/PERF_RESOURCE/PERF_COUNTERS/PERF_OBSERVATION followed by one JSON object perline; PERF_CONTROL only key=value",
+  "consolidated_record_authority": "experiments/fastdds_socket/perf/Measurement.hpp SampleRecord; timestampsns, unknownns=-1/internalrc=INT32_MIN MUST emitJSONnull",
+  "identity_key": [
+    "run",
+    "side",
+    "mode",
+    "repeat",
+    "case",
+    "phase",
+    "sequence"
+  ],
+  "record_flags": {
+    "NotAttempted": 1,
+    "Attempted": 2,
+    "Validated": 4,
+    "TimedOut": 8,
+    "Late": 16,
+    "MissedSlot": 32,
+    "EchoReserved": 64,
+    "AfterObservation": 128,
+    "Invalid": 256,
+    "InvalidClock": 512
+  },
+  "warmup_native_witness": {
+    "MEASURE": "First WARMUP sequence1 ofeach6cases:RTTRequest+Response,LOADRequest=9sampleidentities. Logger mayemitotherwarmupdetails; onlythissubset requiredanddeclarednativechainproof. Noformalfulldetailednativeclaim.",
+    "TRACE": "Allplannedformalidentities:8RTTrequests+8responses+22load=38businessdeliveryidentities; warmup0.",
+    "native_matching": "actualfullWriterGUID+DDSSN, RTPSDATA orcompleteDATA_FRAG ranges, actualSendBytesreturn vsoppositeownedcopy/receiver +originalcapturedlease, sameframehash/length; noheaderindexasDDSsequence substitute"
+  },
+  "control": {
+    "filename": "stage-N.release",
+    "body": "PERF_RELEASE <run> <N> <case> <phase>\\n",
+    "arm": "B receivesrelease then B_ARMED; host releasesA onlyafterBarmed",
+    "finish": "A_DONE and B_DONE bothrequired before stage-N.flush; routineformaloutput remainsquietthroughlate/resources beforeflush",
+    "payload": "NO businesspayload or DDScontrolmessages overHDC"
+  },
+  "performance_observer": {
+    "enable": "EnablePerformanceObservation beforefirstRuntimeAcquire, onlyexplicitperfCLI",
+    "binding": "boundedtrivialstaticprocessstorage; defaultnull CurrentPerformanceObservation; noreset API",
+    "phase": "Options.quiet_observer bool callback calledonlycontrolthreadstageboundaries",
+    "cost": "O(1) atomicsandfixed128 nonzeroeventvalues; originalStats/RTPS accountingunchanged; formalextraLogSpanhash/parse/output suppressed",
+    "native_byte_scope": "send_attempt/success/failure APIbytes andownedcopybytes cumulative; rawingress/wirebytesunobserved",
+    "nonzero": "PositiveSocket handles andOnShutdownreasonvalues notautomaticallySDKfailures; send_failures preciseSendBytesreturn!=0 only",
+    "overflow": "checked64bitcounters;nonzeroeventdetailcapacity128 andoverflowvisible",
+    "HWM": "exactqueuehighwatersUNOBSERVED; boundarysamplemaxonlylowerbound"
+  },
+  "actual_record_size": "Hostmeasured160B (mustnativebuildsizeofreported); declaredcap<=256B",
+  "log_retention_per_side_bytes": 8388608,
+  "immutable_deadlines": {
+    "PERF_SUMMARY.phase_deadline_ns": "immutable min localphase/globaldeadline",
+    "PERF_SUMMARY.observation_deadline_ns": "nominalend+late2s withglobalcap, separateactualobservation_end_ns",
+    "semantics": "Halfopen: RTTatdeadlineistimeout/late; sampleatobservationdeadlineAfterObservation (alsoLate), notwithinlatewindow; positiveRTTonly; nullunknown."
+  }
+}

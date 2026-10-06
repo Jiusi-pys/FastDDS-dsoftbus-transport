@@ -7,7 +7,7 @@
 #include <type_traits>
 
 namespace {
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 using namespace std::chrono_literals;
 
 #define CHECK(condition) do { if (!(condition)) throw std::runtime_error( \

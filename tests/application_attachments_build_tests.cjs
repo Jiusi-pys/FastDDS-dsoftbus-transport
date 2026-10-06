@@ -31,19 +31,19 @@ if(NOT option_type STREQUAL "BOOL")
     message(FATAL_ERROR "ATTACHMENTS_OPTION_CONTRACT: root must declare its BOOL option")
 endif()
 if(EXPECT_ATTACHMENTS)
-    if(NOT BUILD_DSOFTBUS_APPLICATION_ATTACHMENTS OR NOT TARGET mdds_dsoftbus_application_attachments)
+    if(NOT BUILD_DSOFTBUS_APPLICATION_ATTACHMENTS OR NOT TARGET fastdds_dsoftbus_application_attachments)
         message(FATAL_ERROR "ATTACHMENTS_OPTION_CONTRACT: requested public attachment target is missing")
     endif()
-    get_target_property(library_type mdds_dsoftbus_application_attachments TYPE)
-    get_target_property(public_links mdds_dsoftbus_application_attachments INTERFACE_LINK_LIBRARIES)
-    get_target_property(public_features mdds_dsoftbus_application_attachments INTERFACE_COMPILE_FEATURES)
+    get_target_property(library_type fastdds_dsoftbus_application_attachments TYPE)
+    get_target_property(public_links fastdds_dsoftbus_application_attachments INTERFACE_LINK_LIBRARIES)
+    get_target_property(public_features fastdds_dsoftbus_application_attachments INTERFACE_COMPILE_FEATURES)
     if(NOT library_type STREQUAL "STATIC_LIBRARY")
         message(FATAL_ERROR "ATTACHMENTS_OPTION_CONTRACT: public target must be a static library")
     endif()
-    if(NOT "mdds_dsoftbus_input_channels" IN_LIST public_links OR NOT "cxx_std_17" IN_LIST public_features)
+    if(NOT "fastdds_dsoftbus_input_channels" IN_LIST public_links OR NOT "cxx_std_17" IN_LIST public_features)
         message(FATAL_ERROR "ATTACHMENTS_OPTION_CONTRACT: PUBLIC input-channel/C++17 dependency is missing")
     endif()
-elseif(BUILD_DSOFTBUS_APPLICATION_ATTACHMENTS OR TARGET mdds_dsoftbus_application_attachments)
+elseif(BUILD_DSOFTBUS_APPLICATION_ATTACHMENTS OR TARGET fastdds_dsoftbus_application_attachments)
     message(FATAL_ERROR "ATTACHMENTS_OPTION_CONTRACT: disabled attachment target is present")
 endif()
 if(EXPECT_TEST_TARGET)
@@ -66,7 +66,7 @@ if(EXPECT_LIBRARY_ONLY)
         endif()
     endforeach()
 endif()
-if(EXPECT_NO_BINDING AND (TARGET fastdds OR TARGET mdds_fastdds_binding))
+if(EXPECT_NO_BINDING AND (TARGET fastdds OR TARGET fastdds_dsoftbus_fastdds_binding))
     message(FATAL_ERROR "ATTACHMENTS_OPTION_CONTRACT: tools-only configuration created a Fast DDS binding")
 endif()
 message(STATUS "ATTACHMENTS_OPTION_CONTRACT: observed expected actual targets")
@@ -76,11 +76,11 @@ const base = ['-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=OFF'
     '-DBUILD_NATIVE_PERMISSION_PROBE=OFF', '-DBUILD_DSOFTBUS_DIRECTORY=ON',
     '-DBUILD_DSOFTBUS_SEND_QUEUE=OFF', '-DBUILD_DSOFTBUS_INPUT_CHANNELS=ON',
     '-DBUILD_DSOFTBUS_RUNTIME_SEND_PATH=OFF', '-DBUILD_DSOFTBUS_TRANSPORT_FACADE=OFF',
-    '-DMDDS_FASTDDS_MODE=CONFIG', `-Dfastdds_DIR=${prefix}/share/fastdds/cmake`,
-    `-DCMAKE_PREFIX_PATH=${prefix}`, `-DMDDS_SOURCE_ROOT=${root}`];
+    '-DFASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG', `-Dfastdds_DIR=${prefix}/share/fastdds/cmake`,
+    `-DCMAKE_PREFIX_PATH=${prefix}`, `-DFASTDDS_DSOFTBUS_SOURCE_ROOT=${root}`];
 const cases = [
     {name: 'default-on-with-input', extra: ['-DBUILD_TESTING=ON'], attachments: true, tests: true},
-    {name: 'source-probe-default-on', extra: ['-DMDDS_FASTDDS_MODE=SOURCE_PROBE',
+    {name: 'source-probe-default-on', extra: ['-DFASTDDS_DSOFTBUS_FASTDDS_MODE=SOURCE_PROBE',
         '-Dfastdds_DIR=', '-DCMAKE_PREFIX_PATH='], attachments: true},
     {name: 'input-off-default-off', extra: ['-DBUILD_DSOFTBUS_INPUT_CHANNELS=OFF'], attachments: false},
     {name: 'explicit-off', extra: ['-DBUILD_DSOFTBUS_APPLICATION_ATTACHMENTS=OFF'], attachments: false},

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <stdexcept>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 
 ProbeSenderResource::ProbeSenderResource(std::shared_ptr<ProbeSendObservation> observation, uint32_t max_bytes)
     : SenderResource(interface_probe_kind), observation_(std::move(observation)), max_bytes_(max_bytes)
@@ -239,4 +239,4 @@ bool InterfaceProbeTransport::deliver(const rtps::octet* data, uint32_t size, co
     return true;
 }
 
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe
