@@ -247,7 +247,7 @@ mutates the valid locator → `No unicast locators to create unique flows` →
 smaller than the largest message the descriptor promises — is correct and was
 left alone; what was wrong was the descriptor promising one byte more than a
 secure participant can ever offer. `65535` still exceeds Fast DDS's 65500
-no-fragment ceiling, which is the only lower bound this value has to meet, and the
+no-fragment limit that the descriptor overrides, not a lower bound it has to clear, and the
 opaque-byte link's own `max_message_size=65536` was deliberately left as an upper
 bound. `DSoftBusTransport::Init`'s other constraints (`limits.max_record_bytes`
 equality, `InvalidLimits`, `UnsupportedNoFragmentRequest`, the V1 directory and
@@ -262,7 +262,7 @@ RED → GREEN on the same path: before, the run above; after, case 01 below.
 
 | Case | Result |
 | --- | --- |
-| 01 secure dual pair | `pass=True`, `errors=[]`, A `{writes: 10, takes: 10}`, B `{writes: 10, takes: 10}` — 20 writes / 20 takes, real graph, real service request/response, original DDS deletion, RuntimeClose, normal exit; `FDDST_HOST_IO … sends=129 ingress=129 send_errors=0` on the opaque-byte Host seam |
+| 01 secure dual pair | `pass=True`, `errors=[]`, A `{writes: 10, takes: 10}`, B `{writes: 10, takes: 10}` — 20 writes / 20 takes, real graph, real service request/response, original DDS deletion, RuntimeClose, normal exit; `FDDST_HOST_IO … send_errors=0` with non-zero sends and ingress on both sides, so the opaque-byte Host seam carried real records both ways (per-run counters are not pinned here; each run regenerates its own case directory) |
 | 02 unauthenticated peer (one side with security disabled) | refused — no match, no samples |
 | 03 mixed dependency (ON application and RMW with the SECURITY=OFF dependency) | refused in the Windows loader (`STATUS_ENTRYPOINT_NOT_FOUND`) before any project code runs; this shows the mix is refused but does **not** exercise the project's own build-mode gate |
 | 04 secure pair, real fragmented sample | `pass=True`, `errors=[]`, 20 writes / 20 takes with `ROS_FRAGMENT_TAKE bytes=70029/70032 exact=1` |

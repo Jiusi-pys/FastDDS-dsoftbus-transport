@@ -83,12 +83,15 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         fastdds_dsoftbus::ros2_target_observation::Begin(owner->run,side);
         fastdds_dsoftbus::ros2_target_observation::SetSourceForHostInjection();
         owner->diagnostic_control=[] {(void)fastdds_dsoftbus::ros2_target_observation::ExportPending();FastddsDsoftbusFactoryFlushTeardownPending();};
-        // 65535, not 65536: a participant with DDS Security caps the receiver buffer it will
-        // offer at uint16 max, because the secure ReceiverResource needs an auxiliary decrypt
-        // buffer (RTPSParticipantImpl::createReceiverResources). The transport refuses a receiver
-        // buffer smaller than its descriptor's maximum, so 65536 could never be satisfied by a
-        // secure participant and every input channel failed to open. 65535 still exceeds Fast
-        // DDS's 65500 no-fragment ceiling, which is the only lower bound this value has to meet.
+        // 65535, not 65536. Two constraints bound this value, and only one of them is about sizes
+        // being large enough. (1) Upper bound: a participant with DDS Security caps the receiver
+        // buffer it will offer at uint16 max, because the secure ReceiverResource needs an
+        // auxiliary decrypt buffer (RTPSParticipantImpl::createReceiverResources), so
+        // capacity = min(65536, 65535) = 65535 while the transport refuses a receiver buffer
+        // smaller than its descriptor's maximum. 65536 could therefore never be opened by a secure
+        // participant. (2) Consistency: init() requires maxMessageSize <= the effective no-fragment
+        // limit; 65500 is Fast DDS's default limit that this line overrides below, not a lower
+        // bound to clear.
         DSoftBusTransportDescriptor config(65535);
         const auto identity=[&](unsigned index){return v1::DeviceIdentity{"host-ros",domain,index?"synthetic-host-B":"synthetic-host-A"};};
         const auto issue=config.ConfigureV1([&]{V1Deployment input{identity(side),17+side,v1::Profile::BytesNative,prefix+".ns",
@@ -140,7 +143,7 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         }
         owner->descriptor=owner->runtime->MakeDescriptor(config);if(!owner->descriptor)throw std::runtime_error("descriptor issuance");
         auto& qos=*static_cast<fd::DomainParticipantQos*>(raw);
-        // The descriptor's maxMessageSize (65536) is above Fast DDS's default no-fragment ceiling (65500). Like the
+        // The descriptor's maxMessageSize (65535) overrides Fast DDS's default no-fragment limit (65500). Like the
         // built-in UDP/TCP transports, init() accepts that only when the participant states the larger limit.
         qos.transport().max_msg_size_no_frag=config.maxMessageSize;
         qos.transport().use_builtin_transports=false;qos.transport().user_transports.clear();qos.transport().user_transports.push_back(owner->descriptor);

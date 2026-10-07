@@ -56,6 +56,7 @@ def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
         result = json.loads((out / 'result.json').read_text(encoding='utf-8'))
 
     security_evidence = {}
+    side_text = {}
     for side in 'AB':
         text = ''.join(
             (out / (side + suffix)).read_text(encoding='utf-8', errors='replace')
@@ -67,6 +68,7 @@ def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
         # reaches stdout as an ordinary Fast DDS log line. Counting only the first
         # and reporting it as "security messages" would report 0 while the crypto
         # plugin was in fact being driven.
+        side_text[side] = text
         security_evidence[side] = {
             'security_category_lines': len(re.findall(r'^FDDST_SECURITY_LOG ', text, re.M)),
             'security_category_errors': len(re.findall(
@@ -96,9 +98,14 @@ def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
         # or inactive security plugin makes the RMW refuse to create the
         # participant and the runner cannot pass. Security log lines are mostly
         # refusals, so requiring them would ask for a failure.
-        checks.append({'check': 'security_enforced_run_passed',
-                       'actual': bool(result.get('pass')),
-                       'expected': True, 'pass': bool(result.get('pass'))})
+        # Independent of the runner verdict: each child must report that rcl
+        # found and used its security enclave. This fails on its own if the
+        # children were ever given no security configuration.
+        for side in 'AB':
+            found = ('Found security directory:' in side_text[side]
+                     and side_text[side].count('Found security directory:') == 1)
+            checks.append({'check': 'security_enclave_used_' + side,
+                           'actual': found, 'expected': True, 'pass': found})
         access_errors = sum(v['security_category_errors'] + v['access_control_refusals']
                            for v in security_evidence.values())
         crypto_lines = sum(v['crypto_plugin_lines'] for v in security_evidence.values())
@@ -164,7 +171,13 @@ def main():
             '02_unauthenticated_peer_no_delivery', work,
             fastdds_prefix=args.fastdds_prefix.resolve(), keystore=args.keystore.resolve(),
             mode='dual', extra=['--plain-side', 'A'], expect_pass=False,
-            expect_stderr=[], **common))
+            # Both sides must fail for the observed reason. The plain side is
+            # never matched by the secured one, so the failure is reported at the
+            # MATCH stage rather than as a data-path error. This does not by
+            # itself prove the refusal came from the security layer; the secured
+            # side's enclave use and the absence of any match are what the run
+            # shows, and the session-level cause remains inferred.
+            expect_stderr=['REMOTE_MATCH_MISSING'], **common))
 
     if want('03'):
         # Mixed dependency: the ON application and RMW with the SECURITY=OFF

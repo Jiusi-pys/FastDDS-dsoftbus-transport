@@ -214,11 +214,12 @@ int RunTransportFacadeTests(int argc, char** argv) {
             auto just_below = FM(sized(limit + 1)); FCHECK(!just_below->init(nullptr, limit));
             auto lifted = FM(sized(limit + 1)); FCHECK(lifted->init(nullptr, limit + 1));
             auto at_default = FM(sized(limit)); FCHECK(at_default->init(nullptr, 0));
-            // The ROS2 bridges (integrations/ros2/Bridge.cpp, target/TargetBridge.cpp) issue a 65536-byte
-            // descriptor with the built-in transports off. Under this contract that is accepted only when the
+            // The ROS2 bridges (integrations/ros2/Bridge.cpp, target/TargetBridge.cpp) issue a 65535-byte
+            // descriptor with the built-in transports off: 65535 is the largest value a participant with DDS
+            // Security will offer as a receiver buffer. Under this contract it is still accepted only when the
             // participant states the larger limit, so both bridges set qos.transport().max_msg_size_no_frag.
-            auto ros2_default = FM(sized(65536)); FCHECK(!ros2_default->init(nullptr, 0) && ros2_default->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
-            auto ros2_stated = FM(sized(65536)); FCHECK(ros2_stated->init(nullptr, 65536));
+            auto ros2_default = FM(sized(65535)); FCHECK(!ros2_default->init(nullptr, 0) && ros2_default->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
+            auto ros2_stated = FM(sized(65535)); FCHECK(ros2_stated->init(nullptr, 65535));
         }
         {   // AUDIT-A3: another transport's locator must not overwrite the init diagnostic.
             auto udp = FL(2); udp.kind = 1;
