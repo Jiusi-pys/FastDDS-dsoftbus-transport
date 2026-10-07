@@ -23,6 +23,7 @@ import socket
 import subprocess
 import sys
 import time
+import tempfile
 from pathlib import Path
 
 # name -> scenario definition.
@@ -230,8 +231,7 @@ def sha256_file(path: Path) -> str:
 def run_scenario(probe: Path, pki: Path, out: Path, scenario: dict, base_port: int,
                  timeout_ms: int, runtime_dirs) -> dict:
     name = scenario["name"]
-    work = out / name
-    work.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix='case-', dir=out))
     sub_port, pub_port, sub_data_port = free_port_triple(base_port)
     pub_data_port = sub_data_port + 1
     ports = (sub_port, pub_port, sub_data_port, pub_data_port)
@@ -421,6 +421,7 @@ def main() -> int:
     pki = Path(args.pki).resolve()
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
+    out = Path(tempfile.mkdtemp(prefix='attempt-', dir=out))
 
     runtime_dirs = [Path(item) for item in args.runtime_dir]
     # This is a catalogue of the DLLs the probe directory holds, derived from
@@ -464,7 +465,7 @@ def main() -> int:
         json.dumps(summary, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps({"scenarios_total": summary["scenarios_total"],
                       "scenarios_passed": summary["scenarios_passed"]}))
-    return 0 if summary["scenarios_passed"] == summary["scenarios_total"] else 1
+    return 0 if results and summary["scenarios_passed"] == summary["scenarios_total"] else 1
 
 
 if __name__ == "__main__":

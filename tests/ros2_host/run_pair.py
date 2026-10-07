@@ -7,7 +7,9 @@ p.add_argument('--route-offline-writes',action='store_true')
 p.add_argument('--run-id',help='Frozen isolated run, used by exact security endpoint grants')
 p.add_argument('--secure-keystore',type=Path)
 p.add_argument('--plain-side',choices=['A','B'])
+p.add_argument('--security-development-control',action='store_true',help='Explicit test-only plugins-off control within the SECURITY=ON build; never fallback')
 a=p.parse_args()
+if a.security_development_control and (a.secure_keystore or a.plain_side):raise ValueError('Development control cannot be combined with required security/enclave settings')
 if a.reaccept_host and (a.mode!='dual' or a.forward!='1'):raise ValueError('Reaccept fixture requires dual opaque-byte forwarding')
 if a.owned_normal_reaccept and not a.reaccept_host:raise ValueError('Owned normal model requires explicit Host reaccept')
 if a.route_lifecycle and not a.owned_normal_reaccept:raise ValueError("route fixture requires retained-entity scene")
@@ -46,6 +48,9 @@ for index,side in enumerate('AB'):
   env['ROS_SECURITY_STRATEGY']='Enforce'
   env['ROS_SECURITY_KEYSTORE']=str(a.secure_keystore.resolve())
   env['ROS_SECURITY_ENCLAVE_OVERRIDE']='/'+side
+ elif a.security_development_control:
+  env['ROS_SECURITY_ENABLE']='false';env['ROS_SECURITY_STRATEGY']='Enforce'
+  env.pop('ROS_SECURITY_KEYSTORE',None);env.pop('ROS_SECURITY_ENCLAVE_OVERRIDE',None)
  else:
   for k in ('ROS_SECURITY_ENABLE','ROS_SECURITY_STRATEGY','ROS_SECURITY_KEYSTORE','ROS_SECURITY_ENCLAVE_OVERRIDE'):env.pop(k,None)
  if a.owned_normal_reaccept:env['FDDST_BOUNDED_NATIVE_SCENE']='ROUTE_RETURN_ONCE' if a.route_offline_writes else 'BOUNDED_NORMAL_ONCE';env.pop('FDDST_HOST_REACCEPT_STAGE',None)

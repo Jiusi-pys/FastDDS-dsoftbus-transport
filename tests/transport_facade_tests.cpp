@@ -365,6 +365,41 @@ int RunTransportFacadeTests(int argc, char** argv) {
         FCHECK(DSoftBusTransportTestAccess::Deliver(*t, ticket, FL(12), bytes.data(), 1) == InputDeliveryResult::InvalidRoute);
         FCHECK(receiver.calls == 1); t->CloseInputChannel(FL(2));
     });
+    cases.emplace_back("FCD-08-secure-size-capacity-boundaries", [] {
+        for (const auto pair : {std::pair<std::uint32_t,std::uint32_t>{65535,65534},
+                               {65535,65535}, {65535,65536}, {65536,65535}, {65536,65536}}) {
+            auto base = FD(); DSoftBusTransportDescriptor d(pair.first);
+            d.directory = base.directory;
+            d.default_metatraffic_unicast = base.default_metatraffic_unicast;
+            d.default_user_unicast = base.default_user_unicast;
+            auto t = FM(d);
+            FCHECK(t->init(nullptr, pair.first)); // Legal backend, limits and no-fragment input first.
+            FacadeReceiver existing, candidate;
+            FCHECK(t->OpenInputChannel(FL(2), &existing, pair.first));
+            const auto ticket = DSoftBusTransportTestAccess::Capture(*t, FL(2));
+            const auto before = DSoftBusTransportTestAccess::Usage(*t);
+            const bool expected = pair.second >= pair.first;
+            FCHECK(t->OpenInputChannel(FL(3), &candidate, pair.second) == expected);
+            if (!expected) {
+                FCHECK(t->last_error().error == FacadeError::InsufficientReceiverCapacity);
+                FCHECK(!t->IsInputChannelOpen(FL(3)) && t->IsInputChannelOpen(FL(2)));
+                FCHECK(DSoftBusTransportTestAccess::Usage(*t).open_channels == before.open_channels);
+                FCHECK(!t->OpenInputChannel(FL(2), &candidate, pair.second));
+                FCHECK(t->last_error().error == FacadeError::InsufficientReceiverCapacity);
+            } else {
+                FCHECK(t->IsInputChannelOpen(FL(3)));
+                FCHECK(t->CloseInputChannel(FL(3)));
+            }
+            const auto same_ticket = DSoftBusTransportTestAccess::Capture(*t, FL(2));
+            std::vector<std::uint8_t> bytes(pair.first, 0x6a);
+            FCHECK(DSoftBusTransportTestAccess::Deliver(*t, ticket, FL(10), bytes.data(), bytes.size()) == InputDeliveryResult::Delivered);
+            FCHECK(DSoftBusTransportTestAccess::Deliver(*t, same_ticket, FL(10), bytes.data(), bytes.size()) == InputDeliveryResult::Delivered);
+            FCHECK(existing.calls == 2 && existing.bytes == bytes && candidate.calls == 0);
+            FCHECK(t->CloseInputChannel(FL(2))); t->shutdown();
+            std::cout << "CAPACITY M=" << pair.first << " C=" << pair.second
+                      << " accepted=" << expected << " existing_receiver_intact=1 exact_bytes=" << bytes.size() << std::endl;
+        }
+    });
     cases.emplace_back("FCD-09-input-identity-and-idempotence", [] {
         auto t = FM(), other = FM(); FCHECK(t->init() && other->init()); FacadeReceiver one, two;
         FCHECK(t->OpenInputChannel(FL(2), &one, 64) && t->OpenInputChannel(FL(2), &one, 64));

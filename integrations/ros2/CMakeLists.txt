@@ -8,6 +8,7 @@ if(MSVC AND DEFINED CMAKE_MSVC_RUNTIME_LIBRARY AND NOT CMAKE_MSVC_RUNTIME_LIBRAR
 endif()
 set(CMAKE_CXX_STANDARD 17)
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/Ros214Candidate.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/Ros214TestAsan.cmake")
 add_compile_definitions(FASTDDS_DSOFTBUS_ROS214_PATCH=${FASTDDS_DSOFTBUS_ROS214_PATCH})
 find_package(Threads REQUIRED)
 set(DSOFTBUS_SOURCE_DIR "" CACHE PATH "Explicit authorized public Socket source headers")
@@ -29,6 +30,8 @@ set_property(TARGET fastdds_dsoftbus_ros2_214_runtime APPEND PROPERTY COMPATIBLE
 add_library(fastdds_dsoftbus_ros2_host_bridge SHARED Bridge.cpp HostSocket.cpp target/NativeObservation.cpp "${_transport_root}/probes/PublicSocketRtpsObservation.cpp")
 target_compile_definitions(fastdds_dsoftbus_ros2_host_bridge PRIVATE FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1)
 target_link_libraries(fastdds_dsoftbus_ros2_host_bridge PRIVATE fastdds_dsoftbus_ros2_214_runtime ws2_32)
+fastdds_dsoftbus_test_asan_target(fastdds_dsoftbus_ros2_214_runtime)
+fastdds_dsoftbus_test_asan_target(fastdds_dsoftbus_ros2_host_bridge)
 target_include_directories(fastdds_dsoftbus_ros2_host_bridge PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
 target_compile_features(fastdds_dsoftbus_ros2_host_bridge PRIVATE cxx_std_17)
 include(CTest)
@@ -92,6 +95,7 @@ install(EXPORT Ros2HostTargets NAMESPACE FastDDSDSoftBusTransportRos2Host:: DEST
 configure_package_config_file(Ros2HostConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/FastDDSDSoftBusTransportRos2HostConfig.cmake"
     INSTALL_DESTINATION lib/cmake/FastDDSDSoftBusTransportRos2Host)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/FastDDSDSoftBusTransportRos2HostConfig.cmake" DESTINATION lib/cmake/FastDDSDSoftBusTransportRos2Host)
+install(FILES "${_transport_root}/cmake/Ros214TestAsan.cmake" DESTINATION lib/cmake/FastDDSDSoftBusTransportRos2Host)
 include("${_transport_root}/cmake/InstallPreflight.cmake")
 fastdds_dsoftbus_install_preflight(FastDDSDSoftBusTransportRos2Host false
     DEPENDENCIES fastrtps fastcdr

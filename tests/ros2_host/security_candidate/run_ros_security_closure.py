@@ -20,6 +20,9 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
+import hashlib
+import shutil
 from pathlib import Path
 
 def _repo_root(start):
@@ -38,11 +41,10 @@ HOST_IO_PATTERN = r'FDDST_HOST_IO [^\r\n]*sends=[1-9][0-9]* ingress=[1-9][0-9]* 
 
 
 def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
-             run_id, keystore, mode, extra, expect_pass, expect_stderr):
-    out = work / name
-    if out.exists():
-        import shutil
-        shutil.rmtree(out)
+             run_id, keystore, mode, extra, expect_pass, expect_stderr, activation='secure'):
+    work.mkdir(parents=True, exist_ok=True)
+    attempt = Path(tempfile.mkdtemp(prefix='case-', dir=work))
+    out = attempt / 'run'
     command = [sys.executable, '-B', str(RUNNER), '--exe', str(exe), '--bridge', str(bridge),
                '--fastdds-prefix', str(fastdds_prefix), '--ros-prefix', str(ros_prefix),
                '--pixi-prefix', str(pixi_prefix), '--output', str(out),
@@ -50,7 +52,19 @@ def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
     if keystore is not None:
         command += ['--secure-keystore', str(keystore)]
     command += extra
-    proc = subprocess.run(command, capture_output=True, text=True, timeout=1200)
+    (attempt / 'invocation.json').write_text(json.dumps({'name': name, 'argv': command,
+        'activation': activation, 'environment': {key: os.environ.get(key) for key in
+        ('PATH', 'AMENT_PREFIX_PATH', 'FDDST_ROS_FRAGMENT_BYTES')}}, indent=2), encoding='utf-8')
+    timed_out = False
+    try:
+        proc = subprocess.run(command, capture_output=True, text=True, timeout=1200)
+    except subprocess.TimeoutExpired as error:
+        timed_out = True
+        proc = subprocess.CompletedProcess(command, -1, error.stdout or '', error.stderr or '')
+    except OSError as error:
+        proc = subprocess.CompletedProcess(command, -1, '', repr(error))
+    for suffix, content in (('stdout', proc.stdout), ('stderr', proc.stderr)):
+        (attempt / ('runner.' + suffix)).write_bytes(content if isinstance(content, bytes) else content.encode('utf-8'))
     result = {}
     if (out / 'result.json').is_file():
         result = json.loads((out / 'result.json').read_text(encoding='utf-8'))
@@ -71,8 +85,11 @@ def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
         side_text[side] = text
         security_evidence[side] = {
             'security_category_lines': len(re.findall(r'^FDDST_SECURITY_LOG ', text, re.M)),
-            'security_category_errors': len(re.findall(
-                r'^FDDST_SECURITY_LOG .*\[SECURITY Error\]', text, re.M)),
+            # The probe forwards only category= and message=, never the level, so
+            # this counts refused/error-class security texts rather than a level tag.
+            'security_category_errorish': len([m for m in re.findall(
+                r'^FDDST_SECURITY_LOG .*$', text, re.M)
+                if re.search(r'Error|not allowed|not found|PKCS7|failed', m)]),
             'access_control_refusals': len(re.findall(
                 r'topic not found in allow rule', text)),
             'crypto_plugin_lines': len(re.findall(r'\[SECURITY_CRYPTO ', text)),
@@ -86,8 +103,21 @@ def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
         if (out / (side + suffix)).is_file() else ''
         for side in 'AB' for suffix in ('.stdout', '.stderr'))
 
-    checks = [{'check': 'runner_pass', 'actual': bool(result.get('pass')),
+    sanitizer = [line for line in observed_all.splitlines()
+                 if 'AddressSanitizer' in line]
+    checks = [{'check': 'runner_completed', 'pass': not timed_out and bool(result)},
+              {'check': 'runner_pass', 'actual': bool(result.get('pass')),
                'expected': expect_pass, 'pass': bool(result.get('pass')) == expect_pass}]
+    # A sanitizer report is a finding wherever it appears. For the cases that must
+    # succeed it is a hard failure; for the invalid-configuration case it is
+    # recorded, because what it shows is an upstream defect on that path rather
+    # than a project defect. Either way it is visible instead of unasserted.
+    if expect_pass:
+        checks.append({'check': 'no_sanitizer_report', 'actual': len(sanitizer),
+                       'expected': 0, 'pass': not sanitizer})
+    else:
+        checks.append({'check': 'sanitizer_report_recorded', 'actual': len(sanitizer),
+                       'expected': 'recorded', 'pass': True})
     for fragment in expect_stderr:
         checks.append({'check': 'stderr_contains(' + fragment + ')',
                        'actual': fragment in observed_all,
@@ -105,14 +135,16 @@ def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
             found = ('Found security directory:' in side_text[side]
                      and side_text[side].count('Found security directory:') == 1)
             checks.append({'check': 'security_enclave_used_' + side,
-                           'actual': found, 'expected': True, 'pass': found})
-        access_errors = sum(v['security_category_errors'] + v['access_control_refusals']
+                           'actual': found, 'expected': activation == 'secure',
+                           'pass': found == (activation == 'secure')})
+        access_errors = sum(v['security_category_errorish'] + v['access_control_refusals']
                            for v in security_evidence.values())
         crypto_lines = sum(v['crypto_plugin_lines'] for v in security_evidence.values())
         checks.append({'check': 'no_access_or_auth_control_errors',
                        'actual': access_errors, 'expected': 0, 'pass': access_errors == 0})
         checks.append({'check': 'crypto_plugin_driven',
-                       'actual': crypto_lines, 'expected': '>0', 'pass': crypto_lines > 0})
+                       'actual': crypto_lines, 'expected': '>0' if activation == 'secure' else 0,
+                       'pass': crypto_lines > 0 if activation == 'secure' else crypto_lines == 0})
         checks.append({'check': 'host_path_carried_bytes',
                        'actual': bool(re.search(HOST_IO_PATTERN, observed_all)),
                        'expected': True,
@@ -124,11 +156,44 @@ def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
                        'pass': not any(v['abi_mismatch'] or v['factory_abi_mismatch']
                                        for v in security_evidence.values())})
 
-    payload = dict(name=name, expect_pass=expect_pass, runner_exit=proc.returncode,
+    if activation == 'invalid':
+        loader_codes = {0xC0000135, 0xC0000139, 0xC000007B}
+        processes = result.get('processes', {})
+        checks += [
+            {'check': 'config_or_security_rejection', 'pass': bool(re.search(
+                r'(\[SECURITY Error\]|FDDST_SECURITY_LOG .*Error while configuring security plugin|security.*(failed|error)|Failed to create node)', observed_all, re.I))},
+            {'check': 'no_business_take', 'pass': not re.search(r'ROS_(TAKE|FRAGMENT_TAKE) ', observed_all)},
+            # Excludes only loader/ABI codes; an abnormal exit inside the ON
+            # dependency is NOT excluded here and is reported by
+            # sanitizer_report_recorded plus the summary.
+            {'check': 'not_loader_or_abi_failure', 'pass': len(processes) == 2 and all(
+                p.get('exit_code') is not None and p['exit_code'] not in loader_codes for p in processes.values())
+                and 'ABI_MISMATCH' not in observed_all},
+            {'check': 'plugin_refused_own_configuration', 'pass': all(
+                'Error while configuring security plugin' in side_text[s] for s in 'AB')},
+            {'check': 'plugin_refused_material_format', 'pass': all(
+                ('PKCS7' in side_text[s] and 'S/MIME' in side_text[s]) for s in 'AB')},
+            # Recorded, deliberately not asserted to be a clean code: the plugin
+            # refuses the configuration and the process then terminates
+            # abnormally. A warning exit would not make the refusal less real, and
+            # an abnormal exit does not make it less of a refusal.
+            {'check': 'failure_exit_codes_recorded', 'actual': sorted(
+                p.get('exit_code') for p in processes.values()) if processes else None,
+             'expected': 'recorded', 'pass': bool(processes) and all(
+                p.get('exit_code') is not None for p in processes.values())},
+            {'check': 'on_dependency_loaded', 'pass': all(
+                'FDDST_LOADED module=fastrtps-2.14.dll path=' + str((fastdds_prefix/'bin/fastrtps-2.14.dll').resolve())
+                in side_text[s] for s in 'AB')},
+        ]
+    payload = dict(name=name, attempt_dir=str(attempt), output=str(out), activation=activation,
+                   sanitizer_report_lines=sanitizer,
+                   input_sha256={str(f.resolve()): hashlib.sha256(f.read_bytes()).hexdigest()
+                       for f in (exe, bridge, fastdds_prefix/'bin/fastrtps-2.14.dll', ros_prefix/'bin/fastcdr-2.2.dll') if f.is_file()},
+                   timed_out=timed_out, expect_pass=expect_pass, runner_exit=proc.returncode,
                    runner_result=result, security_evidence=security_evidence,
                    checks=checks, passed=all(c['pass'] for c in checks),
-                   runner_stderr=proc.stderr[-1500:])
-    (work / (name + '.json')).write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
+                   runner_stderr=str(proc.stderr)[-1500:])
+    (attempt / 'case.json').write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
     print(('PASS ' if payload['passed'] else 'FAIL ') + name +
           ' runner_pass=%s errors=%s' % (result.get('pass'), result.get('errors')))
     return payload
@@ -139,7 +204,7 @@ def main():
     parser.add_argument('--exe', type=Path, required=True)
     parser.add_argument('--bridge', type=Path, required=True)
     parser.add_argument('--fastdds-prefix', type=Path, required=True)
-    parser.add_argument('--off-fastdds-prefix', type=Path, required=True)
+    parser.add_argument('--off-fastdds-prefix', type=Path)
     parser.add_argument('--ros-prefix', type=Path, required=True)
     parser.add_argument('--pixi-prefix', type=Path, required=True)
     parser.add_argument('--keystore', type=Path, required=True)
@@ -148,8 +213,10 @@ def main():
     parser.add_argument('--only', default=None)
     args = parser.parse_args()
 
-    work = args.work.resolve()
-    work.mkdir(parents=True, exist_ok=True)
+    root = args.work.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix='attempt-', dir=root))
+    (work / 'invocation.json').write_text(json.dumps({'argv': sys.argv, 'work': str(work)}, indent=2), encoding='utf-8')
     common = dict(exe=args.exe.resolve(), bridge=args.bridge.resolve(),
                   ros_prefix=args.ros_prefix.resolve(), pixi_prefix=args.pixi_prefix.resolve(),
                   run_id=args.run_id)
@@ -186,6 +253,8 @@ def main():
         # exits with STATUS_ENTRYPOINT_NOT_FOUND before any project code runs.
         # This case therefore shows that the mix is refused; it does NOT exercise
         # the project's own build-mode gate, and no gate marker is expected here.
+        if args.off_fastdds_prefix is None:
+            parser.error('case 03 requires an explicit --off-fastdds-prefix')
         results.append(run_case(
             '03_mixed_dependency_refused_by_loader', work,
             fastdds_prefix=args.off_fastdds_prefix.resolve(), keystore=args.keystore.resolve(),
@@ -209,11 +278,32 @@ def main():
         finally:
             os.environ.pop('FDDST_ROS_FRAGMENT_BYTES', None)
 
-    summary = dict(cases_total=len(results), cases_passed=sum(1 for x in results if x['passed']))
+    if args.only == 'A':
+        results.append(run_case('A_same_on_prefix_development_control', work,
+            fastdds_prefix=args.fastdds_prefix.resolve(), keystore=None, mode='dual',
+            extra=['--security-development-control'], expect_pass=True, expect_stderr=['FDDST_ROS_CLOSED'],
+            activation='development', **common))
+    if args.only == 'C':
+        broken = work / 'invalid-keystore'
+        shutil.copytree(args.keystore, broken)
+        for side in 'AB':
+            governance = broken / 'enclaves' / side / 'governance.p7s'
+            if not governance.is_file():
+                raise ValueError('Missing declared synthetic governance input: ' + str(governance))
+            governance.write_text('INVALID TEST-ONLY GOVERNANCE SIGNATURE\n', encoding='ascii')
+        results.append(run_case('C_required_invalid_governance', work,
+            fastdds_prefix=args.fastdds_prefix.resolve(), keystore=broken, mode='dual', extra=[],
+            # No ROS_FAILURE marker: the plugin refuses before the application's
+            # own failure protocol is reached, so the rejection is observed in the
+            # security layer rather than in the app. The exit status is recorded,
+            # not required to be clean.
+            expect_pass=False, expect_stderr=[], activation='invalid', **common))
+
+    summary = dict(attempt=str(work), cases_total=len(results), cases_passed=sum(1 for x in results if x['passed']), cases=results)
     (work / 'ROS_SECURITY_CLOSURE.json').write_text(json.dumps(summary, indent=2) + '\n',
                                                     encoding='utf-8')
     print(json.dumps(summary))
-    return 0 if summary['cases_passed'] == summary['cases_total'] else 1
+    return 0 if results and summary['cases_passed'] == summary['cases_total'] else 1
 
 
 if __name__ == '__main__':

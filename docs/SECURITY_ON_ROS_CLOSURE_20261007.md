@@ -298,3 +298,105 @@ authorized, matched peer presenting a large legitimate `sampleSize` remains an
 uncovered resource risk; PF-01/PF-02, licensing, SBOM closure and the platform SDK
 contract are untouched; product budgets remain `NEEDS_PRODUCT_VALUE`. Target
 results remain static-only and no device was run.
+
+---
+
+# Validation completion — 2026-10-07, task `SECURE_ROS_VALIDATION_COMPLETION_FROM_CB9AD6E`
+
+Baseline `cb9ad6e6d1fd92c709b23ef978a512a470c31a77`. Four items only.
+
+## Log preservation
+
+`run_ros_security_closure.py` and `run_security_matrix.py` now allocate a fresh
+`attempt-*`/`case-*` directory per invocation, so a later run cannot delete an
+earlier result. `tests/ros2_host/security_candidate/attempt_log_tests.py` proves
+it: against the old code its assertion that the first run's raw bytes survive
+fails, and it passes against the new code. Running scenario 00 twice into the same
+`--out` leaves two `attempt-*` directories, each with its own `case-*` and
+`SECURITY_MATRIX_RESULT.json`, both 1/1.
+
+The **historical RED logs were not retained** — they were overwritten before this
+task. No recovered artifact is claimed. A new RED was produced this round from an
+isolated copy of commit `2405ded` (`git archive 2405ded` into
+`red-prefix-source`, bridge rebuilt into `red-bridge-prefix`) and is labelled
+`RE_PRODUCED_THIS_ROUND` in `RED_REPRODUCED_20261007.json`. It reproduces the
+whole chain: `FacadeError 10 InsufficientReceiverCapacity`, then `9 InvalidLocator`,
+then `Applied mutation until: Invalid_locator:[_]:0`, then `No unicast locators to
+create unique flows`.
+
+## Facade capacity boundary
+
+`tests/transport_facade_tests.cpp` gained `FCD-08` with the matrix below, built in
+a **new** tree (`facade-build`) against the standalone Fast DDS 3.6 CONFIG package
+— legitimate because the rule under test lives in project code and is
+version-independent. Result: 22 groups, 0 failures.
+
+| descriptor max M | offered capacity C | accepted |
+| --- | --- | --- |
+| 65535 | 65534 | no |
+| 65535 | 65535 | yes |
+| 65535 | 65536 | yes |
+| 65536 | 65535 | no |
+| 65536 | 65536 | yes — the general-Transport control |
+
+The refusal is asserted as exactly `InsufficientReceiverCapacity` *after* a
+successful `init(nullptr, M)`, with rollback checked (`open_channels` unchanged,
+the original local still open, the competing local not) and the pre-existing
+receiver still delivering exact bytes. The last row is the control that the
+Transport is **not** globally locked to 65535: 65536 remains legal when every
+other condition holds.
+
+## A / B / C within one SECURITY=ON build
+
+* **A** — development control: the same ON binaries as B, plugins off through an
+  explicit flag that refuses to combine with a keystore or a plain side. The
+  driver requires the enclave line and the crypto lines to be **absent** for A and
+  **present** for B, so A cannot be mistaken for a fallback.
+* **B** — the legal secure configuration; 20 writes / 20 takes, graph, service,
+  DDS deletion, RuntimeClose, normal exit, and a real fragmented sample.
+* **C** — security explicitly required with the governance material corrupted. The
+  plugin refuses at the real plugin: `Input data has not PKCS7 S/MIME format`
+  (`Permissions.cpp:356`), `Participant is not allowed with its own permissions
+  file.`, `Error while configuring security plugin.` The ON dependency is loaded,
+  no loader code appears, and no business take occurs.
+
+**C terminates abnormally.** After refusing the configuration the processes exit
+`0xC0000005` `STATUS_ACCESS_VIOLATION`, and under ASan this is an
+`access-violation` inside `fastrtps-2.14.dll` in
+`SequenceNumber_t::operator+=` while unwinding the failed
+`create_participant` — no project frame is present, so it is an upstream
+robustness defect on the invalid-configuration path, not a bridge defect. The
+driver **records** the exit codes rather than requiring a clean one, and the
+sanitizer report is recorded rather than hidden. "Not a loader failure" excludes
+only the loader codes; it does not claim C exits cleanly.
+
+## Bridge / ROS under ASan
+
+`cmake/Ros214TestAsan.cmake` is a new **test-only** profile. The production guards
+in `cmake/Ros214Candidate.cmake` and the installed preflight are untouched — the
+three existing CMake files only gain lines. The profile requires native MSVC x64,
+`/MD`, Release-only configuration, the explicit 2.14.7 candidate, `HAVE_SECURITY 1`,
+and it **verifies actual instrumentation** by running `dumpbin /imports` and
+requiring `clang_rt.asan_dynamic-x86_64.dll`. It derives `dumpbin` from the
+selected compiler because the Visual Studio generator does not populate
+`CMAKE_DUMPBIN`. Pointing it at the uninstrumented prefix fails configure with
+`dependency is not instrumented: fastrtps`, so the check is a real gate.
+
+Instrumented and exercised: Fast DDS 2.14.7 (SECURITY=ON, Release-only), Fast CDR
+2.2.8 (Release-only), the project runtime, `fastdds_dsoftbus_ros2_host_bridge.dll`
+and `ordinary_ros2_transport_consumer.exe`. The ASan runtime had to be placed
+beside the instrumented modules; on `PATH` alone the children exited silently.
+
+Results, with the loaded Fast CDR verified byte-identical (`4ee7e28b…`) to the
+ASan build:
+
+| Case | Sanitizer |
+| --- | --- |
+| 01 secure dual pair, 20 writes / 20 takes, RuntimeClose | 0 reports |
+| 04 secure fragmented sample, reassembled exactly | 0 reports |
+| C invalid governance | 6 report lines — the upstream access-violation above |
+
+**Still uninstrumented**, so this is not a memory-safety proof for the whole
+stack: `rmw_fastrtps_cpp`, `rmw_fastrtps_shared_cpp`, the `rosidl` typesupport
+libraries, `std_msgs`, `example_interfaces`, and the rest of the upstream ROS
+runtime (`rclcpp`, `rcl`, `rcutils`, `rmw` and their peers). TSan was not run.
