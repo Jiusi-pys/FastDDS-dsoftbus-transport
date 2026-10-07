@@ -147,11 +147,19 @@ change Transport behaviour without evidence that it is correct.
   mixed-dependency cases depend on a positive case that reaches discovery; with
   the positive case blocked at participant/reader association, their results would
   not be attributable.
-* **The directed ASan build did not finish in this round.** The ASan Fast CDR
-  prefix built; the ASan Fast DDS link failed on a third-party Boost symbol when
-  the sanitizer flags replaced the default MSVC flags. It was relaunched with the
-  flags appended, and its result is recorded separately if it completes. No ASan
-  result is claimed here and TSan remains NOT_RUN.
+* **Directed ASan covers the receive and parse paths but not the bridge or the
+  ROS closure.** Fast CDR and Fast DDS (SECURITY=ON) were rebuilt with
+  `/fsanitize=address` appended to the default MSVC flags, and the two
+  receive-path probes were rebuilt against them and re-run:
+  fragment geometry 14/14 and bounded payload pool 6/6, with **zero
+  AddressSanitizer reports**. The first ASan attempt replaced the default MSVC
+  flags instead of extending them and failed to link a third-party Boost symbol;
+  that attempt is retained as history. The project bridge could **not** be
+  sanitized: `integrations/ros2/CMakeLists.txt` requires an actual selected
+  RELEASE shared binary and rejects a sanitizer build at configure. The ROS
+  closure was not re-run under ASan. TSan remains NOT_RUN. Receipts:
+  `receipts/ASAN_RESULT.json`, `receipts/ASAN_FRAGMENT_GEOMETRY_RESULT.json`,
+  `receipts/ASAN_BOUNDED_PAYLOAD_POOL_RESULT.json`.
 * **No device, HDC, deployment, grant or target execution occurred.** The API23
   result is a static build/link audit only: the target bridge is ELF64/AArch64,
   has no absolute `C:` `DT_NEEDED`, and links `libssl.so.3` / `libcrypto.so.3`.
@@ -164,7 +172,7 @@ MALFORMED_FRAGMENT_GEOMETRY_TESTED           (14/14, real non-zero fragment size
 API23_SECURITY_STATIC_ONLY                   (ELF64/AArch64, no absolute host paths)
 SECURITY_ON_ROS_HOST_INTEGRATION             BLOCKED (see section 5)
 SECURITY_ON_ROS_NEGATIVES                   NOT_RUN (dependent on the above)
-DIRECTED_ASAN                               INCOMPLETE
+DIRECTED_ASAN                               RECEIVE_AND_PARSE_PATHS_ONLY (0 reports)
 DEVICE_SECURITY_PROFILE_NOT_RUN
 NOT_PRODUCTION_QUALIFIED
 ```
