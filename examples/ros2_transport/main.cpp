@@ -63,6 +63,13 @@ int main(int argc,char** argv) {
 #endif
     std::cout<<"ROS_MAIN scenario=ROS2_DSOFTBUS run="<<run<<" side="<<side<<" pid="<<pid<<" mode="<<mode<<std::endl;
     int result=4;
+    // Bounded test input, not a production sample-size contract.
+    std::size_t fragment_bytes=0;
+    if(const char* size=std::getenv("FDDST_ROS_FRAGMENT_BYTES")) {
+        fragment_bytes=std::stoul(size);
+        if(fragment_bytes>1024*1024)return 2;
+    }
+    const std::string padding(fragment_bytes,'x');
     const char* active_stage="RCLCPP_INIT";
     try {
         rclcpp::init(1,argv);
@@ -91,10 +98,12 @@ int main(int argc,char** argv) {
                 const auto prefix=payload_prefix+peer+":";
                 if(msg.data.rfind(prefix,0)!=0){bad=true;return;}
                 unsigned ordinal=static_cast<unsigned>(std::stoul(msg.data.substr(prefix.size())));
+                if(msg.data!=prefix+std::to_string(ordinal)+padding){bad=true;return;}
                 if(ordinal<1||ordinal>5||!taken.insert(ordinal).second){bad=true;return;}
                 std::ostringstream id;for(unsigned char b:info.get_rmw_message_info().publisher_gid.data)id<<std::hex<<std::setw(2)<<std::setfill('0')<<unsigned(b);
-                std::cout<<"ROS_TAKE run="<<run<<" side="<<side<<" ordinal="<<ordinal<<" gid="<<id.str()<<" payload="<<msg.data<<" phase="<<phase
+                std::cout<<"ROS_TAKE run="<<run<<" side="<<side<<" ordinal="<<ordinal<<" gid="<<id.str()<<" payload="<<prefix+std::to_string(ordinal)<<" phase="<<phase
                     <<" topic="<<topic_prefix<<"from_"<<peer<<" publication_sequence="<<info.get_rmw_message_info().publication_sequence_number<<std::endl;
+                if(fragment_bytes)std::cout<<"ROS_FRAGMENT_TAKE bytes="<<msg.data.size()<<" exact=1 ordinal="<<ordinal<<std::endl;
             });
         rclcpp::Service<example_interfaces::srv::AddTwoInts>::SharedPtr service;
         rclcpp::Client<example_interfaces::srv::AddTwoInts>::SharedPtr client;
@@ -119,7 +128,7 @@ int main(int argc,char** argv) {
         // Their elapsed time must not consume the service/receive budget.
         const auto business_deadline=std::chrono::steady_clock::now()+30s;
         active_stage="PUBLISH";
-        for(unsigned i=1;i<=5;++i){std_msgs::msg::String m;m.data=payload_prefix+side+":"+std::to_string(i);pub->publish(m);std::cout<<"ROS_WRITE run="<<run<<" side="<<side<<" ordinal="<<i<<" payload="<<m.data<<" phase="<<phase<<" topic="<<pub->get_topic_name()<<std::endl;
+        for(unsigned i=1;i<=5;++i){std_msgs::msg::String m;const auto value=payload_prefix+side+":"+std::to_string(i);m.data=value+padding;pub->publish(m);std::cout<<"ROS_WRITE run="<<run<<" side="<<side<<" ordinal="<<i<<" payload="<<value<<" phase="<<phase<<" topic="<<pub->get_topic_name()<<std::endl;
 #if defined(_WIN32)
             const char* reaccept=std::getenv("FDDST_HOST_REACCEPT_STAGE");
             if(i==2&&phase=="reliable"&&reaccept&&std::string(reaccept)=="1"){

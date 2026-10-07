@@ -74,6 +74,36 @@ security profile (that needs the whole ROS stack rebuilt against `SECURITY=ON`),
 no device, SDK or platform execution occurred. `NOT_PRODUCTION_QUALIFIED` is
 unchanged.
 
+## SECURITY=ON ROS closure attempt (2026-10-07, later task)
+
+From baseline `a885a3781ac3e022c7186da6a1420ad20c2255ca` the task
+`SECURITY_ON_ROS_CLOSURE_FROM_A885A37` rebuilt the whole Host chain inside one
+explicit security environment and closed the preflight input-binding gap. Full
+record: [SECURITY=ON ROS closure attempt](SECURITY_ON_ROS_CLOSURE_20261007.md).
+
+Closed: `--fastdds-include` is no longer a free-floating override — the manifest
+carries a content-bound dependency binding and the flag is an equality assertion
+against it (8/8 materialized cases, including relocated-prefix acceptance and
+refusal of a foreign include tree, a modified header, a stale record, a deleted
+record, a manifest without a binding, and the same-version SECURITY=OFF library).
+OpenSSL was pinned to released 3.5.9 and Fast DDS 2.14.7, the ROS consumers, the
+bridge and the application were rebuilt against it. Fragment geometry was
+exercised with real non-zero fragment sizes for the first time (14/14): sizes 1–3
+are refused and the helper is not a bound on a large sample.
+
+**Not closed, and reported as blocked rather than as a qualified limitation:**
+the ordinary-ROS-under-security positive case does not pass. The security plugins
+are demonstrably active and enforcing — plugin-sourced access-control refusals
+appear in the run's own logs and were resolved by correcting the enclave grants —
+but the ON participant then fails at
+`Invalid_locator:[_]:0` / `No unicast locators to create unique flows`, and the
+application exits with status 4 without exchanging samples. The identical harness
+against the retained SECURITY=OFF prefixes passes 20 writes / 20 takes
+(A 10/10, B 10/10), which localises the failure to the security build rather than
+to the harness, the transport or the opaque-byte Host seam. The negative ROS cases
+and the directed ASan run are consequently not reported as passed. No device, HDC,
+deployment or grant occurred; the API23 result remains a static build/link audit.
+
 ## Production foundation checkpoint (2026-10-06)
 
 From baseline `facca428ab9a15649f44f2bdf216e446c7d56d5d`, the local productionization

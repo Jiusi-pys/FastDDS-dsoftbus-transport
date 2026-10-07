@@ -100,29 +100,55 @@ framework.
 and any key outside that set, fails closed. When `mode` is not `NONE` the checker
 requires all six of `identity_ca`, `identity_certificate`, `private_key`,
 `permissions_ca`, `governance` and `permissions`; `permissions_ca` is required
-because the Access-Permissions plugin reads it. It also requires an explicit
-absolute `--fastdds-include`, reads only `fastrtps/config.h` from it, and refuses
-when that tree reports no security support
-(`SECURITY_NOT_COMPILED_INTO_DEPENDENCY`) or does not define `HAVE_SECURITY`
-(`SECURITY_SUPPORT_UNKNOWN`) — otherwise a declared profile would silently run
-unprotected. Each declared material path must be absolute and present
-(`SECURITY_PATH_NOT_ABSOLUTE`, `SECURITY_FILE_MISSING`), and every required key
-must be present (`SECURITY_MATERIAL_MISSING`). Declaring material while `mode` is
-`NONE` is refused (`SECURITY_MODE_NONE_WITH_MATERIAL`). With no `security` object
-every existing pass/fail decision is unchanged, and the result additionally
-reports `security_mode = NONE`.
+because the Access-Permissions plugin reads it. Each declared material path must
+be absolute and present (`SECURITY_PATH_NOT_ABSOLUTE`, `SECURITY_FILE_MISSING`),
+and every required key must be present (`SECURITY_MATERIAL_MISSING`). Declaring
+material while `mode` is `NONE` is refused (`SECURITY_MODE_NONE_WITH_MATERIAL`).
+With no `security` object every existing pass/fail decision is unchanged, and the
+result additionally reports `security_mode = NONE`.
 
-`--fastdds-include` is caller-supplied and is **not** bound to the manifest's
-dependency digest: an unrelated include tree that happens to report
-`HAVE_SECURITY 1` would pass. Point it at the same dependency build the manifest
-binds.
+## Dependency input binding (2026-10-07)
 
-**What this check does not establish.** File presence and a compiled-in
-`HAVE_SECURITY` do not show that an identity is used on a target, that an
-authenticated handshake succeeded, that unauthenticated peer traffic is
-discarded, or that PF/P4 are closed. The checker records that limitation in its
-own output as `SECURITY_RUNTIME_UNPROVEN`, and `production_ready` stays false,
-P4 stays NOT_RELEASED and no QualificationProfile is generated regardless of the
+`--fastdds-include` used to be a free-floating override: any header tree that
+happened to define `HAVE_SECURITY 1` would pass, whatever binary the manifest
+actually selected. The security block now verifies a **declared, content-bound**
+input instead:
+
+* the manifest's `fastrtps` dependency carries a `source_binding` naming a binding
+  record, given as a path relative to the selected dependency prefix root;
+* that record binds the selected library path and SHA-256, the installed `include`
+  root, every installed header beneath it, every installed `share/fastrtps/cmake`
+  file, the build-cache digest and its `SECURITY` setting;
+* `--fastdds-include` is accepted **only as an equality assertion** against the
+  bound root. A different tree is refused even when its bytes are identical
+  (`SECURITY_SOURCE_BINDING_INCLUDE_MISMATCH`);
+* `HAVE_SECURITY` must be exactly `0` or `1` (`SECURITY_SUPPORT_UNKNOWN`
+  otherwise), and the record's build setting must agree with the installed header
+  (`SECURITY_SOURCE_BINDING_MODE_MISMATCH`);
+* a changed header, a stale record or a record that disagrees with the selected
+  binary is refused (`SECURITY_SOURCE_BINDING_HEADER_MISMATCH`,
+  `SECURITY_SOURCE_BINDING_STALE`, `SECURITY_SOURCE_BINDING_LIBRARY_MISMATCH`),
+  and a manifest without a binding is refused
+  (`SECURITY_SOURCE_BINDING_MISSING`).
+
+Content binding proves that the header tree and the selected binary **correspond**.
+It is not publisher attestation, and the checker says so in its own output
+(`SECURITY_SOURCE_BINDING_VERIFIED … publisher trust remains unverified`). A
+relocated installation is still valid, because every path in the record resolves
+relative to the selected binary's prefix root.
+
+The binding record is produced by `scripts/bind_dependency_install.py` from a
+successful build and install in the new dependency prefix, never from
+command-line text; `cmake/InstallPreflight.cmake` embeds its digest in the
+manifest from the actual imported dependency.
+
+**What this check does not establish.** File presence, a compiled-in
+`HAVE_SECURITY` and content correspondence do not show that an identity is used on
+a target, that an authenticated handshake succeeded, that unauthenticated peer
+traffic is discarded, or that PF/P4 are closed. The checker records that
+limitation in its own output as `SECURITY_RUNTIME_UNPROVEN`, and `production_ready`
+stays false, P4 stays NOT_RELEASED and no QualificationProfile is generated
+regardless of the
 declared mode.
 
 Statuses are cumulative. Valid experimental/Host inputs return exit 0 together

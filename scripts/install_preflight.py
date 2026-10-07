@@ -137,6 +137,61 @@ def runtime_configuration(path, native):
     return values
 
 
+def security_source_binding(dep, library, include_override):
+    """Verify declared content correspondence; this is not publisher attestation."""
+    binding = dep.get('source_binding')
+    if not isinstance(binding, dict) or binding.get('root_from_library') not in ('.', '..'):
+        raise ValueError('SECURITY_SOURCE_BINDING_MISSING: dependency build/install binding required')
+    root = (library.parent / binding['root_from_library']).resolve(strict=True)
+
+    def member(name):
+        if not isinstance(name, str) or not name or Path(name).is_absolute() or '..' in Path(name).parts:
+            raise ValueError('SECURITY_SOURCE_BINDING_INVALID: relative member required')
+        path = (root / name).resolve()
+        if not path.is_relative_to(root):
+            raise ValueError('SECURITY_SOURCE_BINDING_INVALID: member escapes declared input root')
+        return path
+
+    record_file = member(binding.get('file'))
+    if not record_file.is_file() or digest(record_file) != binding.get('sha256'):
+        raise ValueError('SECURITY_SOURCE_BINDING_STALE: install binding digest mismatch')
+    record = load_json(record_file)
+    if (not isinstance(record, dict) or record.get('schema') != 1 or
+            record.get('dependency') != dep['name'] or record.get('version') != dep['version'] or
+            member(record.get('library_file')) != library.resolve() or
+            record.get('library_sha256') != dep['sha256'] or digest(library) != record.get('library_sha256')):
+        raise ValueError('SECURITY_SOURCE_BINDING_LIBRARY_MISMATCH: header/install record and selected binary differ')
+    include = member(record.get('include_root'))
+    if include_override is None or not Path(include_override).is_absolute():
+        raise ValueError('SECURITY_DEPENDENCY_NOT_INSPECTED: explicit bound include required')
+    if Path(include_override).resolve() != include:
+        raise ValueError('SECURITY_SOURCE_BINDING_INCLUDE_MISMATCH: CLI include is outside declared dependency input')
+    header = include / 'fastrtps/config.h'
+    if not header.is_file():
+        raise ValueError('SECURITY_DEPENDENCY_NOT_INSPECTED: bound config.h missing')
+    rows = record.get('headers')
+    configs = record.get('configuration_files')
+    if not isinstance(rows, list) or not rows or not isinstance(configs, list):
+        raise ValueError('SECURITY_SOURCE_BINDING_INVALID: header/configuration inventory required')
+    listed = set()
+    for row in rows + configs:
+        if not isinstance(row, dict):
+            raise ValueError('SECURITY_SOURCE_BINDING_INVALID: file record required')
+        path = member(row.get('file'))
+        if path in listed or not path.is_file() or digest(path) != row.get('sha256'):
+            raise ValueError('SECURITY_SOURCE_BINDING_HEADER_MISMATCH: installed header/configuration changed')
+        listed.add(path)
+    if header.resolve() not in listed:
+        raise ValueError('SECURITY_SOURCE_BINDING_INVALID: config.h is not bound')
+    match = re.search(r'^\s*#define\s+HAVE_SECURITY\s+([01])\s*$', header.read_text(encoding='utf-8'), re.M)
+    if match is None:
+        raise ValueError('SECURITY_SUPPORT_UNKNOWN: HAVE_SECURITY must be exactly zero or one')
+    mode = int(match.group(1))
+    if not isinstance(record.get('build'), dict) or record['build'].get('security') != mode:
+        raise ValueError('SECURITY_SOURCE_BINDING_MODE_MISMATCH: build and config.h disagree')
+    return mode
+
+
 def preflight(prefix, config_path, runtime_dirs, readobj, fastdds_include=None):
     """Return separate installation and platform statuses; configuration has no authority."""
     checks = []
@@ -249,28 +304,6 @@ def preflight(prefix, config_path, runtime_dirs, readobj, fastdds_include=None):
                 if fastdds_include is None or not Path(fastdds_include).is_absolute():
                     fail('SECURITY_DEPENDENCY_NOT_INSPECTED',
                          'Explicit absolute --fastdds-include is required to check compiled security support')
-                else:
-                    config_header = Path(fastdds_include) / 'fastrtps/config.h'
-                    if not config_header.is_file():
-                        fail('SECURITY_DEPENDENCY_NOT_INSPECTED',
-                             'fastrtps/config.h not found under --fastdds-include')
-                    else:
-                        text = config_header.read_text(encoding='utf-8', errors='replace')
-                        match = re.search(r'^\s*#define\s+HAVE_SECURITY\s+(\d+)', text, re.M)
-                        if match is None:
-                            fail('SECURITY_SUPPORT_UNKNOWN',
-                                 'HAVE_SECURITY is not defined in the installed dependency header')
-                        elif match.group(1) == '0':
-                            fail('SECURITY_NOT_COMPILED_INTO_DEPENDENCY',
-                                 'The include tree named by --fastdds-include reports no '
-                                 'security support; requesting DISCOVERY_' +
-                                 security_mode.split('_')[-1] + ' against it would silently '
-                                 'run unprotected. Point --fastdds-include at the same '
-                                 'dependency build the manifest binds')
-                        else:
-                            checks.append(dict(code='SECURITY_COMPILED_IN', result='PASS',
-                                               detail='HAVE_SECURITY=' + match.group(1) +
-                                                      ' in the bound dependency header'))
                 note('SECURITY_RUNTIME_UNPROVEN',
                      'File presence and compiled support do not prove that the identity is used on a '
                      'target, that an authenticated handshake succeeded, or that unauthenticated peer '
@@ -338,6 +371,21 @@ def preflight(prefix, config_path, runtime_dirs, readobj, fastdds_include=None):
             if digest(path) != dep['sha256']:
                 fail('DEPENDENCY_VERSION_OR_ABI_MISMATCH', 'Actual binary differs from build-bound ' + dep['name'] + ' ' + dep['version'])
             binaries.append(path)
+            if dep['name'] == dep_name and security_mode != 'NONE':
+                try:
+                    mode = security_source_binding(dep, path, fastdds_include)
+                    checks.append(dict(code='SECURITY_SOURCE_BINDING_VERIFIED', result='PASS',
+                                       detail='Selected include, installed config/build record and binary content correspond; publisher trust remains unverified'))
+                    if mode != 1:
+                        fail('SECURITY_NOT_COMPILED_INTO_DEPENDENCY', 'Bound dependency has HAVE_SECURITY=0')
+                    else:
+                        checks.append(dict(code='SECURITY_COMPILED_IN', result='PASS', detail='Bound build/config.h has HAVE_SECURITY=1; runtime unproven'))
+                except (ValueError, OSError, KeyError, TypeError) as exc:
+                    detail = str(exc)
+                    code = detail.split(':', 1)[0]
+                    if not code.startswith('SECURITY_'):
+                        code = 'SECURITY_SOURCE_BINDING_INVALID'
+                    fail(code, detail)
             for implib in dep.get('link_files', []):
                 link = resolve_library(implib['file'])
                 if digest(link) != implib['sha256']:

@@ -43,9 +43,14 @@ unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsign
 struct Owner:fastdds_dsoftbus::ros2_integration::BridgeOwner {bool host_close_error=false;};
 }
 extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookVersion(){return 21405;}
+extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookSecurity(){return HAVE_SECURITY;}
 extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsigned domain,void* raw,void** out) {
     *out=nullptr;
     try {
+        // Plain C only: reject a foreign public C++ layout before inspecting qos.
+        auto module=GetModuleHandleA("fastrtps-2.14.dll");
+        auto mode=reinterpret_cast<unsigned(*)()>(GetProcAddress(module,"FastddsDsoftbusFactorySecurityMode"));
+        if((mode&&mode()!=HAVE_SECURITY)||(!mode&&HAVE_SECURITY))throw std::runtime_error("security ABI mode mismatch");
         auto m=read(path);
         if(m.at("locator_version")!="V1"||m.at("native_name_contract")!="PACKAGE_SCOPED_V1"||m.at("authorized_package")!="host.ros.test")throw std::runtime_error("explicit V1 configuration required");
         if(m.at("backend")!="HOST_OPAQUE_BYTES_TEST_ONLY")throw std::runtime_error("backend unavailable; Host-only binary");

@@ -3,12 +3,18 @@ import argparse,json,os,subprocess,time,secrets,socket,re,hashlib
 from pathlib import Path
 from control_files import publish_control
 p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort','dual'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');p.add_argument('--host-close-error',choices=['0','1'],default='0');p.add_argument('--paired-close',action='store_true');p.add_argument('--asymmetric-cleanup',action='store_true');p.add_argument('--reaccept-host',action='store_true');p.add_argument('--reaccept-origin',choices=['A','B'],default='A');p.add_argument('--owned-normal-reaccept',action='store_true');p.add_argument("--route-lifecycle",choices=["new","same"])
-p.add_argument('--route-offline-writes',action='store_true');a=p.parse_args()
+p.add_argument('--route-offline-writes',action='store_true')
+p.add_argument('--run-id',help='Frozen isolated run, used by exact security endpoint grants')
+p.add_argument('--secure-keystore',type=Path)
+p.add_argument('--plain-side',choices=['A','B'])
+a=p.parse_args()
 if a.reaccept_host and (a.mode!='dual' or a.forward!='1'):raise ValueError('Reaccept fixture requires dual opaque-byte forwarding')
 if a.owned_normal_reaccept and not a.reaccept_host:raise ValueError('Owned normal model requires explicit Host reaccept')
 if a.route_lifecycle and not a.owned_normal_reaccept:raise ValueError("route fixture requires retained-entity scene")
 if a.route_offline_writes and not a.route_lifecycle:raise ValueError('offline-write fixture requires explicit route lifecycle')
-a.output.mkdir(parents=True,exist_ok=False);run=secrets.token_hex(8);domain=201
+a.output.mkdir(parents=True,exist_ok=False);run=a.run_id or secrets.token_hex(8);domain=201
+if not re.fullmatch('[0-9a-f]{16}',run):raise ValueError('Invalid frozen run id')
+if a.secure_keystore and (not a.secure_keystore.is_absolute() or not a.secure_keystore.is_dir()):raise ValueError('Explicit security keystore required')
 # Optional test-only controller response, never an application/SDK injection.
 close_control=os.environ.get('FDDST_HOST_TEST_CLOSE_CONTROL','NORMAL_COMPLETION')
 if close_control not in ('NORMAL_COMPLETION','WINDOW_FAILED','INVALID_PID'):raise ValueError('Host close control fixture')
@@ -34,6 +40,14 @@ for index,side in enumerate('AB'):
   with conf.open('a') as stream:stream.write('runtime_close_release='+str((a.output/(side+'-control.RUNTIME_CLOSE')).resolve())+'\n')
  env=os.environ.copy();env['PATH']=os.pathsep.join([str(a.fastdds_prefix/'bin'),str(a.ros_prefix/'bin'),str(a.pixi_prefix/'Library/bin'),env.get('PATH','')]);env['RMW_IMPLEMENTATION']='rmw_fastrtps_cpp';env['ROS_DOMAIN_ID']=str(domain);env['ROS_AUTOMATIC_DISCOVERY_RANGE']='SUBNET';env['FASTDDS_DSOFTBUS_REQUIRED_CONFIG']=str(conf.resolve());env['FASTDDS_ENVIRONMENT_FILE']='';env['SKIP_DEFAULT_XML']='1'
  env['FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX']=str((a.output/(side+'-control')).resolve())
+ if a.secure_keystore:
+  env['FDDST_SECURITY_TRACE']='1'
+  env['ROS_SECURITY_ENABLE']='false' if side==a.plain_side else 'true'
+  env['ROS_SECURITY_STRATEGY']='Enforce'
+  env['ROS_SECURITY_KEYSTORE']=str(a.secure_keystore.resolve())
+  env['ROS_SECURITY_ENCLAVE_OVERRIDE']='/'+side
+ else:
+  for k in ('ROS_SECURITY_ENABLE','ROS_SECURITY_STRATEGY','ROS_SECURITY_KEYSTORE','ROS_SECURITY_ENCLAVE_OVERRIDE'):env.pop(k,None)
  if a.owned_normal_reaccept:env['FDDST_BOUNDED_NATIVE_SCENE']='ROUTE_RETURN_ONCE' if a.route_offline_writes else 'BOUNDED_NORMAL_ONCE';env.pop('FDDST_HOST_REACCEPT_STAGE',None)
  elif a.reaccept_host:env['FDDST_HOST_REACCEPT_STAGE']='1';env.pop('FDDST_BOUNDED_NATIVE_SCENE',None)
  else:env.pop('FDDST_HOST_REACCEPT_STAGE',None);env.pop('FDDST_BOUNDED_NATIVE_SCENE',None)

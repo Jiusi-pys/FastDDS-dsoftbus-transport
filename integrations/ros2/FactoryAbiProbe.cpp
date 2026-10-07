@@ -5,6 +5,10 @@
 #include "TeardownDiagnostics.hpp"
 #include "NativePrefix.hpp"
 #include "Ros214Version.hpp"
+#if HAVE_SECURITY
+extern "C" unsigned FastddsDsoftbusFactorySecurityMode();
+#include <fastdds/dds/log/Log.hpp>
+#endif
 // A link-time import binds ordinary application consumption to the actual
 // patched 2.14 DLL. This performs no Runtime/Socket/thread work in static init.
 #if defined(_WIN32)
@@ -21,8 +25,30 @@ extern "C" void FastddsDsoftbusFactoryTeardownControl(const char*) noexcept;
 extern "C" int FastddsDsoftbusFactoryCaptureNativePrefix(fastdds_dsoftbus::ros2_diagnostics::NativePrefix*) noexcept;
 #endif
 namespace {
+#if HAVE_SECURITY
+// Compiled into the application, so the callback cannot outlive an unloaded Bridge.
+class SecurityTrace final : public eprosima::fastdds::dds::LogConsumer {
+public:
+    void Consume(const eprosima::fastdds::dds::Log::Entry& entry) override {
+        if(entry.context.category && std::strcmp(entry.context.category,"SECURITY")==0) {
+            std::fprintf(stderr,"FDDST_SECURITY_LOG category=%s message=%s\n",entry.context.category,entry.message.c_str());
+            std::fflush(stderr);
+        }
+    }
+};
+#endif
 struct AbiCheck {
-    AbiCheck(){if(FastddsDsoftbusFactoryHookAbi()!=21405){std::fputs("FDDST_FACTORY_ABI_MISMATCH\n",stderr);std::abort();}}
+    AbiCheck(){
+#if HAVE_SECURITY
+        if(FastddsDsoftbusFactorySecurityMode()!=HAVE_SECURITY){std::fputs("FDDST_SECURITY_ABI_MISMATCH\n",stderr);std::abort();}
+        if(const char* trace=std::getenv("FDDST_SECURITY_TRACE");trace&&std::strcmp(trace,"1")==0) {
+            using eprosima::fastdds::dds::Log;
+            Log::SetVerbosity(Log::Info);
+            Log::RegisterConsumer(std::unique_ptr<eprosima::fastdds::dds::LogConsumer>(new SecurityTrace));
+        }
+#endif
+        if(FastddsDsoftbusFactoryHookAbi()!=21405){std::fputs("FDDST_FACTORY_ABI_MISMATCH\n",stderr);std::abort();}
+    }
 } abi_check;
 }
 extern "C" void FastddsDsoftbusFailureSnapshot(std::uint64_t failure_ref) noexcept {

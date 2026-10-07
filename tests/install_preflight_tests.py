@@ -83,7 +83,70 @@ class InstalledPreflight(unittest.TestCase):
             include = self.root / ('fastdds-include-sec%d' % value)
             (include / 'fastrtps').mkdir(parents=True, exist_ok=True)
             (include / 'fastrtps/config.h').write_text('#define HAVE_SECURITY %d\n' % value)
+        self.declare_security_binding(self.root / 'fastdds-include-sec1')
         return material
+
+    def declare_security_binding(self, include):
+        header = include / 'fastrtps/config.h'
+        rows = [dict(file=str(header.relative_to(self.root)), sha256=hashlib.sha256(header.read_bytes()).hexdigest())] if header.exists() else []
+        dep = self.manifest['dependencies'][0]
+        receipt = dict(schema=1, dependency='fastrtps', version=dep['version'],
+                       library_file='external-dependencies/' + dep['file'], library_sha256=dep['sha256'],
+                       include_root=str(include.relative_to(self.root)), headers=rows,
+                       configuration_files=[], build=dict(configuration='Release', compiler='Clang',
+                       security=0 if include.name.endswith('sec0') else 1), publisher_trust='UNVERIFIED')
+        sidecar = self.root / 'dependency-binding.json'
+        sidecar.write_text(json.dumps(receipt))
+        dep['source_binding'] = dict(root_from_library='..', file=sidecar.name,
+                                    sha256=hashlib.sha256(sidecar.read_bytes()).hexdigest())
+
+    def test_security_binding_foreign_include_even_identical_is_refused(self):
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **self.security_material())
+        foreign = self.root / 'foreign-include'
+        shutil.copytree(self.root / 'fastdds-include-sec1', foreign)
+        self.assertEqual(self.check(fastdds_include=foreign)['exit_code'], 2)
+
+    def test_security_binding_modified_header_is_refused(self):
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **self.security_material())
+        include = self.root / 'fastdds-include-sec1'
+        (include / 'fastrtps/config.h').write_text('#define HAVE_SECURITY 1\n// modified\n')
+        self.assertEqual(self.check(fastdds_include=include)['exit_code'], 2)
+
+    def test_security_binding_stale_manifest_is_refused(self):
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **self.security_material())
+        self.manifest['dependencies'][0]['source_binding']['sha256'] = '0' * 64
+        self.assertEqual(self.check(fastdds_include=self.root / 'fastdds-include-sec1')['exit_code'], 2)
+
+    def test_security_binding_same_version_other_library_is_refused(self):
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **self.security_material())
+        binary = self.deps / self.manifest['dependencies'][0]['file']
+        binary.write_bytes(b'SECURITY_OFF_same_version')
+        self.manifest['dependencies'][0]['sha256'] = hashlib.sha256(binary.read_bytes()).hexdigest()
+        self.assertEqual(self.check(fastdds_include=self.root / 'fastdds-include-sec1')['exit_code'], 2)
+
+    def test_security_binding_missing_record_is_refused(self):
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **self.security_material())
+        del self.manifest['dependencies'][0]['source_binding']
+        self.assertEqual(self.check(fastdds_include=self.root / 'fastdds-include-sec1')['exit_code'], 2)
+
+    def test_security_binding_moved_inputs_are_valid(self):
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **self.security_material())
+        include = self.root / 'fastdds-include-sec1'
+        r = self.check(fastdds_include=include)
+        self.assertTrue(any(c['code'] == 'SECURITY_SOURCE_BINDING_VERIFIED' for c in r['checks']))
+        moved = self.root / 'moved-input-root'
+        moved.mkdir()
+        self.deps.rename(moved / self.deps.name)
+        include.rename(moved / include.name)
+        (self.root / 'dependency-binding.json').rename(moved / 'dependency-binding.json')
+        self.deps = moved / self.deps.name
+        self.runtime['fastdds_module'] = str(self.deps / 'libfastrtps.so.2.14')
+        self.runtime['fastcdr_module'] = str(self.deps / 'libfastcdr.so.2.2')
+        self.runtime['softbus_module'] = str(self.deps / 'libsoftbus_client.z.so')
+        self.config['socket_library'] = self.runtime['softbus_module']
+        self.config['identity']['library'] = str(self.deps / 'libidentity.so')
+        self.config['module_files'].update({k:self.runtime[k] for k in ['fastdds_module','fastcdr_module','softbus_module']})
+        self.assertEqual(self.check(fastdds_include=moved / include.name)['exit_code'], 0)
 
     def test_security_absent_is_unchanged(self):
         r = self.check()
@@ -104,6 +167,7 @@ class InstalledPreflight(unittest.TestCase):
 
     def test_declared_security_without_compiled_support_is_refused(self):
         material = self.security_material()
+        self.declare_security_binding(self.root / 'fastdds-include-sec0')
         self.config['security'] = dict(mode='DISCOVERY_ENCRYPT', **material)
         r = self.check(fastdds_include=self.root / 'fastdds-include-sec0')
         self.assertTrue(any(c['code'] == 'SECURITY_NOT_COMPILED_INTO_DEPENDENCY' for c in r['checks']))
@@ -167,6 +231,7 @@ class InstalledPreflight(unittest.TestCase):
         include = self.root / 'fastdds-include-nomacro'
         (include / 'fastrtps').mkdir(parents=True)
         (include / 'fastrtps/config.h').write_text('#define SOMETHING_ELSE 1\n')
+        self.declare_security_binding(include)
         self.config['security'] = dict(mode='DISCOVERY_SIGN', **material)
         r = self.check(fastdds_include=include)
         self.assertTrue(any(c['code'] == 'SECURITY_SUPPORT_UNKNOWN' for c in r['checks']))
@@ -176,6 +241,7 @@ class InstalledPreflight(unittest.TestCase):
         material = self.security_material()
         include = self.root / 'fastdds-include-empty'
         include.mkdir()
+        self.declare_security_binding(include)
         self.config['security'] = dict(mode='DISCOVERY_SIGN', **material)
         r = self.check(fastdds_include=include)
         self.assertTrue(any(c['code'] == 'SECURITY_DEPENDENCY_NOT_INSPECTED' for c in r['checks']))

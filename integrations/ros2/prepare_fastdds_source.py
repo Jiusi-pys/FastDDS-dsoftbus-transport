@@ -128,14 +128,42 @@ def prepare_candidate(source):
     return result
 
 
-def prepare(source, version='2.14.5'):
+def prepare(source, version='2.14.5', security_mode='OFF'):
     source = Path(source).absolute()
     # apply_topic_rtti_key.py only accepts an unlinked tree inside <repo>/build;
     # fail before any transform edits the tree, so a bad location leaves it pristine.
     if source != source.resolve() or not source.is_relative_to(HERE.parents[1] / 'build'):
         raise ValueError('--source must be a real (unlinked) directory inside <repo>/build')
+    if security_mode not in ('OFF', 'ON') or (security_mode == 'ON' and version != '2.14.7'):
+        raise ValueError('security ABI overlay requires explicit 2.14.7 ON selection')
     if version == '2.14.7':
-        return prepare_candidate(source)
+        result = prepare_candidate(source)
+        if security_mode == 'ON':
+            hook = source / 'src/cpp/fastdds/domain/FastddsHook.hpp'
+            before = hook.read_bytes()
+            eol = b'\r\n' if b'\r\n' in before else b'\n'
+            text = before.decode('utf-8').replace('\r\n', '\n')
+            anchor = '    if(version&&version()==21405&&create&&p->close&&create(path,domain,qos,&p->owner)==0) {'
+            if text.count(anchor) != 1:
+                raise ValueError('security ABI overlay prerequisite mismatch')
+            gate = '''    auto security=reinterpret_cast<Version>(fastdds_dsoftbus_hook_platform::symbol(p->module,"FastddsDsoftbusHookSecurity"));
+    if(!security||security()!=HAVE_SECURITY) {
+        std::fputs("FDDST_SECURITY_ABI_MISMATCH\\n",stderr);
+        if(p->module)fastdds_dsoftbus_hook_platform::unload(p->module);
+        std::lock_guard<std::mutex> l(gate());reserved()=false;return {};
+    }
+'''
+            text = text.replace('#include "PlatformModule.hpp"', '#include "PlatformModule.hpp"\n#include <fastrtps/config.h>', 1)
+            text = text.replace(anchor, gate + anchor, 1)
+            text += '\nextern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT unsigned FastddsDsoftbusFactorySecurityMode(){return HAVE_SECURITY;}\n'
+            after = text.replace('\n', eol.decode()).encode('utf-8')
+            hook.write_bytes(after)
+            result['security_mode'] = 'ON'
+            result['security_overlay'] = dict(file='src/cpp/fastdds/domain/FastddsHook.hpp',
+                before_raw_sha256=hashlib.sha256(before).hexdigest(), after_raw_sha256=hashlib.sha256(after).hexdigest(),
+                purpose='PLAIN_C_ABI_MODE_CHECK_BEFORE_TYPED_QOS; NO_SDK_EPOCH_OR_PROTOCOL_CHANGE')
+            (source/'FDDST_MAINTENANCE_PREPARED.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
+        return result
     if version != '2.14.5':
         raise ValueError('unsupported version-bound source preparation')
     for script in SCRIPTS:
@@ -154,6 +182,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--version', choices=['2.14.5', '2.14.7'], default='2.14.5')
+    parser.add_argument('--security-mode', choices=['OFF', 'ON'], default='OFF')
     args = parser.parse_args()
-    prepare(args.source, version=args.version)
+    prepare(args.source, version=args.version, security_mode=args.security_mode)
     print('FASTDDS_SOURCE_PREPARED steps=%d headers=%d' % (len(SCRIPTS), len(HEADERS)))

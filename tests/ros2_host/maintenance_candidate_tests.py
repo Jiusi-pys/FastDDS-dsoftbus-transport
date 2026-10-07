@@ -52,6 +52,15 @@ class Candidate(unittest.TestCase):
         with self.assertRaises(ValueError):
             prepare.prepare(ROOT/'build/ros214-security-20261007/upstream-fastdds', version='2.14.8')
 
+    def test_secure_overlay_is_explicit_and_checks_before_create(self):
+        source = self.tree()
+        result = prepare.prepare(source, version='2.14.7', security_mode='ON')
+        hook = (source/'src/cpp/fastdds/domain/FastddsHook.hpp').read_text(encoding='utf-8')
+        self.assertIn('FastddsDsoftbusFactorySecurityMode', hook)
+        self.assertIn('FastddsDsoftbusHookSecurity', hook)
+        self.assertLess(hook.index('FDDST_SECURITY_ABI_MISMATCH'), hook.index('create(path,domain,qos'))
+        self.assertEqual(result['security_mode'], 'ON')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -23,15 +23,20 @@ target_link_libraries(secure_discovery_probe PRIVATE fastrtps fastcdr foonathan_
 add_executable(bounded_payload_pool_tests bounded_payload_pool_tests.cpp)
 target_link_libraries(bounded_payload_pool_tests PRIVATE fastrtps fastcdr foonathan_memory)
 
+# Fragment-geometry evidence with real, non-zero fragment sizes.
+add_executable(fragment_geometry_tests fragment_geometry_tests.cpp)
+target_link_libraries(fragment_geometry_tests PRIVATE fastrtps fastcdr foonathan_memory)
+
 if(MSVC)
     target_compile_options(secure_discovery_probe PRIVATE /W4 /EHsc)
     target_compile_options(bounded_payload_pool_tests PRIVATE /W4 /EHsc)
+    target_compile_options(fragment_geometry_tests PRIVATE /W4 /EHsc)
 endif()
 
 # Copy the runtime DLLs next to the probe so the process never picks up an
 # uninstrumented or differently configured fastrtps from PATH.
 if(WIN32)
-    foreach(_target secure_discovery_probe bounded_payload_pool_tests)
+    foreach(_target secure_discovery_probe bounded_payload_pool_tests fragment_geometry_tests)
         foreach(_dep fastrtps fastcdr)
             if(TARGET ${_dep})
                 add_custom_command(TARGET ${_target} POST_BUILD
