@@ -60,7 +60,7 @@ class InstalledPreflight(unittest.TestCase):
             ['bridge_library', 'fastdds_module', 'fastcdr_module', 'softbus_module']}
         self.info = dict(architecture='aarch64', format='elf64-littleaarch64', needed=[])
 
-    def check(self, capture=None):
+    def check(self, capture=None, fastdds_include=None):
         share = self.prefix / 'share/FastDDSDSoftBusTransportRos2Target'
         share.mkdir(parents=True, exist_ok=True)
         (share / 'install-manifest.json').write_text(json.dumps(self.manifest))
@@ -68,7 +68,125 @@ class InstalledPreflight(unittest.TestCase):
         config.write_text(json.dumps(self.config))
         Path(self.config['runtime_config']).write_text(''.join(k + '=' + v + '\n' for k, v in self.runtime.items()))
         with patch.object(self.tool, 'inspect_binary', side_effect=capture or (lambda *a: self.info)):
-            return self.tool.preflight(self.prefix, config, [self.deps], Path('explicit-readobj'))
+            return self.tool.preflight(self.prefix, config, [self.deps], Path('explicit-readobj'),
+                                       fastdds_include)
+
+    def security_material(self):
+        """Create the six declared security files and a dependency include tree."""
+        material = {}
+        for name in ('identity_ca', 'identity_certificate', 'private_key',
+                     'permissions_ca', 'governance', 'permissions'):
+            path = self.root / (name + '.pem')
+            path.write_bytes(b'isolated-test-material')
+            material[name] = str(path)
+        for value in (0, 1):
+            include = self.root / ('fastdds-include-sec%d' % value)
+            (include / 'fastrtps').mkdir(parents=True, exist_ok=True)
+            (include / 'fastrtps/config.h').write_text('#define HAVE_SECURITY %d\n' % value)
+        return material
+
+    def test_security_absent_is_unchanged(self):
+        r = self.check()
+        self.assertEqual(r['security_mode'], 'NONE')
+        self.assertEqual(r['exit_code'], 0)
+
+    def test_declared_security_profile_passes_input_checks_only(self):
+        material = self.security_material()
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **material)
+        r = self.check(fastdds_include=self.root / 'fastdds-include-sec1')
+        self.assertIn('INSTALL_INPUTS_VALID', r['statuses'])
+        self.assertEqual(r['security_mode'], 'DISCOVERY_SIGN')
+        self.assertTrue(any(c['code'] == 'SECURITY_COMPILED_IN' for c in r['checks']))
+        self.assertTrue(any(c['code'] == 'SECURITY_RUNTIME_UNPROVEN' for c in r['checks']))
+        self.assertFalse(r['production_ready'])
+        self.assertEqual(r['qualification_profile'], 'NOT_GENERATED')
+        self.assertEqual(r['exit_code'], 0)
+
+    def test_declared_security_without_compiled_support_is_refused(self):
+        material = self.security_material()
+        self.config['security'] = dict(mode='DISCOVERY_ENCRYPT', **material)
+        r = self.check(fastdds_include=self.root / 'fastdds-include-sec0')
+        self.assertTrue(any(c['code'] == 'SECURITY_NOT_COMPILED_INTO_DEPENDENCY' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_declared_security_without_dependency_inspection_is_refused(self):
+        material = self.security_material()
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **material)
+        r = self.check()
+        self.assertTrue(any(c['code'] == 'SECURITY_DEPENDENCY_NOT_INSPECTED' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_missing_security_file_is_refused(self):
+        material = self.security_material()
+        (self.root / 'governance.pem').unlink()
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **material)
+        r = self.check(fastdds_include=self.root / 'fastdds-include-sec1')
+        self.assertTrue(any(c['code'] == 'SECURITY_FILE_MISSING' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_relative_security_path_is_refused(self):
+        material = self.security_material()
+        material['private_key'] = 'relative_private_key.pem'
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **material)
+        r = self.check(fastdds_include=self.root / 'fastdds-include-sec1')
+        self.assertTrue(any(c['code'] == 'SECURITY_PATH_NOT_ABSOLUTE' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_security_material_without_mode_is_refused(self):
+        material = self.security_material()
+        self.config['security'] = dict(mode='NONE', **material)
+        r = self.check(fastdds_include=self.root / 'fastdds-include-sec1')
+        self.assertTrue(any(c['code'] == 'SECURITY_MODE_NONE_WITH_MATERIAL' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_unknown_security_mode_is_refused(self):
+        material = self.security_material()
+        self.config['security'] = dict(mode='RTPS_SIGN', **material)
+        r = self.check(fastdds_include=self.root / 'fastdds-include-sec1')
+        self.assertTrue(any(c['code'] == 'SECURITY_MODE_UNSUPPORTED' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_missing_required_security_key_is_refused(self):
+        material = self.security_material()
+        del material['permissions_ca']
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **material)
+        r = self.check(fastdds_include=self.root / 'fastdds-include-sec1')
+        self.assertTrue(any(c['code'] == 'SECURITY_MATERIAL_MISSING' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_material_file_missing_for_newly_required_key(self):
+        material = self.security_material()
+        (self.root / 'permissions_ca.pem').unlink()
+        self.config['security'] = dict(mode='DISCOVERY_ENCRYPT', **material)
+        r = self.check(fastdds_include=self.root / 'fastdds-include-sec1')
+        self.assertTrue(any(c['code'] == 'SECURITY_FILE_MISSING' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_unreadable_security_support_is_refused(self):
+        material = self.security_material()
+        include = self.root / 'fastdds-include-nomacro'
+        (include / 'fastrtps').mkdir(parents=True)
+        (include / 'fastrtps/config.h').write_text('#define SOMETHING_ELSE 1\n')
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **material)
+        r = self.check(fastdds_include=include)
+        self.assertTrue(any(c['code'] == 'SECURITY_SUPPORT_UNKNOWN' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_dependency_include_without_config_header_is_refused(self):
+        material = self.security_material()
+        include = self.root / 'fastdds-include-empty'
+        include.mkdir()
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', **material)
+        r = self.check(fastdds_include=include)
+        self.assertTrue(any(c['code'] == 'SECURITY_DEPENDENCY_NOT_INSPECTED' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
+
+    def test_unknown_security_field_is_refused(self):
+        material = self.security_material()
+        self.config['security'] = dict(mode='DISCOVERY_SIGN', production_ready=True, **material)
+        r = self.check(fastdds_include=self.root / 'fastdds-include-sec1')
+        self.assertTrue(any(c['code'] == 'UNKNOWN_SECURITY_FIELD' for c in r['checks']))
+        self.assertEqual(r['exit_code'], 2)
 
     def test_valid_inputs_are_only_experimental(self):
         r = self.check()

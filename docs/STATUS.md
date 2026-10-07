@@ -40,6 +40,40 @@ The final R2 metadata-only delta changed patch serialization/digest only. It pre
 24/24 compiled inputs, 11/11 prepared outputs and 6/6 copied headers; the prior cached
 whitespace failure remains historical evidence and no waiver was used.
 
+### CVE-2026-63340 Host verification and malformed CDR (2026-10-07, later task)
+
+From baseline `3be549253a8edfb88793291f040a0f24a2bd05e6`, the bounded Host task
+`CANDIDATE_SECURITY_MITIGATION_FROM_3BE5492` closed two of the gaps named in the
+paragraph above. Full record:
+[CVE-2026-63340 Host verification](CVE_2026_63340_HOST_VERIFICATION_20261007.md).
+
+An isolated Fast DDS 2.14.7 rebuild with `SECURITY=ON` (OpenSSL 3.3.2, MSVC 19.44
+Release `/MD`) with the builtin PKI-DH / Access-Permissions / AES-GCM-GMAC plugins
+and a `SIGN` discovery profile was exercised by independent loopback processes:
+11/11 scenarios, including refusal of an unauthenticated peer in both directions,
+refusal of a valid certificate whose grant does not cover the governed domain or
+topic at access-control endpoint creation, fail-closed participant creation with
+missing governance or identity material, and successful delivery of a 200000-byte
+fragmented sample for an authorized pair. A test-owned `IPayloadPool` shows the
+advisory's `0x7FFFFFFF` reservation request does reach `RTPSReader::reserve_cache`
+for a resizable reader, and that a fixed `PREALLOCATED` payload maximum clamps it.
+Malformed CDR sequence lengths over the real generated `std_msgs` typesupport pass
+19/19, closing the "not executed" statement above for that type.
+
+This does **not** change the candidate: it remains `SECURITY=OFF` by default, and no
+prepared source, patch or manifest in `integrations/ros2/candidates/2.14.7` was
+modified. CVE-2026-63340 still has **no fixed version**; the mitigation is
+configuration and is verified on Host only. The matrix does **not** attribute the
+effect to `discovery_protection_kind`: a single-knob probe that flips only
+`allow_unauthenticated_participants`, leaving discovery protection at `SIGN`,
+reproduces the same discovered-participant count as the fully unmitigated control. So
+what is verified is the candidate security profile as configured, not that the
+advisory's named protection setting is the one doing the work. Authorized matched
+peers remain an uncovered resource risk, ROS applications were **not** run under the
+security profile (that needs the whole ROS stack rebuilt against `SECURITY=ON`), and
+no device, SDK or platform execution occurred. `NOT_PRODUCTION_QUALIFIED` is
+unchanged.
+
 ## Production foundation checkpoint (2026-10-06)
 
 From baseline `facca428ab9a15649f44f2bdf216e446c7d56d5d`, the local productionization

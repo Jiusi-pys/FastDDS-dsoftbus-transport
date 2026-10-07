@@ -137,11 +137,12 @@ def runtime_configuration(path, native):
     return values
 
 
-def preflight(prefix, config_path, runtime_dirs, readobj):
+def preflight(prefix, config_path, runtime_dirs, readobj, fastdds_include=None):
     """Return separate installation and platform statuses; configuration has no authority."""
     checks = []
     statuses = {'EXPERIMENTAL_ONLY', 'PLATFORM_CONTRACT_UNVERIFIED'}
     valid = True
+    security_mode = 'NONE'
 
     def fail(code, detail, status='RUNTIME_PREREQUISITE_MISSING'):
         nonlocal valid
@@ -156,6 +157,7 @@ def preflight(prefix, config_path, runtime_dirs, readobj):
         if valid:
             statuses.add('INSTALL_INPUTS_VALID')
         return dict(schema=1, statuses=sorted(statuses), checks=checks,
+                    security_mode=security_mode,
                     production_ready=False, p4='NOT_RELEASED',
                     qualification_profile='NOT_GENERATED',
                     exit_code=0 if valid and capability != 'production' else 2,
@@ -203,9 +205,76 @@ def preflight(prefix, config_path, runtime_dirs, readobj):
             fail('UNKNOWN_CAPABILITY', 'Choose host, experimental or production', 'UNSUPPORTED_PROFILE')
         allowed = {'schema', 'capability', 'profile', 'platform', 'namespace', 'domain',
                    'service_slot', 'initial_peer_slots', 'identity', 'socket_library',
-                   'runtime_config', 'module_files'}
+                   'runtime_config', 'module_files', 'security'}
         if set(config) - allowed:
             fail('UNKNOWN_CONFIGURATION_FIELD', 'Unsupported fields; qualification/production flags cannot grant readiness')
+
+        # DDS Security profile. This is a configuration and file-presence check only.
+        # It never establishes that a certificate is used on a target, that a handshake
+        # succeeded, or that any traffic was discarded.
+        security = config.get('security')
+        if security is not None:
+            if not isinstance(security, dict):
+                raise ValueError('security must be an object')
+            allowed_security = {'mode', 'identity_ca', 'identity_certificate', 'private_key',
+                                'permissions_ca', 'governance', 'permissions'}
+            if set(security) - allowed_security:
+                fail('UNKNOWN_SECURITY_FIELD', 'Unsupported security fields; readiness cannot be requested here')
+            security_mode = security.get('mode')
+            if security_mode not in ('NONE', 'DISCOVERY_SIGN', 'DISCOVERY_ENCRYPT'):
+                fail('SECURITY_MODE_UNSUPPORTED',
+                     'security.mode must be NONE, DISCOVERY_SIGN or DISCOVERY_ENCRYPT',
+                     'UNSUPPORTED_PROFILE')
+                security_mode = 'NONE'
+            required_material = ('identity_ca', 'identity_certificate', 'private_key',
+                                 'permissions_ca', 'governance', 'permissions')
+            present_material = [name for name in allowed_security - {'mode'} if name in security]
+            if security_mode == 'NONE':
+                if present_material:
+                    # A declared identity with no requirement to use it is the
+                    # silent-fallback shape this checker must refuse.
+                    fail('SECURITY_MODE_NONE_WITH_MATERIAL',
+                         'Security material declared while security.mode is NONE')
+            else:
+                for name in required_material:
+                    value = security.get(name)
+                    if not isinstance(value, str) or not value:
+                        fail('SECURITY_MATERIAL_MISSING', 'security.' + name + ' is required')
+                        continue
+                    path = Path(value)
+                    if not path.is_absolute():
+                        fail('SECURITY_PATH_NOT_ABSOLUTE', 'security.' + name + ' must be an explicit absolute path')
+                    elif not path.is_file():
+                        fail('SECURITY_FILE_MISSING', 'security.' + name + ' does not exist')
+                if fastdds_include is None or not Path(fastdds_include).is_absolute():
+                    fail('SECURITY_DEPENDENCY_NOT_INSPECTED',
+                         'Explicit absolute --fastdds-include is required to check compiled security support')
+                else:
+                    config_header = Path(fastdds_include) / 'fastrtps/config.h'
+                    if not config_header.is_file():
+                        fail('SECURITY_DEPENDENCY_NOT_INSPECTED',
+                             'fastrtps/config.h not found under --fastdds-include')
+                    else:
+                        text = config_header.read_text(encoding='utf-8', errors='replace')
+                        match = re.search(r'^\s*#define\s+HAVE_SECURITY\s+(\d+)', text, re.M)
+                        if match is None:
+                            fail('SECURITY_SUPPORT_UNKNOWN',
+                                 'HAVE_SECURITY is not defined in the installed dependency header')
+                        elif match.group(1) == '0':
+                            fail('SECURITY_NOT_COMPILED_INTO_DEPENDENCY',
+                                 'The include tree named by --fastdds-include reports no '
+                                 'security support; requesting DISCOVERY_' +
+                                 security_mode.split('_')[-1] + ' against it would silently '
+                                 'run unprotected. Point --fastdds-include at the same '
+                                 'dependency build the manifest binds')
+                        else:
+                            checks.append(dict(code='SECURITY_COMPILED_IN', result='PASS',
+                                               detail='HAVE_SECURITY=' + match.group(1) +
+                                                      ' in the bound dependency header'))
+                note('SECURITY_RUNTIME_UNPROVEN',
+                     'File presence and compiled support do not prove that the identity is used on a '
+                     'target, that an authenticated handshake succeeded, or that unauthenticated peer '
+                     'traffic is discarded')
         for field in ('identity', 'module_files'):
             if field in config and not isinstance(config[field], dict):
                 raise ValueError(field + ' must be an object')
@@ -376,10 +445,13 @@ def main():
     parser.add_argument('--runtime-dir', type=Path, action='append', default=[])
     parser.add_argument('--readobj', type=Path, required=True,
                         help='Explicit absolute LLVM readobj executable; only static file inspection')
+    parser.add_argument('--fastdds-include', type=Path, default=None,
+                        help='Explicit absolute installed Fast DDS include directory; read only to '
+                             'check compiled security support when the configuration declares it')
     args = parser.parse_args()
     if not args.readobj.is_absolute() or not args.readobj.is_file():
         parser.error('--readobj must be an explicit existing absolute tool path')
-    report = preflight(args.prefix, args.config, args.runtime_dir, args.readobj)
+    report = preflight(args.prefix, args.config, args.runtime_dir, args.readobj, args.fastdds_include)
     print(json.dumps(report, indent=2))
     return report['exit_code']
 

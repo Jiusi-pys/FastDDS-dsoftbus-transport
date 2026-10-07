@@ -119,6 +119,52 @@ First-party release licensing,
 platform SDK/DSO rights, SBOM closure, product `NEEDS_PRODUCT_VALUE` decisions and
 PF-01/PF-02 remain open. This candidate is not production-ready.
 
+## CVE-2026-63340 mitigation and malformed-CDR execution (2026-10-07)
+
+A separate bounded Host task (`CANDIDATE_SECURITY_MITIGATION_FROM_3BE5492`) turned
+the CVE-2026-63340 row below from an assessment into executed evidence on this
+candidate. Full record:
+[CVE-2026-63340 Host verification](CVE_2026_63340_HOST_VERIFICATION_20261007.md).
+
+* The advisory was re-verified live during that task. It still lists **all
+  versions affected** and **no patched version**; the only offered resolution is
+  enabling DDS Security with `discovery_protection_kind` `SIGN` or `ENCRYPT`.
+  "No fixed version" and "a configuration mitigation is proposed" stay separate
+  rows and neither is reported as an upstream fix.
+* An isolated Host Fast DDS 2.14.7 build with `SECURITY=ON` (OpenSSL 3.3.2,
+  MSVC 19.44 Release `/MD`) was configured with the official access-control and
+  authentication plugins and a `SIGN` discovery profile. The matrix there shows
+  a plain, unauthenticated peer being refused at the plugin authentication gate
+  in both directions while an authenticated authorized pair discovers, delivers
+  a fragmented sample and closes.
+* That result verifies the configured mitigation, not the advisory's named knob.
+  With the governance moved to the unmitigated setting the same peer is still
+  refused, and a single-knob probe that flips only
+  `allow_unauthenticated_participants` — leaving discovery protection at `SIGN` —
+  reproduces the same discovered-participant count as the fully unmitigated
+  control. The observable the matrix measures follows that field, not
+  `discovery_protection_kind`, so the protection setting was never isolated. The
+  verification document records the two questions apart.
+* The allocation sink on this candidate is `RTPSReader::reserve_cache`, not the
+  `BaseReader` class the advisory names; that class is not compiled into this
+  candidate. A test-owned payload pool shows the reported `0x7FFFFFFF` request
+  does reach the reader's pool call for a resizable history, and that a fixed
+  `PREALLOCATED` payload maximum clamps it. No product resource limit is chosen
+  from this.
+* Authorized matched peers remain an uncovered resource risk: topic
+  `data_protection_kind` is `NONE` in this profile, so discovery `SIGN` does not
+  bound a large legitimate sample from a peer that has already been admitted.
+* The candidate default remains `SECURITY=OFF`. Production default switching,
+  PF/P4 closure and target execution were out of scope and did not occur.
+
+The Fast CDR gap recorded above — "malformed sequence lengths were not tested" —
+is closed for `std_msgs` at the generated-typesupport layer (19/19 cases). One
+precision point was found and is recorded rather than patched: in Fast CDR
+2.2.8 the primitive-sequence guard compares remaining **bytes** against element
+**count**, so with exactly `count` bytes present a resize of
+`count * sizeof(element)` is requested before the read fails. The amplification
+is bounded by `sizeof(element)` times the input size and is not a DoS on its own.
+
 ## Historical 2.14.5 release inputs (2026-10-06 baseline)
 
 | Delivery | Observed inputs / source of truth | Security implication |

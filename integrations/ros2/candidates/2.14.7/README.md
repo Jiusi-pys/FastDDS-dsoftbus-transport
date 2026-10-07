@@ -89,3 +89,39 @@ EOL maps and runtime code were unchanged. The final delta preserved 24/24 compil
 inputs, 11/11 prepared outputs and 6/6 copied headers, with maintenance 3/3,
 official blob delivery PASS and staged diff check PASS. The earlier cached-whitespace
 failure remains retained history; no waiver was used.
+
+## CVE-2026-63340 mitigation and malformed CDR (2026-10-07)
+
+The statement above that "malformed sequence lengths were not tested" describes
+the candidate package as it was frozen. A later bounded Host task
+(`CANDIDATE_SECURITY_MITIGATION_FROM_3BE5492`) closed that specific gap and
+verified the official configuration-led mitigation for CVE-2026-63340 on this
+candidate. Full record:
+[docs/CVE_2026_63340_HOST_VERIFICATION_20261007.md](../../../../docs/CVE_2026_63340_HOST_VERIFICATION_20261007.md).
+
+This did not change the candidate. No prepared source file, patch, receipt or
+manifest in this directory was modified — only this README's evidence statement
+was extended. The security work uses an isolated `SECURITY=ON` rebuild of the
+same prepared source, and the candidate default stays `SECURITY=OFF`.
+
+In short: an isolated Host Fast DDS 2.14.7 with `SECURITY=ON`, the builtin
+PKI-DH / Access-Permissions / AES-GCM-GMAC plugins and a `SIGN` discovery
+profile refused an unauthenticated peer at the plugin authentication gate in
+both directions (11/11 scenarios, receipts under
+`build/candidate-security-mitigation-20261007/`); a malformed-CDR suite over the
+real generated `std_msgs` typesupport passed 19/19, and a test-owned
+`IPayloadPool` showed the advisory's `0x7FFFFFFF` reservation request does reach
+`RTPSReader::reserve_cache` for a resizable reader. The advisory still lists no
+patched version: the mitigation is configuration, and it is a Host result, not a
+device or production result.
+
+One qualification belongs with that, and it is a negative result rather than a
+footnote: the matrix does **not** attribute the refusal to
+`discovery_protection_kind`. A single-knob probe that flips **only**
+`allow_unauthenticated_participants`, leaving discovery protection at `SIGN`,
+reproduces the same discovered-participant count as the fully unmitigated
+control, so that field — not the protection setting — is what the measured
+observable follows. What is verified is the candidate security profile as
+configured, taken as the whole mitigation the advisory names, not that the named
+protection setting is the one doing the work. The verification document carries
+the three-configuration comparison.

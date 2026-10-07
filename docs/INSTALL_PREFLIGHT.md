@@ -80,6 +80,51 @@ descriptor applications use the public JSON inputs rather than the ROS `.conf` s
 | PLATFORM_CONTRACT_UNVERIFIED | Missing supplier native lifetime/epoch/drain/source/platform contract and production qualification basis |
 | EXPERIMENTAL_ONLY | No production permission or qualification is granted by this tool |
 
+## Declared DDS Security profile (read-only, 2026-10-07)
+
+The configuration may carry an optional `security` object. It is a static
+input check only, added so that a security profile can be declared and its
+prerequisites verified without turning the checker into a second qualification
+framework.
+
+```json
+"security": {
+  "mode": "DISCOVERY_SIGN",
+  "identity_ca": "<absolute>", "identity_certificate": "<absolute>",
+  "private_key": "<absolute>", "permissions_ca": "<absolute>",
+  "governance": "<absolute>", "permissions": "<absolute>"
+}
+```
+
+`mode` accepts `NONE`, `DISCOVERY_SIGN` or `DISCOVERY_ENCRYPT`. Any other value,
+and any key outside that set, fails closed. When `mode` is not `NONE` the checker
+requires all six of `identity_ca`, `identity_certificate`, `private_key`,
+`permissions_ca`, `governance` and `permissions`; `permissions_ca` is required
+because the Access-Permissions plugin reads it. It also requires an explicit
+absolute `--fastdds-include`, reads only `fastrtps/config.h` from it, and refuses
+when that tree reports no security support
+(`SECURITY_NOT_COMPILED_INTO_DEPENDENCY`) or does not define `HAVE_SECURITY`
+(`SECURITY_SUPPORT_UNKNOWN`) — otherwise a declared profile would silently run
+unprotected. Each declared material path must be absolute and present
+(`SECURITY_PATH_NOT_ABSOLUTE`, `SECURITY_FILE_MISSING`), and every required key
+must be present (`SECURITY_MATERIAL_MISSING`). Declaring material while `mode` is
+`NONE` is refused (`SECURITY_MODE_NONE_WITH_MATERIAL`). With no `security` object
+every existing pass/fail decision is unchanged, and the result additionally
+reports `security_mode = NONE`.
+
+`--fastdds-include` is caller-supplied and is **not** bound to the manifest's
+dependency digest: an unrelated include tree that happens to report
+`HAVE_SECURITY 1` would pass. Point it at the same dependency build the manifest
+binds.
+
+**What this check does not establish.** File presence and a compiled-in
+`HAVE_SECURITY` do not show that an identity is used on a target, that an
+authenticated handshake succeeded, that unauthenticated peer traffic is
+discarded, or that PF/P4 are closed. The checker records that limitation in its
+own output as `SECURITY_RUNTIME_UNPROVEN`, and `production_ready` stays false,
+P4 stays NOT_RELEASED and no QualificationProfile is generated regardless of the
+declared mode.
+
 Statuses are cumulative. Valid experimental/Host inputs return exit 0 together
 with EXPERIMENTAL_ONLY and PLATFORM_CONTRACT_UNVERIFIED. Invalid inputs or a production
 request return exit 2. `production_ready` is always false, P4 is NOT_RELEASED and
