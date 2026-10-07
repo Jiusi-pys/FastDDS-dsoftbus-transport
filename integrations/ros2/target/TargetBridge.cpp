@@ -103,7 +103,11 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         const auto values = read(path);
         if(values.at("locator_version")!="V1" || values.at("profile")!="BYTES_NATIVE" || values.at("native_name_contract")!="PACKAGE_SCOPED_V1")
             throw std::runtime_error("explicit supported V1 profile required");
-        DSoftBusTransportDescriptor config(65536);
+        // 65535, not 65536: see integrations/ros2/Bridge.cpp. A participant with DDS
+        // Security caps the receiver buffer it will offer at uint16 max, so a descriptor
+        // maximum of 65536 could never be satisfied and every input channel would fail to
+        // open. 65535 still exceeds Fast DDS's 65500 no-fragment ceiling.
+        DSoftBusTransportDescriptor config(65535);
         const auto slot=integer(values,"service_slot",v1::AddressCodec::max_slot);
         const auto peer_slot=integer(values,"peer_slot",v1::AddressCodec::max_slot);
         const v1::DeviceIdentity local_identity{values.at("namespace"),domain,values.at("local_udid")};
@@ -166,7 +170,7 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         owner->descriptor = owner->runtime->MakeDescriptor(config);
         if (!owner->descriptor) throw std::runtime_error("descriptor issuance failed");
         auto& qos = *static_cast<eprosima::fastdds::dds::DomainParticipantQos*>(raw);
-        // The descriptor's maxMessageSize (65536) is above Fast DDS's default no-fragment ceiling (65500). Like the
+        // The descriptor's maxMessageSize (65535) is above Fast DDS's default no-fragment ceiling (65500). Like the
         // built-in UDP/TCP transports, init() accepts that only when the participant states the larger limit.
         qos.transport().max_msg_size_no_frag = config.maxMessageSize;
         qos.transport().use_builtin_transports = false; qos.transport().user_transports.clear();

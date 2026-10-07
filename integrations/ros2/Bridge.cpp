@@ -83,7 +83,13 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         fastdds_dsoftbus::ros2_target_observation::Begin(owner->run,side);
         fastdds_dsoftbus::ros2_target_observation::SetSourceForHostInjection();
         owner->diagnostic_control=[] {(void)fastdds_dsoftbus::ros2_target_observation::ExportPending();FastddsDsoftbusFactoryFlushTeardownPending();};
-        DSoftBusTransportDescriptor config(65536);
+        // 65535, not 65536: a participant with DDS Security caps the receiver buffer it will
+        // offer at uint16 max, because the secure ReceiverResource needs an auxiliary decrypt
+        // buffer (RTPSParticipantImpl::createReceiverResources). The transport refuses a receiver
+        // buffer smaller than its descriptor's maximum, so 65536 could never be satisfied by a
+        // secure participant and every input channel failed to open. 65535 still exceeds Fast
+        // DDS's 65500 no-fragment ceiling, which is the only lower bound this value has to meet.
+        DSoftBusTransportDescriptor config(65535);
         const auto identity=[&](unsigned index){return v1::DeviceIdentity{"host-ros",domain,index?"synthetic-host-B":"synthetic-host-A"};};
         const auto issue=config.ConfigureV1([&]{V1Deployment input{identity(side),17+side,v1::Profile::BytesNative,prefix+".ns",
             {{identity(1-side),18-side,side?"host.net.A":"host.net.B",name(side,"outgoing"),{name(1-side,"outgoing")}}}};input.native_name_scope={v1::NativeNameContract::PackageScopedV1,m.at("authorized_package"),m.at("service_prefix")};for(auto& peer:input.peers)peer.native_name_scope=input.native_name_scope;return input;}());

@@ -91,18 +91,25 @@ bridge and the application were rebuilt against it. Fragment geometry was
 exercised with real non-zero fragment sizes for the first time (14/14): sizes 1–3
 are refused and the helper is not a bound on a large sample.
 
-**Not closed, and reported as blocked rather than as a qualified limitation:**
-the ordinary-ROS-under-security positive case does not pass. The security plugins
-are demonstrably active and enforcing — plugin-sourced access-control refusals
-appear in the run's own logs and were resolved by correcting the enclave grants —
-but the ON participant then fails at
-`Invalid_locator:[_]:0` / `No unicast locators to create unique flows`, and the
-application exits with status 4 without exchanging samples. The identical harness
-against the retained SECURITY=OFF prefixes passes 20 writes / 20 takes
-(A 10/10, B 10/10), which localises the failure to the security build rather than
-to the harness, the transport or the opaque-byte Host seam. The negative ROS cases
-and the directed ASan run are consequently not reported as passed. No device, HDC,
-deployment or grant occurred; the API23 result remains a static build/link audit.
+**Resolved in the follow-up task `SECURE_ROS_RECEIVER_RESOURCE_CLOSURE_FROM_2405DED`.**
+The blocked failure above was traced to a size relationship, not to the locator
+text it printed. A participant with DDS Security caps the receiver buffer it offers
+at `uint16` max, because a secure `ReceiverResource` needs an auxiliary decrypt
+buffer; the project bridge had built its transport descriptor with a maximum
+message size of 65536, one byte more than a secure participant can ever offer, so
+`DSoftBusTransport::OpenInputChannel` refused every channel. The printed
+`Invalid_locator:[_]:0` was Fast DDS's own locator-mutation loop hiding the real
+reason. The descriptor now uses 65535, which still exceeds Fast DDS's 65500
+no-fragment ceiling and leaves the transport's own safety rule intact.
+
+The ordinary-ROS-under-security closure now passes: secure dual pair 20 writes /
+20 takes with real graph, service request/response, original DDS deletion,
+RuntimeClose and normal exit; a real fragmented sample (70029/70032 bytes, above
+the 65535 ceiling) reassembled exactly; an unauthenticated peer and a mixed
+SECURITY=OFF dependency both refused. Discovery protection stays `SIGN` and
+topic-level data protection stays `NONE`, so business payloads are **not**
+encrypted. No device, HDC, deployment or grant occurred; the API23 result remains
+a static build/link audit.
 
 ## Production foundation checkpoint (2026-10-06)
 

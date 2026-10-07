@@ -181,3 +181,120 @@ Not claimed: `CVE_2026_63340_UPSTREAM_FIXED`, `ALL_SECURITY_ISSUES_CLOSED`,
 `PRODUCTION_READY`, and — importantly — **not** the ordinary-ROS security closure.
 Product budgets remain `NEEDS_PRODUCT_VALUE`; PF-01/PF-02, licensing, SBOM closure
 and the platform SDK contract remain open.
+
+---
+
+# Resolution — 2026-10-07, task `SECURE_ROS_RECEIVER_RESOURCE_CLOSURE_FROM_2405DED`
+
+The historical failure above is retained unedited. This section records the
+resolution. Baseline `2405dedcf2f2d0be8e7764e09f808ad4cf72948f`, parent
+`5320df046bff65eb41d584e511e5744286f194cf`, tree `7848621f34c24df20c81e29e5521b2b04635ca64`.
+
+## The first real rejection point
+
+The formatted `Invalid_locator:[_]:0` was **not** the cause and did **not** come
+from an extra secure builtin endpoint. It is the result of Fast DDS's own
+`ApplyMutation` / `applyLocatorAdaptRule` loop, which rewrites the locator after
+`BuildReceiverResources` has already failed for a reason the mutation loop then
+hides. The real first rejection is recorded in the failed run's own stdout:
+
+```text
+ROS_STARTUP_EVENT ... operation=FacadeDecision_FacadeError_result
+  value_type=LOCAL_STATUS value=10
+```
+
+`FacadeError` 10 is `InsufficientReceiverCapacity`
+(`include/fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp`), which is emitted only
+by `src/DSoftBusTransport.cpp:204`:
+
+```cpp
+if (capacity < frozen_.maxMessageSize) { Diagnose({FacadeError::InsufficientReceiverCapacity, "open_input"}); return false; }
+```
+
+## The capacity candidate was correct
+
+The value `capacity` is not an arbitrary number. It is derived in two steps:
+
+```cpp
+// upstream RTPSParticipantImpl::createReceiverResources
+uint32_t max_receiver_buffer_size =
+        is_secure() ? std::numeric_limits<uint16_t>::max() : (std::numeric_limits<uint32_t>::max)();
+
+// upstream NetworkFactory::BuildReceiverResources
+uint32_t max_recv_buffer_size = std::min(transport->max_recv_buffer_size(), receiver_max_message_size);
+```
+
+The upstream comment states the reason: a secure `ReceiverResource` needs an
+auxiliary buffer to decrypt the message, so it caps what it will accept at
+`uint16` max. The project transport reported `max_recv_buffer_size() == 65536`
+because the bridge built `DSoftBusTransportDescriptor config(65536)`.
+
+So for any participant with DDS Security, `capacity = min(65536, 65535) = 65535`,
+and the transport's own rule `capacity >= maxMessageSize` could **never** be
+satisfied. Every input channel failed to open, every locator was then mutated, and
+the reader could not be associated.
+
+Chain, in order: `is_secure()` true → `max_receiver_buffer_size = 65535` →
+`capacity = min(65536, 65535) = 65535` → `65535 < 65536` →
+`InsufficientReceiverCapacity` → no receiver resource → `applyLocatorAdaptRule`
+mutates the valid locator → `No unicast locators to create unique flows` →
+`Problem creating associated Reader`.
+
+## The minimal repair
+
+`integrations/ros2/Bridge.cpp`: the descriptor's maximum message size is
+`65535`, not `65536`. The transport's rule — never accept a receiver buffer
+smaller than the largest message the descriptor promises — is correct and was
+left alone; what was wrong was the descriptor promising one byte more than a
+secure participant can ever offer. `65535` still exceeds Fast DDS's 65500
+no-fragment ceiling, which is the only lower bound this value has to meet, and the
+opaque-byte link's own `max_message_size=65536` was deliberately left as an upper
+bound. `DSoftBusTransport::Init`'s other constraints (`limits.max_record_bytes`
+equality, `InvalidLimits`, `UnsupportedNoFragmentRequest`, the V1 directory and
+locator semantics) are unchanged.
+
+RED → GREEN on the same path: before, the run above; after, case 01 below.
+
+## Ordinary ROS under security, executed
+
+`build/security-on-ros-closure-20261007/run_ros_security_closure.py`, receipts in
+`receipts/ros-closure/` — **4/4**.
+
+| Case | Result |
+| --- | --- |
+| 01 secure dual pair | `pass=True`, `errors=[]`, A `{writes: 10, takes: 10}`, B `{writes: 10, takes: 10}` — 20 writes / 20 takes, real graph, real service request/response, original DDS deletion, RuntimeClose, normal exit; `FDDST_HOST_IO … sends=129 ingress=129 send_errors=0` on the opaque-byte Host seam |
+| 02 unauthenticated peer (one side with security disabled) | refused — no match, no samples |
+| 03 mixed dependency (ON application and RMW with the SECURITY=OFF dependency) | refused in the Windows loader (`STATUS_ENTRYPOINT_NOT_FOUND`) before any project code runs; this shows the mix is refused but does **not** exercise the project's own build-mode gate |
+| 04 secure pair, real fragmented sample | `pass=True`, `errors=[]`, 20 writes / 20 takes with `ROS_FRAGMENT_TAKE bytes=70029/70032 exact=1` |
+
+Case 04's payload is above the transport's 65535 message ceiling, so the writer
+must fragment and the reader must reassemble under security; the takes carry
+`exact=1`. A 200000-byte payload was tried first and did reassemble exactly
+(`bytes=200029 exact=1` for all five ordinals) but exceeded the run's time budget,
+so the smaller size is used to keep the case inside it.
+
+Dispositions are kept separate. Evidence classes are reported separately and
+not collapsed: the passing runs carry **0** authentication/access-control error
+messages and **47 `SECURITY_CRYPTO` lines per side**, i.e. the AES-GCM-GMAC
+plugin is being driven on every run. The plugins were **active** (with security
+enforced, a missing or inactive plugin makes the RMW refuse to create the
+participant), discovery protection remains `SIGN`, and topic-level
+`data_protection_kind` remains `NONE` — so **business payloads are not encrypted**
+and discovery signing is not payload encryption. No wildcard topic grant was used
+to make the graph or the services pass; the enclave grants remain exact
+per-endpoint grants with `<default>DENY</default>`.
+
+## Status after this task
+
+```text
+SECURITY_ON_ROS_HOST_INTEGRATION_VERIFIED
+LOCAL_COMMITTED
+DEVICE_SECURITY_PROFILE_NOT_RUN
+NOT_PRODUCTION_QUALIFIED
+```
+
+Still open, unchanged by this task: CVE-2026-63340 has no upstream fix; an
+authorized, matched peer presenting a large legitimate `sampleSize` remains an
+uncovered resource risk; PF-01/PF-02, licensing, SBOM closure and the platform SDK
+contract are untouched; product budgets remain `NEEDS_PRODUCT_VALUE`. Target
+results remain static-only and no device was run.
