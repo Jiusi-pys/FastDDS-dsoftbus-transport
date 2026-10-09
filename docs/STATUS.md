@@ -1,5 +1,43 @@
 # Project status
 
+## Failed-construction module-lifetime Host closeout (2026-10-09)
+
+From baseline `bfcd1af9e4a1306b36f234822af39883c6d8b524`, the frozen Host closeout is
+**HOST_VERIFIED / INDEPENDENT_REVIEW_CLOSED / NOT PRODUCTION QUALIFIED**. The final
+tester receipt `build/failed-construction-host-closeout-20261009/FINAL_TESTER_RESULT.json`
+reports PASS; review R1 reports no actionable findings. The six frozen source files
+match, and the ON header, selected Fast DDS artifact and build identities are bound.
+
+The scoped defect is project hook/module lifetime ordering during participant creation
+and local QoS cleanup. The earlier `PUBLIC_API / NO_BRIDGE_DESCRIPTOR` control through
+the patched factory and inferred
+fault-range or unmapped-Bridge attribution remain historical boundaries; no generic
+upstream `SequenceNumber_t` fix is claimed. Final Host evidence covers ON failed
+construction, resource-complete error, fresh-process PublicDelete, OFF controls,
+security cases 01/04, expected unauthenticated refusal, expected Windows loader
+refusal, and malformed-governance refusal. Result 2 is a known Runtime execution
+error with `cleanup_result=2` and `return=0`, not an uncertain cleanup result and not
+a clean pass.
+
+The lifetime policy reserves one successful preparation per HookState/process, one
+permanent/CAS reservation and one transferred owned `LoadLibrary` reference. There
+is no Windows PIN, failed-slot unload site, arbitrary `FreeLibrary`, or surviving-holder
+hot-unload claim. Static dependencies remain mapped; complete SDK resource cleanup and
+static-object/destructor ordering are unverified. Later legitimate owned references
+do not consume the transferred reference, and reloading the same image does not unload
+it while that reference is held. ASan covered the explicit DDS/CDR/project/
+Bridge/application scope; the real QoS test destroyed strong and weak holders with
+mapped state 1, while normal fresh-process unload reached mapped state 0. ROS/RMW/
+typesupport and TSan were not instrumented/run.
+
+The malformed governance test used ASCII-invalid test-only signature text followed by
+Windows CRLF; signed permissions and both hashes remained unchanged. Raw keys, dumps,
+logs and binaries are excluded. The API23/OHOS branch is behavior-equivalent for this
+Host-only lifetime delta; the current Host delta was not rebuilt/run for API23. No
+HDC/device operation occurred, and production/PF/P4/QualificationProfile defaults
+remain unchanged. Full
+scope and evidence are appended to [SECURITY_ON_ROS_CLOSURE_20261007.md](SECURITY_ON_ROS_CLOSURE_20261007.md).
+
 ## ROS 2 2.14 security maintenance candidate (2026-10-07)
 
 From baseline `d24c6e1af8ee6613e243270fb694bdd724cb440b`, the source-bound ROS 2

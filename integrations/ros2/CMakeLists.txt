@@ -48,6 +48,12 @@ if(BUILD_TESTING)
     target_compile_options(ros2_hook_config_tests PRIVATE /UNDEBUG)
     add_test(NAME ros2_hook_config_lf COMMAND ros2_hook_config_tests $<TARGET_FILE:ros2_hook_config_library> "${CMAKE_CURRENT_BINARY_DIR}/hook-lf.conf" lf)
     add_test(NAME ros2_hook_config_crlf COMMAND ros2_hook_config_tests $<TARGET_FILE:ros2_hook_config_library> "${CMAKE_CURRENT_BINARY_DIR}/hook-crlf.conf" crlf)
+    add_executable(ros2_failed_construction_lifetime_tests "${_transport_root}/tests/ros2_host/failed_construction_lifetime_tests.cpp")
+    target_compile_options(ros2_failed_construction_lifetime_tests PRIVATE /UNDEBUG)
+    target_link_libraries(ros2_failed_construction_lifetime_tests PRIVATE fastrtps)
+    fastdds_dsoftbus_test_asan_target(ros2_failed_construction_lifetime_tests)
+    # Invoke separately with an explicit real bridge/config; never import the
+    # bridge DLL into this executable or acquire an observation loader ref.
     add_library(ros2_platform_test_library SHARED "${_transport_root}/tests/ros2_host/platform_test_library.cpp")
     add_executable(ros2_platform_module_tests "${_transport_root}/tests/ros2_host/platform_module_tests.cpp")
     target_compile_options(ros2_platform_module_tests PRIVATE /UNDEBUG)

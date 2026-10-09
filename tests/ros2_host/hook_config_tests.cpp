@@ -17,5 +17,10 @@ int main(int argc, char** argv) {
     assert(admitted && lease && lease->owner && lease->module);
     assert(fastdds_dsoftbus_hook::release_pending(lease));
     assert(lease->close_state == 2 && !lease->owner);
+    // Regression: a failed construction is still inside the factory frame whose local QoS holds
+    // a descriptor copy with code in this module. Release must retain, not unload, the module.
+    auto retained = fastdds_dsoftbus_hook::retired_callback_module();
+    assert(retained && !lease->module);
+    assert(fastdds_dsoftbus_hook_platform::symbol(retained, "FastddsDsoftbusClose") != nullptr);
     std::cout << "HOOK_CONFIG_PASS actual_prepare=1 ending=" << argv[3] << '\n';
 }

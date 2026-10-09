@@ -120,19 +120,30 @@ inline bool release_pending(const std::shared_ptr<Lease>& p, CloseCause cause=Cl
     if(p->terminal_result!=0&&p->terminal_result!=2) { p->close_state=3;std::fputs("FDDST_CLOSE_INCOMPLETE\n",stderr);return false; }
     p->owner=nullptr;
     p->close_state=2;
+    const bool qos_frame_may_hold_code = cause==CloseCause::FailedConstruction;
+    (void)qos_frame_may_hold_code;
     // Captures read only a process-lifetime POD cache, never owner. Close and
     // its output need no copy lock. Pin only unloading against an in-flight copy.
     {
     std::lock_guard<std::mutex> module_lifetime(p->module_copy);
+    // A construction that did not complete is still inside the factory's create_participant frame.
+    // That frame's local DomainParticipantQos holds a copy of the transport descriptor, whose
+    // vtable and shared_ptr deleter live in this module. Unloading here would make the frame's
+    // own ~DomainParticipantQos execute unmapped code. Close has already released every runtime
+    // resource, so only the module image is retained; it is never unloaded while that copy lives.
 #if defined(__OHOS__)
-    { std::lock_guard<std::mutex> lock(gate()); retired_callback_module()=p->module; }
+    const bool retain_module = true;
 #else
-    fastdds_dsoftbus_hook_platform::unload(p->module);
+    const bool retain_module = qos_frame_may_hold_code;
 #endif
+    if(retain_module) { std::lock_guard<std::mutex> lock(gate()); retired_callback_module()=p->module; }
+    else fastdds_dsoftbus_hook_platform::unload(p->module);
     p->module=nullptr;
     }
 #if defined(__OHOS__)
     std::fputs("FDDST_MODULE_RETAINED_UNTIL_PROCESS_EXIT sdk_callback_drain=NOT_PROVEN\n",stderr);
+#else
+    if(qos_frame_may_hold_code)std::fputs("FDDST_MODULE_RETAINED_UNTIL_PROCESS_EXIT reason=FAILED_CONSTRUCTION_QOS_FRAME\n",stderr);
 #endif
     // This Host profile permits one Participant lifecycle per process. Its
     // existing process-global native entries are not a hot-reuse guarantee.

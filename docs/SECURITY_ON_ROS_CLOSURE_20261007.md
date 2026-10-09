@@ -400,3 +400,73 @@ ASan build:
 stack: `rmw_fastrtps_cpp`, `rmw_fastrtps_shared_cpp`, the `rosidl` typesupport
 libraries, `std_msgs`, `example_interfaces`, and the rest of the upstream ROS
 runtime (`rclcpp`, `rcl`, `rcutils`, `rmw` and their peers). TSan was not run.
+
+---
+
+# Failed-construction module-lifetime Host closeout — 2026-10-09
+
+This append-only Host checkpoint uses baseline
+`bfcd1af9e4a1306b36f234822af39883c6d8b524`. It preserves earlier raw reports and
+scope labels. The final independent tester reports `PASS`; review R1 reports no
+actionable findings. The accepted scope is
+`HOST_VERIFIED / INDEPENDENT_REVIEW_CLOSED / NOT_PRODUCTION_QUALIFIED`.
+
+The earlier control was `PUBLIC_API / NO_BRIDGE_DESCRIPTOR` through the patched
+factory; it was not a pure upstream-only result. The current
+defect under test is project hook/module lifetime ordering during participant
+creation and local QoS cleanup. Earlier fault-range and unmapped-Bridge attribution
+remain inferred where they were not directly measured. No generic upstream
+`SequenceNumber_t` fix is claimed.
+
+The four retained work-in-progress inputs and new real Bridge QoS test/CMake entry
+were exercised from the frozen six-file source set. One successful preparation per
+HookState/process is reserved permanently/CAS once, with one existing owned
+`LoadLibrary` reference transferred to the retired slot. There is no Windows PIN,
+failed-slot unload site, arbitrary `FreeLibrary`, or plugin-wide module-path
+accumulation. Runtime states remain `0=true`, `2=false`, `1=uncertain`; state 3
+retains owner and module. Static dependencies remain mapped, so this is not complete
+SDK resource cleanup or static-destructor ordering proof. Normal unload was tested
+in a fresh process after relevant QoS strong/weak holders were released; arbitrary
+surviving-holder hot unload is unverified.
+The real Bridge QoS test explicitly destroyed strong and weak holders with mapped
+state still `1`, while the normal fresh-process path reached mapped state `0`.
+
+Later legitimate owned references do not consume the transferred owned reference;
+reloading the same image does not unload it while that transferred reference is held.
+There is no Windows PIN claim and no guarantee permitting arbitrary external borrowed
+`FreeLibrary`. The mapping retains code, statics and dependencies, but does not prove
+static-object or destructor ordering.
+
+Source proof binds base Hook `e3ed8570ea23e1bf829d9c7d1cd38a115d6384196ae94e0927e9b6d7251cad1d`
+to the declared ON overlay `497e4f6fe4648e4e877b1258e9d472452187972bac3f81eacce34d30d7118c22`,
+and selected DDS artifact `00dd63e842f5b72e0487163d78e73b6f896f0c5690055807c6d1e42339b73176`
+equals the compiled output. Preparation 2.14.5 and 2.14.7 passed; prior RED/GREEN
+records remain preserved, with no additional crash replay claimed.
+
+## Final Host evidence
+
+| Case | Result | Evidence boundary |
+| --- | --- | --- |
+| ON failed construction / local close | PASS | cleanup result 0, return 1, mapped 1, repeat preparation refused |
+| ON resource-complete error | PASS | Runtime execution error: cleanup result 2, return 0, mapped 1, repeat preparation refused; result 2 is not a clean pass |
+| ON fresh-process PublicDelete | PASS | cleanup result 0 after holders released |
+| OFF failed/PublicDelete controls | PASS | Both modes passed |
+| ON security cases 01/04 | PASS | Secure 20/20 graph/service close and secure 70000-byte fragment |
+| ON security case 02 | EXPECTED REFUSAL | Unauthenticated peer rejected |
+| ON security case 03 | EXPECTED LOADER REFUSAL | Windows `0xc0000139` before project code; not a project gate failure |
+| C malformed governance | EXPECTED REFUSAL | Both children exit 4; PKCS7/S-MIME rejection, Runtime cleanup attempted, no business takes, zero sanitizer lines |
+
+The malformed governance input was ASCII-invalid test-only signature text followed by
+Windows CRLF. The signed permissions `.p7s` remained unchanged and both permission
+hashes were verified. This test-only corruption and raw material are not distributed.
+
+ASan covered the explicitly selected Fast DDS/CDR/project runtime/Bridge/application
+and lifetime test. ROS/RMW/typesupport and the remaining ROS runtime were not
+instrumented; TSan was not run. Prior startup PATH and dependency-order failures
+remain environment evidence, not product RED. Earlier raw reports and old failures
+remain unchanged.
+
+The API23 target was not rebuilt or run because this is a behavior-equivalent OHOS
+branch for this Host-only lifetime delta; the current Host delta itself was not
+rebuilt for API23. No HDC/device operation occurred. Defaults remain
+production-disabled; PF/P4 and QualificationProfile status are unchanged.
