@@ -20,6 +20,26 @@ it does not make the package production-ready or qualify P4/PF.
 The separate default Fast DDS 3.6 regression remains independently recorded at
 `134/134`; it is not folded into the 2.14 candidate result.
 
+## Secure API23 target validation checkpoint (2026-10-10)
+
+The formal target-r6 package uses Fast DDS 2.14.7, Fast CDR 2.2.8 and OpenSSL
+3.5.9 with SDK API23, Clang 15.0.4, AArch64 shared libc++, Release and
+`SECURITY=ON` without ASan. The installed example/header copy was compiled by
+the external consumer path; the package has 111 members and the formal build
+plus 65 affected static checks passed. The static receipt itself contains no
+device execution; the separately recorded S3-r5 window exercised the actual
+r6 package on the boards. Target ASan was not run.
+
+The separately attributed device evidence is S1 normal `PASS_SCOPED_S1`, S1
+fragment `PASS_SCOPED_FRAGMENT`, S2 `PASS_SCOPED_S2_NEGATIVE`, and S3
+`PASS_SCOPED_S3_FAILED_CONSTRUCTION`. S2 is an authentication-negative window
+whose cleanup result is `WINDOW_FAILED`, not normal close success. S3 fails before
+listener creation and has no normal READY or application-delete claim. Both
+boards restored their state in all four windows (eight final guards passed).
+These scoped results do not qualify the default
+backend, SDK drain/epoch/hot-unload, PF/P4 or production release. The legacy
+2.14.5 default and standalone 3.6 configuration remain unchanged.
+
 ## Production foundation checkpoint (2026-10-06)
 
 The first local productionization package adds a relocatable, read-only installation

@@ -7,12 +7,14 @@ def materialize(repo,task,profile):
  if repo!=here.parents[2]:raise ValueError('Repository must own this exact materializer')
  authority=repo/'.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002'
  task_child=task.parent==authority/'iterations' and task.name.startswith('iteration-') and task.name[10:].isdigit() and task.name[10:]==str(int(task.name[10:])) and int(task.name[10:])>=1
- if (task.parent.parent!=repo/'.artifacts' and not task_child) or task.exists():raise ValueError('Fresh declared task/immutable iteration root required')
+ secure_task=task.is_relative_to(repo/'build/secure-candidate-target-20261009')
+ if (task.parent.parent!=repo/'.artifacts' and not task_child and not secure_task) or task.exists():raise ValueError('Fresh declared task/immutable iteration root required')
  if task_child:
   grant=authority/'AUTHORIZATION.json'
   if hashlib.sha256(grant.read_bytes()).hexdigest()!='1dbadad0591bad3f76ef98a6bab09ff80ee6b75491e54c447410c841b39bea51':raise ValueError('Task materialization original grant anchor')
  config=json.loads(Path(profile).read_text(encoding='utf-8'))
  if not isinstance(config,dict):raise ValueError('Private configuration object required')
+ if secure_task and config.get('secure_authorization')!='TASK_SCOPED_SECURE_CANDIDATE_DEVICE_VALIDATION':raise ValueError('Secure task purpose required')
  config.update(schema=1,repo_root=str(repo),task_root=str(task))
  if task_child:config.update(task_authority_root=str(authority),execution_iteration_id=int(task.name[10:]))
  spec=importlib.util.spec_from_file_location('private_input_validation',here/'executor/private_config.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
@@ -27,6 +29,7 @@ def materialize(repo,task,profile):
    if src.is_file() and src.suffix in ('.py','.cjs','.ps1'):
     if src.name=='bounded-native-scene.cjs' and not config.get('bounded_native_authorization'):continue
     if src.name=='route-network-capture.py' and not config.get('route_lifecycle_native'):continue
+    if src.name=='secure_contract.py' and not secure_task:continue
     dst=task/folder/src.name;shutil.copyfile(src,dst);manifest.append(dict(destination=dst.relative_to(task).as_posix(),source=src.relative_to(repo).as_posix(),sha256=hashlib.sha256(dst.read_bytes()).hexdigest()))
  for name in CANONICAL:
   src=here.parent/name;dst=task/'executor'/name;shutil.copyfile(src,dst);manifest.append(dict(destination=dst.relative_to(task).as_posix(),source=src.relative_to(repo).as_posix(),sha256=hashlib.sha256(dst.read_bytes()).hexdigest()))

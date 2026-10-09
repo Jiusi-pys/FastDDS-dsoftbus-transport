@@ -18,6 +18,12 @@ import urllib.request
 
 REPO=Path(__file__).resolve().parents[3]
 FDDS='ebcb5c05e9da9e262041e8616bbaff61ab40a296'
+def selected_candidate(version='2.14.5',security='OFF'):
+    if version not in ('2.14.5','2.14.7') or security not in ('OFF','ON') or (version=='2.14.5' and security!='OFF'):
+        raise ValueError('Unsupported exact target candidate/security selection')
+    return dict(version=version,security=security,
+        commit=FDDS if version=='2.14.5' else '010b908dc3bb2b6f2818d61ac8db462d01b79a1f',
+        fastcdr='2.2.5' if version=='2.14.5' else '2.2.8',openssl='3.5.9' if security=='ON' else None)
 PINS={'rmw_fastrtps':'bbbb90a98b65f1f678945ef69273edf8b09200ae',
       'rcl':'22c0b957140035c675f0a061daaab5fd6b2080e7',
       'rclcpp':'3aa906a2c7ad13d1623b31a55731993f56538e72'}
@@ -29,6 +35,11 @@ ROS_REPOS=('common_interfaces example_interfaces libyaml_vendor rcl rcl_interfac
  'unique_identifier_msgs').split()
 
 def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+def security_diagnostic_options(candidate):
+    # Official build controls preserve normal plugin/handshake evidence in the
+    # explicit test candidate. Runtime verbosity cannot restore compiled-out logs.
+    return ['-DLOG_NO_INFO=OFF','-DFASTDDS_ENFORCE_LOG_INFO=ON'] if candidate['security']=='ON' else []
+
 def read(path):return json.loads(Path(path).read_text(encoding='utf-8-sig'))
 def write(path,value):
     Path(path).write_text(json.dumps(value,indent=2)+'\n',encoding='utf-8')
@@ -70,6 +81,13 @@ def verify_transform_inputs(record,current):
 
 class Build:
     def __init__(self,args):
+        self.candidate=selected_candidate(args.version,args.security_mode)
+        self.source_repo=Path(args.fastdds_source_repo).resolve() if args.fastdds_source_repo else REPO/'Fast-DDS'
+        self.openssl=Path(args.openssl_prefix).resolve() if args.openssl_prefix else None
+        if self.candidate['version']=='2.14.7' and (not args.fastdds_source_repo or not args.fastcdr_prefix):
+            raise ValueError('Candidate requires explicit official source repository and Fast CDR prefix')
+        if self.candidate['security']=='ON' and not self.openssl:
+            raise ValueError('SECURITY=ON requires explicit OpenSSL 3.5.9 target prefix')
         self.rebuild_packages=args.rebuild_package
         self.root=build_root(REPO,args.output);self.root.mkdir(parents=True,exist_ok=True)
         for leaf in ('tmp','receipts','src','downloads'):
@@ -89,11 +107,23 @@ class Build:
         self.env['PYTHONPATH']=str(self.host/'Lib/site-packages')
         self.base=REPO/'.artifacts/ros2-device-acceptance/run-20260930-local/target-environment'
         self.deps=[self.base/('sdk23-shared-prefix-'+name) for name in ('fastcdr-225','tinyxml2-6','foonathan-074','ros-bootstrap')]
+        if args.fastcdr_prefix:self.deps[0]=Path(args.fastcdr_prefix).resolve()
+        if self.openssl:self.deps.append(self.openssl)
         self.fast=self.root/'fastdds-install';self.ros=self.root/'ros/install';self.transport=self.root/'transport-install'
         self.selection=self.root/'BUILD_SELECTION.json'
         current=dict(repo=str(REPO),root=str(self.root),sdk=str(self.sdk),cmake=str(self.cmake),python=str(self.python),ninja=str(self.ninja),host_tools=str(self.host),
                      dependency_prefixes=[dict(path=str(p),tree_sha256=tree_hash(p)) for p in self.deps],
                      tool_sha256={str(p):sha(p) for p in (self.cmake,self.python,self.ninja,self.sdk/'build/cmake/ohos.toolchain.cmake',self.sdk/'llvm/bin/clang++.exe')})
+        if self.candidate['version']=='2.14.7':
+            current.update(candidate=self.candidate,fastdds_source_repository=str(self.source_repo))
+            cdr_header=(self.deps[0]/'include/fastcdr/config.h').read_text()
+            if not all('#define FASTCDR_VERSION_'+part+' '+value in cdr_header for part,value in [('MAJOR','2'),('MINOR','2'),('MICRO','8')]):
+                raise ValueError('Candidate Fast CDR target headers must be exactly 2.2.8')
+            if self.openssl:
+                header=(self.openssl/'include/openssl/opensslv.h').read_text()
+                if '3.5.9' not in header:raise ValueError('Candidate OpenSSL target headers must be exactly 3.5.9')
+                if not all((self.openssl/'lib'/name).is_file() for name in ('libssl.so','libcrypto.so')):
+                    raise ValueError('Actual shared target OpenSSL libraries missing')
         for p in (self.cmake,self.python,self.ninja,self.sdk/'build/cmake/ohos.toolchain.cmake'):
             if not p.is_file():raise ValueError('Required installed tool missing: '+str(p))
         if any(not p.is_dir() for p in self.deps):raise ValueError('Declared target dependency prefix missing')
@@ -142,11 +172,16 @@ class Build:
     def prepare(self):
         patched=self.root/'FAST_DDS_PATCHED.json';here=REPO/'integrations/ros2'
         names=['UPSTREAM.json','TEARDOWN_UPSTREAM.json','RESIDUAL_UPSTREAM.json','TOPIC_RTTI_UPSTREAM.json','apply_fastdds_hook.py','apply_endpoint_guard.py','apply_teardown_observation.py','apply_residual_observation.py','apply_topic_rtti_key.py','fastdds-2.14.5-teardown.patch','FastddsHook.hpp','PlatformModule.hpp','StartupDiagnostics.hpp','TeardownDiagnostics.hpp','ResidualDiagnostics.hpp','NativePrefix.hpp']
+        if self.candidate['version']=='2.14.7':names+=['prepare_fastdds_source.py','candidates/2.14.7/UPSTREAM.json','candidates/2.14.7/integration.patch']
         current={n:sha(here/n) for n in names};inputs=self.root/'FAST_DDS_TRANSFORM_INPUTS.json'
         if inputs.exists():verify_transform_inputs(read(inputs)['inputs'],current)
         if not patched.exists():
-            src=self.archive('fastdds',REPO/'Fast-DDS',FDDS);changes=self.apply_patches(src)
-            write(patched,dict(commit=FDDS,tree_sha256=tree_hash(src),exact_eol_mapping=changes))
+            src=self.archive('fastdds',self.source_repo,self.candidate['commit'])
+            if self.candidate['version']=='2.14.7':
+                self.command('prepare-candidate',[self.python,here/'prepare_fastdds_source.py','--source',src,'--version','2.14.7','--security-mode',self.candidate['security']])
+                changes=read(src/'FDDST_MAINTENANCE_PREPARED.json')
+            else:changes=self.apply_patches(src)
+            write(patched,dict(commit=self.candidate['commit'],tree_sha256=tree_hash(src),exact_eol_mapping=changes))
             write(inputs,dict(scope='CAPTURED_DURING_SOURCE_PREPARATION',inputs=current))
         elif tree_hash(self.root/'src/fastdds')!=read(patched)['tree_sha256']:raise ValueError('Patched source drift')
         elif not inputs.exists():
@@ -195,12 +230,14 @@ class Build:
         for phase,path in records.items():write(dest/(phase+'.json'),dict(read(path),original_receipt=str(path),original_sha256=sha(path)))
     def fastdds(self):
         self.prepare();src=self.root/'src/fastdds'
+        security_options=[]
+        if self.openssl:security_options=['-DOPENSSL_ROOT_DIR='+str(self.openssl),'-DOPENSSL_INCLUDE_DIR='+str(self.openssl/'include'),'-DOPENSSL_SSL_LIBRARY='+str(self.openssl/'lib/libssl.so'),'-DOPENSSL_CRYPTO_LIBRARY='+str(self.openssl/'lib/libcrypto.so')]
         self.configure_build('fastdds',src,self.root/'fastdds-build',[
-            '-DCMAKE_INSTALL_PREFIX='+str(self.fast),'-DBUILD_SHARED_LIBS=ON','-DSECURITY=OFF','-DFASTDDS_STATISTICS=OFF',
+            '-DCMAKE_INSTALL_PREFIX='+str(self.fast),'-DBUILD_SHARED_LIBS=ON','-DSECURITY='+self.candidate['security'],'-DFASTDDS_STATISTICS=OFF',
             '-DTHIRDPARTY=OFF','-DTHIRDPARTY_UPDATE=OFF','-DAsio_INCLUDE_DIR='+str(self.asio),
             '-DTHIRDPARTY_BOOST_INCLUDE_DIR='+str(src/'thirdparty/boost/include'),'-DTINYXML2_FROM_SOURCE=OFF',
             '-Dfastcdr_DIR='+str(self.deps[0]/'lib/cmake/fastcdr'),'-DTinyXML2_DIR='+str(self.deps[1]/'lib/cmake/tinyxml2'),
-            '-Dfoonathan_memory_DIR='+str(self.deps[2]/'lib/foonathan_memory/cmake'),'-DCOMPILE_TOOLS=ON','-DCOMPILE_EXAMPLES=OFF','-DBUILD_TESTING=OFF'],True)
+            '-Dfoonathan_memory_DIR='+str(self.deps[2]/'lib/foonathan_memory/cmake'),'-DCOMPILE_TOOLS=ON','-DCOMPILE_EXAMPLES=OFF','-DBUILD_TESTING=OFF',*security_options,*security_diagnostic_options(self.candidate)],True)
     def ros_build(self):
         self.prepare()
         args=[self.python,REPO/'integrations/ros2/target/build_ros_slice.py','--source',self.root/'src/ros','--output',self.root/'ros',
@@ -212,6 +249,9 @@ class Build:
         for name in ('rosidl_typesupport_introspection_c','rosidl_typesupport_introspection_cpp','rosidl_typesupport_c','rosidl_typesupport_cpp',
                      'builtin_interfaces','unique_identifier_msgs','service_msgs','action_msgs','rcl_interfaces',
                      'rmw_fastrtps_cpp','rmw_implementation','rclcpp','std_msgs','example_interfaces'):args+=['--package',name]
+        if self.candidate['version']=='2.14.7':
+            for name in ('rosidl_typesupport_fastrtps_c','rosidl_typesupport_fastrtps_cpp','rmw_dds_common','rmw_fastrtps_shared_cpp','rmw_fastrtps_cpp','rmw_implementation','rcl','rclcpp','std_msgs','example_interfaces'):
+                args+=['--package',name,'--rebuild-package',name]
         # These interface packages may have been installed before the C/C++
         # dispatch generators existed. Rebuild only when that output is absent.
         for name in ('builtin_interfaces','unique_identifier_msgs','service_msgs','action_msgs','rcl_interfaces'):
@@ -223,10 +263,13 @@ class Build:
         spec=importlib.util.spec_from_file_location('ros_slice',Path(__file__).with_name('build_ros_slice.py'));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         dirs={k:v for k,v in module.package_dirs(self.host).items() if k.startswith('ament_') or k in module.PURE_TOOLS}
         for prefix in [*self.deps,self.fast,self.ros,self.transport]:dirs.update(module.package_dirs(prefix))
-        return ['-D'+k+'_DIR:PATH='+v.as_posix() for k,v in sorted(dirs.items())]
+        result=['-D'+k+'_DIR:PATH='+v.as_posix() for k,v in sorted(dirs.items())]
+        if self.openssl:result+=['-DOPENSSL_ROOT_DIR='+str(self.openssl),'-DOPENSSL_INCLUDE_DIR='+str(self.openssl/'include'),'-DOPENSSL_SSL_LIBRARY='+str(self.openssl/'lib/libssl.so'),'-DOPENSSL_CRYPTO_LIBRARY='+str(self.openssl/'lib/libcrypto.so')]
+        return result
     def assembly(self):
         socket=REPO/'.artifacts/breakthrough-20260920/native-path/A-libsoftbus_client.z.so'
         self.configure_build('assembly',REPO/'integrations/ros2/target',self.root/'transport-build',self.package_dirs()+[
+            '-DFASTDDS_DSOFTBUS_ROS214_VERSION='+self.candidate['version'],
             '-DCMAKE_INSTALL_PREFIX='+str(self.transport),'-DDSOFTBUS_SOURCE_DIR='+str(REPO/'communication_dsoftbus'),
             '-DFASTDDS_DSOFTBUS_SOCKET_LIBRARY='+str(socket)],True)
     def consumer(self):
@@ -237,6 +280,7 @@ class Build:
         prefixes=[self.ros,self.transport,self.fast,*self.deps]
         self.env['AMENT_PREFIX_PATH']=os.pathsep.join(str(p) for p in prefixes)
         self.configure_build('consumer',source,self.root/'consumer-build',self.package_dirs()+[
+            '-DFASTDDS_DSOFTBUS_ROS214_VERSION='+self.candidate['version'],
             '-DPython3_EXECUTABLE='+str(self.python),'-DCMAKE_PREFIX_PATH='+';'.join(str(p) for p in prefixes),
             '-DFastRTPS_INCLUDE_DIR='+str(self.fast/'include'),'-DFastRTPS_LIBRARY_RELEASE='+str(self.fast/'lib/libfastrtps.so'),
             '-DFastCDR_LIBRARY_RELEASE='+str(self.deps[0]/'lib/libfastcdr.so'),
@@ -255,11 +299,17 @@ class Build:
         rows=[dict(name=r['name'],path=str((output/r['name']).resolve()),characters=len(str((output/r['name']).resolve())),sha256=sha(output/r['name'])) for r in members]
         write(self.root/'PACKAGE_SEND_PATHS.json',dict(scope='HOST_SOURCE_PATH_LENGTH_NOT_DEVICE_ADMISSION',members=rows,max_characters=max(r['characters'] for r in rows)))
         self.command('bind',[self.python,Path(__file__).with_name('bind_build.py'),'--repo',REPO,'--package',output,
+            '--version',self.candidate['version'],'--security-mode',self.candidate['security'],
             '--assembly-receipts',self.root/'assembly-receipts','--consumer-receipts',self.root/'consumer-receipts',
             '--assembly-build',self.root/'transport-build','--consumer-build',self.root/'consumer-build','--output',self.root/'bound-build'])
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path)
+    p.add_argument('--version',choices=['2.14.5','2.14.7'],default='2.14.5')
+    p.add_argument('--security-mode',choices=['OFF','ON'],default='OFF')
+    p.add_argument('--fastdds-source-repo',type=Path)
+    p.add_argument('--fastcdr-prefix',type=Path)
+    p.add_argument('--openssl-prefix',type=Path)
     p.add_argument('--phase',choices=['prepare','fastdds','ros','assembly','consumer','package','all'],required=True)
     p.add_argument('--rebuild-package',action='append',default=[],help='Explicit local ROS relink after an audited dependency install correction')
     p.add_argument('--cmake',default='C:/pixi_ws/.pixi/envs/default/Library/bin/cmake.exe')

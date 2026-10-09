@@ -12,7 +12,11 @@
 namespace {
 constexpr std::size_t capacity = 8192;
 struct Frame { std::uint64_t observation; bool sending; std::int32_t socket;
-    std::array<std::uint8_t,16> writer; std::int32_t high; std::uint32_t low; };
+    std::array<std::uint8_t,16> writer; std::int32_t high; std::uint32_t low;
+    bool fragment=false,bounds_known=false,key=false;
+    std::uint32_t first=0,sample_size=0;
+    std::uint16_t fragment_count=0,fragment_size=0;
+    std::uint64_t payload_bytes=0; };
 struct ObserverState {
     std::array<Frame,capacity> frames{};
     std::size_t count=0;
@@ -151,6 +155,12 @@ std::uint64_t SocketFrame(const char* event,std::int32_t socket,const std::uint8
         if(state->count==capacity){++state->overflow;continue;}
         state->frames[state->count++]={observation,sending,socket,item.writer_guid,item.sequence_hi,item.sequence_lo};
     }
+    for(const auto& item:decoded.fragments) {
+        if(state->count==capacity){++state->overflow;continue;}
+        state->frames[state->count++]={observation,sending,socket,item.writer_guid,item.sequence_hi,item.sequence_lo,
+            true,item.payload_bounds_known,item.key_flag,item.fragment_start,item.sample_size,
+            item.fragment_count,item.fragment_size,item.payload_bytes};
+    }
     return observation;
 }
 }
@@ -227,10 +237,16 @@ bool CapturePrefix(ros2_diagnostics::NativePrefix& output) noexcept {
         output={};std::memcpy(output.run,state->run.c_str(),17);output.side=state->side;output.valid=true;
         output.send_enter=state->send_enter;output.send_return=state->send_return;output.send_error=state->send_error;
         output.ingress=state->ingress;output.overflow=state->overflow;output.malformed=state->malformed;
-        output.total_stored=state->count;output.stored=(std::min)(state->count,ros2_diagnostics::prefix_capacity);
-        output.first_index=state->count-output.stored;
-        for(std::size_t i=0;i<output.stored;++i){const auto& frame=state->frames[output.first_index+i];
-            output.frames[i]={frame.observation,frame.sending,frame.socket,frame.writer,frame.high,frame.low};}
+        // Existing prefix ABI and DATA label remain DATA-only. Fragment rows
+        // are exported separately by Flush, with their actual wire geometry.
+        for(std::size_t i=0;i<state->count;++i)if(!state->frames[i].fragment)++output.total_stored;
+        output.stored=(std::min)(output.total_stored,ros2_diagnostics::prefix_capacity);
+        output.first_index=output.total_stored-output.stored;
+        std::size_t ordinal=0,stored=0;
+        for(std::size_t i=0;i<state->count;++i){const auto& frame=state->frames[i];
+            if(frame.fragment)continue;
+            if(ordinal++<output.first_index)continue;
+            output.frames[stored++]={frame.observation,frame.sending,frame.socket,frame.writer,frame.high,frame.low};}
         return true;
     }catch(...){++state->capture_faults;return false;}
 }
@@ -254,7 +270,12 @@ bool Flush() {
     std::fprintf(stdout,"ROS_V1_OBSERVATION run=%s side=%c captured=%u adverts=%zu selected=%zu faults=%llu sdk_epoch=NOT_PROVEN\n",state->run.c_str(),state->side?'B':'A',unsigned(locator_capture),locators.advert_count,locators.selected_count,static_cast<unsigned long long>(locators.faults));
     for(std::size_t i=0;i<stored;++i) {
         char guid[33]{};for(std::size_t j=0;j<16;++j)std::snprintf(guid+2*j,3,"%02x",snapshot[i].writer[j]);
-        std::fprintf(stdout,"ROS_NATIVE_DATA run=%s side=%c observation=%llu direction=%s socket=%d writer=%s sequence_hi=%d sequence_lo=%u scope=STRUCTURAL_APP_OBSERVER\n",
+        if(snapshot[i].fragment) {
+            const auto& f=snapshot[i];
+            std::fprintf(stdout,"ROS_NATIVE_FRAGMENT run=%s side=%c observation=%llu direction=%s socket=%d writer=%s sequence_hi=%d sequence_lo=%u scope=STRUCTURAL_APP_OBSERVER first=%u count=%u fragment_size=%u sample_size=%u payload_bounds_known=%u key_flag=%u payload_bytes=%llu\n",
+                state->run.c_str(),state->side?'B':'A',static_cast<unsigned long long>(f.observation),f.sending?"SDK_SEND":"SDK_INGRESS",f.socket,guid,f.high,f.low,
+                f.first,unsigned(f.fragment_count),unsigned(f.fragment_size),f.sample_size,unsigned(f.bounds_known),unsigned(f.key),static_cast<unsigned long long>(f.payload_bytes));
+        }else std::fprintf(stdout,"ROS_NATIVE_DATA run=%s side=%c observation=%llu direction=%s socket=%d writer=%s sequence_hi=%d sequence_lo=%u scope=STRUCTURAL_APP_OBSERVER\n",
             state->run.c_str(),state->side?'B':'A',static_cast<unsigned long long>(snapshot[i].observation),snapshot[i].sending?"SDK_SEND":"SDK_INGRESS",snapshot[i].socket,guid,snapshot[i].high,snapshot[i].low);
     }
     std::fprintf(stdout,"ROS_NATIVE_SUMMARY run=%s side=%c send_enter=%llu send_return=%llu send_error=%llu ingress=%llu detailed_stored=%zu metadata_limit=%zu overflow=%llu malformed=%llu sdk_epoch=NOT_PROVEN\n",

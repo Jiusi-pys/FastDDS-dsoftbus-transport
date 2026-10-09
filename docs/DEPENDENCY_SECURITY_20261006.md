@@ -327,3 +327,31 @@ places 3.3 at EOL since 2026-04-09. For a linked production dependency evaluate
 supported 3.5 LTS at a current security patch level; validate exports, providers,
 certificate/CRL/CMS/TLS behavior and Fast DDS security configuration. No upgrade
 or ABI compatibility assumption is made in this package.
+
+## Secure target candidate validation (2026-10-10)
+
+The final scoped validation used Fast DDS 2.14.7
+(`010b908dc3bb2b6f2818d61ac8db462d01b79a1f`), Fast CDR 2.2.8
+(`1bc9c919311ffce555b445560bf7ae062a4e1c72`) and OpenSSL 3.5.9. The formal
+target-r6 package was built with SDK API23, Clang 15.0.4, AArch64 shared libc++,
+Release and `SECURITY=ON` without ASan; it contains 111 members and passed the
+installed-consumer/header identity and affected static checks. The old 2.14.5
+and standalone 3.6 defaults were not switched.
+
+The four device receipts are source-attributed scoped observations: S1 normal is
+`device-S1-r7`/target-r4, S1 fragment is `device-fragment-r3`/target-r5, S2
+authentication-negative is `device-S2-r4`/target-r5, and S3 failed-construction
+is `device-S3-r5`/target-r6. They are
+not a single r6 positive target runtime and do not qualify production. S2 keeps
+`WINDOW_FAILED` cleanup semantics rather than a normal close claim; S3 failed
+before listener creation and keeps no normal READY or participant-delete claim.
+OpenSSL 3.5.9 callable origins and security/authentication observations were
+recorded in the scoped windows; discovery signing was observed and payload
+encryption was not claimed.
+
+The final independent review is closed and the canonical tester gate is PASS,
+but the graph report retains HIGH risk with stale/new-target coverage limits.
+SDK drain/epoch/hot-unload, complete platform ABI, SBOM and supplier authority,
+CVE-2026-63340 exposure for authenticated large samples, PF/P4 and production
+qualification remain unverified. This updates dependency and target evidence
+without changing the release or default-security boundary.

@@ -36,6 +36,13 @@ ROS_SERVICE_NAME_AUTHORIZATION='ONE_ROS2_SERVICE_NAME_DEVICE_VALIDATION_AND_SUCC
 ROS_PRIOR_CONSUMED_LEDGER_SHA256='00ca1a2928ca8d082c7bcf9bb1ddc18fa21596e2fd34e934f82d9dafbce8f00c'
 ROS_LAYERED_AUTHORIZATION='ONE_CONDITIONAL_ROS_AFTER_DDS214_DEVICE_VALIDATION'
 ROS_TASK_AUTHORIZATION='TASK_SCOPED_ROS2_DEVICE_VALIDATION'
+def secure():
+ spec=importlib.util.spec_from_file_location('secure_contract',Path(__file__).with_name('secure_contract.py'))
+ module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
+def secure_mode(frozen=None):
+ if frozen is None:
+  file=TASK_ROOT/'DEVICE_CONTRACT.json';frozen=json.loads(file.read_text(encoding='utf-8-sig')) if file.is_file() else {}
+ return frozen.get('authorization')=='TASK_SCOPED_SECURE_CANDIDATE_DEVICE_VALIDATION'
 ROS_TASK_GRANT_RELATIVE='.artifacts/ros2-device-acceptance/task-scoped-teardown-20261002/AUTHORIZATION.json'
 ROS_TASK_GRANT_PATH=None
 ROS_TASK_GRANT_SHA256='1dbadad0591bad3f76ef98a6bab09ff80ee6b75491e54c447410c841b39bea51'
@@ -84,6 +91,7 @@ ROS_LIMITS=dict(canonical_windows=1,repair_retries=1,total_attempts=2,query_pair
 ROS_LIMITS_ONCE=dict(ROS_LIMITS,repair_retries=0,total_attempts=1,total_query_pairs=1)
 
 def verify_ros_authorization(frozen):
+ if secure_mode(frozen):return secure().authority(frozen,PRIVATE,TASK_ROOT)
  if frozen.get('authorization')==ROS_TASK_AUTHORIZATION:return verify_ros_task_grant(frozen)
  if frozen.get('authorization') in ROS_ONE_WINDOW_AUTHORIZATIONS:
   limits=frozen.get('limits')
@@ -438,7 +446,7 @@ def ros_shape(c):
  need(c.get('expected_writes')=={'A':10,'B':10} and c.get('record_count')==20,'ROS directional/aggregate sample contract')
  need(c.get('stages')==(ROS_ROUTE_NATIVE_STAGES if c.get('route_lifecycle_native') else ROS_NATIVE_STAGES if c.get('bounded_native_reaccept') else ROS_STAGES) and c.get('timeout_seconds')==300 and c.get('stdout_budget')==25165824,'ROS frozen stage/budget mismatch')
  need(c['system_library_dirs']==LIBDIRS and c.get('max_record_bytes')==8192,'ROS loader/log budget mismatch')
- need(type(c.get('ros_attempt')) is int and (c['ros_attempt']>=1 if ros_task_mode() else c['ros_attempt'] in (1,2)),'ROS attempt identity')
+ need(type(c.get('ros_attempt')) is int and (c['ros_attempt']>=1 if ros_task_mode() or secure_mode() else c['ros_attempt'] in (1,2)),'ROS attempt identity')
  names=[x['name'] for x in c['package_artifacts']]
  need(len(names)==len(set(names)) and len(names)<=128 and c['main_member'] in names,'ROS package identity/size')
  need(all(Path(x['source']).name==x['name'] and digest(x['source'])==x['sha256'] for x in c['package_artifacts']),'ROS package drift')
@@ -453,6 +461,9 @@ def ros_shape(c):
    row=spec[key];need(set(row)=={'path','sha256'} and Path(row['path']).is_absolute() and digest(row['path'])==row['sha256'],'Debugger frozen tool changed')
   need(Path(spec['server']['path']).name=='lldb-server' and Path(spec['client']['path']).name=='lldb.exe' and Path(spec['script']['path']).resolve()==TASK_ROOT/'executor/rmw_lldb_trace.py','Debugger exact tool/script binding')
 def ros_claim_path(kind,attempt):
+ if secure_mode():
+  need(kind in ('query','data') and type(attempt) is int and attempt>=1,'Secure claim identity')
+  return TASK_ROOT/'ros2/secure-ledger'/f'{kind}-{attempt}.json'
  need(kind in ('query','data') and type(attempt) is int and (attempt>=1 if ros_task_mode() else attempt in (1,2)),'ROS claim purpose')
  if ros_task_mode():return ros_task_authority_root()/'ros2/task-ledger'/f'{kind}-{attempt}.json'
  return TASK_ROOT/'ros2/attempt-ledger'/f'{kind}-{attempt}.json'
@@ -485,6 +496,12 @@ def ros_previous_attempt():
  return claim
 
 def ros_next_attempt(exclude_window=None):
+ if secure_mode():
+  rows=list((TASK_ROOT/'ros2/secure-ledger').glob('data-*.json'))
+  for row in rows:
+   prior=json.loads(row.read_text());window=Path(prior['window'])
+   if exclude_window is None or window.resolve()!=Path(exclude_window).resolve():require_restored(window)
+  return len(rows)+1
  if ros_task_mode():return ros_task_next_attempt(exclude_window)
  claims=list((TASK_ROOT/'ros2/attempt-ledger').glob('data-*.json'))
  freeze=TASK_ROOT/'DEVICE_CONTRACT.json'
@@ -509,6 +526,26 @@ def ros_next_attempt(exclude_window=None):
  need(bool(summary.get('first_failure')),'A successful ROS window forbids another attempt')
  return 2
 def verify_ros_budget(c,query=False):
+ if secure_mode():
+  frozen=json.loads(Path(c['task_contract']['freeze_path']).read_text())
+  secure().authority(frozen,PRIVATE,TASK_ROOT)
+  if not query:secure().window(c,frozen,PRIVATE,TASK_ROOT)
+  need(c.get('ros_task_id')==secure().TASK and c.get('ros_authorization_mode')==secure().AUTH,'Secure dispatch authority identity')
+  need(type(c.get('ros_attempt')) is int and c['ros_attempt']==ros_next_attempt(None if query else c['window_root']),'Secure attempt sequence')
+  if query:need(not ros_claim_path('query',c['ros_attempt']).exists(),'Secure query already dispatched')
+  else:
+   route=c.get('route_binding');need(isinstance(route,dict),'Secure guarded route required')
+   receipt=json.loads(ros_claim_path('query',c['ros_attempt']).read_text())
+   need(receipt.get('scope')==ROS_SCOPE and receipt.get('run')==route.get('query_run'),'Secure query purpose binding')
+   query_window=Path(receipt['window']).resolve()
+   need(query_window.parent==TASK_ROOT/'windows' and Path(route.get('private_receipt','')).resolve().parent==query_window,'Secure route source window')
+   require_restored(query_window)
+   previous=[p for p in (TASK_ROOT/'windows').glob('*/DATA_ATTEMPT_STARTED') if p.parent!=Path(c['window_root']).resolve()]
+   if previous:
+    binding=c.get('retry_evidence',{});path=Path(binding.get('path','')).resolve()
+    need(path.is_relative_to(TASK_ROOT) and path.is_file() and digest(path)==binding.get('sha256'),'Secure repeat requires new reviewed evidence or repair')
+    repair=json.loads(path.read_text());need(all(repair.get(k) for k in ('root_cause','fix','affected_validation','review')),'Secure repeat evidence incomplete')
+  return
  attempt=c.get('ros_attempt');need(type(attempt) is int and attempt==ros_next_attempt(None if query else c['window_root']),'ROS attempt sequence/quota')
  if attempt==2 and not ros_task_mode():
   row=c.get('retry_evidence');need(isinstance(row,dict),'ROS reviewed repair required')
@@ -674,6 +711,7 @@ def materialization_record(frozen):
  record=json.loads(p.read_text(encoding='utf-8'));need(record.get('scope')=='LOCAL_MATERIALIZATION_ONLY_NO_EXECUTION_AUTHORITY' and record.get('task')==str(TASK_ROOT) and record.get('repo')==str(repo_root()) and record.get('private_config_sha256')==frozen.get('private_config_sha256'),'Materialization identity mismatch')
  rows=record.get('files',[]);names=[e['destination'].replace(chr(92),'/') for e in rows]
  current_members=set(names) in (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES),set(PRIOR_MATERIALIZED_FILES),set(NATIVE_MATERIALIZED_FILES),set(ROUTE_NATIVE_MATERIALIZED_FILES))
+ if secure_mode(frozen):current_members=set(names)==set(MATERIALIZED_FILES)|{'executor/secure_contract.py'}
  strict=frozen.get('scope')==layered().SCOPE or frozen.get('authorization')==ROS_LAYERED_AUTHORIZATION
  need(len(names)==len(set(names)) and (current_members or (not strict and set(names)==set(LEGACY_MATERIALIZED_FILES))),'Materialized dependency membership mismatch')
  if frozen.get('authorization')==ROS_TASK_AUTHORIZATION:need(set(names) in ((set(ROUTE_NATIVE_MATERIALIZED_FILES),) if frozen.get('route_lifecycle_native') else (set(NATIVE_MATERIALIZED_FILES),) if frozen.get('bounded_native_authorization') else (set(MATERIALIZED_FILES),) if frozen.get('rmw_debugger') else (set(MATERIALIZED_FILES),set(RECOVERY_MATERIALIZED_FILES))),'Task recovery-capable execution requires current complete materialization')
@@ -1215,7 +1253,7 @@ def require_restored(window):
   return validate_local_no_state_change(window)
 
 def verify_v1_window(c,frozen):
- if not frozen.get('v1_successor_authorization'):return
+ if not frozen.get('v1_successor_authorization') and not secure_mode(frozen):return
  spec=importlib.util.spec_from_file_location('window_v1_private',TASK_ROOT/'executor/private_config.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
  v=module.validate_v1_deployment(PRIVATE,repo_root())
  need(v is not None and c.get('v1_deployment')==v,'Window V1 deployment differs from controlled input')
@@ -1263,6 +1301,7 @@ def verify_window(c):
   return
  if is_ros(c):
   need(frozen['scope']==ROS_SCOPE,'ROS work package mismatch')
+  if secure_mode(frozen):secure().window(c,frozen,PRIVATE,TASK_ROOT)
   verify_v1_window(c,frozen)
   if frozen.get('v1_successor_authorization'):verify_v1_identity_correspondence(c)
   need(type(frozen.get('paired_runtime_close',False)) is bool and type(c.get('paired_runtime_close',False)) is bool and
@@ -1332,9 +1371,9 @@ def verify_window(c):
 def verify_identity_query_binding(c,frozen):
  identity=frozen.get('identity_qualification',False)
  need(type(identity) is bool and type(c.get('identity_qualification',False)) is bool and c.get('identity_qualification',False)==identity,'Identity query mode mismatch')
- if identity:
-  need(verify_v1_successor(frozen,verify_ros_task_grant(frozen)) is not None,'Identity query missing V1 successor')
-  bound=frozen.get('identity_query_helper',{});image=Path(bound.get('path','')).resolve()
+ if identity or secure_mode(frozen):
+  if identity:need(verify_v1_successor(frozen,verify_ros_task_grant(frozen)) is not None,'Identity query missing V1 successor')
+  bound=frozen.get('identity_query_helper' if identity else 'directory_query_helper',{});image=Path(bound.get('path','')).resolve()
   need(image==Path(PRIVATE['query_helper_path']).resolve() and c.get('query_helper')==dict(path=str(image),sha256=bound.get('sha256')) and image.stat().st_size==bound.get('size') and digest(image)==bound.get('sha256'),'Identity helper binding drift')
   source=bound.get('source',{});need(source==dict(path='probes/softbus_record_probe.cpp',sha256=digest(repo_root()/'probes/softbus_record_probe.cpp')),'Identity helper current source drift')
   proof=bound.get('binding_receipt',{});receipt_path=Path(proof.get('path','')).resolve()
@@ -1359,8 +1398,11 @@ def verify_identity_query_binding(c,frozen):
    dependencies=unit.get('dependencies',[]);need(len(dependencies)==unit.get('dependency_count') and bool(dependencies),'Identity dependency list incomplete');total+=len(dependencies)
    for row in dependencies:need(digest(row['path'])==row['sha256'],'Identity compiler dependency drift')
   need(total==closure['closure'].get('all_dependency_entries'),'Identity dependency count mismatch')
-  need(c.get('private_identity_output')=={side:c['remote'][side]+'/local-udid.bin' for side in 'AB'},'Identity private output mismatch')
-  need(c.get('command_contract')=='--list-nodes --check-identities --identity-output <exact-window>/local-udid.bin --expected-token <board-token> --preflight-confirmed','Identity query command mismatch')
+  if identity:
+   need(c.get('private_identity_output')=={side:c['remote'][side]+'/local-udid.bin' for side in 'AB'},'Identity private output mismatch')
+   need(c.get('command_contract')=='--list-nodes --check-identities --identity-output <exact-window>/local-udid.bin --expected-token <board-token> --preflight-confirmed','Identity query command mismatch')
+  else:
+   need('private_identity_output' not in c and c.get('command_contract')=='--list-nodes --expected-token <board-token> --preflight-confirmed','Secure directory query may not export identities')
 
 def verify_query_context(c):
  verify_private_binding(c)

@@ -64,10 +64,13 @@ def main():
     compiled, _ = execute('build', command, 60)
     passed = compiled
     if compiled:
-        for mode in ('lifetime', 'prebegin', 'invalid', 'duplicate', 'concurrent','prefix','busy'):
+        for mode in ('lifetime', 'prebegin', 'invalid', 'duplicate', 'concurrent','prefix','busy','fragment'):
             ok, text = execute(mode, prefix + ['timeout', '12', native(binary), mode], 20)
             passed = passed and ok and text.count('OBSERVER_EXIT_LIFETIME result=PASS ') == 1
             passed = passed and 'result=FAIL' not in text
+            if mode == 'fragment':
+                passed = passed and text.count('ROS_NATIVE_FRAGMENT ') == 2 and 'ROS_NATIVE_DATA ' not in text
+                passed = passed and 'first=2 count=1 fragment_size=5 sample_size=8 payload_bounds_known=1 key_flag=0 payload_bytes=3' in text
     receipt = {'scope': 'REAL_OBSERVER_HOST_COMPONENT_NOT_ROS_SDK_DEVICE', 'pass': passed,
                'inputs': identities, 'commands': records, 'device_operations': 0}
     (output/'RESULT.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')

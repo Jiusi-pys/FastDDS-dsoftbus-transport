@@ -22,7 +22,12 @@ a = p.parse_args()
 s = read(a.selection)
 review = read(a.review)
 out = a.output.resolve()
-need(Path(s['preflight_output_parent']).resolve() == out.parent and out.parent.is_relative_to(repo / '.artifacts') and (not out.exists()), 'Preflight constraint failed')
+secure_root = repo / 'build/secure-candidate-target-20261009'
+secure = (s.get('authorization') == 'TASK_SCOPED_SECURE_CANDIDATE_DEVICE_VALIDATION' and
+          s.get('task_id') == 'SECURE_CANDIDATE_TARGET_VALIDATION_FROM_FD7F65D' and
+          out.parent.is_relative_to(secure_root))
+need(Path(s['preflight_output_parent']).resolve() == out.parent and
+     (out.parent.is_relative_to(repo / '.artifacts') or secure) and (not out.exists()), 'Preflight constraint failed')
 need(review['verdict'] == 'PASS' and review['selection_sha256'] == sha(a.selection) and (review['allow_readonly_preflight'] is True), 'Preflight constraint failed')
 need(sha(__file__) == s['preflight_tool_sha256'], 'Preflight constraint failed')
 need(sha(s['platform_reference']) == s['platform_reference_sha256'], 'Declared platform reference changed; no device dispatch')

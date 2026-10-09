@@ -174,8 +174,13 @@ def original(window):
     need(Path(private['repo_root']).resolve()==repo and cfg['package_artifacts']==frozen['build_binding']['package_artifacts'],'ORIGINAL_PACKAGE_BINDING')
     need(cfg.get('main_member')=='ordinary_ros2_transport_consumer' and cfg['system_library_dirs']==['/system/lib64/platformsdk','/system/lib64/chipset-sdk-sp','/system/lib64/chipset-sdk','/system/lib64'],'ORIGINAL_MAIN_OR_LOADER_SCOPE')
     for row in mat['files']:need(sha(root/row['destination'])==row['sha256'],'ORIGINAL_EXECUTOR_DRIFT')
+    secure=secure_module(cfg,root) if frozen.get('authorization')=='TASK_SCOPED_SECURE_CANDIDATE_DEVICE_VALIDATION' else None
+    if secure:secure.window(cfg,frozen,private,root)
     for side in 'AB':
         expected_aux={'capture-load.sh','native_permission_probe','required-load-paths.txt','ros.conf'}
+        if secure:
+            expected_aux.update('security_'+name for name in secure.FILES)
+            need(all(cfg['auxiliary_sha256'][side]['security_'+name]==sha(window/side/'aux'/('security_'+name))==cfg['secure_candidate']['material']['sha256'][side][name] for name in secure.FILES),'SECURE_AUXILIARY_HASH_DRIFT')
         if cfg.get('rmw_debugger') is not None:
             need(cfg['rmw_debugger']==frozen.get('rmw_debugger'),'ORIGINAL_DEBUGGER_BINDING')
             expected_aux.add('lldb-server')
@@ -188,6 +193,11 @@ def original(window):
         need(cfg.get('simulated') is True and cfg['targets']=={'A':'SIM-A','B':'SIM-B'} and Path(cfg['hdc_path']).name=='fake-hdc.exe','LOCAL_IDENTITY_BOUNDARY')
         need(frozen.get('device_authorized') is not True and frozen.get('execution_admitted') is not True,'LOCAL_CANNOT_GRANT_DEVICE_AUTHORITY')
         authority=root
+    elif secure:
+        need(frozen.get('device_authorized') is True and 'simulated' not in cfg,'NOT_SECURE_DEVICE_AUTHORITY')
+        authority=root
+        need(Path(cfg['hdc_path']).name.lower()=='hdc.exe' and not Path(cfg['hdc_path']).resolve().is_relative_to(root),'SECURE_DRIVER_SCOPE')
+        need(sha(cfg['hdc_path'])==frozen['device_driver']['sha256'],'SECURE_DRIVER_DRIFT')
     else:
         need(frozen.get('authorization')==AUTH and frozen.get('device_authorized') is True and 'simulated' not in cfg,'NOT_TASK_DEVICE_AUTHORITY')
         authority=Path(frozen['task_authority_root']).resolve();grant=authority/'AUTHORIZATION.json'
@@ -203,9 +213,14 @@ def original(window):
     need((window/'EXECUTION_STARTED').is_file() and bool((window/'EXECUTION_STARTED').read_bytes()),'MISSING_EXECUTION_START')
     for name in ('DATA_ATTEMPT_STARTED','runner.stdout.log','runner.stderr.log','result.json','data-dispatch-A.json','data-dispatch-B.json'):
         need(not (window/name).exists(),'BUSINESS_DISPATCH_PRESENT')
-    for claim in (authority/'ros2/task-ledger').glob('data-*.json'):
+    for claim in (authority/('ros2/secure-ledger' if secure else 'ros2/task-ledger')).glob('data-*.json'):
         row=read(claim);need(row.get('run')!=cfg['run'] and row.get('window')!=str(window),'BUSINESS_CLAIM_PRESENT')
     return cfg,frozen,private,authority,local
+
+def secure_module(cfg,root):
+    if not cfg.get('secure_candidate'):raise ValueError('Secure recovery scene missing')
+    spec=importlib.util.spec_from_file_location('bound_secure_recovery',Path(root)/'executor/secure_contract.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 
 def transfer_classification(step,source,local=False):
     # Saved HDC evidence, not an inference from the current missing file.
@@ -244,6 +259,8 @@ def inspect_window(window):
     sides={}
     for side in 'AB':
         remote=cfg['remote'][side];folder=window/side;owned={};created=False;commands=[]
+        secure=secure_module(cfg,Path(cfg['task_contract']['task_root'])) if cfg.get('secure_candidate') else None
+        secure_setup=False;secure_copies=[];secure_commands=secure.recovery_commands(cfg,side) if secure else {}
         package={e['name']:e['sha256'] for e in cfg['package_artifacts']};aux=cfg['auxiliary_sha256'][side]
         allowed={**package,**aux};known_modes={}
         platform={x['path'] for x in cfg['platform'][side]['files']}|{cfg['platform'][side]['service_server']['path']}
@@ -267,8 +284,14 @@ def inspect_window(window):
                 if core in hashes|params|{'ps -A',meta}:kind='READ_ONLY'
                 elif core in ("env -i PATH=/system/bin:/system/xbin /system/bin/sh -c 'for mdds_tool in cat readlink stat sha256sum mv env timeout; do command -v \\\"$mdds_tool\\\" || exit 3; done'", "env -i PATH=/system/bin:/system/xbin /system/bin/sh -c 'for mdds_tool in cat readlink stat sha256sum mv env timeout; do command -v \"$mdds_tool\" || exit 3; done'"):
                     kind='READ_ONLY'
-                elif core=='test ! -e '+remote+' && mkdir '+remote:
+                elif core=='test ! -e '+remote+' && mkdir '+remote or secure and core=='test ! -e '+remote+' && mkdir -m 700 '+remote:
                     remote_text(text(step/'stdout.log'),int(text(step/'exit-code.txt').strip()));created=True;kind='OWNED_DIRECTORY_CREATE'
+                elif core in secure_commands:
+                    kind,name=secure_commands[core]
+                    if kind=='SECURE_DIRECTORY_SETUP':secure_setup=True
+                    if kind=='SECURE_FILE_COPY':
+                        output=text(step/'stdout.log');codes=re.findall(r'^MDDS_REMOTE_EXIT=([0-9]+)\s*$',output,re.M)
+                        if int(text(step/'exit-code.txt').strip())==0 and codes==['0']:secure_copies.append(name)
                 elif core in ('chmod 700 '+remote+'/native_permission_probe','chmod 700 '+remote+'/'+cfg['main_member']+' && test -x '+remote+'/'+cfg['main_member']) or (cfg.get('rmw_debugger') is not None and core=='chmod 700 '+remote+'/lldb-server && test -x '+remote+'/lldb-server'):
                     known_modes[core.split()[2].rsplit('/',1)[-1]]='700';kind='OWNED_FILE_MODE'
             need(kind is not None,'UNKNOWN_OR_FORBIDDEN_ORIGINAL_COMMAND')
@@ -287,6 +310,7 @@ def inspect_window(window):
         sides[side]=dict(baseline=dict(kind=origin,path=str(baseline),sha256=sha(baseline),metadata_path=str(metadata_file),metadata_sha256=sha(metadata_file),metadata=baseline_metadata,
             original_collection_utc='UNKNOWN_NOT_RECORDED',ordering='BOUND_BY_CURRENT_TASK_PREFLIGHT_BEFORE_DATA_PREPARATION' if origin=='PREFLIGHT_BASELINE' else 'ACTUAL_DATA_WINDOW_PREGRANT_CAPTURE'),
             created=created,retained_owned_artifacts=[dict(name=n,**v,expected_mode=known_modes.get(n)) for n,v in sorted(owned.items())],original_commands=commands)
+        if secure:sides[side].update(secure_setup_attempted=secure_setup,secure_confirmed_copies=sorted(secure_copies))
     return dict(run=cfg['run'],window=str(window),task_authority_root=str(authority),local_contract_test=local,targets=cfg['targets'],sides=sides,original_inputs_sha256=inputs,
         first_failure=read(window/'window-summary.json')['first_failure'],permission_actions='NOT_PERFORMED',business_process='NOT_STARTED')
 
@@ -304,6 +328,7 @@ def prepare(window,tools_root,output,helper):
     readonly=dict(preflight_output_parent=str(window/'recovery'),targets=cfg['targets'],tokens=cfg['token'],device_driver=dict(path=cfg['hdc_path'],sha256=sha(cfg['hdc_path'])),
         platform_reference=cfg['preflight_config'],platform_reference_sha256=cfg['preflight_config_sha256'],permission_helper=cfg['permission_helper'],
         source_files=[dict(path=p,sha256=h) for p,h in tools.items()],preflight_tool_sha256=tools[str(tools_root/'recovery/readonly_preflight.py')],local_contract_test=local)
+    if cfg.get('secure_candidate'):readonly.update(authorization=frozen['authorization'],task_id=frozen['task_id'])
     put(ro,readonly)
     selection=dict(schema=1,scope='OWNED_PREGRANT_RECOVERY_ONLY',facts=facts,tools_root=str(tools_root),materialization_sha256=sha(mat),tools_sha256=tools,
         readonly_selection=dict(path=str(ro),sha256=sha(ro)),permission_helper=dict(path=str(helper),sha256=sha(helper)),
@@ -422,10 +447,15 @@ def _recover_attempt(selection_path,review_path):
             command(side+'/snapshot-guard',[ps,'-NoLogo','-NoProfile','-NonInteractive','-File',Path(s['tools_root'])/'recovery/recovery-guard.ps1',
                 '-GuardSource',Path(cfg['repo'])/'scripts/NativePermissionGuard.ps1','-Baseline',before['path'],'-Current',after,'-Run',cfg['run'],'-Side',side,'-Token',cfg['token'][side],'-Output',guard_output],'LOCAL_GUARD')
             need(read(guard_output)['Passed'] is True,'SNAPSHOT_GUARD_FAILED')
-            remote=cfg['remote'][side];retained=[]
+            remote=cfg['remote'][side];retained=[];secure_tree=None
             if expected['created']:
                 shell(side,'owned-directory',f'test -d {remote} && test ! -L {remote}')
                 listing=shell(side,'owned-members','ls -1A '+remote).splitlines()
+                if expected.get('secure_setup_attempted'):
+                    secure=secure_module(cfg,Path(cfg['task_contract']['task_root']))
+                    secure_tree=secure.recovery_tree(cfg,side,expected['secure_confirmed_copies'],lambda tag,core:shell(side,tag,core))
+                    need(('security' in listing)==any(x['path']==remote+'/security' for x in secure_tree['directories']),'SECURE_DIRECTORY_OBSERVATION_CHANGED')
+                    listing=[name for name in listing if name!='security']
                 def observe(i,e):
                     p=remote+'/'+e['name'];return file_observation(shell(side,'owned-file-'+str(i),file_command(p)),p,e['sha256'],e['expected_mode'])
                 def absent(i,e):
@@ -456,6 +486,7 @@ def _recover_attempt(selection_path,review_path):
                 guard_path=str(guard_output),guard_sha256=sha(guard_output),retained_owned_artifacts=retained,
                 recovery_helper_artifact=dict(path=target,sha256=s['permission_helper']['sha256'],**helper_observation,disposition='RETAINED_RECOVERY_HELPER'),metadata_after_helper=after_meta,
                 service_permission='DENIED',permission_helper_actions='READ_ONLY_VERIFY_DENIED',process_absent=True,previous_recovery_artifacts=prior_helpers)
+            if secure_tree is not None:result['sides'][side]['secure_retained_tree']=secure_tree
         result['status']='PASS'
     except (OSError,ValueError,KeyError,subprocess.SubprocessError) as error:result['failure']=str(error);result['status']='BLOCKED'
     result.update(recorded_utc=stamp(),commands=commands,output_bytes=used)
@@ -538,6 +569,12 @@ def verify_result(result_path,require_acceptance=True):
         if expected['created']:
             shell(side,'owned-directory',f'test -d {remote} && test ! -L {remote}')
             listing=shell(side,'owned-members','ls -1A '+remote).splitlines()
+            if expected.get('secure_setup_attempted'):
+                secure=secure_module(cfg,Path(cfg['task_contract']['task_root']))
+                tree=secure.recovery_tree(cfg,side,expected['secure_confirmed_copies'],lambda tag,core:shell(side,tag,core))
+                need(('security' in listing)==any(x['path']==remote+'/security' for x in tree['directories']),'SECURE_DIRECTORY_OBSERVATION_CHANGED')
+                need(side_result.get('secure_retained_tree')==tree,'SECURE_RETAINED_TREE_DRIFT')
+                listing=[name for name in listing if name!='security']
             def observe(i,item):
                 p=remote+'/'+item['name'];return file_observation(shell(side,'owned-file-'+str(i),file_command(p)),p,item['sha256'],item['expected_mode'])
             def absent(i,item):

@@ -10,14 +10,29 @@ import re
 from analyze_ros2 import analyze,rows
 
 
+def fragment_coverage(records):
+    """Bounded interval union; never allocate by wire sample_size."""
+    geometry={(int(r['sample_size']),int(r['fragment_size'])) for r in records}
+    if len(geometry)!=1:raise ValueError('FRAGMENT_GEOMETRY_CHANGED')
+    size,width=next(iter(geometry));total=(size+width-1)//width
+    end=0
+    for first,last in sorted((int(r['first']),int(r['first'])+int(r['count'])-1) for r in records):
+        if first>end+1:raise ValueError('FRAGMENT_RANGE_HOLE')
+        end=max(end,last)
+    if end!=total:raise ValueError('FRAGMENT_RANGE_INCOMPLETE')
+    return size,width
+
+
 def correlate(texts,run,ledger=None,route_lifecycle_native=False):
     ledger=analyze(texts,run,['reliable','best_effort']) if ledger is None else ledger
-    errors=list(ledger['errors']);frames={};sockets={};matched={};offline_matched={s:0 for s in 'AB'}
+    errors=list(ledger['errors']);frames={};sockets={};matched={};fragments={};fragment_matched={s:0 for s in 'AB'};offline_matched={s:0 for s in 'AB'}
     for side in 'AB':
         frames[side]={'SDK_SEND':set(),'SDK_INGRESS':set()};matched[side]=0
         sockets[side]={'SDK_SEND':{},'SDK_INGRESS':{}}
+        fragments[side]={'SDK_SEND':{},'SDK_INGRESS':{}}
         try:
-            records=rows(texts[side],'ROS_NATIVE_DATA');summaries=rows(texts[side],'ROS_NATIVE_SUMMARY')
+            fragment_rows=rows(texts[side],'ROS_NATIVE_FRAGMENT')
+            records=rows(texts[side],'ROS_NATIVE_DATA')+fragment_rows;summaries=rows(texts[side],'ROS_NATIVE_SUMMARY')
             if len(summaries)!=1:raise ValueError('NATIVE_SUMMARY_REQUIRED')
             summary=summaries[0]
             if summary.get('run')!=run or summary.get('side')!=side or summary.get('sdk_epoch')!='NOT_PROVEN':raise ValueError('SUMMARY_IDENTITY')
@@ -27,7 +42,7 @@ def correlate(texts,run,ledger=None,route_lifecycle_native=False):
                     summary['send_error']!='0' or int(summary['ingress'])<1 or summary['overflow']!='0' or
                     summary['malformed']!='0' or summary['metadata_limit']!='8192' or
                     int(summary['detailed_stored'])!=len(records) or len(records)>8192):raise ValueError('SUMMARY_INCOMPLETE_OR_ERROR')
-            for record in records:
+            for index,record in enumerate(records):
                 if (record.get('run')!=run or record.get('side')!=side or
                         record.get('scope')!='STRUCTURAL_APP_OBSERVER' or record.get('direction') not in frames[side] or
                         not re.fullmatch(r'[0-9a-f]{32}',record.get('writer','')) or
@@ -37,6 +52,17 @@ def correlate(texts,run,ledger=None,route_lifecycle_native=False):
                         not re.fullmatch(r'[0-9]+',record.get('sequence_lo',''))):raise ValueError('NATIVE_RECORD_IDENTITY')
                 high=int(record['sequence_hi']);low=int(record['sequence_lo'])
                 if not -2147483648<=high<=2147483647 or not 0<=low<=4294967295:raise ValueError('NATIVE_SEQUENCE_RANGE')
+                if index>=len(records)-len(fragment_rows):
+                    for field in ('first','count','fragment_size','sample_size','payload_bytes'):
+                        if not re.fullmatch(r'[0-9]+',record.get(field,'')):raise ValueError('FRAGMENT_FIELD:'+field)
+                    first,count,width,size,payload=(int(record[f]) for f in ('first','count','fragment_size','sample_size','payload_bytes'))
+                    if not (0<width<=65535 and 0<count<=65535 and 0<size<=4294967295 and first>0):raise ValueError('FRAGMENT_GEOMETRY')
+                    last=first+count-1;total=(size+width-1)//width
+                    expected=min(size,last*width)-(first-1)*width
+                    if (last>total or record.get('payload_bounds_known')!='1' or record.get('key_flag')!='0' or
+                            not expected<=payload<=expected+3):raise ValueError('FRAGMENT_PAYLOAD_OR_RANGE')
+                    fragments[side][record['direction']].setdefault((record['writer'],high*4294967296+low),[]).append(record)
+                    continue
                 frames[side][record['direction']].add((record['writer'],high*4294967296+low))
                 sockets[side][record['direction']].setdefault((record['writer'],high*4294967296+low),set()).add(int(record['socket']))
             real=rows(texts[side],'FDDST_REAL_SOCKET')
@@ -57,7 +83,12 @@ def correlate(texts,run,ledger=None,route_lifecycle_native=False):
                 key=(gid[:32],int(sample['publication_sequence']))
                 if key in seen:raise ValueError('DUPLICATE_TOPIC_NATIVE_IDENTITY')
                 seen.add(key)
-                if key not in frames[peer]['SDK_SEND'] or key not in frames[side]['SDK_INGRESS']:raise ValueError('TOPIC_NATIVE_CHAIN_MISSING:'+sample.get('phase','')+':'+sample.get('ordinal',''))
+                sent=fragments[peer]['SDK_SEND'].get(key,[]);received=fragments[side]['SDK_INGRESS'].get(key,[])
+                if sent or received:
+                    if not sent or not received:raise ValueError('FRAGMENT_DIRECTION_MISSING')
+                    if fragment_coverage(sent)!=fragment_coverage(received):raise ValueError('FRAGMENT_DIRECTION_GEOMETRY_MISMATCH')
+                    fragment_matched[side]+=1
+                elif key not in frames[peer]['SDK_SEND'] or key not in frames[side]['SDK_INGRESS']:raise ValueError('TOPIC_NATIVE_CHAIN_MISSING:'+sample.get('phase','')+':'+sample.get('ordinal',''))
                 if sample.get('segment')=='POST':
                     before={s:next(x for x in rows(texts[s],'NATIVE_REACCEPT_EVENT') if x.get('stage')=='ARMED') for s in 'AB'}
                     after={s:next(x for x in rows(texts[s],'NATIVE_REACCEPT_EVENT') if x.get('stage')=='OWNER_PUBLISHED') for s in 'AB'}
@@ -71,7 +102,7 @@ def correlate(texts,run,ledger=None,route_lifecycle_native=False):
         except (ValueError,KeyError,TypeError,StopIteration) as error:errors.append('correlation:'+side+':'+str(error))
     if matched!={'A':10,'B':10}:errors.append('DIRECTIONAL_NATIVE_TOPIC_SET_INCOMPLETE')
     return dict(run=run,**{'pass':not errors},errors=errors,matched_topic_takes=matched,offline_history_takes=offline_matched,
-                ros=ledger,scope='LOGICAL_DDS_SAMPLE_TO_STRUCTURAL_SDK_SEND_INGRESS_NOT_PHYSICAL_EPOCH',
+                ros=ledger,matched_fragment_takes=fragment_matched,scope='LOGICAL_DDS_SAMPLE_TO_STRUCTURAL_SDK_SEND_INGRESS_NOT_PHYSICAL_EPOCH',
                 sdk_epoch='NOT_PROVEN',sdk_drain='NOT_PROVEN')
 
 if __name__=='__main__':

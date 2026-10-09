@@ -22,6 +22,9 @@ def prepare(destination,preflight_path,provenance,contract_path=None,query_cycle
     frozen=json.loads(Path(task_contract['freeze_path']).read_text())
     identity=frozen.get('identity_qualification') is True
     query_sha=QUERY_SHA256;query_size=257536
+    if contract.secure_mode(frozen):
+        if identity:raise ValueError('Secure directory query cannot change to identity-export mode')
+        bound=frozen['directory_query_helper'];query=Path(bound['path']);query_sha=bound['sha256'];query_size=bound['size']
     if identity:
         successor=contract.verify_v1_successor(frozen,contract.verify_ros_task_grant(frozen))
         if successor is None:raise ValueError('Identity qualification requires explicit V1 successor')
@@ -59,6 +62,7 @@ def prepare(destination,preflight_path,provenance,contract_path=None,query_cycle
         config['work_package']=contract.ROS_SCOPE;config['query_for_scenario']=contract.ROS_SCENARIO
         config['ros_attempt']=1 if frozen.get('local_contract_test') is True else contract.ros_next_attempt()
         if contract.ros_task_mode(frozen):config.update(ros_task_id=frozen['task_id'],ros_authorization_mode=contract.ROS_TASK_AUTHORIZATION,task_authority_root=frozen['task_authority_root'])
+        if contract.secure_mode(frozen):config.update(ros_task_id=contract.secure().TASK,ros_authorization_mode=contract.secure().AUTH)
         if retry:config['retry_evidence']={'path':str(Path(retry).resolve()),'sha256':digest(retry)}
     if frozen['scope']==contract.INSTALLED_SCOPE and frozen.get('local_contract_test') is not True:
         config['installed_attempt']=contract.installed_next_attempt()

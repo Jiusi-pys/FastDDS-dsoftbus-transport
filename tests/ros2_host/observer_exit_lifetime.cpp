@@ -93,7 +93,7 @@ int main(int argc,char** argv) {
     main_started = true;
     const char* mode=argc==2?argv[1]:"lifetime";
     if(std::strcmp(mode,"lifetime")&&std::strcmp(mode,"prebegin")&&
-            std::strcmp(mode,"invalid")&&std::strcmp(mode,"duplicate")&&std::strcmp(mode,"concurrent")&&std::strcmp(mode,"prefix")&&std::strcmp(mode,"busy"))return 2;
+            std::strcmp(mode,"invalid")&&std::strcmp(mode,"duplicate")&&std::strcmp(mode,"concurrent")&&std::strcmp(mode,"prefix")&&std::strcmp(mode,"busy")&&std::strcmp(mode,"fragment"))return 2;
     if(!std::strcmp(mode,"prebegin")) {
         diag::Snapshot empty;
         diag::NativePrefix prefix;
@@ -132,7 +132,21 @@ int main(int argc,char** argv) {
     const auto prefix_allocations=allocations.load();
     if(!obs::CapturePrefix(prefix)||!prefix.valid||prefix.stored!=0||prefix.total_stored!=0||prefix.side!=0||
             std::strcmp(prefix.run,"1234567890abcdef")||allocations.load()!=prefix_allocations)return 8;
-    if(!std::strcmp(mode,"prefix")) {
+    if(!std::strcmp(mode,"fragment")) {
+        // Actual read-only parser/observer: one DATA_FRAG, not a DATA alias.
+        std::uint8_t packet[64]{};std::memcpy(packet,"RTPS",4);packet[4]=2;
+        packet[20]=0x16;packet[21]=1;packet[22]=37;
+        packet[26]=28;packet[35]=2;packet[40]=1;packet[44]=1;
+        packet[48]=1;packet[50]=5;packet[52]=8;
+        fastdds_dsoftbus::dsoftbus::dds_experiment::SocketFrame("SDK_SEND",7,packet,61);
+        packet[44]=2;packet[22]=35;
+        fastdds_dsoftbus::dsoftbus::dds_experiment::SocketFrame("SDK_SEND",7,packet,59);
+        if(!obs::CapturePrefix(prefix)||prefix.stored||prefix.total_stored)return 10;
+        fastdds_dsoftbus::dsoftbus::runtime_probe::TraceEvent("SendBytes_enter",1,0,7,0,sizeof(packet));
+        fastdds_dsoftbus::dsoftbus::runtime_probe::TraceEvent("SendBytes_return",1,0,7,0,sizeof(packet));
+        if(!obs::Flush())return 10;
+    }
+    if(!std::strcmp(mode,"prefix")||!std::strcmp(mode,"fragment")) {
         std::uint8_t packet[44]{};std::memcpy(packet,"RTPS",4);packet[4]=2;
         packet[20]=0x15;packet[21]=1;packet[22]=20;packet[35]=2;
         for(unsigned i=1;i<=200;++i){packet[40]=static_cast<std::uint8_t>(i);

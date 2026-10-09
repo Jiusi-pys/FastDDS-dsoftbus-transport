@@ -174,3 +174,19 @@ Tests include relocated prefix, missing/transitive libraries, wrong artifact/for
 unsupported profile, missing identity, forged qualification and missing platform
 contract. Test fixtures use synthetic captures; real static binary/installed CLI
 execution is recorded independently. Neither constitutes a new device communication run.
+
+## API23 secure target candidate (2026-10-10)
+
+The formal target-r6 receipt is a separate, source-bound build of Fast DDS 2.14.7,
+Fast CDR 2.2.8 and OpenSSL 3.5.9 for SDK API23, Clang 15.0.4, AArch64 shared
+libc++, Release and `SECURITY=ON` without ASan. It contains 111 package members
+and passed installed-consumer/header identity and affected static checks. A public
+rebuild must receive the caller's legally obtained SDK/toolchain, target
+OpenSSL/ROS/ament inputs and real public Socket library explicitly; private
+developer-machine prefixes, board identities, tokens, PKI contents and raw device
+receipts are not repository inputs and are not distributed here.
+
+This is target build/link evidence only. The separately recorded S1 normal,
+S1 fragment, S2 authentication-negative and S3 failed-construction windows are
+scoped device evidence; they do not turn this read-only preflight into production
+qualification. The 2.14.5 default and standalone 3.6 path remain unchanged.

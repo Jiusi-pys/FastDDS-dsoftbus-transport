@@ -24,7 +24,9 @@ $currentPreflight = Get-Content -Raw -LiteralPath $cfg.preflight_config | Conver
 if ($currentPreflight.eligible_for_executor_gate -ne $true) {throw 'Current baseline not eligible'}
 $frozenManifest=Get-Content -Raw -LiteralPath $cfg.build_manifest | ConvertFrom-Json
 if ($cfg.scenario -ceq 'ROS2_DSOFTBUS') {
-    if ($frozenManifest.scenario -cne 'ROS2_DSOFTBUS' -or $frozenManifest.main -cne 'ordinary_ros2_transport_consumer' -or $frozenManifest.abi.fastrtps -cne '2.14.5' -or $frozenManifest.abi.cpp_runtime -cne 'c++_shared') {throw 'ROS target build/ABI identity mismatch'}
+    $selectedVersion=if($cfg.PSObject.Properties['secure_candidate']){'2.14.7'}else{'2.14.5'}
+    if ($frozenManifest.scenario -cne 'ROS2_DSOFTBUS' -or $frozenManifest.main -cne 'ordinary_ros2_transport_consumer' -or $frozenManifest.abi.fastrtps -cne $selectedVersion -or $frozenManifest.abi.cpp_runtime -cne 'c++_shared') {throw 'ROS target build/ABI identity mismatch'}
+    if($cfg.PSObject.Properties['secure_candidate'] -and $frozenManifest.security_mode -cne 'ON'){throw 'Secure build mode mismatch'}
 } elseif ($cfg.scenario -ceq 'DDS214_LAYER_BASELINE') {
     if ($frozenManifest.scenario -cne 'DDS214_LAYER_BASELINE' -or $frozenManifest.main -cne 'fastdds_dsoftbus_dds214_baseline' -or $frozenManifest.abi.fastrtps -cne '2.14.5' -or $frozenManifest.abi.cpp_runtime -cne 'c++_shared') {throw 'Direct DDS target build/ABI identity mismatch'}
 } elseif ($cfg.scenario -ceq 'INSTALLED_RUNTIME') {
@@ -349,7 +351,12 @@ foreach ($board in @('A','B')) {
     $owned = Test-NativePermissionOwnership -OwnershipJson $ownership -Run $cfg.run -Board $board -BaselineSha256 $expectedHash[$board] -ExpectedToken ([UInt64]$cfg.token.$board)
     [IO.File]::WriteAllText((Join-Path $windowRoot ($board+'/ownership-guard.json')), ($owned | ConvertTo-Json), $utf8)
     if (-not $owned.Passed) {throw "Ownership check failed $board"}
-    Invoke-Remote -Board $board -Step 'mkdir' -CommandText ('test ! -e '+$cfg.remote.$board+' && mkdir '+$cfg.remote.$board) | Out-Null
+    $mkdirMode=if($cfg.PSObject.Properties['secure_candidate']){' -m 700 '}else{' '}
+    Invoke-Remote -Board $board -Step 'mkdir' -CommandText ('test ! -e '+$cfg.remote.$board+' && mkdir'+$mkdirMode+$cfg.remote.$board) | Out-Null
+    if($cfg.PSObject.Properties['secure_candidate']){
+        $modeRecord=Invoke-Remote -Board $board -Step 'secure-owned-root-mode' -CommandText ('stat -c %a '+$cfg.remote.$board)
+        if($modeRecord.Text -notmatch '(?m)^700\s*$'){throw 'Secure owned root is not private before transfer'}
+    }
     foreach ($file in $packageFiles) {
         Invoke-HdcLogged -Board $board -Step ('deploy-'+$file.Name) -NativeArguments @('file','send',$file.FullName,($cfg.remote.$board+'/'+$file.Name)) | Out-Null
     }
@@ -360,6 +367,16 @@ foreach ($board in @('A','B')) {
         Invoke-HdcLogged -Board $board -Step ('deploy-aux-'+$property.Name) -NativeArguments @('file','send',$localAux,$remoteAux) | Out-Null
         $record=Invoke-Remote -Board $board -Step ('hash-aux-'+$property.Name) -CommandText ('sha256sum '+$remoteAux)
         if ($record.Text -notmatch ('(?m)^'+$property.Value+'\s+'+[regex]::Escape($remoteAux)+'\s*$')) {throw 'Auxiliary deployment mismatch'}
+    }
+    if($cfg.PSObject.Properties['secure_candidate']){
+        $secureRoot=$cfg.remote.$board+'/security/enclaves/'+$board
+        Invoke-Remote -Board $board -Step 'secure-enclave-directory' -CommandText ('mkdir -p '+$secureRoot+' && chmod 700 '+$cfg.remote.$board+'/security '+$cfg.remote.$board+'/security/enclaves '+$secureRoot) | Out-Null
+        foreach($name in @('cert.pem','key.pem','identity_ca.cert.pem','permissions_ca.cert.pem','permissions.p7s','governance.p7s')){
+            $source=$cfg.remote.$board+'/security_'+$name
+            Invoke-Remote -Board $board -Step ('secure-material-'+$name) -CommandText ('cp '+$source+' '+$secureRoot+'/'+$name+' && chmod 600 '+$source+' '+$secureRoot+'/'+$name) | Out-Null
+            $secureHash=Invoke-Remote -Board $board -Step ('secure-hash-'+$name) -CommandText ('sha256sum '+$secureRoot+'/'+$name)
+            if($secureHash.Text -notmatch $cfg.secure_candidate.material.sha256.$board.$name){throw 'Secure enclave digest mismatch'}
+        }
     }
     Invoke-Remote -Board $board -Step 'helper-executable' -CommandText ('chmod 700 '+$cfg.remote.$board+'/native_permission_probe') | Out-Null
     if ($cfg.PSObject.Properties['rmw_debugger']) {

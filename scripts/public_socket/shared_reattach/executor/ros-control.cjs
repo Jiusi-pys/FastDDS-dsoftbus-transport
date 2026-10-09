@@ -18,7 +18,15 @@ function commands(c,tokens,libdirs){
  for(const side of ['A','B']){
   const root=c.remote[side];
   if(root!==`/data/local/tmp/mdds_dds_${c.run}_${side}`||c.token[side]!==tokens[side]||!/^[1-9][0-9]*$/.test(tokens[side]))throw Error('ROS_COMMAND_IDENTITY');
-  result[side]=`cd ${root} && env -i ${c.bounded_native_reaccept?`FDDST_BOUNDED_NATIVE_SCENE=${c.route_lifecycle_native?'ROUTE_RETURN_ONCE':'BOUNDED_NORMAL_ONCE'} `:""}PATH=/system/bin:/system/xbin LD_LIBRARY_PATH=${root}:${libdirs.join(':')} SKIP_DEFAULT_XML=1 ROS_LOG_DIR=${root}/ros-log RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=201 ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET FASTDDS_DSOFTBUS_REQUIRED_CONFIG=${root}/ros.conf FASTDDS_DSOFTBUS_NATIVE_TOKEN=${tokens[side]} FASTDDS_DSOFTBUS_IDENTITY_ADMITTED=1 FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX=${root}/control timeout ${c.timeout_seconds} ${root}/${c.main_member} ${side} ${c.run} dual; rc=$?; echo REMOTE_EXIT=$rc; exit $rc`;
+  let security='';
+  if(c.secure_candidate){
+   const spec=c.secure_candidate.spec;
+   if(!['S1','S1_FRAGMENT','S2','S3'].includes(spec?.case)||typeof spec.enabled?.[side]!=='boolean'||![0,70000].includes(spec.fragment_bytes))throw Error('SECURE_COMMAND_CONTRACT');
+   security=`ROS_SECURITY_ENABLE=${spec.enabled[side]?'true':'false'} ROS_SECURITY_STRATEGY=Enforce ROS_SECURITY_KEYSTORE=${root}/security ROS_SECURITY_ENCLAVE_OVERRIDE=/${side} FDDST_SECURITY_TRACE=1 `;
+   if(spec.fragment_bytes)security+=`FDDST_ROS_FRAGMENT_BYTES=${spec.fragment_bytes} `;
+   if(spec.case==='S3')security+='FDDST_ROS_FAILURE_LOAD_CAPTURE=1 ';
+  }
+  result[side]=`cd ${root} && env -i ${security}${c.bounded_native_reaccept?`FDDST_BOUNDED_NATIVE_SCENE=${c.route_lifecycle_native?'ROUTE_RETURN_ONCE':'BOUNDED_NORMAL_ONCE'} `:""}PATH=/system/bin:/system/xbin LD_LIBRARY_PATH=${root}:${libdirs.join(':')} SKIP_DEFAULT_XML=1 ROS_LOG_DIR=${root}/ros-log RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=201 ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET FASTDDS_DSOFTBUS_REQUIRED_CONFIG=${root}/ros.conf FASTDDS_DSOFTBUS_NATIVE_TOKEN=${tokens[side]} FASTDDS_DSOFTBUS_IDENTITY_ADMITTED=1 FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX=${root}/control timeout ${c.timeout_seconds} ${root}/${c.main_member} ${side} ${c.run} dual; rc=$?; echo REMOTE_EXIT=$rc; exit $rc`;
  }
  return result;
 }
@@ -55,6 +63,23 @@ function controller(c,release,admission){
  const cleanup_controls={},cleanup_control_failures=[],teardown_events={A:[],B:[]},ended={};
  const primary_failure={},cleanup_failure={},capture_failure=[],application_exit={},terminal_sequences={A:new Set(),B:new Set()};
  const residual_summaries={A:[],B:[]},residual_objects={A:[],B:[]};
+ const failure_load_ready={},failure_load_controls={};let failureLoadChain=null;
+ function queueFailureLoad(){
+  if(c.secure_candidate?.spec?.case!=='S3'||failureLoadChain)return;
+  if(!['A','B'].every(s=>failure_load_ready[s]||ended[s]))return;
+  failureLoadChain=(async()=>{
+   let proof;try{proof=await admission();}catch(e){capture('ROS_FAILURE_LOAD_CAPTURE_FAILED');proof={};}
+   const complete=['A','B'].every(s=>failure_load_ready[s]&&proof[s]?.pass===true);
+   if(!complete)capture('ROS_FAILURE_LOAD_CAPTURE_FAILED');
+   // Observation ACKs never release SDK/business or erase the original error.
+   for(const side of ['A','B'])if(failure_load_ready[side]&&!ended[side]){
+    const ready=failure_load_ready[side],request={...ready,reason:complete?'CAPTURE_COMPLETE':'CAPTURE_FAILED',state:'QUEUED'};
+    failure_load_controls[side]=request;
+    try{await serialRelease(()=>{request.state='ISSUED';return release(side,'FAILED_CONSTRUCTION_LOAD',{pid:ready.pid,failure_ref:ready.failure_ref,reason:request.reason});});request.state='COMPLETED';}
+    catch(e){request.state='FAILED';capture('ROS_FAILURE_LOAD_ACK_FAILED_'+side);}
+   }
+  })();
+ }
  function queueCleanup(reason){
   for(const side of ['A','B'])if(pids[side]&&!ended[side]&&!cleanup_controls[side]){
    const request={side,pid:pids[side],reason,stage:'CLEANUP',state:'QUEUED'};cleanup_controls[side]=request;
@@ -158,13 +183,23 @@ function controller(c,release,admission){
    pids[side]=r.pid;if(first)queueCleanup('WINDOW_FAILED');return;
   }
   if(text.startsWith('ROS_RUNTIME_CLOSE_READY ')){
+   const queuedFailureReady=!!first&&cleanup_controls[side]?.state==='QUEUED'&&cleanup_controls[side].pid===pids[side];
    if(!c.paired_runtime_close||r.schema!=='1'||r.run!==c.run||r.side!==side||r.pid!==pids[side]||r.stage!=='RUNTIME_CLOSE'||
       r.stopping!=='1'||r.sealed!=='1'||r.active_pumps!=='0'||r.pump_joined!=='1'||runtime_close_ready[side]||
-      !['ISSUED','COMPLETED'].includes(cleanup_controls[side]?.state)||
+      (!['ISSUED','COMPLETED'].includes(cleanup_controls[side]?.state)&&!queuedFailureReady)||
       Object.keys(r).sort().join(',')!=='active_pumps,pid,pump_joined,run,schema,sealed,side,stage,stopping'){
     capture('ROS_RUNTIME_CLOSE_READY_IDENTITY');return;
    }
    runtime_close_ready[side]=r;queueRuntimeClose();return;
+  }
+  if(text.startsWith('ROS_FAILURE_LOAD_READY ')){
+   const primary=primary_failure[side];
+   if(c.secure_candidate?.spec?.case!=='S3'||!first||r.schema!=='1'||r.run!==c.run||r.side!==side||r.pid!==pids[side]||
+       r.stage!=='FAILED_CONSTRUCTION'||!primary||primary.stage!=='NODE_CREATE'||r.failure_ref!==primary.seq||
+       failure_load_ready[side]||ended[side]||Object.keys(r).sort().join(',')!=='failure_ref,pid,run,schema,side,stage'){
+    capture('ROS_FAILURE_LOAD_READY_IDENTITY');return;
+   }
+   failure_load_ready[side]=r;queueFailureLoad();return;
   }
   if(text.startsWith('ROS_RUNTIME_CLOSE_FAILURE ')){
    if(!c.paired_runtime_close||r.schema!=='1'||r.run!==c.run||r.side!==side||r.pid!==pids[side]||r.stage!=='RUNTIME_CLOSE'||
@@ -275,7 +310,8 @@ function controller(c,release,admission){
    if(first)return;
    // The SDK connect must precede DDS/ROS discovery. Capture dynamic ROS type
    // libraries once the same main PID reaches ready, before any formal write.
-   if(index===1){const load=await admission();if(!load.A?.pass||!load.B?.pass){fail('ROS_LOAD_CAPTURE_FAILED');return;}}
+   const negativeSecure=['S2','S3'].includes(c.secure_candidate?.spec?.case);
+   if(index===(negativeSecure?0:1)){const load=await admission();if(!load.A?.pass||!load.B?.pass){fail('ROS_LOAD_CAPTURE_FAILED');return;}}
    if(bounded&&(r.stage==='PRE_DONE'||r.stage==='POST_DONE')){
     const segment=r.stage==='PRE_DONE'?'PRE':'POST',lo=segment==='PRE'?1:3,hi=segment==='PRE'?2:5;
     for(const s of ['A','B'])for(const q of ['reliable','best_effort'])for(let o=lo;o<=hi;o++){
@@ -300,13 +336,13 @@ function controller(c,release,admission){
    }
   }).catch(e=>fail('ROS_CONTROL_RELEASE_FAILED:'+e.message));
  }
- return{line,stop:capture,end(side,confirmed){ended[side]=true;if(!confirmed)capture('ROS_COLLECTOR_INCOMPLETE_'+side);else if(progress[side]!==STAGES.length)fail('ROS_COLLECTOR_INCOMPLETE_'+side);},async finish(){await chain;if(c.route_lifecycle_native){try{await native.restore();}catch(e){route_restore_failure=String(e.message||e);fail('ETH1_RESTORE_FAILED:'+e.message);}}await cleanupChain;for(const side of ['A','B']){
+ return{line,stop:capture,end(side,confirmed){ended[side]=true;queueFailureLoad();if(!confirmed)capture('ROS_COLLECTOR_INCOMPLETE_'+side);else if(progress[side]!==STAGES.length)fail('ROS_COLLECTOR_INCOMPLETE_'+side);},async finish(){await chain;await failureLoadChain;if(c.route_lifecycle_native){try{await native.restore();}catch(e){route_restore_failure=String(e.message||e);fail('ETH1_RESTORE_FAILED:'+e.message);}}await cleanupChain;for(const side of ['A','B']){
    if(primary_failure[side]?.identity_origin==='APPLICATION_SCHEMA_1'&&primary_failure[side].pid!==pids[side]){capture('ROS_FAILURE_WITHOUT_MAIN_IDENTITY');delete primary_failure[side];}
    for(const r of cleanup_failure[side]||[])if(r.identity_origin==='APPLICATION_SCHEMA_1'&&(r.pid!==pids[side]||(r.failure_ref!=='0'&&r.failure_ref!==primary_failure[side]?.seq)))capture('ROS_CLEANUP_FAILURE_UNBOUND');
    if(!closed[side]||!deleted[side])fail('ROS_FINAL_LIFECYCLE_INCOMPLETE_'+side);
    if(c.require_residual_snapshot&&(!residual_summaries[side].length||residual_summaries[side].some(s=>residual_objects[side].filter(o=>o.snapshot===s.snapshot).length!==Number(s.object_stored))))capture('ROS_REQUIRED_RESIDUAL_EVIDENCE_MISSING_'+side);
   }await cleanupChain;await runtimeCloseChain;
   if(c.paired_runtime_close&&!['A','B'].every(s=>runtime_close_ready[s]&&runtime_close_controls[s]?.state==='COMPLETED'&&runtime_close_controls[s].reason==='NORMAL_COMPLETION'))fail('ROS_RUNTIME_CLOSE_COORDINATION_INCOMPLETE');
-  const firstSide=/_(A|B)$/.exec(first||'')?.[1];const primarySide=firstSide?(primary_failure[firstSide]?firstSide:null):['A','B'].find(s=>primary_failure[s]);return{pass:!first&&released.length===10&&Object.values(cleanup_controls).every(x=>x.state==='COMPLETED'),first_failure:primarySide?'ROS_APPLICATION_FAILURE_'+primarySide:first,reported_first_host:first,route_restore_failure,primary_failure,cleanup_failure,capture_failure,application_exit,cleanup_controls,cleanup_control_failures,runtime_close_ready,runtime_close_controls,runtime_close_failures,teardown_events,residual_summaries,residual_objects,primary_selection:'FIRST_HOST_WITH_SAME_SIDE_PRIMARY_REFERENCE_NOT_CROSS_PROCESS_CAUSALITY',cross_side_failure_order:'UNKNOWN',released,issued,pids,progress,ros:{pub,write,take,graph,done,sent,handled,response,deleted,closed}};}};
+  const firstSide=/_(A|B)$/.exec(first||'')?.[1];const primarySide=firstSide?(primary_failure[firstSide]?firstSide:null):['A','B'].find(s=>primary_failure[s]);return{pass:!first&&released.length===10&&Object.values(cleanup_controls).every(x=>x.state==='COMPLETED'),first_failure:primarySide?'ROS_APPLICATION_FAILURE_'+primarySide:first,reported_first_host:first,route_restore_failure,primary_failure,cleanup_failure,capture_failure,application_exit,cleanup_controls,cleanup_control_failures,runtime_close_ready,runtime_close_controls,runtime_close_failures,failure_load_ready,failure_load_controls,teardown_events,residual_summaries,residual_objects,primary_selection:'FIRST_HOST_WITH_SAME_SIDE_PRIMARY_REFERENCE_NOT_CROSS_PROCESS_CAUSALITY',cross_side_failure_order:'UNKNOWN',released,issued,pids,progress,ros:{pub,write,take,graph,done,sent,handled,response,deleted,closed}};}};
 }
 module.exports={STAGES,stagesFor,isRos,commands,controller};

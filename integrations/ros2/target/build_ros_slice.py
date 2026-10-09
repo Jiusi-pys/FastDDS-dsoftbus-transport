@@ -141,6 +141,14 @@ def main():
                     '-DPython3_EXECUTABLE=' + str(args.python),
                     '-DCMAKE_PREFIX_PATH=' + ';'.join(str(x) for x in inputs)]
             argv.extend('-D' + key + '_DIR:PATH=' + value.as_posix() for key, value in sorted(current.items()))
+            for prefix in args.dependency_prefix:
+                if (prefix/'include/openssl/opensslv.h').is_file():
+                    if not all((prefix/'lib'/name).is_file() for name in ('libcrypto.so','libssl.so')):
+                        raise ValueError('Declared shared target OpenSSL closure missing')
+                    argv.extend(['-DOPENSSL_ROOT_DIR:PATH='+prefix.as_posix(),
+                        '-DOPENSSL_INCLUDE_DIR:PATH='+(prefix/'include').as_posix(),
+                        '-DOPENSSL_CRYPTO_LIBRARY:FILEPATH='+(prefix/'lib/libcrypto.so').as_posix(),
+                        '-DOPENSSL_SSL_LIBRARY:FILEPATH='+(prefix/'lib/libssl.so').as_posix()])
             # Legacy Fast DDS exports include a bare tinyxml2 dependency. Only
             # declared target-prefix library directories participate in its
             # linker lookup, never the Host ROS/Python library directories.

@@ -13,6 +13,20 @@ spec=importlib.util.spec_from_file_location('target_build',REPO/'integrations/ro
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 
 class LayoutTests(unittest.TestCase):
+    def test_secure_candidate_is_explicit_and_pinned(self):
+        value=m.selected_candidate('2.14.7','ON')
+        self.assertEqual(value['commit'],'010b908dc3bb2b6f2818d61ac8db462d01b79a1f')
+        self.assertEqual(value['fastcdr'],'2.2.8')
+        self.assertEqual(value['openssl'],'3.5.9')
+        self.assertEqual(m.selected_candidate()['version'],'2.14.5')
+        self.assertEqual(m.selected_candidate()['security'],'OFF')
+    def test_secure_release_keeps_actual_plugin_evidence(self):
+        self.assertEqual(m.security_diagnostic_options(m.selected_candidate('2.14.7','ON')),
+            ['-DLOG_NO_INFO=OFF','-DFASTDDS_ENFORCE_LOG_INFO=ON'])
+        self.assertEqual(m.security_diagnostic_options(m.selected_candidate()),[])
+    def test_unknown_or_legacy_on_selection_is_rejected(self):
+        for version,security in [('2.14.x','ON'),('3.6','ON'),('2.14.5','ON'),('2.14.7','automatic')]:
+            self.assertRaises(ValueError,m.selected_candidate,version,security)
     def test_default_outputs_are_below_repository_build(self):
         root=m.build_root(REPO,None)
         self.assertEqual(root,REPO/'build/ros2-target')

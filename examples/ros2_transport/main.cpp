@@ -14,6 +14,7 @@
 #include <fstream>
 #include <functional>
 #include "FailureProtocol.hpp"
+#include "FailedConstructionLoad.hpp"
 #if defined(_WIN32)
 #include <process.h>
 #else
@@ -173,6 +174,8 @@ int main(int argc,char** argv) {
     }catch(const ros_failure_protocol::PeerCleanup&){result=4;}
     catch(const std::exception& e){(void)e;ros_failure_protocol::Report(run,side,pid,active_stage,"ROS_OPERATION_EXCEPTION");}
     FastddsDsoftbusTeardownCheckpoint("AFTER_NODE_ENTITY_DELETE");
+    if(result!=0&&std::string(active_stage)=="NODE_CREATE")
+        (void)ros_failure_protocol::CaptureFailedConstructionLoad(run,side,pid,ros_failure_protocol::primary());
     bool shutdown_return=false;
     try {shutdown_return=rclcpp::shutdown();if(!shutdown_return)ros_failure_protocol::Report(run,side,pid,"CONTEXT_SHUTDOWN","SHUTDOWN_RETURNED_FALSE",true);}
     catch(...){ros_failure_protocol::Report(run,side,pid,"CONTEXT_SHUTDOWN","SHUTDOWN_EXCEPTION",true);}

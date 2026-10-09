@@ -151,17 +151,19 @@ function createControlRelease(c,directory,{spawn=require('node:child_process').s
  const release=(side,stage,metadata)=>new Promise((resolve,reject)=>{
   const cleanup=isRos(c)&&stage==='CLEANUP';
   const runtimeClose=isRos(c)&&c.paired_runtime_close===true&&stage==='RUNTIME_CLOSE';
+  const failureLoad=isRos(c)&&c.secure_candidate?.spec?.case==='S3'&&stage==='FAILED_CONSTRUCTION_LOAD';
   const nativeAction=isRos(c)&&c.bounded_native_reaccept&&require('./bounded-native-scene.cjs').ACTIONS.includes(stage);
   const networkAction=isRos(c)&&c.route_lifecycle_native&&['ETH1_DOWN','ETH1_UP'].includes(stage);
   if(networkAction&&(side!=='A'||c.route_lifecycle_native.trigger.side!=='A'||c.route_lifecycle_native.trigger.interface!=='eth1'||c.route_lifecycle_native.trigger.cycles!==1)){reject(Error('NETWORK_TRIGGER_SCOPE'));return;}
   if(stage==='ETH1_DOWN'&&eth1DownIssued){reject(Error('NETWORK_TRIGGER_ALREADY_ISSUED'));return;}
   if(stage==='NATIVE_OFFLINE_CAPTURE'&&!c.route_lifecycle_native){reject(Error('NATIVE_ROUTE_CONTROL_REQUIRED'));return;}
   if(nativeAction&&((stage==='NATIVE_END'&&(c.route_lifecycle_native||side!==(c.bounded_native_reaccept.order==='outgoing-first'?'A':'B')))||(stage==='NATIVE_REPLACE'&&!c.route_lifecycle_native&&side!=='A'))){reject(Error('NATIVE_CONTROL_ROLE'));return;}
-  if(!['A','B'].includes(side)||(!phases(c).includes(stage)&&!cleanup&&!runtimeClose&&!nativeAction&&!networkAction)||active.size||sequence>=2*phases(c).length+(isRos(c)?2:0)+(isRos(c)&&c.paired_runtime_close===true?2:0)+(c.route_lifecycle_native?8:0)){reject(Error('CONTROL_SCOPE_OR_CAPACITY'));return;}
+  if(!['A','B'].includes(side)||(!phases(c).includes(stage)&&!cleanup&&!runtimeClose&&!failureLoad&&!nativeAction&&!networkAction)||active.size||sequence>=2*phases(c).length+(isRos(c)?2:0)+(isRos(c)&&c.paired_runtime_close===true?2:0)+(c.secure_candidate?.spec?.case==='S3'?2:0)+(c.route_lifecycle_native?8:0)){reject(Error('CONTROL_SCOPE_OR_CAPACITY'));return;}
+  if(failureLoad&&(!metadata||!/^[1-9][0-9]*$/.test(String(metadata.pid))||!/^[1-9][0-9]*$/.test(String(metadata.failure_ref))||!['CAPTURE_COMPLETE','CAPTURE_FAILED'].includes(metadata.reason))){reject(Error('FAILURE_LOAD_CONTROL_IDENTITY'));return;}
   if((cleanup||runtimeClose)&&(!metadata||!/^[1-9][0-9]*$/.test(String(metadata.pid))||!['WINDOW_FAILED','NORMAL_COMPLETION'].includes(metadata.reason))){reject(Error('CLEANUP_CONTROL_IDENTITY'));return;}
   const root=c.remote[side],filename=nativeAction?`${root}/control.NATIVE_REACCEPT.${stage.slice(7)}`:`${root}/control.${stage}`;
   if(root!==`/data/local/tmp/mdds_dds_${c.run}_${side}`){reject(Error('CONTROL_REMOTE_IDENTITY'));return;}
-  const contents=nativeAction?`NATIVE_CONTROL run=${c.run} side=${side} phase=${stage.slice(7)}`:runtimeClose?`ROS_RUNTIME_CLOSE_RELEASE schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=RUNTIME_CLOSE reason=${metadata.reason}`:cleanup?`ROS_CLEANUP schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=CLEANUP reason=${metadata.reason}`:isDds214(c)?`${stage==='LISTENER_READY'?'ROS_RELEASE':'DDS214_RELEASE'} run=${c.run} side=${side} stage=${stage}`:isRos(c)?`ROS_RELEASE run=${c.run} side=${side} stage=${stage}`:`${c.run} ${cycleCount(c)>1?side+" ":""}${stage}`;
+  const contents=nativeAction?`NATIVE_CONTROL run=${c.run} side=${side} phase=${stage.slice(7)}`:failureLoad?`ROS_FAILURE_LOAD_RELEASE schema=1 run=${c.run} side=${side} pid=${metadata.pid} failure_ref=${metadata.failure_ref} stage=FAILED_CONSTRUCTION reason=${metadata.reason}`:runtimeClose?`ROS_RUNTIME_CLOSE_RELEASE schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=RUNTIME_CLOSE reason=${metadata.reason}`:cleanup?`ROS_CLEANUP schema=1 run=${c.run} side=${side} pid=${metadata.pid} stage=CLEANUP reason=${metadata.reason}`:isDds214(c)?`${stage==='LISTENER_READY'?'ROS_RELEASE':'DDS214_RELEASE'} run=${c.run} side=${side} stage=${stage}`:isRos(c)?`ROS_RELEASE run=${c.run} side=${side} stage=${stage}`:`${c.run} ${cycleCount(c)>1?side+" ":""}${stage}`;
   const command=networkAction?`env -i PATH=/system/bin:/system/xbin timeout 5 /system/bin/sh -c 'ip link set dev eth1 ${stage==='ETH1_DOWN'?'down':'up'}'; rc=$?; echo CONTROL_REMOTE_EXIT=$rc; exit $rc`:`env -i PATH=/system/bin:/system/xbin timeout 5 /system/bin/sh -c 'test ! -e ${filename} && printf "${contents}\\n" > ${filename}.tmp && mv ${filename}.tmp ${filename}'; rc=$?; echo CONTROL_REMOTE_EXIT=$rc; exit $rc`;
   if(stage==='ETH1_DOWN')eth1DownIssued=true; // An uncertain dispatch cannot authorize another cycle.
   const seq=++sequence,argv=['-t',c.targets[side],'shell',command];
@@ -224,18 +226,25 @@ function createDataDispatcher(c,directory){
  }
  if(isRos(c)){
   const scope='ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_ACCEPTANCE';
+  const secureMode=c.ros_authorization_mode==='TASK_SCOPED_SECURE_CANDIDATE_DEVICE_VALIDATION';
   const taskMode=c.ros_authorization_mode==='TASK_SCOPED_ROS2_DEVICE_VALIDATION';
-  if(c.work_package!==scope||c.main_mode!=='dual'||!Number.isInteger(c.ros_attempt)||(taskMode?c.ros_attempt<1:![1,2].includes(c.ros_attempt)))throw Error('ROS_DATA_DISPATCH_SCOPE');
+  if(c.work_package!==scope||c.main_mode!=='dual'||!Number.isInteger(c.ros_attempt)||((taskMode||secureMode)?c.ros_attempt<1:![1,2].includes(c.ros_attempt)))throw Error('ROS_DATA_DISPATCH_SCOPE');
   const taskGrant=taskMode?verifyTaskGrant(c):null;
-  const task=path.resolve(directory,'../..'),ledger=path.join(taskMode?taskGrant.task_root:task,'ros2',taskMode?'task-ledger':'attempt-ledger');
+  const task=path.resolve(directory,'../..'),ledger=path.join(taskMode?taskGrant.task_root:task,'ros2',secureMode?'secure-ledger':taskMode?'task-ledger':'attempt-ledger');
   if(path.dirname(path.resolve(directory))!==path.join(task,'windows')||path.resolve(c.window_root)!==path.resolve(directory))throw Error('ROS_WINDOW_DISPATCH_BINDING');
   const claim=path.join(ledger,c.simulated===true?'local-data-'+c.run+'.json':`data-${c.ros_attempt}.json`),nonce=require('node:crypto').randomUUID();
   return(side,executable,argv)=>{
    if(!['A','B'].includes(side))throw Error('ROS_DATA_SIDE');
    const receipt={scope,run:c.run,attempt:c.ros_attempt,window:path.resolve(directory),side,host_pid:process.pid,node_nonce:nonce,kind:'DATA_DISPATCH_INTENT',remote_execution:'UNOBSERVED_AT_INTENT',executable,argv_sha256:require('node:crypto').createHash('sha256').update(JSON.stringify(argv)).digest('hex'),simulated:c.simulated===true};
    if(taskMode){verifyTaskGrant(c);receipt.task_id=c.ros_task_id;receipt.authorization='TASK_SCOPED_ROS2_DEVICE_VALIDATION';receipt.authorization_record_sha256='1dbadad0591bad3f76ef98a6bab09ff80ee6b75491e54c447410c841b39bea51';}
+   if(secureMode){
+    const frozen=JSON.parse(fs.readFileSync(c.task_contract.freeze_path,'utf8'));
+    if(frozen.authorization!==c.ros_authorization_mode||frozen.task_id!==c.ros_task_id)throw Error('SECURE_DISPATCH_AUTHORITY');
+    receipt.task_id=c.ros_task_id;receipt.authorization=c.ros_authorization_mode;
+    receipt.authorization_record_sha256=frozen.authorization_record.sha256;
+   }
    if(side==='A'){
-    if(taskMode){
+    if(taskMode||secureMode){
      // Repeat the bound formal admission at the actual start boundary. A direct
      // runner invocation must not bypass recovery, continuation or route gates.
      readBoundPrivate(c);
@@ -324,7 +333,8 @@ function readBoundPrivate(c){
  const nativeRequired=[...currentRequired,'executor/bounded-native-scene.cjs'];
  const routeRequired=[...nativeRequired,'executor/route-network-capture.py'];
  const strict=isDds214(c)||frozen.authorization==='ONE_CONDITIONAL_ROS_AFTER_DDS214_DEVICE_VALIDATION';
- const required=frozen.route_lifecycle_native?routeRequired:frozen.bounded_native_reaccept?nativeRequired:JSON.stringify(names)===JSON.stringify(currentRequired.slice().sort())?currentRequired:JSON.stringify(names)===JSON.stringify(recoveryRequired.slice().sort())?recoveryRequired:JSON.stringify(names)===JSON.stringify(priorRequired.slice().sort())?priorRequired:legacyRequired;
+ const secureRequired=[...currentRequired,'executor/secure_contract.py'];
+ const required=frozen.authorization==='TASK_SCOPED_SECURE_CANDIDATE_DEVICE_VALIDATION'?secureRequired:frozen.route_lifecycle_native?routeRequired:frozen.bounded_native_reaccept?nativeRequired:JSON.stringify(names)===JSON.stringify(currentRequired.slice().sort())?currentRequired:JSON.stringify(names)===JSON.stringify(recoveryRequired.slice().sort())?recoveryRequired:JSON.stringify(names)===JSON.stringify(priorRequired.slice().sort())?priorRequired:legacyRequired;
  if((strict&&required===legacyRequired)||JSON.stringify(names)!==JSON.stringify(required.slice().sort()))throw Error('Materialization membership mismatch');
  if(frozen.authorization==='TASK_SCOPED_ROS2_DEVICE_VALIDATION'&&(frozen.route_lifecycle_native?required!==routeRequired:frozen.bounded_native_reaccept?required!==nativeRequired:frozen.rmw_debugger?required!==currentRequired:![currentRequired,recoveryRequired].includes(required)))throw Error('Task recovery materialization required');
  const declared=new Map((frozen.execution_files||[]).map(e=>[path.resolve(privateConfig.repo_root,e.path),e.sha256]));

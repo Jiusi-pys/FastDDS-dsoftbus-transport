@@ -28,7 +28,7 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
     if mode in contract.CASES:
         if not route or not Path(route).resolve().is_relative_to(root):raise ValueError('Current-task guarded route query required')
         spec=importlib.util.spec_from_file_location('runtime_route',here/'route_binding.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);route_proof=m.load_route_binding(route);peer=route_proof['peer']
-    run=secrets.token_hex(8)
+    run=frozen['secure_candidate']['run'] if contract.secure_mode(frozen) else secrets.token_hex(8)
     cfg={'work_package':frozen['scope'],'task_contract':proof,'run':run,'scenario':mode,'cycles':cycles,'delete_first':'A' if mode=='SHARED_W2' else 'B','repo':str(repo),'window_root':str(destination),
          'package':str(package),'package_artifacts':artifacts,'main_sha256':digest(package/main_member),
          'build_manifest':str(manifest_path),'build_manifest_sha256':digest(manifest_path),
@@ -77,6 +77,10 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
             cfg['v1_locator_analyzer']=frozen['v1_locator_analyzer']
         if frozen.get('local_contract_test') is True:cfg['simulated']=True
         if contract.ros_task_mode(frozen):cfg.update(ros_task_id=frozen['task_id'],ros_authorization_mode=contract.ROS_TASK_AUTHORIZATION,task_authority_root=frozen['task_authority_root'])
+        if contract.secure_mode(frozen):
+            cfg.update(ros_task_id=contract.secure().TASK,ros_authorization_mode=contract.secure().AUTH,
+                secure_candidate=frozen['secure_candidate'],v1_deployment=contract.PRIVATE['v1_deployment'],
+                v1_locator_analyzer=frozen['v1_locator_analyzer'])
         if frozen.get('paired_runtime_close') is True:cfg['paired_runtime_close']=True
         if frozen.get('rmw_debugger'):
             cfg['rmw_debugger']=frozen['rmw_debugger'];cfg['require_residual_snapshot']=True
@@ -137,6 +141,12 @@ def prepare(mode,build,destination,preflight,route=None,retry=None,contract_path
             if ros and cfg.get('bounded_native_reaccept'):
                 values.update(backend='OHOS_PUBLIC_SOCKET_BOUNDED_REACCEPT_EXPERIMENTAL',native_reaccept_order=cfg['bounded_native_reaccept']['order'],native_reaccept_control=cfg['remote'][side]+'/control.NATIVE_REACCEPT')
             if ros and cfg.get('route_lifecycle_native'):values['route_lifecycle']='1'
+            if ros and cfg.get('secure_candidate'):
+                spec=cfg['secure_candidate'];contract.secure().window(cfg,frozen,contract.PRIVATE,root)
+                values.update(ssl_module=cfg['remote'][side]+'/libssl.so.3',crypto_module=cfg['remote'][side]+'/libcrypto.so.3')
+                source=Path(spec['material']['root'])/'enclaves'/side
+                for name in contract.secure().FILES:
+                    shutil.copyfile(source/name,aux/('security_'+name))
             (aux/('dds214.conf' if dds214 else 'ros.conf')).write_text(''.join(k+'='+v+'\n' for k,v in values.items()),encoding='utf-8',newline='\n')
         (aux/'required-load-paths.txt').write_text('\n'.join([cfg['remote'][side]+'/'+e['name'] for e in artifacts]+cfg['required_platform_paths'])+'\n',newline='\n')
     cfg['auxiliary_sha256']={s:{p.name:digest(p) for p in (destination/s/'aux').iterdir()} for s in ['A','B']}

@@ -28,8 +28,11 @@ using Values = std::map<std::string, std::string>;
 Values read(const char* path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("configuration missing");
-    const std::set<std::string> keys{"bridge_library", "fastdds_module", "fastcdr_module", "softbus_module",
+    std::set<std::string> keys{"bridge_library", "fastdds_module", "fastcdr_module", "softbus_module",
         "backend", "run", "side", "domain", "authorized_package", "peer_network_id", "service_prefix", "connect_release", "locator_version", "namespace", "local_udid", "peer_udid", "service_slot", "peer_slot", "profile", "native_name_contract", "local_initiator_name", "peer_initiator_name"};
+#if HAVE_SECURITY
+    keys.insert("ssl_module");keys.insert("crypto_module");
+#endif
     Values values;
     std::string line;
     while (std::getline(input, line)) {
@@ -96,11 +99,33 @@ bool await_connect(Owner* owner, const std::string& path) {
 }
 
 extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT unsigned FastddsDsoftbusHookVersion() { return 21405; }
+extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT unsigned FastddsDsoftbusHookSecurity() { return HAVE_SECURITY; }
 extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         const char* path, unsigned domain, void* raw, void** output) {
     *output = nullptr;
     try {
+        // Plain C mode check before reading the security-dependent public QoS.
+        using SecurityMode=unsigned(*)();
+        const auto mode=reinterpret_cast<SecurityMode>(dlsym(RTLD_DEFAULT,"FastddsDsoftbusFactorySecurityMode"));
+        if((mode && mode()!=HAVE_SECURITY) || (!mode && HAVE_SECURITY))
+            throw std::runtime_error("security ABI mode mismatch");
         const auto values = read(path);
+#if HAVE_SECURITY
+        // Observe actual callable origins, not only a SONAME or self-report.
+        for(const auto& pair:{std::make_pair("OpenSSL_version","crypto_module"),std::make_pair("SSL_new","ssl_module")}) {
+            void* address=dlsym(RTLD_DEFAULT,pair.first);Dl_info origin{};
+            if(!address || !dladdr(address,&origin) || !origin.dli_fname ||
+                !std::filesystem::equivalent(origin.dli_fname,values.at(pair.second)))
+                throw std::runtime_error("OpenSSL callable source mismatch");
+            std::fprintf(stderr,"FDDST_SECURITY_ORIGIN symbol=%s path=%s\n",pair.first,origin.dli_fname);
+            if(std::string(pair.first)=="OpenSSL_version") {
+                const auto version=reinterpret_cast<const char*(*)(int)>(address)(0);
+                if(!version || std::string(version).find("OpenSSL 3.5.9 ")!=0)
+                    throw std::runtime_error("OpenSSL maintenance version mismatch");
+                std::fprintf(stderr,"FDDST_SECURITY_VERSION value=%s\n",version);
+            }
+        }
+#endif
         if(values.at("locator_version")!="V1" || values.at("profile")!="BYTES_NATIVE" || values.at("native_name_contract")!="PACKAGE_SCOPED_V1")
             throw std::runtime_error("explicit supported V1 profile required");
         // 65535, not 65536: see integrations/ros2/Bridge.cpp for the full reasoning. A

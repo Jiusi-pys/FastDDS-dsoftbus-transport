@@ -5,7 +5,7 @@ const {createBoundedSink,createLines}=require('./bounded-output.cjs');
 const LOAD_FILES=['load-status.txt','load-exe.txt','load-cwd.txt','load-cmdline.txt','load-environ.txt','load-stat-before.txt','load-stat-after.txt','load-uptime.txt','load-maps.txt'];
 function createLoadObserver({config,directory,spawn=require('node:child_process').spawn,record=()=>{},hostTimeoutMs=12000,drainMs=250,onRosReady=()=>{}}){
  const configured214=['ROS2_DSOFTBUS','DDS214_LAYER_BASELINE'].includes(config.scenario);
- const states={},ended=new Set(),inputErrors={},rosPids={};
+ const states={},ended=new Set(),inputErrors={},rosPids={},failureRefs={};
  let loadClosureUnconfirmed=false; // Pair-wide latch; late close never upgrades it.
  const digest=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
  function boundedChild(executable,args,side,label){
@@ -128,7 +128,21 @@ function createLoadObserver({config,directory,spawn=require('node:child_process'
   if(config.scenario==='ROS2_DSOFTBUS'){
    const main=/^ROS_MAIN scenario=ROS2_DSOFTBUS run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) mode=dual$/.exec(line);
    if(main){if(main[1]!==config.run||main[2]!==side||rosPids[side])inputErrors[side]||='ROS_MAIN_IDENTITY';else rosPids[side]=Number(main[3]);return;}
-   const readyStage=config.bounded_native_reaccept?'PRE_READY':'RELIABLE_READY';
+   if(config.secure_candidate?.spec?.case==='S3'){
+    const failed=/^ROS_FAILURE schema=1 run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) seq=([1-9][0-9]*) stage=NODE_CREATE reason=ROS_OPERATION_EXCEPTION failure_ref=0$/.exec(line);
+    if(failed){if(failed[1]!==config.run||failed[2]!==side||Number(failed[3])!==rosPids[side]||failureRefs[side])inputErrors[side]||='FAILED_CONSTRUCTION_PRIMARY_IDENTITY';else failureRefs[side]=failed[4];return;}
+    const failureReady=/^ROS_FAILURE_LOAD_READY schema=1 run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) failure_ref=([1-9][0-9]*) stage=FAILED_CONSTRUCTION$/.exec(line);
+    if(failureReady){
+     if(ended.has(side)||inputErrors[side]||failureReady[1]!==config.run||failureReady[2]!==side||Number(failureReady[3])!==rosPids[side]||failureReady[4]!==failureRefs[side]||states[side])inputErrors[side]||='FAILED_CONSTRUCTION_CAPTURE_IDENTITY';
+     else{start(side,rosPids[side]);states[side].pid_source='ROS_MAIN_AND_FAILED_CONSTRUCTION_BOUND';}
+     return;
+    }
+   }
+   // A genuine authentication/configuration rejection never reaches match.
+   // Reuse the existing real listener hold; formal capture must precede its
+   // connect release in the controller. All positive/legacy stages stay put.
+   const negativeSecure=['S2','S3'].includes(config.secure_candidate?.spec?.case);
+   const readyStage=negativeSecure?'LISTENER_READY':config.bounded_native_reaccept?'PRE_READY':'RELIABLE_READY';
    const ready=new RegExp('^ROS_STAGE run=([0-9a-f]{16}) side=([AB]) pid=([1-9][0-9]*) stage='+readyStage+'$').exec(line);
    if(ready){if(ended.has(side)||ready[1]!==config.run||ready[2]!==side||Number(ready[3])!==rosPids[side]||states[side]){inputErrors[side]||='ROS_LOAD_PID_OR_STAGE';return;}start(side,rosPids[side]);states[side].pid_source='ROS_MAIN_AND_'+readyStage+'_BOUND';onRosReady(side,rosPids[side]);}
    return;

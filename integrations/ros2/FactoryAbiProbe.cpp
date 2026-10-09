@@ -30,10 +30,18 @@ namespace {
 class SecurityTrace final : public eprosima::fastdds::dds::LogConsumer {
 public:
     void Consume(const eprosima::fastdds::dds::Log::Entry& entry) override {
-        if(entry.context.category && std::strcmp(entry.context.category,"SECURITY")==0) {
-            std::fprintf(stderr,"FDDST_SECURITY_LOG category=%s message=%s\n",entry.context.category,entry.message.c_str());
-            std::fflush(stderr);
-        }
+        using eprosima::fastdds::dds::Log;
+        const char* category=entry.context.category?entry.context.category:"UNSPECIFIED";
+        const bool security=std::strcmp(category,"SECURITY")==0;
+        const bool crypto=std::strcmp(category,"SECURITY_CRYPTO")==0;
+        // Only the opt-in diagnostic profile replaces DDS consumers. Keep the
+        // application's stdout records free of asynchronous DDS log fragments.
+        // Retain every warning/error, including non-security reader failures.
+        if(entry.kind==Log::Info&&!security&&!crypto)return;
+        if(security)std::fprintf(stderr,"FDDST_SECURITY_LOG category=%s message=%s\n",category,entry.message.c_str());
+        else std::fprintf(stderr,"[%s %s] %s\n",category,
+            entry.kind==Log::Info?"Info":entry.kind==Log::Warning?"Warning":"Error",entry.message.c_str());
+        std::fflush(stderr);
     }
 };
 #endif
@@ -43,8 +51,11 @@ struct AbiCheck {
         if(FastddsDsoftbusFactorySecurityMode()!=HAVE_SECURITY){std::fputs("FDDST_SECURITY_ABI_MISMATCH\n",stderr);std::abort();}
         if(const char* trace=std::getenv("FDDST_SECURITY_TRACE");trace&&std::strcmp(trace,"1")==0) {
             using eprosima::fastdds::dds::Log;
-            Log::SetVerbosity(Log::Info);
+            // Controlled test initialization, before participant/pump creation.
+            // ClearConsumers flushes the old consumers before removing them.
+            Log::ClearConsumers();
             Log::RegisterConsumer(std::unique_ptr<eprosima::fastdds::dds::LogConsumer>(new SecurityTrace));
+            Log::SetVerbosity(Log::Info);
         }
 #endif
         if(FastddsDsoftbusFactoryHookAbi()!=21405){std::fputs("FDDST_FACTORY_ABI_MISMATCH\n",stderr);std::abort();}

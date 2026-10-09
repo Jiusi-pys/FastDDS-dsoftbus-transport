@@ -12,6 +12,7 @@ to third-party binaries or a release-license decision for first-party code.
 | TinyXML2 Host 10.0.0 and API23 target 6.0.0 | leethomason/tinyxml2; zlib license in source header | Separate external dependency inputs; source/version and retained notice needed for release; no bundling or upgrade is implied |
 | Asio | chriskohlhoff/asio; Boost Software License 1.0 | Header dependency; retain license and bind actual build input version |
 | ROS 2 Jazzy packages | Official per-package repositories and package.xml/license files | Existing original RMW is unchanged; per-package SBOM/license obligations are not replaced by a distro-wide label |
+| OpenSSL 3.5.9 (secure target candidate) | Official OpenSSL release/source `openssl-3.5.9`; Apache License 2.0 and the upstream LICENSE/NOTICE terms | Explicit build/runtime input for the scoped API23 candidate; this repository does not bundle or authorize redistribution of OpenSSL binaries, SDK/DSO files or private prefixes; preserve upstream notices for any legally obtained redistribution |
 | LLVM/OpenHarmony toolchain, SDK and native platform libraries | OpenHarmony/vendor-authorized distribution and terms | Not bundled; source checkout license does not authorize redistribution of vendor binary images |
 | First-party Transport / new tooling | No root first-party release LICENSE was located | FIRST_PARTY_LICENSE_DECISION_REQUIRED before public release; owner must approve license and rights. This task does not invent ownership or apply Apache to all first-party files |
 

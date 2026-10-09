@@ -99,6 +99,14 @@ def analyze(directory, config, side):
             check(frozen_matches,'FROZEN_ROUTE_SCENE_MISMATCH')
             if valid and frozen_matches:expected_ros_environment['FDDST_BOUNDED_NATIVE_SCENE']='ROUTE_RETURN_ONCE'
         allowed_environment.update(expected_ros_environment)
+        if config.get('secure_candidate'):
+            spec=config['secure_candidate']['spec']
+            expected_ros_environment.update(ROS_SECURITY_ENABLE='true' if spec['enabled'][side] else 'false',
+                ROS_SECURITY_STRATEGY='Enforce',ROS_SECURITY_KEYSTORE=remote+'/security',
+                ROS_SECURITY_ENCLAVE_OVERRIDE='/'+side,FDDST_SECURITY_TRACE='1')
+            if spec['fragment_bytes']:expected_ros_environment['FDDST_ROS_FRAGMENT_BYTES']=str(spec['fragment_bytes'])
+            if spec['case']=='S3':expected_ros_environment['FDDST_ROS_FAILURE_LOAD_CAPTURE']='1'
+            allowed_environment.update(expected_ros_environment)
         for name,value in expected_ros_environment.items():
             check(environment.get(name)==value,'ROS_ENVIRONMENT_MISMATCH:'+name)
     if dds214:

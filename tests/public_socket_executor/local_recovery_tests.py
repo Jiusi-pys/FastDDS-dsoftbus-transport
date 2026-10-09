@@ -12,7 +12,9 @@ class Recovery(unittest.TestCase):
   self.flow=Flow();self.flow.setUp();self.task=self.flow.task;self.w=self.flow.w
   self.fixture=Path(os.environ['MDDS_RECOVERY_DRIVER_FIXTURE']).resolve()
   self.local=self.task/'local-flow';self.local.mkdir()
-  for name in ('fake-hdc.exe','fake-hdc.py'):shutil.copyfile(self.fixture/name,self.local/name)
+  # The current fake driver imports finite_model before it can journal a call.
+  # Keep the test's complete driver closure together in the isolated task.
+  for name in ('fake-hdc.exe','fake-hdc.py','finite_model.py'):shutil.copyfile(self.fixture/name,self.local/name)
   self.driver=self.local/'fake-hdc.exe'
   if sha(self.driver)!='db7ae6830317e94976954d34a874d801c81eb189b824a876742d598853f83bd3':raise ValueError('Unknown local-only PE')
   profile=read(self.task/'PRIVATE_CONFIG.json');profile.update(hdc_path=str(self.driver),targets={'A':'SIM-A','B':'SIM-B'})
@@ -108,7 +110,7 @@ class Recovery(unittest.TestCase):
   result=subprocess.run([str(self.driver),*driver_args],env=self.launch_env,cwd=self.flow.repo,capture_output=True,timeout=30)
   (step/'stdout.log').write_bytes(result.stdout);(step/'stderr.log').write_bytes(result.stderr);(step/'exit-code.txt').write_text(str(result.returncode))
   self.assertEqual(result.returncode,0,result.stderr)
-  self.assertEqual((self.task/'sandbox/A/mutation.bin').read_bytes(),src.read_bytes())
+  self.assertEqual((self.task/'sandbox/remote'/self.cfg['run']/'A/mutation.bin').read_bytes(),src.read_bytes())
   with self.assertRaisesRegex(ValueError,'LOCAL_RECOVERY_LATE_DISPATCH'):self.c.require_restored(self.w)
 
 if __name__=='__main__':unittest.main()

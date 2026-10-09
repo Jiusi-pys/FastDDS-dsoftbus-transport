@@ -470,3 +470,64 @@ The API23 target was not rebuilt or run because this is a behavior-equivalent OH
 branch for this Host-only lifetime delta; the current Host delta itself was not
 rebuilt for API23. No HDC/device operation occurred. Defaults remain
 production-disabled; PF/P4 and QualificationProfile status are unchanged.
+
+---
+
+# Secure candidate target validation — 2026-10-10
+
+This append-only record covers `SECURE_CANDIDATE_TARGET_VALIDATION_FROM_FD7F65D`
+from baseline `fd7f65d34d499d9fd9f830342aac8755d98db5b1`. It does not rewrite
+the earlier Host failures or their raw reports.
+
+The formal target candidate is Fast DDS 2.14.7 (`010b908dc3bb2b6f2818d61ac8db462d01b79a1f`),
+Fast CDR 2.2.8 (`1bc9c919311ffce555b445560bf7ae062a4e1c72`) and OpenSSL 3.5.9,
+built for SDK API23, Clang 15.0.4, AArch64, shared libc++, Release,
+`SECURITY=ON`, without ASan. `TARGET_R6_TESTER_RESULT.json` records build exit
+0, ELF64/AArch64 closure, 111 package members, installed consumer/header identity,
+and 65 affected static regression checks. This static build receipt itself
+contains no HDC deployment or target execution and target ASan was not run in
+that receipt. Separately, the S3 device window below executed the actual r6
+package on the boards.
+
+The final tester gate is `PASS` with `Commit gate: PASS`; the 35-file source
+freeze has no drift and the independent review is `INDEPENDENT_REVIEW_CLOSED`
+with no actionable findings. Device receipts are scoped and retain exact source
+attribution: S1 normal is `device-S1-r7` using target-r4,
+`PASS_SCOPED_S1` (20/20 dual-QoS writes/takes and restoration); the fragment
+window is `device-fragment-r3` using target-r5, `PASS_SCOPED_FRAGMENT` (A10/B10
+native fragments and 20 application markers); S2 is `device-S2-r4` using
+target-r5, `PASS_SCOPED_S2_NEGATIVE` (real authentication rejection, zero
+application delivery, expected exit 4); and S3 is `device-S3-r5` using target-r6,
+`PASS_SCOPED_S3_FAILED_CONSTRUCTION` (pre-listener governance/plugin failure,
+exit 4, no AV/signal/timeout, complete PID-bound capture ACKs). S2 retains
+`WINDOW_FAILED` cleanup rather than a normal `Close(0)` claim; S3 retains no
+normal listener/READY/application-delete claim.
+
+All four windows passed byte, metadata, process and permission restoration
+guards. These results do not establish SDK drain/epoch/hot-unload guarantees,
+full platform ABI coverage, production readiness, P4/PF closure or distribution
+authority. Private PKI is test input; discovery signing was observed, while
+payload encryption was not claimed. S1-r6, fragment-r1, S2-r3 and S3-r4 remain
+historical failures and are not relabeled.
+
+The reviewed implementation deltas are diagnostic and observation-path changes:
+the structured security trace routes SECURITY/CRYPTO information and all warning/
+error records to stderr while preserving business stdout; native observation
+keeps a shared 8192-record metadata cap, structural full-range `DATA_FRAG` records and a
+bounded DATA-only prefix without introducing a protocol change. S2 admits the
+full 111-entry load before listener/connect release and requires real queued
+cleanup completion. S3 observes the SDK-free post-`NODE_CREATE` failure path
+with exact PID-bound READY/ACK and `CAPTURE_COMPLETE` controls, preserving exit
+4 and the default-off/non-production boundary. The selected Host ASan evidence
+does not instrument prebuilt ROS; artifact versions remain source-bound, and
+historical failure reasons and original reports remain unchanged.
+
+```text
+Implementation: PRESENT (frozen 35-file scoped package)
+Target build: PASS (API23/AArch64, SECURITY=ON, Release, non-ASan)
+Host/local affected checks: PASS
+Device cases: PASS_SCOPED only, with the boundaries above
+Independent review: CLOSED
+Commit gate: PASS (tester evidence)
+Production/P4/PF qualification: NOT VERIFIED
+```
