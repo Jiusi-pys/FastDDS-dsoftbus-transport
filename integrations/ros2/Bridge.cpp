@@ -34,7 +34,7 @@ std::map<std::string,std::string> read(const char* path) {
         auto p=line.find('=');if(p==std::string::npos)throw std::runtime_error("configuration syntax");
         if(!m.emplace(line.substr(0,p),line.substr(p+1)).second)throw std::runtime_error("duplicate key");
     }
-    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="route_lifecycle"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order"&&!fastdds_dsoftbus::payload_resource::config_key(e.first))throw std::runtime_error("unknown key");
+    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="host_close_incomplete"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="route_lifecycle"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order"&&!fastdds_dsoftbus::payload_resource::config_key(e.first))throw std::runtime_error("unknown key");
     (void)fastdds_dsoftbus::payload_resource::parse(m);
     return m;
 }
@@ -42,7 +42,7 @@ unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsign
     const auto& s=m.at(k);if(!std::regex_match(s,std::regex("[0-9]+")))throw std::runtime_error("integer syntax");
     auto n=std::stoul(s);if(n>max)throw std::runtime_error("integer range");return static_cast<unsigned>(n);
 }
-struct Owner:fastdds_dsoftbus::ros2_integration::BridgeOwner {bool host_close_error=false;};
+struct Owner:fastdds_dsoftbus::ros2_integration::BridgeOwner {bool host_close_error=false;bool host_close_incomplete=false;};
 }
 extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookVersion(){return 21405;}
 extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookSecurity(){return HAVE_SECURITY;}
@@ -81,6 +81,15 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         // Runtime close, then report its existing execution-error outcome.
         if(m.count("host_close_error")&&integer(m,"host_close_error",1)){
             owner->host_close_error=true;std::fputs("FDDST_HOST_TEARDOWN_INJECTION source=HOST_FAKE cause=RESOURCE_COMPLETE_ERROR\n",stderr);
+        }
+        // Explicit Host injection only, and only for the close-contract counterexample. It
+        // forces the "close could not be certified complete" verdict that the huge-rejection
+        // scene reaches on its own about once in 36 Host runs, so the abort path below it is
+        // exercisable on demand instead of by waiting for that race. It does not touch the
+        // runtime, the pool, the adapter or any success criterion: the real close still runs
+        // and its real result is still observed; only the reported verdict is pinned.
+        if(m.count("host_close_incomplete")&&integer(m,"host_close_incomplete",1)){
+            owner->host_close_incomplete=true;std::fputs("FDDST_HOST_TEARDOWN_INJECTION source=HOST_FAKE cause=RUNTIME_CLOSE_INCOMPLETE\n",stderr);
         }
         fastdds_dsoftbus::ros2_target_observation::Begin(owner->run,side);
         fastdds_dsoftbus::ros2_target_observation::SetSourceForHostInjection();
@@ -165,8 +174,29 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
 }
 extern "C" __declspec(dllexport) int FastddsDsoftbusClose(void* value) {
     auto* p=static_cast<Owner*>(value);if(!p)return 1;
-    const int close_result=p->CloseLocal();
-    if(close_result==1) {std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr);return 1;}
+    const int local_close=p->CloseLocal();
+    const int close_result=(local_close==0&&p->host_close_incomplete)?1:local_close;
+    if(close_result==1) {
+        // Bounded read-only diagnostic: name the provider-side event that left the close
+        // incomplete. Observation only; close semantics and the failure verdict are unchanged.
+        const auto io=fastdds_dsoftbus::ros2_host::ObserveLink();const auto native=p->runtime->ObserveSocket();
+        std::fprintf(stderr,"FDDST_HOST_IO run=%s side=%u sends=%llu ingress=%llu send_errors=%llu fake_sdk=%d rejected_callbacks=%llu\n",p->run.c_str(),p->side,static_cast<unsigned long long>(io.sends),static_cast<unsigned long long>(io.ingress),static_cast<unsigned long long>(io.send_errors),int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));
+        std::fprintf(stderr,"FDDST_CLOSE_INCOMPLETE_DETAIL result=%d first_exception=%d first_api_error_op=%d first_api_error_code=%d exceptions=%llu rejected_callbacks=%llu fake_sdk=%d\n",
+            close_result,
+            native.first_exception?int(*native.first_exception):-1,
+            native.first_api_error?int(native.first_api_error->operation):-1,
+            native.first_api_error?native.first_api_error->code:-1,
+            static_cast<unsigned long long>(native.exceptions),
+            static_cast<unsigned long long>(native.rejected_callbacks),int(native.fake_sdk));std::fflush(stderr);
+        // The Host link seam must be joined on this path too. Its accept/read threads are
+        // namespace-scope std::thread objects in HostSocket.cpp that the CRT destroys at
+        // DLL_PROCESS_DETACH, and a still-joinable one calls std::terminate() there -- which
+        // killed the process with 0xC0000409 *after* the incomplete close was already
+        // reported, turning a reported failure into an unreportable abort. Joining here is a
+        // teardown-accounting fix only: the return value, the verdict and the diagnostics
+        // above are unchanged, and the retained product owner (return 1) is untouched.
+        fastdds_dsoftbus::ros2_host::StopLink();
+        std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr);std::fflush(stderr);return 1;}
     fastdds_dsoftbus::ros2_host::StopLink();
     const auto io=fastdds_dsoftbus::ros2_host::ObserveLink();const auto native=p->runtime->ObserveSocket();
     std::fprintf(stderr,"FDDST_HOST_IO run=%s side=%u sends=%llu ingress=%llu send_errors=%llu fake_sdk=%d rejected_callbacks=%llu\n",p->run.c_str(),p->side,static_cast<unsigned long long>(io.sends),static_cast<unsigned long long>(io.ingress),static_cast<unsigned long long>(io.send_errors),int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));

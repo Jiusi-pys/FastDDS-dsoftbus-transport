@@ -639,7 +639,9 @@ bool HostProviderLoop::ShutdownRuntime(bool owns_stop) noexcept {
         failed_cleanup.value_or(BackendCloseResult{BackendStatus::None,true});
     if(node_close!=BackendStatus::None)result.status=node_close;
     {std::lock_guard<std::mutex> lock(s.gate);s.close=result;s.input_open=false;s.closed=true;s.changed.notify_all();
-        return result.status==BackendStatus::None&&result.adapter_drained&&!s.shutdown_observer_fault;}
+        const bool clean=result.status==BackendStatus::None&&result.adapter_drained&&!s.shutdown_observer_fault;
+        if(!clean){std::fprintf(stderr,"FDDST_SHUTDOWN_RUNTIME_NOT_CLEAN status=%d drained=%d observer_fault=%d node_close=%d\n",static_cast<int>(result.status),result.adapter_drained?1:0,s.shutdown_observer_fault?1:0,static_cast<int>(node_close));std::fflush(stderr);}
+        return clean;}
 }
 bool HostProviderLoop::InputCloseAllowedOnThisThread() const noexcept {
     return !ServiceRecordBinding::IsCallbackContext()&&!ProviderAdapter::IsProviderCallbackContext();

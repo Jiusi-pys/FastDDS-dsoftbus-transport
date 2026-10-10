@@ -427,7 +427,19 @@ BackendSendResult PublicSocketBackend::Send(std::int32_t id,const std::uint8_t* 
     auto s=state_;
     {std::lock_guard<std::mutex> lock(s->gate);
         if(!p||!size||size>s->config.max_message_size||size>UINT32_MAX){s->Reject(PublicSocketOperation::Send,BackendStatus::InvalidBuffer);return {BackendStatus::InvalidBuffer,{}};}
-        if(s->socket<0||id!=s->socket||s->primary_closed||s->primary_observed||s->primary_failed||s->observation.stopped||s->observation.closed||std::chrono::steady_clock::now()>=deadline){s->Reject(PublicSocketOperation::Send,BackendStatus::InvalidState);return {BackendStatus::InvalidState,{}};}
+        if(s->socket<0||id!=s->socket||s->primary_closed||s->primary_observed||s->primary_failed||s->observation.stopped||s->observation.closed||std::chrono::steady_clock::now()>=deadline){
+            // Diagnostic only, once per process: this refusal returns a status without entering
+            // the SDK, which is the shape the adapter can no longer mistake for an exception.
+            // Naming the disjunct keeps the refusal's trigger on the record instead of inferred.
+            static std::atomic<int> once{0};
+            if(once.fetch_add(1)==0){
+                const auto now=std::chrono::steady_clock::now();
+                const int reason=(s->socket<0?1:0)|(id!=s->socket?2:0)|(s->primary_closed?4:0)|(s->primary_observed?8:0)|(s->primary_failed?16:0)|(s->observation.stopped?32:0)|(s->observation.closed?64:0)|(now>=deadline?128:0);
+                std::fprintf(stderr,"FDDST_BACKEND_SEND_REFUSAL reason_mask=%d past_deadline_ms=%lld size=%llu\n",reason,
+                    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(now-deadline).count()),
+                    static_cast<unsigned long long>(size));std::fflush(stderr);
+            }
+            s->Reject(PublicSocketOperation::Send,BackendStatus::InvalidState);return {BackendStatus::InvalidState,{}};}
         s->Enter(PublicSocketOperation::Send);}
     try {FASTDDS_DSOFTBUS_DDS_FRAME("SDK_SEND",id,p,size);FASTDDS_DSOFTBUS_PROBE_EVENT("SendBytes_enter",s->observation.entry_index,int(RecordRole::Client),id,0,size);const auto rc=::SendBytes(id,p,static_cast<std::uint32_t>(size));FASTDDS_DSOFTBUS_PROBE_EVENT("SendBytes_return",s->observation.entry_index,int(RecordRole::Client),id,rc,size);std::lock_guard<std::mutex> lock(s->gate);s->Returned(PublicSocketOperation::Send,rc);
         // NativeSendExecution must see even negative or unexpected positive raw results.

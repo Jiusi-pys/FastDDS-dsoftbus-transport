@@ -52,6 +52,8 @@ def main():
     p.add_argument('--scene', choices=sorted(SCENES), required=True)
     p.add_argument('--limits', nargs=3, type=int, help='override TEST_ONLY M B N')
     p.add_argument('--no-guard', action='store_true', help='negative control: omit payload keys (legacy unprotected)')
+    p.add_argument('--capture-dir', type=Path, help='run each child under the per-process debug capture (Windows); dumps stay local')
+    p.add_argument('--inject-close-incomplete', choices=('A', 'B'), help='Host-only counterexample: pin one side\'s close verdict to incomplete')
     a = p.parse_args()
     m, b, n = a.limits if a.limits else SCENES[a.scene]
     run = '0123456789abcdef'  # the frozen id the test keystore grants name; no other id is authorized
@@ -71,7 +73,7 @@ def main():
             'locator_version=V1\nnative_name_contract=PACKAGE_SCOPED_V1\nauthorized_package=host.ros.test\n'
             'service_prefix=host.ros.test.v1\nbackend=HOST_OPAQUE_BYTES_TEST_ONLY',
             'run=' + run, 'side=' + str(index), 'port=' + str(ports[index]), 'peer_port=' + str(peers[index]),
-            'domain=201', 'forward=1', 'host_close_error=0'] + ([] if a.no_guard else [
+            'domain=201', 'forward=1', 'host_close_error=0'] + (['host_close_incomplete=1'] if a.inject_close_incomplete == side else []) + ([] if a.no_guard else [
             'payload_guard_profile=TEST_ONLY_BOUNDED', 'payload_max_sample_bytes=%d' % m,
             'payload_pool_budget_bytes=%d' % b, 'payload_max_allocations=%d' % n])) + '\n')
         env = os.environ.copy()
@@ -87,8 +89,12 @@ def main():
         out = (a.output / (side + '.stdout')).open('wb')
         err = (a.output / (side + '.stderr')).open('wb')
         files[side] = (out, err)
-        procs[side] = subprocess.Popen([str(a.exe.resolve()), side, run, a.scene, str(root.resolve()), str(m)],
-                                       env=env, stdout=out, stderr=err)
+        argv = [str(a.exe.resolve()), side, run, a.scene, str(root.resolve()), str(m)]
+        if a.capture_dir:
+            from crash_capture import Captured
+            procs[side] = Captured(argv, env, out, err, str((a.capture_dir / side).resolve()))
+        else:
+            procs[side] = subprocess.Popen(argv, env=env, stdout=out, stderr=err)
     outcome = dict(scene=a.scene, M=m, B=b, N=n, run=run, steps={})
     try:
         ready = all(wait_for(a.output / (s + '.stdout'), 'RESOURCE_READY', 40) for s in 'AB')
@@ -120,6 +126,13 @@ def main():
             err.close()
         relay.close()
     outcome['exit'] = codes
+    if a.capture_dir:
+        outcome['capture'] = {}
+        for side, proc in procs.items():
+            proc.write_report(str(a.output / (side + '.capture.json')))
+            r = proc.report
+            outcome['capture'][side] = dict(exit_code=r['exit_code'], first_fatal=r['first_fatal'], complete=r['capture_complete'],
+                                            dump=(r['dump'] or {}).get('path'))
     outcome['relay_events'] = relay.events[:8]
     outcome['relay_errors_after_oracle'] = relay.errors[len(outcome.get('relay_errors_before_oracle', [])):][:4]
     outcome['relay_errors'] = outcome.get('relay_errors_before_oracle', relay.errors)[:4]
@@ -128,8 +141,27 @@ def main():
     outcome['bound_readers'] = len(re.findall('FDDST_PAYLOAD_READER_CREATED', err_a))
     outcome['asan'] = 'AddressSanitizer' in err_a
     outcome['oracle_line'] = next((l for l in text.splitlines() if l.startswith('RESOURCE_ORACLE')), None)
+    # The teardown contract is asserted, not assumed, and its two failure shapes are kept
+    # apart. A side that never printed its joined local close left the owner retained: that is
+    # an incomplete close (FDDST_ROS_CLOSED absent or the incomplete markers present), and it
+    # exits 0, so without this check a broken teardown was only ever visible through a fatal
+    # exit code -- which is exactly what the incomplete path can fail to produce. A side that
+    # did release its owner but reported an execution error is a different, already-reported
+    # outcome and must not be read as the same thing.
+    close_contract = {}
+    for side in 'AB':
+        err_side = (a.output / (side + '.stderr')).read_text(errors='replace')
+        released = ('FDDST_ROS_CLOSED run=%s side=%d' % (run, 'AB'.index(side))) in err_side
+        incomplete = ('FDDST_RUNTIME_CLOSE_INCOMPLETE' in err_side
+                      or 'FDDST_CLOSE_INCOMPLETE' in err_side)
+        runtime_error = ('FDDST_CLOSE_RESOURCE_COMPLETE_WITH_RUNTIME_ERROR' in err_side
+                         or 'Failed to delete participant' in err_side)
+        close_contract[side] = dict(released=released, incomplete=incomplete, runtime_error=runtime_error,
+                                    ok=released and not incomplete and not runtime_error)
+    outcome['close_contract'] = close_contract
     outcome['passed'] = (codes.get('A') == 0 and codes.get('B') == 0 and not outcome['asan']
-                         and 'result=PASS' in (outcome['oracle_line'] or '') and not outcome['relay_errors'])
+                         and 'result=PASS' in (outcome['oracle_line'] or '') and not outcome['relay_errors']
+                         and close_contract['A']['ok'] and close_contract['B']['ok'])
     (a.output / 'RESULT.json').write_text(json.dumps(outcome, indent=2) + '\n')
     print(json.dumps(outcome))
     return 0 if outcome['passed'] else 1

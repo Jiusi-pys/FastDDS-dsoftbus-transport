@@ -10,6 +10,8 @@
 #ifndef STARTUP_LOCAL
 #define STARTUP_LOCAL(event,value) ((void)0)
 #endif
+#include <cstdio>
+#include <atomic>
 #include <stdexcept>
 #include <array>
 #include <condition_variable>
@@ -89,10 +91,15 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
     // Destroyed first, while its ServiceRecordProvider bridge and backend live.
     std::unique_ptr<ServiceRecordBinding> binding;
 
-    void Fault(BackendStatus status) noexcept {
+    // Diagnostic only. The first fault latches provider_status, so naming that one
+    // site and its status attributes the sticky verdict to the call that produced it.
+    // Exactly one line per process; no state beyond the existing labels is observed.
+    void Fault(BackendStatus status,int site=0) noexcept {
         std::lock_guard<std::mutex> lock(gate);
-        if(provider_status==BackendStatus::None)provider_status=status;
+        const bool first=provider_status==BackendStatus::None;
+        if(first)provider_status=status;
         if (status == BackendStatus::ProviderException) ++exceptions;
+        if(first){std::fprintf(stderr,"FDDST_ADAPTER_FAULT site=%d status=%d dispatching=%llu\n",site,static_cast<int>(status),static_cast<unsigned long long>(dispatching));std::fflush(stderr);}
     }
     NativeSocketResult CreateSocket() noexcept override {
         {
@@ -128,12 +135,12 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
                 pending_stop.reset();
                 return NativeSocketResult::Id(socket);
             }
-            Fault(result.status == BackendStatus::None ? BackendStatus::InvalidIdentity : result.status);
+            Fault(result.status == BackendStatus::None ? BackendStatus::InvalidIdentity : result.status,132);
             if(result.api_called&&result.api_returned&&result.provider_error&&*result.provider_error<0){
                 std::lock_guard<std::mutex> lock(gate);creating=false;pending_stop.reset();
                 return NativeSocketResult::Error(*result.provider_error);
             }
-        } catch (...) { Fault(BackendStatus::ProviderException); }
+        } catch (...) { Fault(BackendStatus::ProviderException,137); }
         {
             std::lock_guard<std::mutex> lock(gate);
             creating = false;
@@ -151,9 +158,9 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
         try {
             auto result = backend->Listen(id);
             if (result.status == BackendStatus::None) return SyncListenResult::Success();
-            Fault(result.status);
+            Fault(result.status,155);
             if(result.called&&result.returned&&result.provider_return&&*result.provider_return!=0)return SyncListenResult::Error(*result.provider_return);
-        } catch (...) { Fault(BackendStatus::ProviderException); }
+        } catch (...) { Fault(BackendStatus::ProviderException,157); }
         return SyncListenResult::Error(-1);
     }
     SyncBindResult Bind(NativeSocketId id) noexcept override {
@@ -164,20 +171,20 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
         try {
             auto result = backend->Bind(id);
             if (result.status == BackendStatus::None) return SyncBindResult::Success();
-            Fault(result.status);
+            Fault(result.status,168);
             if(result.called&&result.returned&&result.provider_return&&*result.provider_return!=0)return SyncBindResult::Error(*result.provider_return);
-        } catch (...) { Fault(BackendStatus::ProviderException); }
+        } catch (...) { Fault(BackendStatus::ProviderException,170); }
         return SyncBindResult::Error(-1);
     }
-    void CleanupFault(BackendStatus status) noexcept {
+    void CleanupFault(BackendStatus status,int site=0) noexcept {
         {std::lock_guard<std::mutex> lock(gate);if(cleanup_status==BackendStatus::None)cleanup_status=status;}
-        Fault(status);
+        Fault(status,site);
     }
     void Shutdown(NativeSocketId id) noexcept override {
         try {
             auto result = backend->Shutdown(id);
-            if (result.status != BackendStatus::None) CleanupFault(result.status);
-        } catch (...) { CleanupFault(BackendStatus::ProviderException); }
+            if (result.status != BackendStatus::None) CleanupFault(result.status,180);
+        } catch (...) { CleanupFault(BackendStatus::ProviderException,181); }
     }
     std::int32_t Send(NativeSocketId id, const Route& route, const std::uint8_t* data,
             std::size_t size, SendQueue::Clock::time_point deadline, std::int32_t priority) override {
@@ -194,18 +201,33 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
         }
         try {
             const auto result = backend->Send(id, data, size, deadline);
-            if (result.status != BackendStatus::None || !result.provider_return)
-                throw std::runtime_error("Host provider returned no send result");
-            return *result.provider_return;
-        } catch (...) { Fault(BackendStatus::ProviderException); throw; }
+            if (result.status == BackendStatus::None && result.provider_return) return *result.provider_return;
+            // Diagnostic only: the provider's own verdict behind this rejection.
+            // A returned status is a decision, not a thrown exception; without this
+            // the two are indistinguishable in the adapter's sticky verdict.
+            static std::atomic<int> once{0};
+            if(once.fetch_add(1)==0){std::fprintf(stderr,"FDDST_ADAPTER_SEND_REJECT status=%d provider_return=%d api_called=%d size=%llu\n",static_cast<int>(result.status),result.provider_return?static_cast<int>(*result.provider_return):std::numeric_limits<std::int32_t>::min(),result.api_called?1:0,static_cast<unsigned long long>(size));std::fflush(stderr);}
+            // A status returned without the SDK ever being entered is a decision about this
+            // one invocation -- the backend refused it (buffer outside the descriptor bound,
+            // socket no longer usable, or a deadline that had already expired when a reliable
+            // retransmission reached the front of the queue). It is not the unclean-close
+            // condition this verdict exists to record: the SDK was never entered, so nothing
+            // inside it can have been left half-done, and the invocation's own ticket is
+            // settled by the caller's returned-code path either way. A refusal is therefore
+            // reported outside the latch, exactly as the identity/state pre-check above
+            // reports its own rejection, and the pump still records the execution failure.
+            // Only a status returned *after* the SDK was entered (api_called) still latches.
+            if (result.api_called) throw std::runtime_error("Host provider returned no send result");
+        } catch (...) { Fault(BackendStatus::ProviderException,201); throw; }
+        throw std::runtime_error("Host provider refused the send before SDK entry");
     }
     NativeSocketResult CreateListenerSocket() noexcept {
         try {
             auto result=backend->CreateListener(ProviderCallbacks{weak_from_this(),RecordRole::Server});
             if(result.status==BackendStatus::None&&result.socket&&*result.socket>=0)return NativeSocketResult::Id(*result.socket);
-            Fault(result.status);
+            Fault(result.status,207);
             if(result.provider_error&&*result.provider_error<0)return NativeSocketResult::Error(*result.provider_error);
-        }catch(...){Fault(BackendStatus::ProviderException);}
+        }catch(...){Fault(BackendStatus::ProviderException,209);}
         return NativeSocketResult::Error(-1);
     }
     BackendStatus Negotiate(RecordRole role,std::int32_t id,const BackendPeer& peer) noexcept {
@@ -507,8 +529,12 @@ BackendStatus RequestNormalEnd(RecordRole role) noexcept {
         if(!first_callback_error)first_callback_error=code;
         return BackendStatus::None; // error is not a native shutdown observation
     }
+    // One bounded line on a path that already reports not-drained; no state is read or changed beyond the labels.
+    static void CloseUndrained(int site,BackendStatus status) noexcept {
+        std::fprintf(stderr,"FDDST_ADAPTER_CLOSE_UNDRAINED site=%d status=%d\n",site,static_cast<int>(status));std::fflush(stderr);
+    }
     BackendCloseResult Close() noexcept {
-        if(provider_callback_depth||ServiceRecordBinding::IsCallbackContext())return {BackendStatus::InvalidState,false};
+        if(provider_callback_depth||ServiceRecordBinding::IsCallbackContext()){CloseUndrained(1,BackendStatus::InvalidState);return {BackendStatus::InvalidState,false};}
         {std::lock_guard<std::mutex> lock(gate);if(phase!=AdapterPhase::Closed)phase=AdapterPhase::Closing;}
         std::unique_lock<std::mutex> control(control_gate);
         {
@@ -518,21 +544,21 @@ BackendStatus RequestNormalEnd(RecordRole role) noexcept {
             idle.wait(lock, [&] { return active == 0&&controls==0; });
         }
         if(dual) {
-            const auto accepted_close=CloseAccepted();if(accepted_close!=BackendStatus::None)return {accepted_close,false};
+            const auto accepted_close=CloseAccepted();if(accepted_close!=BackendStatus::None){CloseUndrained(2,accepted_close);return {accepted_close,false};}
         }
         if (binding) {
             const auto before = binding->Observe();
             if (before.phase != BindingPhase::Empty) {
                 const auto status = binding->Abandon();
-                if (status != NativeStatus::None && status != NativeStatus::AlreadySettled)
-                    return {BackendStatus::BindingRejected, false};
+                if (status != NativeStatus::None && status != NativeStatus::AlreadySettled){
+                    CloseUndrained(3,BackendStatus::BindingRejected);return {BackendStatus::BindingRejected, false};}
             }
-            if (!binding->DrainComplete()) return {BackendStatus::BindingRejected, false};
+            if (!binding->DrainComplete()){CloseUndrained(4,BackendStatus::BindingRejected);return {BackendStatus::BindingRejected, false};}
         }
         if(listener&&listener->Observe().phase!=BindingPhase::Empty) {
             const auto result=listener->Abandon();
-            if(result!=NativeStatus::None&&result!=NativeStatus::AlreadySettled)return {BackendStatus::BindingRejected,false};
-            if(!listener->DrainComplete())return {BackendStatus::BindingRejected,false};
+            if(result!=NativeStatus::None&&result!=NativeStatus::AlreadySettled){CloseUndrained(5,BackendStatus::BindingRejected);return {BackendStatus::BindingRejected,false};}
+            if(!listener->DrainComplete()){CloseUndrained(6,BackendStatus::BindingRejected);return {BackendStatus::BindingRejected,false};}
         }
         std::lock_guard<std::mutex> lock(gate);
         phase = AdapterPhase::Closed;
@@ -626,14 +652,14 @@ BackendStatus ProviderAdapter::Initialize() noexcept {
                 if(setup==NativeStatus::None){setup=listener->Connect();STARTUP_LOCAL("ListenerConnect_NativeStatus_result",setup);}
                 if(setup==NativeStatus::None){setup=listener->Publish();STARTUP_LOCAL("ListenerPublish_NativeStatus_result",setup);}
             }
-        }catch(...){state_->Fault(BackendStatus::ProviderException);}
+        }catch(...){state_->Fault(BackendStatus::ProviderException,645);}
         {std::lock_guard<std::mutex> lock(state_->gate);
             if(setup!=NativeStatus::None||state_->stopped||state_->listener_stopped){state_->phase=AdapterPhase::Failed;return state_->provider_status==BackendStatus::None?BackendStatus::BindingRejected:state_->provider_status;}
             state_->listener_ready=true;
         }
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE
         // Probe control handshake outside all management gates. Not an SDK proof.
-        if(!RuntimeProbeBeforeConnect()){state_->Fault(BackendStatus::InvalidState);return BackendStatus::InvalidState;}
+        if(!RuntimeProbeBeforeConnect()){state_->Fault(BackendStatus::InvalidState,652);return BackendStatus::InvalidState;}
 #endif
     }
     auto built = ServiceRecordBinding::Build(state_->records, state_->native, state_->attachments,
@@ -644,8 +670,8 @@ BackendStatus ProviderAdapter::Initialize() noexcept {
         status = state_->binding->Prepare();
         if(status==NativeStatus::None){
             try {const auto configured=state_->backend->ConfigureEntrance(state_->binding->RoleEntrance(state_->request.role));
-                if(configured!=BackendStatus::None){state_->Fault(configured);status=NativeStatus::InvalidConfiguration;}}
-            catch(...){state_->Fault(BackendStatus::ProviderException);status=NativeStatus::InvalidConfiguration;}
+                if(configured!=BackendStatus::None){state_->Fault(configured,663);status=NativeStatus::InvalidConfiguration;}}
+            catch(...){state_->Fault(BackendStatus::ProviderException,664);status=NativeStatus::InvalidConfiguration;}
         }
         if (status == NativeStatus::None) status = state_->binding->Connect();
     }

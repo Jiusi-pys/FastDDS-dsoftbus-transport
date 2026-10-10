@@ -573,7 +573,7 @@ if(BUILD_DSOFTBUS_HOST_PROVIDER_LOOP)
             set_tests_properties(dsoftbus.host_input_close.${_close_case} PROPERTIES TIMEOUT 20)
         endforeach()
         foreach(_loop_case default loop preopen input-close queued paused-send paused-receiver late error
-                open-exception open-allocation open-racing-shutdown backend-size-bound backend-size-above backend-size-unspecified observe-lifetime shared-init startup-allocation setup-cleanup-failure receive-limit)
+                open-exception open-allocation open-racing-shutdown backend-size-bound backend-size-above backend-size-unspecified observe-lifetime shared-init startup-allocation setup-cleanup-failure receive-limit refused-send entered-send-failure)
             add_test(NAME dsoftbus.host_provider_loop.${_loop_case} COMMAND host_provider_loop_tests ${_loop_case})
             set_tests_properties(dsoftbus.host_provider_loop.${_loop_case} PROPERTIES TIMEOUT 20)
         endforeach()

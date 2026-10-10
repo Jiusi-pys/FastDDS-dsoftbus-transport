@@ -41,6 +41,11 @@ DSoftBusTransportDescriptor Config(){
 struct Mock final:NativeBackend {
     ProviderCallbacks callbacks;std::atomic<int> sends{0},closes{0},creates{0};
     std::function<void()> during_send,during_create,during_close;bool throw_send=false,throw_close=false,throw_identity=false,deny_after_kind=false,reject_bind=false;
+    // Host-only send outcomes. send_status is returned with the SDK never entered, which is the
+    // shape a refused invocation really has (api_called stays false); send_entered_failure is the
+    // status a backend returns after it did enter the SDK. They are separate because the adapter
+    // must treat them separately.
+    BackendStatus send_status=BackendStatus::None;bool send_entered_failure=false;
     std::vector<std::uint8_t> sent;std::size_t max_message=0;
     std::size_t MaxMessageSize()const noexcept override{return max_message;}
     BackendKind Kind()const noexcept override{if(deny_after_kind)loop_deny_allocations=true;return BackendKind::HostMock;}
@@ -51,6 +56,8 @@ struct Mock final:NativeBackend {
     BackendSendResult Send(std::int32_t id,const std::uint8_t* p,std::size_t n,std::chrono::steady_clock::time_point)override{
         Check(id==42,"same owned socket");++sends;if(during_send)during_send();
         if(throw_send)throw std::runtime_error("mock send exception");
+        if(send_entered_failure)return {BackendStatus::ProviderException,std::nullopt,true,false};
+        if(send_status!=BackendStatus::None)return {send_status,std::nullopt};
         sent.assign(p,p+n);auto temporary=sent;
         callbacks.OnBytes(id,temporary.data(),static_cast<std::uint32_t>(n));
         std::fill(temporary.begin(),temporary.end(),0xEE);return {BackendStatus::None,0};
