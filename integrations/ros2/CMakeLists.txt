@@ -83,6 +83,7 @@ target_link_libraries(factory_configuration INTERFACE fastrtps)
 set_property(TARGET factory_configuration PROPERTY INTERFACE_FASTDDS_DSOFTBUS_FACADE_VARIANT ros2-214-host-experiment)
 set_property(TARGET factory_configuration APPEND PROPERTY COMPATIBLE_INTERFACE_STRING FASTDDS_DSOFTBUS_FACADE_VARIANT)
 include(GNUInstallDirs)
+install(FILES ReaderPayloadGuard.hpp ReaderPayloadBinding.hpp PayloadResourceConfig.hpp DESTINATION share/FastDDSDSoftBusTransportRos2Host/payload_resource)
 include(CMakePackageConfigHelpers)
 install(TARGETS fastdds_dsoftbus_ros2_214_runtime fastdds_dsoftbus_ros2_host_bridge factory_configuration
     EXPORT Ros2HostTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

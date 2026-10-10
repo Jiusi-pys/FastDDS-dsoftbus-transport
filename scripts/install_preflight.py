@@ -81,6 +81,36 @@ def valid_native_scope(package, prefix, namespace):
     return valid_bytes(namespace, 116) and len(prefix) + 1 + 23 + 2 * len(namespace.encode('utf-8')) <= 255
 
 
+PAYLOAD_RESOURCE_KEYS = {'payload_guard_profile', 'payload_max_sample_bytes',
+                         'payload_pool_budget_bytes', 'payload_max_allocations'}
+
+
+def payload_resource_configuration(values):
+    """Same explicit scalar contract as PayloadResourceConfig.hpp, without loading DDS."""
+    present = PAYLOAD_RESOURCE_KEYS & set(values)
+    result = dict(profile='UNPROTECTED_LEGACY', production_values='NEEDS_PRODUCT_VALUE',
+                  runtime_enforcement_verified=False, scope='SUBSCRIBER_USER_READER_PAYLOAD_ONLY')
+    if not present:
+        return result
+    if present != PAYLOAD_RESOURCE_KEYS or values['payload_guard_profile'] != 'TEST_ONLY_BOUNDED':
+        raise ValueError('PAYLOAD_PROFILE_UNSUPPORTED_OR_INCOMPLETE: NEEDS_PRODUCT_VALUE')
+    limits = {}
+    for key, maximum in [('payload_max_sample_bytes', 0xffffffff-0xffff),
+                         ('payload_pool_budget_bytes', 0xffffffffffffffff),
+                         ('payload_max_allocations', 0xffffffff)]:
+        value = values[key]
+        if not isinstance(value, str) or not re.fullmatch('[0-9]+', value) or not 0 < int(value) <= maximum:
+            raise ValueError('PAYLOAD_LIMIT_SYNTAX_OR_RANGE: ' + key)
+        limits[key] = int(value)
+    m, b, n = (limits[key] for key in ('payload_max_sample_bytes', 'payload_pool_budget_bytes', 'payload_max_allocations'))
+    if m < 4 or b < m:
+        raise ValueError('PAYLOAD_M_B_CONTRACT_INVALID')
+    result.update(profile='TEST_ONLY_BOUNDED', M_bytes=m, B_bytes=b, N_allocations=n,
+                  cdr_header_included=True, fragment_tail_must_also_fit_M=True,
+                  payload_cache_bytes=0)
+    return result
+
+
 def runtime_configuration(path, native):
     """Scalar rules from Bridge.cpp/TargetBridge.cpp; no private artifact validator."""
     common = {'bridge_library', 'fastdds_module', 'fastcdr_module', 'backend', 'run',
@@ -96,11 +126,12 @@ def runtime_configuration(path, native):
     values = {}
     for line in path.read_text(encoding='utf-8').splitlines():
         key, separator, value = line.partition('=')
-        if not separator or not value or key not in required or key in values:
+        if not separator or not value or key not in required | PAYLOAD_RESOURCE_KEYS or key in values:
             raise ValueError('Runtime config missing/unknown/duplicate field')
         values[key] = value
-    if set(values) != required:
+    if set(values) - PAYLOAD_RESOURCE_KEYS != required:
         raise ValueError('Incomplete runtime config; missing ' + ', '.join(sorted(required - set(values))))
+    payload_resource_configuration(values)
     if values['locator_version'] != 'V1' or values['native_name_contract'] != 'PACKAGE_SCOPED_V1':
         raise ValueError('Runtime requires V1/PACKAGE_SCOPED_V1')
     backend = 'OHOS_PUBLIC_SOCKET_EXPERIMENTAL' if native else 'HOST_OPAQUE_BYTES_TEST_ONLY'
@@ -397,6 +428,10 @@ def preflight(prefix, config_path, runtime_dirs, readobj, fastdds_include=None):
                 raise ValueError('ROS frontend requires explicit runtime_config .conf path')
             native = package == 'FastDDSDSoftBusTransportRos2Target'
             values = runtime_configuration(Path(runtime_path), native)
+            resource = payload_resource_configuration(values)
+            note('PAYLOAD_RESOURCE_INPUTS', json.dumps(resource, sort_keys=True))
+            if capability == 'production':
+                fail('PAYLOAD_PRODUCT_VALUES_UNAPPROVED', 'M/B/N remain NEEDS_PRODUCT_VALUE; TEST_ONLY cannot authorize production')
             if int(values['domain']) != config['domain']:
                 raise ValueError('Runtime domain differs from preflight input')
             if native and (values['namespace'] != config['namespace'] or

@@ -5,6 +5,7 @@ extern "C" void FastddsDsoftbusFactoryFlushTeardownPending() noexcept;
 #include "../PlatformModule.hpp"
 #include "NativeObservation.hpp"
 #include "../BoundedNativeControl.hpp"
+#include "../PayloadResourceConfig.hpp"
 #include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
 #include <fastrtps/attributes/LibrarySettingsAttributes.h>
 #include <fastrtps/xmlparser/XMLProfileManager.h>
@@ -38,12 +39,13 @@ Values read(const char* path) {
     while (std::getline(input, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         const auto equals = line.find('=');
-        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release"&&line.substr(0,equals)!="native_reaccept_order"&&line.substr(0,equals)!="native_reaccept_control"&&line.substr(0,equals)!="route_lifecycle") ||
+        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release"&&line.substr(0,equals)!="native_reaccept_order"&&line.substr(0,equals)!="native_reaccept_control"&&line.substr(0,equals)!="route_lifecycle"&&!fastdds_dsoftbus::payload_resource::config_key(line.substr(0,equals))) ||
                 !values.emplace(line.substr(0, equals), line.substr(equals + 1)).second)
             throw std::runtime_error("configuration syntax/duplicate/unknown key");
     }
     for (const auto& key : keys) if (!values.count(key) || values.at(key).empty())
         throw std::runtime_error("required configuration field missing");
+    (void)fastdds_dsoftbus::payload_resource::parse(values);
     return values;
 }
 unsigned integer(const Values& v, const char* key, unsigned limit) {

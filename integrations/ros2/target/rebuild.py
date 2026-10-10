@@ -172,7 +172,7 @@ class Build:
     def prepare(self):
         patched=self.root/'FAST_DDS_PATCHED.json';here=REPO/'integrations/ros2'
         names=['UPSTREAM.json','TEARDOWN_UPSTREAM.json','RESIDUAL_UPSTREAM.json','TOPIC_RTTI_UPSTREAM.json','apply_fastdds_hook.py','apply_endpoint_guard.py','apply_teardown_observation.py','apply_residual_observation.py','apply_topic_rtti_key.py','fastdds-2.14.5-teardown.patch','FastddsHook.hpp','PlatformModule.hpp','StartupDiagnostics.hpp','TeardownDiagnostics.hpp','ResidualDiagnostics.hpp','NativePrefix.hpp']
-        if self.candidate['version']=='2.14.7':names+=['prepare_fastdds_source.py','candidates/2.14.7/UPSTREAM.json','candidates/2.14.7/integration.patch']
+        if self.candidate['version']=='2.14.7':names+=['prepare_fastdds_source.py','candidates/2.14.7/UPSTREAM.json','candidates/2.14.7/integration.patch','apply_payload_resource_guard.py','ReaderPayloadGuard.hpp','PayloadResourceConfig.hpp','ReaderPayloadBinding.hpp']
         current={n:sha(here/n) for n in names};inputs=self.root/'FAST_DDS_TRANSFORM_INPUTS.json'
         if inputs.exists():verify_transform_inputs(read(inputs)['inputs'],current)
         if not patched.exists():

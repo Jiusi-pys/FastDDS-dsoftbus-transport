@@ -8,7 +8,11 @@ p.add_argument('--run-id',help='Frozen isolated run, used by exact security endp
 p.add_argument('--secure-keystore',type=Path)
 p.add_argument('--plain-side',choices=['A','B'])
 p.add_argument('--security-development-control',action='store_true',help='Explicit test-only plugins-off control within the SECURITY=ON build; never fallback')
+p.add_argument('--payload-resource-test',nargs=3,type=int,metavar=('M_BYTES','B_BYTES','N_RECORDS'),help='Explicit TEST_ONLY_BOUNDED payload resource configuration')
 a=p.parse_args()
+if a.payload_resource_test:
+ m,b,n=a.payload_resource_test
+ if not(4<=m<=0xffffffff-0xffff and m<=b<=0xffffffffffffffff and 1<=n<=0xffffffff):raise ValueError('Invalid test payload resource limits')
 if a.security_development_control and (a.secure_keystore or a.plain_side):raise ValueError('Development control cannot be combined with required security/enclave settings')
 if a.reaccept_host and (a.mode!='dual' or a.forward!='1'):raise ValueError('Reaccept fixture requires dual opaque-byte forwarding')
 if a.owned_normal_reaccept and not a.reaccept_host:raise ValueError('Owned normal model requires explicit Host reaccept')
@@ -32,6 +36,8 @@ for index,side in enumerate('AB'):
   'bridge_library='+str(a.bridge.resolve()),'fastdds_module='+str((a.fastdds_prefix/'bin/fastrtps-2.14.dll').resolve()),'fastcdr_module='+str((a.ros_prefix/'bin/fastcdr-2.2.dll').resolve()),'locator_version=V1\nnative_name_contract=PACKAGE_SCOPED_V1\nauthorized_package=host.ros.test\nservice_prefix=host.ros.test.v1\nbackend=HOST_OPAQUE_BYTES_TEST_ONLY',
   'run='+run,'side='+str(index),'port='+str(ports[index]),'peer_port='+str(ports[1-index]),
   'domain='+str(domain),'forward='+a.forward,'host_close_error='+a.host_close_error])+'\n')
+ if a.payload_resource_test:
+  with conf.open('a') as stream:stream.write('payload_guard_profile=TEST_ONLY_BOUNDED\npayload_max_sample_bytes='+str(m)+'\npayload_pool_budget_bytes='+str(b)+'\npayload_max_allocations='+str(n)+'\n')
  if a.reaccept_host:
   with conf.open('a') as stream:stream.write('host_reaccept=1\nreaccept_control='+str((a.output/(side+'-reaccept')).resolve())+'\n')
  if a.owned_normal_reaccept:

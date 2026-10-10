@@ -17,6 +17,8 @@
 > [dependency security assessment](docs/DEPENDENCY_SECURITY_20261006.md) 与
 > [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)。
 
+> **Payload Resource Guard（2026-10-10）**：可选 IPayloadPool 注入到 Fast DDS 2.14.7 Subscriber，在 Reader 构造前拦截、检查用户 payload 的 M/B/N 三项资源度量。Host 验证范围内：component 纯 plain 与 ASan、8 线程并发 race 测试、四个真实 ROS 场景（boundary/huge/count/budget）全 PASS，mutant 杀死 4/4。已知问题：一例 tester-canon-1 huge 场景在 HostProviderLoop 关闭时 exit 0xC0000409（约 1/36，是否与 guard 相关未证实，根因 UNKNOWN，见文档），WSL2 ASan start-up 随机崩溃。未运行：设备验证、TSan、per-process 预算、builtin/crypto/CDR 覆盖。产品数值与全量需求设计待供应商输入。详见 [Payload Resource Guard](docs/PAYLOAD_RESOURCE_GUARD.md)。
+
 本项目是 Fast DDS 的 OpenHarmony DSoftBus Socket Transport 适配层，不是独立的
 MDDS 中间件或新的 DDS/RMW 实现。公开命名已迁移为 `fastdds_dsoftbus`、
 `<fastdds_dsoftbus/dsoftbus/...>` 和 CMake 包 `FastDDSDSoftBusTransport`。

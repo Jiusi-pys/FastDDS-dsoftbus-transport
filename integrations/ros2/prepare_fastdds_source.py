@@ -138,6 +138,11 @@ def prepare(source, version='2.14.5', security_mode='OFF'):
         raise ValueError('security ABI overlay requires explicit 2.14.7 ON selection')
     if version == '2.14.7':
         result = prepare_candidate(source)
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('payload_resource_transform', HERE/'apply_payload_resource_guard.py')
+        transform = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(transform)
+        result['payload_resource_overlay'] = transform.apply(source)
         if security_mode == 'ON':
             hook = source / 'src/cpp/fastdds/domain/FastddsHook.hpp'
             before = hook.read_bytes()
@@ -163,6 +168,7 @@ def prepare(source, version='2.14.5', security_mode='OFF'):
                 before_raw_sha256=hashlib.sha256(before).hexdigest(), after_raw_sha256=hashlib.sha256(after).hexdigest(),
                 purpose='PLAIN_C_ABI_MODE_CHECK_BEFORE_TYPED_QOS; NO_SDK_EPOCH_OR_PROTOCOL_CHANGE')
             (source/'FDDST_MAINTENANCE_PREPARED.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
+        (source/'FDDST_MAINTENANCE_PREPARED.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
         return result
     if version != '2.14.5':
         raise ValueError('unsupported version-bound source preparation')

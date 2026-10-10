@@ -46,6 +46,7 @@ foreach(_target IN ITEMS fastdds_dsoftbus_ros2_214_target_runtime factory_config
     set_property(TARGET ${_target} APPEND PROPERTY COMPATIBLE_INTERFACE_STRING FASTDDS_DSOFTBUS_FACADE_VARIANT)
 endforeach()
 include(GNUInstallDirs)
+install(FILES ../ReaderPayloadGuard.hpp ../ReaderPayloadBinding.hpp ../PayloadResourceConfig.hpp DESTINATION share/FastDDSDSoftBusTransportRos2Target/payload_resource)
 include(CMakePackageConfigHelpers)
 install(TARGETS fastdds_dsoftbus_ros2_214_target_runtime fastdds_dsoftbus_ros2_target_bridge factory_configuration
     EXPORT Ros2TargetTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
