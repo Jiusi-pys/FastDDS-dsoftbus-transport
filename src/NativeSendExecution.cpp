@@ -55,14 +55,17 @@ NativeSendRunResult NativeSendInvocation::Run() noexcept
                     record.size(),record.deadline(),record.priority());
             if(code>0) {
                 const auto fault=detail::NativeEgressBridge::Fault(resources->ticket_,NativeProviderFault::InvalidPositiveReturn,code);
-                result={fault.status,NativeSendOutcome::ReturnedInvalidCode,code};
+                result={fault.status,NativeSendOutcome::ReturnedInvalidCode,code,fault.owner};
             } else {
                 const auto completed=resources->ticket_.Complete(code);
-                result={completed.status,NativeSendOutcome::ReturnedSdkCode,code};
+                result={completed.status,NativeSendOutcome::ReturnedSdkCode,code,completed.owner};
             }
+        } catch(const NativeSendDeadlineRefusal&) {
+            const auto refused=detail::NativeEgressBridge::RefuseDeadline(resources->ticket_);
+            result={refused.status,NativeSendOutcome::RefusedDeadline,std::nullopt,refused.owner};
         } catch(...) {
             const auto fault=detail::NativeEgressBridge::Fault(resources->ticket_,NativeProviderFault::ExceptionUnwind,std::nullopt);
-            result={fault.status,NativeSendOutcome::ReturnedByException,std::nullopt};
+            result={fault.status,NativeSendOutcome::ReturnedByException,std::nullopt,fault.owner};
         }
     }
     if(resources) {

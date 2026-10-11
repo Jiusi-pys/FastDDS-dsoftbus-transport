@@ -74,10 +74,12 @@ struct BackendSocketResult {
     bool api_called=false,api_returned=false;
     std::optional<std::int32_t> provider_error; // negative failure, never a successful handle
 };
+enum class BackendSendRefusal { Unspecified, DeadlineExpired };
 struct BackendSendResult {
     BackendStatus status = BackendStatus::NativeBackendUnavailable;
     std::optional<std::int32_t> provider_return; // absent if not called
     bool api_called=false,api_returned=false;
+    BackendSendRefusal refusal=BackendSendRefusal::Unspecified;
 };
 // Provider port, not production registration. ConfigureEntrance supplies the
 // original record/role association only; the public shim registers its own fixed

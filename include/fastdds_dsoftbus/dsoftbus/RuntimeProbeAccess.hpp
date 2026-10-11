@@ -23,6 +23,10 @@ public:
     // issuance. No installed public entry and no authority over SDK drain.
     static bool BeforeNativeClose(experimental::Runtime&,
             std::function<void(const host_test::RuntimeShutdownPoint&)>);
+#if defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM) || defined(FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST)
+    static bool BeforeSendForHostTest(experimental::Runtime&,
+            void(*)(void*,std::int32_t,std::chrono::steady_clock::time_point) noexcept,void*) noexcept;
+#endif
     static bool BoundedReplacementGate(experimental::Runtime&,std::function<bool()>);
     static BackendStatus RequestNormalEnd(experimental::Runtime&,RecordRole) noexcept;
     static BoundedConnectionSnapshot ObserveConnection(const experimental::Runtime&) noexcept;

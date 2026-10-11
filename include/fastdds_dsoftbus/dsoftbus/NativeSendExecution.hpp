@@ -7,6 +7,7 @@
 namespace fastdds_dsoftbus::dsoftbus {
 class NativeSendExecutionTestAccess;
 class ProcessCoordinator;
+namespace phase0::detail {struct ProviderAdapterState;}
 namespace detail {
 class EgressState;
 class NativeSendWorkState;
@@ -24,12 +25,19 @@ public:
     virtual std::int32_t Send(NativeSocketId, const Route&, const std::uint8_t*,
             std::size_t, SendQueue::Clock::time_point, std::int32_t priority) = 0;
 };
-enum class NativeSendOutcome { NotEntered, ReturnedSdkCode, ReturnedInvalidCode, ReturnedByException };
+// Only the adapter's exact typed pre-API deadline result can mint this control
+// result. It is not an SDK return code or a general exception exemption.
+class NativeSendDeadlineRefusal final {
+    friend struct phase0::detail::ProviderAdapterState;
+    NativeSendDeadlineRefusal() noexcept = default;
+};
+enum class NativeSendOutcome { NotEntered, ReturnedSdkCode, ReturnedInvalidCode, ReturnedByException, RefusedDeadline };
 struct NativeSendRunResult
 {
     NativeStatus status = NativeStatus::NotImplemented;
     NativeSendOutcome outcome = NativeSendOutcome::NotEntered;
     std::optional<std::int32_t> actual_return_code;
+    std::optional<NativeOwnerObservation> original_owner;
 };
 struct NativeEgressUsage
 {

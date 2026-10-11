@@ -29,6 +29,26 @@ struct PublicSocketCall {
     std::optional<std::int32_t> handle; // last Socket call success, NOT an error code
 };
 struct PublicSocketError {PublicSocketOperation operation;std::int32_t code;};
+enum class PublicSocketSendRefusalBranch {InvalidBuffer,InvalidState};
+enum class PublicSocketSendStateSource {Unknown,LocalBackendGate};
+struct PublicSocketSendRefusal {
+    PublicSocketSendRefusalBranch branch=PublicSocketSendRefusalBranch::InvalidState;
+    PublicSocketSendStateSource source=PublicSocketSendStateSource::Unknown;
+    // Branch-local bits. InvalidBuffer: null/empty/descriptor bound/UINT32 bound.
+    // InvalidState: absent socket/id mismatch/closed/observed/failed/stopped/
+    // aggregate closed/deadline. These are the predicates executed in this call.
+    std::uint32_t reason_mask=0;
+    std::uint64_t attempt=0;
+    ProviderRecordIdentity record;ProviderOwnerIdentity owner;
+    std::int32_t requested_socket=-1,current_socket=-1;
+    std::size_t size=0;
+    std::int64_t past_deadline_ms=0;
+    bool configured=false,primary_closed=false,primary_observed=false,primary_failed=false;
+    bool stopped=false,closed=false,deadline_checked=false;
+    BackendSendResult result;
+    // Record/owner are immutable local backend declarations, not the native
+    // invocation ticket, SDK epochs, or physical packet identity.
+};
 struct PublicSocketObservation {
     bool fake_sdk=false,configured=false,stopped=false,closed=false;
     std::size_t entry_index=invalid_record_slot;
@@ -43,6 +63,10 @@ struct PublicSocketObservation {
     std::optional<std::int32_t> first_callback_error,shutdown_reason;
     std::uint64_t callback_entries=0,rejected_callbacks=0,negotiations_denied=0,unsupported_accepts=0,exceptions=0;
     std::uint64_t negotiation_callbacks=0;
+    // One fixed refusal snapshot/output per backend; omitted records are counted.
+    std::optional<PublicSocketSendRefusal> first_send_refusal;
+    std::uint64_t send_refusals=0,send_refusal_overflow=0;
+    bool send_refusal_counter_saturated=false;
     // Fixed entry/parameter storage survives close; no SDK quiescence is inferred.
 };
 // SDK-free port declaration. Implementation alone includes the authorized public
@@ -74,6 +98,11 @@ public:
     BackendSendResult Send(std::int32_t,const std::uint8_t*,std::size_t,std::chrono::steady_clock::time_point) override;
     BackendCallResult Shutdown(std::int32_t) override;
     PublicSocketObservation Observe()const;
+#if defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM)
+    // Test assembly only. The callback runs outside the backend gate, after the
+    // provider invocation began, with that invocation's original socket/deadline.
+    void SetBeforeSendHookForTest(void(*)(void*,std::int32_t,std::chrono::steady_clock::time_point) noexcept,void*) noexcept;
+#endif
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK
     // Fake-build scheduling only, never an SDK callback context or proof input.
     void SetAcceptedCommitHookForTest(void(*)(void*) noexcept,void*) noexcept;

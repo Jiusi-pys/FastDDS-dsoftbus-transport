@@ -24,6 +24,15 @@ int main()
     auto published = lease();
     { hook::PendingLeaseGuard guard(published); guard.disarm(); }
     assert(hook::unpublished_failure() == unpublished && calls == 0);
+    auto omitted = lease();
+    hook::attach(reinterpret_cast<void*>(5), omitted);
+    hook::mark_created(omitted);
+    hook::destructor_notice(reinterpret_cast<void*>(5));
+    assert(calls==0 && omitted->owner && omitted->close_state==0);
+    assert(hook::leases().count(reinterpret_cast<void*>(5))==1);
+    // Destructor notification never grants a loader-lock close/join license.
+    // Supply the required normal-context owner close in this contract test.
+    assert(hook::after_delete(reinterpret_cast<void*>(5)) && calls==1);
     // These exercise the actual injected hook, not a summary of its outcomes.
     auto uncertain = lease(); result = 1;
     hook::attach(reinterpret_cast<void*>(2), uncertain);
@@ -50,6 +59,6 @@ int main()
     auto pending = lease(); result = 1;
     hook::fail_pending(pending);
     assert(hook::unpublished_failure() == pending && pending->owner);
-    assert(calls == 4);
+    assert(calls == 5);
     std::puts("HOOK_LIFECYCLE_PASS healthy=1 resource_error=1 retained_uncertain=1 pending_retained=1");
 }

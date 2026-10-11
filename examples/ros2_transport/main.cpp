@@ -24,12 +24,12 @@
 using namespace std::chrono_literals;
 #include "BoundedReacceptRos.hpp"
 // Test/control metadata only. No business sample is read from this file.
-bool ControlStage(const std::string& run,const std::string& side,long pid,const std::string& stage,const std::function<void()>& progress={}) {
+bool ControlStage(const std::string& run,const std::string& side,long pid,const std::string& stage,const std::function<void()>& progress={},const std::chrono::steady_clock::time_point* inherited_deadline=nullptr) {
     const char* prefix=std::getenv("FASTDDS_DSOFTBUS_ROS_CONTROL_PREFIX");
     if(!prefix)return true;
     std::cout<<"ROS_STAGE run="<<run<<" side="<<side<<" pid="<<pid<<" stage="<<stage<<std::endl;
     const std::string expected="ROS_RELEASE run="+run+" side="+side+" stage="+stage;
-    const auto end=std::chrono::steady_clock::now()+90s;
+    const auto end=inherited_deadline?*inherited_deadline:std::chrono::steady_clock::now()+90s;
     while(std::chrono::steady_clock::now()<end) {
         if(progress)progress();
         std::ifstream cleanup(std::string(prefix)+".CLEANUP");std::string cleanup_line;
@@ -91,20 +91,51 @@ int main(int argc,char** argv) {
         if(phase=="best_effort")qos.best_effort();else qos.reliable();
         active_stage=phase=="reliable"?"RELIABLE_ENTITIES":"BEST_EFFORT_ENTITIES";
         std::set<unsigned> taken;bool bad=false;unsigned requests=0;
+        unsigned callback_count=0,invalid_callbacks=0;
+        // Explicit fixture: delay publication of ONE already validated callback
+        // receipt. No payload, Reader call, ACK or retransmission is retained.
+        const char* defer_value=std::getenv("FDDST_TEST_DEFER_TARGET_LEDGER");
+        const bool defer_target=side=="A"&&phase=="best_effort"&&defer_value&&std::string(defer_value)=="1";
+        struct TargetReceipt {bool present=false;std::string gid;std::uint64_t sequence=0,hash=0;std::size_t bytes=0;} pending;
+        const auto fingerprint=[](const std::string& value){
+            std::uint64_t hash=14695981039346656037ULL;
+            for(unsigned char byte:value){hash^=byte;hash*=1099511628211ULL;}
+            return hash; // Diagnostic value, never a packet/ownership identity.
+        };
+        const auto reject_callback=[&](const char* reason,const std_msgs::msg::String& msg,const rclcpp::MessageInfo& info){
+            bad=true;
+            if(++invalid_callbacks==1)std::cout<<"ROS_CALLBACK_REJECT run="<<run<<" side="<<side<<" pid="<<pid<<" phase="<<phase
+                <<" reason="<<reason<<" publication_sequence="<<info.get_rmw_message_info().publication_sequence_number
+                <<" bytes="<<msg.data.size()<<" payload_hash="<<fingerprint(msg.data)<<" hash_scope=DIAGNOSTIC_VALUE_ONLY"<<std::endl;
+        };
+        const auto publish_receipt=[&](unsigned ordinal,const std::string& gid,std::uint64_t sequence,std::size_t bytes,std::uint64_t hash){
+            std::cout<<"ROS_TAKE run="<<run<<" side="<<side<<" ordinal="<<ordinal<<" gid="<<gid<<" payload="<<payload_prefix+peer+":"+std::to_string(ordinal)<<" phase="<<phase
+                <<" topic="<<topic_prefix<<"from_"<<peer<<" publication_sequence="<<sequence<<std::endl;
+            if(fragment_bytes)std::cout<<"ROS_FRAGMENT_TAKE bytes="<<bytes<<" exact=1 ordinal="<<ordinal<<std::endl;
+            if(ordinal==5)std::cout<<"ROS_TARGET_TAKE run="<<run<<" side="<<side<<" pid="<<pid<<" phase="<<phase<<" ordinal=5 bytes="<<bytes
+                <<" publication_sequence="<<sequence<<" payload_hash="<<hash<<" hash_scope=DIAGNOSTIC_VALUE_ONLY"<<std::endl;
+        };
         auto pub=node->create_publisher<std_msgs::msg::String>(topic_prefix+"from_"+side,qos);
         std::ostringstream own_gid;for(unsigned char b:pub->get_gid().data)own_gid<<std::hex<<std::setw(2)<<std::setfill('0')<<unsigned(b);
         std::cout<<"ROS_PUBLISHER run="<<run<<" side="<<side<<" gid="<<own_gid.str()<<" intra_process="<<node->get_node_options().use_intra_process_comms()<<" phase="<<phase<<" topic="<<pub->get_topic_name()<<std::endl;
         auto sub=node->create_subscription<std_msgs::msg::String>(topic_prefix+"from_"+peer,qos,
             [&](const std_msgs::msg::String& msg,const rclcpp::MessageInfo& info) {
+                ++callback_count;
                 const auto prefix=payload_prefix+peer+":";
-                if(msg.data.rfind(prefix,0)!=0){bad=true;return;}
+                if(msg.data.rfind(prefix,0)!=0){reject_callback("PREFIX",msg,info);return;}
                 unsigned ordinal=static_cast<unsigned>(std::stoul(msg.data.substr(prefix.size())));
-                if(msg.data!=prefix+std::to_string(ordinal)+padding){bad=true;return;}
-                if(ordinal<1||ordinal>5||!taken.insert(ordinal).second){bad=true;return;}
+                if(msg.data!=prefix+std::to_string(ordinal)+padding){reject_callback("PAYLOAD",msg,info);return;}
+                if(ordinal<1||ordinal>5||taken.count(ordinal)||(ordinal==5&&pending.present)){reject_callback("ORDINAL_OR_DUPLICATE",msg,info);return;}
                 std::ostringstream id;for(unsigned char b:info.get_rmw_message_info().publisher_gid.data)id<<std::hex<<std::setw(2)<<std::setfill('0')<<unsigned(b);
-                std::cout<<"ROS_TAKE run="<<run<<" side="<<side<<" ordinal="<<ordinal<<" gid="<<id.str()<<" payload="<<prefix+std::to_string(ordinal)<<" phase="<<phase
-                    <<" topic="<<topic_prefix<<"from_"<<peer<<" publication_sequence="<<info.get_rmw_message_info().publication_sequence_number<<std::endl;
-                if(fragment_bytes)std::cout<<"ROS_FRAGMENT_TAKE bytes="<<msg.data.size()<<" exact=1 ordinal="<<ordinal<<std::endl;
+                const auto sequence=info.get_rmw_message_info().publication_sequence_number;
+                const auto hash=ordinal==5?fingerprint(msg.data):0;
+                if(defer_target&&ordinal==5){
+                    pending={true,id.str(),sequence,hash,msg.data.size()};
+                    std::cout<<"ROS_CALLBACK_VALIDATED_PENDING run="<<run<<" side="<<side<<" pid="<<pid<<" phase="<<phase<<" ordinal=5 gid="<<pending.gid
+                        <<" publication_sequence="<<sequence<<" bytes="<<pending.bytes<<" payload_hash="<<hash<<" exact=1 source=ORIGINAL_VALIDATED_RMW_CALLBACK"<<std::endl;
+                    return;
+                }
+                taken.insert(ordinal);publish_receipt(ordinal,id.str(),sequence,msg.data.size(),hash);
             });
         rclcpp::Service<example_interfaces::srv::AddTwoInts>::SharedPtr service;
         rclcpp::Client<example_interfaces::srv::AddTwoInts>::SharedPtr client;
@@ -130,6 +161,7 @@ int main(int argc,char** argv) {
         const auto business_deadline=std::chrono::steady_clock::now()+30s;
         active_stage="PUBLISH";
         for(unsigned i=1;i<=5;++i){std_msgs::msg::String m;const auto value=payload_prefix+side+":"+std::to_string(i);m.data=value+padding;pub->publish(m);std::cout<<"ROS_WRITE run="<<run<<" side="<<side<<" ordinal="<<i<<" payload="<<value<<" phase="<<phase<<" topic="<<pub->get_topic_name()<<std::endl;
+            if(i==5)std::cout<<"ROS_TARGET_WRITE run="<<run<<" side="<<side<<" pid="<<pid<<" phase="<<phase<<" ordinal=5 bytes="<<m.data.size()<<" payload_hash="<<fingerprint(m.data)<<" hash_scope=DIAGNOSTIC_VALUE_ONLY"<<std::endl;
 #if defined(_WIN32)
             const char* reaccept=std::getenv("FDDST_HOST_REACCEPT_STAGE");
             if(i==2&&phase=="reliable"&&reaccept&&std::string(reaccept)=="1"){
@@ -161,7 +193,19 @@ int main(int argc,char** argv) {
             const auto response=future.get();if(response->sum!=7)ros_failure_protocol::Fail(run,side,pid,"SERVICE","SERVICE_RESULT_WRONG");
             service_done=true;std::cout<<"ROS_SERVICE_RESPONSE run="<<run<<" sum="<<response->sum<<" phase="<<phase<<" request_id="<<request_id<<std::endl;
         }
-        while((taken.size()<5||(side=="B"&&requests!=1))&&std::chrono::steady_clock::now()<business_deadline){rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);}
+        while((taken.size()<5||(side=="B"&&requests!=1))&&std::chrono::steady_clock::now()<business_deadline){
+            if(pending.present&&taken.size()==4&&service_done){
+                std::cout<<"ROS_TARGET_LEDGER_HELD run="<<run<<" side="<<side<<" pid="<<pid<<" phase="<<phase<<" ordinal=5 accepted_before="<<taken.size()
+                    <<" callbacks="<<callback_count<<" publication_sequence="<<pending.sequence<<" payload_validated=1 retained_payload=0"<<std::endl;
+                if(!ControlStage(run,side,pid,"TARGET_LEDGER_HELD",{},&business_deadline))ros_failure_protocol::Fail(run,side,pid,"LEDGER_BARRIER","FINITE_RELEASE_MISSING");
+                taken.insert(5);publish_receipt(5,pending.gid,pending.sequence,pending.bytes,pending.hash);pending.present=false;
+            }
+            rclcpp::spin_some(node);std::this_thread::sleep_for(1ms);
+        }
+        unsigned accepted_mask=0;for(unsigned value:taken)accepted_mask|=1u<<(value-1);
+        std::cout<<"ROS_LEDGER_STATE run="<<run<<" side="<<side<<" pid="<<pid<<" phase="<<phase<<" callbacks="<<callback_count<<" invalid_callbacks="<<invalid_callbacks
+            <<" bad="<<int(bad)<<" accepted="<<taken.size()<<" accepted_mask="<<accepted_mask<<" target5_accepted="<<taken.count(5)<<" service_done="<<int(service_done)<<" requests="<<requests
+            <<" source=ACTUAL_APPLICATION_VALUES"<<std::endl;
         if(bad||taken.size()!=5||(side=="A"&&!service_done)||(side=="B"&&requests!=1))ros_failure_protocol::Fail(run,side,pid,"LEDGER","SAMPLE_SERVICE_INCOMPLETE");
         std::cout<<"ROS_BUSINESS_DONE run="<<run<<" side="<<side<<" writes=5 takes="<<taken.size()<<" phase="<<phase<<std::endl;
         if(!ControlStage(run,side,pid,std::string(stage_prefix)+"_DONE"))ros_failure_protocol::Fail(run,side,pid,"PHASE_DONE","PHASE_COMPLETION_RELEASE_MISSING");

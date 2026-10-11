@@ -4,8 +4,8 @@
 #ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
 #include "../probes/PublicSocketRuntimeTrace.hpp"
 extern "C" void FastddsDsoftbusObserveSenderSubmission(std::uint64_t sender,
-        const void* data,std::size_t bytes,int status,bool route_known,bool route_available,
-        std::uint64_t route_revision,bool queue_admitted) noexcept;
+        const void* data,std::size_t bytes,bool decode_complete,int status,int queue_result,
+        bool route_known,bool route_state_known,bool route_available,std::uint64_t route_revision) noexcept;
 #endif
 
 namespace fastdds_dsoftbus::dsoftbus {
@@ -78,26 +78,31 @@ bool DSoftBusSenderResource::Send(const std::vector<NetworkBuffer>& buffers, std
         const RuntimeSendPath::Clock::time_point& deadline, std::int32_t priority)
 {
     const bool expired_before_gate = runtime_->Now() >= deadline;
-    std::lock_guard<std::mutex> lock(gate_);
-    if (released_) last_report_ = RuntimeSendReport{RuntimeSendStatus::Released};
-    else if (expired_before_gate || runtime_->Now() >= deadline)
-        last_report_ = RuntimeSendReport{RuntimeSendStatus::DeadlineExpired};
-    else last_report_ = runtime_->Submit(buffers, bytes, begin, end, deadline, priority);
+    RuntimeSendReport original;
+    {
+        std::lock_guard<std::mutex> lock(gate_);
+        if (released_) last_report_ = RuntimeSendReport{RuntimeSendStatus::Released};
+        else if (expired_before_gate || runtime_->Now() >= deadline)
+            last_report_ = RuntimeSendReport{RuntimeSendStatus::DeadlineExpired};
+        else last_report_ = runtime_->Submit(buffers, bytes, begin, end, deadline, priority);
+        original=*last_report_;
+    }
 #ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
     // Process-local diagnostic token only. Never an owner, admission capability,
     // device identity or SDK event epoch. Capture keeps no payload pointer.
     runtime_probe::TraceEvent("Sender_submit_result",reinterpret_cast<std::uintptr_t>(this),
-            -1,-1,static_cast<int>(last_report_->status),bytes);
+            -1,-1,static_cast<int>(original.status),bytes);
     // The observer reads only a complete original single-buffer frame. Other
     // layouts remain explicitly uncorrelated; do not flatten/copy/reframe them.
     const bool complete=buffers.size()==1&&buffers.front().buffer&&buffers.front().size>=bytes;
     FastddsDsoftbusObserveSenderSubmission(reinterpret_cast<std::uintptr_t>(this),
-            complete?buffers.front().buffer:nullptr,complete?bytes:0,static_cast<int>(last_report_->status),
-            last_report_->unresolved_route.has_value(),last_report_->unresolved_route&&last_report_->unresolved_route->route_available,
-            last_report_->unresolved_route?last_report_->unresolved_route->route_version:0,
-            last_report_->queue_result&&*last_report_->queue_result==SendAdmission::Accepted);
+            complete?buffers.front().buffer:nullptr,bytes,complete,static_cast<int>(original.status),
+            original.queue_result?static_cast<int>(*original.queue_result):-1,
+            original.unresolved_route.has_value(),original.unresolved_route&&original.unresolved_route->route_state_known,
+            original.unresolved_route&&original.unresolved_route->route_available,
+            original.unresolved_route?original.unresolved_route->route_version:0);
 #endif
-    return last_report_->status == RuntimeSendStatus::Accepted;
+    return original.status == RuntimeSendStatus::Accepted;
 }
 bool DSoftBusSenderResource::Release()
 {

@@ -81,6 +81,8 @@ int main(int argc,char** argv) {
             if(!wait(root,"CLEANUP",node))throw std::runtime_error("cleanup control missing");
         }
         rclcpp::shutdown();auto final=observation("AFTER_DELETE");
+        std::cout<<"RESOURCE_MODULE_AFTER_DELETE mapped="<<(GetModuleHandleA("fastdds_dsoftbus_ros2_host_bridge.dll")!=nullptr)
+            <<" observation_extra_loader_refs=0"<<std::endl;
         if(final.retained_bytes||final.live_records||final.invalid_releases)okay=false;
         std::cout<<"RESOURCE_EXIT side="<<side<<" result="<<(okay?"PASS":"FAIL")<<std::endl;
     }catch(const std::exception& error){std::cerr<<"RESOURCE_FAILURE reason="<<error.what()<<std::endl;try{rclcpp::shutdown();}catch(...){}return 4;}

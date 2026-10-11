@@ -2,7 +2,7 @@
 
 ## Status
 
-USER_READER_PAYLOAD_LIMIT_HOST_VERIFIED (limited scope), PAYLOAD_POOL_BUDGET_HOST_VERIFIED (limited scope), API23_PAYLOAD_GUARD_BUILD_VERIFIED (compile/link only), DEVICE_RESOURCE_GUARD_NOT_RUN, NOT_PRODUCTION_QUALIFIED. Production M/B/N: NEEDS_PRODUCT_VALUE. The profile TEST_ONLY_BOUNDED is the only accepted profile and is never production approval; configs without the four keys are explicitly UNPROTECTED_LEGACY.
+USER_READER_PAYLOAD_LIMIT_HOST_VERIFIED (limited scope), PAYLOAD_POOL_BUDGET_HOST_VERIFIED (limited scope), API23_PAYLOAD_GUARD_BUILD_VERIFIED (compile/link only), SECURE_FRAGMENTED_BE_SCENE_HOST_VERIFIED (current Candidate 3 host scope), SEND_REFUSAL_FAILED_SCENE_CHECKPOINT_HISTORICAL_CAUSE_UNRESOLVED, DEVICE_RESOURCE_GUARD_NOT_RUN, NOT_PRODUCTION_QUALIFIED. Production M/B/N: NEEDS_PRODUCT_VALUE. The profile TEST_ONLY_BOUNDED is the only accepted profile and is never production approval; configs without the four keys are explicitly UNPROTECTED_LEGACY. The bounded send-refusal and last-sample evidence are recorded in [SEND_REFUSAL_FAILED_SCENE_CHECKPOINT.md](SEND_REFUSAL_FAILED_SCENE_CHECKPOINT.md); they do not change payload-guard qualification.
 
 ## What It Is
 
@@ -59,7 +59,7 @@ Fix (teardown accounting and fault classification only; no fail-fast removed, no
 
 Evidence: deterministic RED/GREEN on the injected counterexample scene (`huge` with one side's close verdict pinned incomplete) — old code exits 3221226505 (0xC0000409, FAST_FAIL subcode 7, dump captured) with the business oracle already at PASS; fixed code exits 0 with the incomplete-close verdict still reported as a failure. Unit-level counterexample `dsoftbus.host_provider_loop.refused-send` fails on the old code (close verdict becomes ProviderException) and passes on the fixed code, while `entered-send-failure` pins the latch that must be kept.
 
-Still open: the *upstream* reason a send is refused at all under sustained reliable retransmission. Its whole archive footprint is one run: `runs/green-boundary` is the only run of the 23 archived boundary runs that carries the refusal marker, and no clean huge run carries it, so it is recorded as untouched — non-reproduction is not a closure claim. (Counted from the archive rather than quoted as a rate; the earlier "about once in 36 Host runs" in the injection comment is superseded by this count.)
+The historical *upstream* reason a send was refused under sustained reliable retransmission remains **INFERRED/UNKNOWN**. Its whole archive footprint is one run: `runs/green-boundary` is the only run of the 23 archived boundary runs that carries the refusal marker, and no clean huge run carries it. The current checkpoint adds bounded host observations and a deterministic deadline-only settlement repair; it does not backfill the archived cause. The original secure 70KB fragmented 19/20 execution remains preserved as an unresolved historical attempt, while Candidate 3 current host scenes pass the strict 20/20 contract. See [SEND_REFUSAL_FAILED_SCENE_CHECKPOINT.md](SEND_REFUSAL_FAILED_SCENE_CHECKPOINT.md).
 
 Two different boundary anomalies were seen and they must not be merged: `runs/green-boundary` is the adapter-level refusal above (no abort, close reported incomplete), while `runs/c3-bnd-5` is a *host-fixture* send error (`send_errors=1` from `HostSocket.cpp`, rc `-609`) that never latched anything (`incomplete:false`) and would behave identically on the pre-fix and fixed bridges.
 
@@ -81,4 +81,7 @@ Residual risk, left unfixed on purpose: the join is on the `FastddsDsoftbusClose
 - Whether the existing budget partition is the wanted shape: it is one budget per (process, latched configuration), shared by every protected reader pool of every Participant in that process, so a per-process total cap across participants already exists; what is still needed is the product value and the approval of that shape
 - Builtin/crypto/CDR coverage decisions
 - Device execution of the guard
-- The upstream reason a send is refused at all under sustained reliable retransmission (see (a)); the abort it used to cause is fixed and is no longer an open item
+- The historical reason for refusal and the original R2 19/20 fragmented
+  progress attempt (see [SEND_REFUSAL_FAILED_SCENE_CHECKPOINT.md](SEND_REFUSAL_FAILED_SCENE_CHECKPOINT.md));
+  current Candidate 3 Host acceptance is separately recorded as strict 20/20.
+  The abort it used to cause is fixed and is no longer an open item.

@@ -127,6 +127,7 @@ friend class ::fastdds_dsoftbus::dsoftbus::NativeSendExecutionTestAccess;
     static void QueueBarrier(EgressState&) noexcept;
     static NativeEgressActivity Observe(const std::shared_ptr<NativeState>&,const EgressState&) noexcept;
     static NativeCompletion Fault(NativeSendCallTicket&,NativeProviderFault,std::optional<std::int32_t>) noexcept;
+    static NativeCompletion RefuseDeadline(NativeSendCallTicket&) noexcept;
     static std::mutex& TestGate(const std::shared_ptr<NativeState>&) noexcept;
 };
 }

@@ -34,7 +34,7 @@ std::map<std::string,std::string> read(const char* path) {
         auto p=line.find('=');if(p==std::string::npos)throw std::runtime_error("configuration syntax");
         if(!m.emplace(line.substr(0,p),line.substr(p+1)).second)throw std::runtime_error("duplicate key");
     }
-    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="host_close_incomplete"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="route_lifecycle"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order"&&!fastdds_dsoftbus::payload_resource::config_key(e.first))throw std::runtime_error("unknown key");
+    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_send_terminal_control"&&e.first!="host_close_error"&&e.first!="host_close_incomplete"&&e.first!="host_fragment_observation"&&e.first!="host_fragment_control"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="route_lifecycle"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order"&&!fastdds_dsoftbus::payload_resource::config_key(e.first))throw std::runtime_error("unknown key");
     (void)fastdds_dsoftbus::payload_resource::parse(m);
     return m;
 }
@@ -42,7 +42,62 @@ unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsign
     const auto& s=m.at(k);if(!std::regex_match(s,std::regex("[0-9]+")))throw std::runtime_error("integer syntax");
     auto n=std::stoul(s);if(n>max)throw std::runtime_error("integer range");return static_cast<unsigned>(n);
 }
-struct Owner:fastdds_dsoftbus::ros2_integration::BridgeOwner {bool host_close_error=false;bool host_close_incomplete=false;};
+class HostReceiveObserver final : public ProcessReceiveObserver {
+public:
+    void OnReceive(ReceiveStage,const ReceiveDiagnostic&,const std::uint8_t*,std::size_t) noexcept override {}
+    void OnDecision(const ReceiveDecision& original) noexcept override {
+        // Original value-only capture has already left every ownership gate.
+        // This observer performs no lookup, payload decode, I/O or Runtime call.
+        using Item=fastdds_dsoftbus::ros2_target_observation::ReceiveDecisionSnapshot::Item;
+        Item value;const auto& admission=original.bridge;
+        value.layer=static_cast<int>(original.layer);value.branch=static_cast<int>(original.branch);
+        value.branch_known=original.branch!=ReceiveDecisionBranch::Unknown;
+        value.rejected=value.branch_known&&original.branch!=ReceiveDecisionBranch::BridgeAccepted&&original.branch!=ReceiveDecisionBranch::Forwarded;
+        value.sequence=original.sequence;value.record_incarnation=original.record_incarnation;value.correlation=original.correlation;
+        value.socket=original.socket;value.role=original.role;value.phase=original.phase;value.bytes=original.size;
+        value.bridge_called=original.bridge_called;value.refused_receive=original.refused_receive;value.refused_receive_total=original.refused_receive_total;
+        value.status_known=original.status_known;value.status=original.status;
+        value.stage=static_cast<int>(admission.stage);value.reason=static_cast<int>(admission.reason);
+        value.result_known=admission.result_known;value.result=admission.result;
+        value.native_status_known=admission.native_status_known;value.native_status=static_cast<int>(admission.native_status);
+        value.native_known=admission.native_known;value.native_slot=admission.native_slot;value.native_incarnation=admission.native_incarnation;
+        value.native_generation=admission.native_generation;value.native_route_version=admission.native_route_version;
+        value.application_known=admission.application_known;value.application_incarnation=admission.application_incarnation;value.logical_token=admission.logical_token;
+        value.receiver_known=admission.receiver_known;value.receiver_incarnation=admission.receiver_incarnation;
+        value.capacity_known=admission.capacity_known;value.lifecycle_known=admission.lifecycle_known;
+        value.application_phase=admission.application_phase;value.receiver_phase=admission.receiver_phase;value.stopped=admission.stopped;
+        value.record_limit_known=admission.record_limit_known;value.record_limit=admission.record_limit;
+        value.records_used=admission.records_used;value.records_limit=admission.records_limit;
+        value.bytes_used=admission.bytes_used;value.bytes_limit=admission.bytes_limit;
+        value.local_records_used=admission.local_records_used;value.local_records_limit=admission.local_records_limit;
+        value.local_bytes_used=admission.local_bytes_used;value.local_bytes_limit=admission.local_bytes_limit;
+        value.copying_used=admission.copying_used;value.copying_limit=admission.copying_limit;
+        value.application_copying=admission.application_copying;value.application_copying_limit=admission.application_copying_limit;
+        std::strncpy(value.stage_name,RxAdmissionStageName(admission.stage),sizeof(value.stage_name)-1);
+        std::strncpy(value.reason_name,RxAdmissionReasonName(admission.reason),sizeof(value.reason_name)-1);
+        fastdds_dsoftbus::ros2_target_observation::ObserveReceiveDecision(value);
+    }
+};
+static_assert(static_cast<std::size_t>(ReceiveDecisionBranch::Count)<=16,"receive branch ledger capacity");
+static_assert(static_cast<std::size_t>(RxAdmissionReason::Count)<=64,"receive reason ledger capacity");
+struct Owner:fastdds_dsoftbus::ros2_integration::BridgeOwner {
+    bool host_close_error=false,host_close_incomplete=false;
+    bool host_fragment_observation=false,host_fragment_observation_flushed=false;
+    std::string send_refusal_control;
+    bool send_refusal_exercised=false; // sole pump thread, until control-side join
+    static void EndOriginalSend(void* context,std::int32_t original_socket,std::chrono::steady_clock::time_point) noexcept {
+        auto& owner=*static_cast<Owner*>(context);
+        if(owner.send_refusal_exercised)return;
+        try {
+            std::ifstream control(owner.send_refusal_control);std::string value;
+            if(!std::getline(control,value)||value!="REFUSE")return;
+            owner.send_refusal_exercised=true;
+            const bool observed=fastdds_dsoftbus::ros2_host::EndOriginalSendForHostTest(original_socket);
+            std::fprintf(stderr,"FDDST_HOST_SEND_TERMINAL_BARRIER original_socket=%d terminal_observed=%d source=HOST_ORIGINAL_CONNECTION\n",original_socket,int(observed));
+            if(!observed)owner.failed=true;
+        }catch(...){owner.failed=true;}
+    }
+};
 }
 extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookVersion(){return 21405;}
 extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookSecurity(){return HAVE_SECURITY;}
@@ -60,9 +115,13 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         unsigned side=integer(m,"side",1),port=integer(m,"port",65535),peerport=integer(m,"peer_port",65535);
         if(!port||!peerport||port==peerport||integer(m,"domain",232)!=domain)throw std::runtime_error("domain/ports");
         bool forward=integer(m,"forward",1)!=0;
+        const bool fragment_observation=m.count("host_fragment_observation")&&integer(m,"host_fragment_observation",1)!=0;
         const bool reaccept=m.count("host_reaccept")&&integer(m,"host_reaccept",1)!=0;
         const bool owned_normal=m.count("owned_normal_reaccept")&&integer(m,"owned_normal_reaccept",1)!=0;
         const bool routes=m.count("route_lifecycle")&&integer(m,"route_lifecycle",1)!=0;
+        const auto fragment_control=m.count("host_fragment_control")?m.at("host_fragment_control"):std::string{};
+        if(m.count("host_fragment_control")&&(side!=1||!forward||fragment_control.empty()||!std::filesystem::path(fragment_control).is_absolute()||reaccept||routes))throw std::runtime_error("fragment loss control requires explicit B-only absolute Host negative profile");
+        if(!fragment_control.empty())std::fputs("FDDST_HOST_FRAGMENT_CONTROL enabled=1 mode=NEGATIVE_DROP_LAST profile=TEST_ONLY_BOUNDED diagnostic_cost=PER_CALL_RTPS_PARSE_ONLY_WHEN_OPTED_IN\n",stderr);
         if(routes&&!owned_normal)throw std::runtime_error("route model requires original retained-entity scene");
         if(owned_normal&&(!reaccept||!m.count("native_reaccept_order")||(m.at("native_reaccept_order")!="outgoing-first"&&m.at("native_reaccept_order")!="accepted-first")))throw std::runtime_error("explicit owned normal Host model required");
         if(reaccept&&(!m.count("reaccept_control")||!std::filesystem::path(m.at("reaccept_control")).is_absolute()))throw std::runtime_error("Host reaccept control must be explicit absolute path");
@@ -77,6 +136,8 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         const auto prefix="host.ros."+m.at("run");
         auto name=[&](unsigned s,const char* role){return prefix+"."+std::to_string(s)+"."+role;};
         auto* owner=new Owner;*out=owner;owner->run=m.at("run");owner->side=side;
+        owner->host_fragment_observation=fragment_observation;
+        if(fragment_observation)std::fputs("FDDST_HOST_FRAGMENT_OBSERVATION enabled=1 profile=TEST_ONLY_BOUNDED scope=STRUCTURAL_APP_OBSERVER export=CONTROL_AFTER_JOIN diagnostic_cost=BOUNDED_CLOSE_IO\n",stderr);
         // Explicit Host injection only. Execute the actual resource-complete
         // Runtime close, then report its existing execution-error outcome.
         if(m.count("host_close_error")&&integer(m,"host_close_error",1)){
@@ -112,7 +173,7 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         const auto remote=config.directory.routes.front().key.remote_locator;
         const auto& local_name=config.directory.locals.front().local_listen_name;
         const auto& peer_name=config.directory.routes.front().fields.remote_listen_name;
-        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",local_name,peer_name,name(1-side,"outgoing"),forward,reaccept,reaccept?m.at("reaccept_control"):std::string{},routes,identity(1-side).udid});
+        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",local_name,peer_name,name(1-side,"outgoing"),forward,reaccept,reaccept?m.at("reaccept_control"):std::string{},routes,identity(1-side).udid,fragment_control});
         phase0::PublicSocketConfiguration b;
         b.identity={name(side,"outgoing"),{910+side*4},{1010+side*4}};
         b.listener_identity={local_name,{911+side*4},{1011+side*4}};
@@ -120,7 +181,13 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         b.max_message_size=65536;b.bind_qos={{0,80},{1,2000}};b.listen_qos=b.bind_qos;
         b.bounded_reaccept_host=reaccept;
         b.route_lifecycle=routes;
-        owner->runtime=std::make_unique<experimental::Runtime>(b);
+        owner->runtime=std::make_unique<experimental::Runtime>(b,std::make_shared<HostReceiveObserver>());
+        if(m.count("host_send_terminal_control")) {
+            owner->send_refusal_control=m.at("host_send_terminal_control");
+            if(!std::filesystem::path(owner->send_refusal_control).is_absolute())throw std::runtime_error("absolute Host send control required");
+            if(!phase0::RuntimeProbeAccess::BeforeSendForHostTest(*owner->runtime,&Owner::EndOriginalSend,owner))
+                throw std::runtime_error("Host send scheduling installation");
+        }
         if(owned_normal){
             auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,m.at("native_reaccept_order")=="outgoing-first",m.at("reaccept_control"),true,routes);
             if(routes)owner->node_diagnostic_close=[control]{if(!control->ExportNodeDiagnostics())throw std::runtime_error("incomplete node diagnostic capture");};
@@ -174,6 +241,25 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
 }
 extern "C" __declspec(dllexport) int FastddsDsoftbusClose(void* value) {
     auto* p=static_cast<Owner*>(value);if(!p)return 1;
+    const auto export_fragments=[p] {
+        // The sole supported control-side close owner calls this after the pump
+        // and Host link joins, before any Runtime/descriptor/module release.
+        // Flush snapshots the existing fixed store under its leaf observation
+        // mutex and emits outside it. This bounded opt-in export has I/O cost;
+        // neither its scope nor its success is an SDK physical-drain claim.
+        if(!p->host_fragment_observation||p->host_fragment_observation_flushed)return;
+        p->host_fragment_observation_flushed=true;
+        bool flush_return=false,exception=false;
+        try{flush_return=fastdds_dsoftbus::ros2_target_observation::Flush();}catch(...){exception=true;}
+        const int output_flush=std::fflush(stdout);
+        const bool output_error=output_flush!=0||std::ferror(stdout)!=0;
+        const bool complete=flush_return&&!exception&&!output_error;
+        const int marker=std::fprintf(stderr,"FDDST_HOST_FRAGMENT_CAPTURE run=%s side=%c flush_return=%d exception=%d output_error=%d complete=%d profile=TEST_ONLY_BOUNDED scope=STRUCTURAL_APP_OBSERVER sdk_epoch=NOT_PROVEN\n",p->run.c_str(),p->side?'B':'A',int(flush_return),int(exception),int(output_error),int(complete));
+        const int marker_flush=std::fflush(stderr);
+        if(marker<0||marker_flush!=0)std::fputs("FDDST_HOST_FRAGMENT_CAPTURE_MARKER_OUTPUT_ERROR\n",stderr);
+        // Diagnostic incompleteness never changes the original provider/SDK
+        // status, business verdict or ownership obligations of this close.
+    };
     const int local_close=p->CloseLocal();
     const int close_result=(local_close==0&&p->host_close_incomplete)?1:local_close;
     if(close_result==1) {
@@ -196,9 +282,21 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusClose(void* value) {
         // teardown-accounting fix only: the return value, the verdict and the diagnostics
         // above are unchanged, and the retained product owner (return 1) is untouched.
         fastdds_dsoftbus::ros2_host::StopLink();
+        if(!fastdds_dsoftbus::ros2_target_observation::ExportAdmissions())std::fputs("FDDST_ADMISSION_CAPTURE_INCOMPLETE\n",stderr);
+        export_fragments();
+        std::fprintf(stderr,"FDDST_HOST_LINK_JOINED complete=1 owner_released=0\n");
         std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr);std::fflush(stderr);return 1;}
     fastdds_dsoftbus::ros2_host::StopLink();
+    if(!fastdds_dsoftbus::ros2_target_observation::ExportAdmissions())std::fputs("FDDST_ADMISSION_CAPTURE_INCOMPLETE\n",stderr);
+    export_fragments();
     const auto io=fastdds_dsoftbus::ros2_host::ObserveLink();const auto native=p->runtime->ObserveSocket();
+    const auto final_native=phase0::RuntimeProbeAccess::ObserveConnection(*p->runtime).native;
+    const auto& send_call=native.operations[static_cast<std::size_t>(phase0::PublicSocketOperation::Send)];
+    std::fprintf(stderr,"FDDST_HOST_CLEANUP threads_joined=%d retained_owner_metadata=%llu retained_id_metadata=%llu callbacks=%llu receives=%llu send_entered=%llu attempts=%llu calls=%llu returns=%llu\n",
+        int(io.threads_joined),static_cast<unsigned long long>(final_native.owners),static_cast<unsigned long long>(final_native.owned_ids),
+        static_cast<unsigned long long>(final_native.callbacks),static_cast<unsigned long long>(final_native.receives),
+        static_cast<unsigned long long>(final_native.send.entered),static_cast<unsigned long long>(send_call.attempts),
+        static_cast<unsigned long long>(send_call.calls),static_cast<unsigned long long>(send_call.returns));
     std::fprintf(stderr,"FDDST_HOST_IO run=%s side=%u sends=%llu ingress=%llu send_errors=%llu fake_sdk=%d rejected_callbacks=%llu\n",p->run.c_str(),p->side,static_cast<unsigned long long>(io.sends),static_cast<unsigned long long>(io.ingress),static_cast<unsigned long long>(io.send_errors),int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));
     const bool failed=p->failed.load();if(failed)std::fputs("FDDST_PUMP_ERROR_OBSERVED\n",stderr);
     p->descriptor.reset();p->runtime.reset();

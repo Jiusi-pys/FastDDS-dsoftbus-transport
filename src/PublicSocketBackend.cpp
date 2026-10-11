@@ -75,6 +75,10 @@ struct PublicSocketState {
     void(*before_capability)(void*) noexcept=nullptr;
     void* before_capability_context=nullptr;
 #endif
+#if defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM)
+    void(*before_send)(void*,std::int32_t,std::chrono::steady_clock::time_point) noexcept=nullptr;
+    void* before_send_context=nullptr;
+#endif
     bool listener_attempted=false,primary_closed=false,listener_closed=false,accepted_closed=false;
     bool primary_observed=false,listener_observed=false,accepted_observed=false;
     bool primary_failed=false,listener_failed=false,accepted_failed=false;
@@ -423,24 +427,56 @@ BackendCallResult Setup(const std::shared_ptr<detail::PublicSocketState>& s,std:
 }
 BackendCallResult PublicSocketBackend::Listen(std::int32_t id){return Setup(state_,id,RecordRole::Server);}
 BackendCallResult PublicSocketBackend::Bind(std::int32_t id){return Setup(state_,id,RecordRole::Client);}
+#if defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM)
+void PublicSocketBackend::SetBeforeSendHookForTest(void(*fn)(void*,std::int32_t,std::chrono::steady_clock::time_point) noexcept,void* context) noexcept {
+    std::lock_guard<std::mutex> lock(state_->gate);state_->before_send=fn;state_->before_send_context=context;
+}
+#endif
 BackendSendResult PublicSocketBackend::Send(std::int32_t id,const std::uint8_t* p,std::size_t size,std::chrono::steady_clock::time_point deadline){
     auto s=state_;
+#if defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM)
+    void(*hook)(void*,std::int32_t,std::chrono::steady_clock::time_point) noexcept=nullptr;void* context=nullptr;
+    {std::lock_guard<std::mutex> lock(s->gate);hook=s->before_send;context=s->before_send_context;}
+    if(hook)hook(context,id,deadline);
+#endif
+    std::optional<PublicSocketSendRefusal> refusal;bool emit_refusal=false;
     {std::lock_guard<std::mutex> lock(s->gate);
-        if(!p||!size||size>s->config.max_message_size||size>UINT32_MAX){s->Reject(PublicSocketOperation::Send,BackendStatus::InvalidBuffer);return {BackendStatus::InvalidBuffer,{}};}
-        if(s->socket<0||id!=s->socket||s->primary_closed||s->primary_observed||s->primary_failed||s->observation.stopped||s->observation.closed||std::chrono::steady_clock::now()>=deadline){
-            // Diagnostic only, once per process: this refusal returns a status without entering
-            // the SDK, which is the shape the adapter can no longer mistake for an exception.
-            // Naming the disjunct keeps the refusal's trigger on the record instead of inferred.
-            static std::atomic<int> once{0};
-            if(once.fetch_add(1)==0){
-                const auto now=std::chrono::steady_clock::now();
-                const int reason=(s->socket<0?1:0)|(id!=s->socket?2:0)|(s->primary_closed?4:0)|(s->primary_observed?8:0)|(s->primary_failed?16:0)|(s->observation.stopped?32:0)|(s->observation.closed?64:0)|(now>=deadline?128:0);
-                std::fprintf(stderr,"FDDST_BACKEND_SEND_REFUSAL reason_mask=%d past_deadline_ms=%lld size=%llu\n",reason,
-                    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(now-deadline).count()),
-                    static_cast<unsigned long long>(size));std::fflush(stderr);
-            }
-            s->Reject(PublicSocketOperation::Send,BackendStatus::InvalidState);return {BackendStatus::InvalidState,{}};}
-        s->Enter(PublicSocketOperation::Send);}
+        const std::uint32_t buffer_reason=(!p?1u:0u)|(!size?2u:0u)|(size>s->config.max_message_size?4u:0u)|(size>UINT32_MAX?8u:0u);
+        std::uint32_t state_reason=0;std::int64_t past_deadline_ms=0;
+        if(!buffer_reason){
+            // One clock/state snapshot is both the executed decision and its
+            // observation; a later clock read cannot invent another branch.
+            const auto now=std::chrono::steady_clock::now();
+            state_reason=(s->socket<0?1u:0u)|(id!=s->socket?2u:0u)|(s->primary_closed?4u:0u)|(s->primary_observed?8u:0u)|(s->primary_failed?16u:0u)|(s->observation.stopped?32u:0u)|(s->observation.closed?64u:0u)|(now>=deadline?128u:0u);
+            // Subtract after conversion so extreme caller deadlines cannot
+            // overflow steady_clock's signed tick duration during observation.
+            const auto elapsed=std::chrono::duration<long double,std::milli>(now.time_since_epoch()).count()-std::chrono::duration<long double,std::milli>(deadline.time_since_epoch()).count();
+            const auto low=static_cast<long double>(std::numeric_limits<std::int64_t>::min()),high=static_cast<long double>(std::numeric_limits<std::int64_t>::max());
+            past_deadline_ms=elapsed<=low?std::numeric_limits<std::int64_t>::min():elapsed>=high?std::numeric_limits<std::int64_t>::max():static_cast<std::int64_t>(elapsed);
+        }
+        if(buffer_reason||state_reason){
+            const auto status=buffer_reason?BackendStatus::InvalidBuffer:BackendStatus::InvalidState;
+            auto& operation=s->Op(PublicSocketOperation::Send);++operation.attempts;operation.last=BackendCallResult{status};
+            PublicSocketSendRefusal captured;captured.branch=buffer_reason?PublicSocketSendRefusalBranch::InvalidBuffer:PublicSocketSendRefusalBranch::InvalidState;
+            captured.source=PublicSocketSendStateSource::LocalBackendGate;captured.reason_mask=buffer_reason?buffer_reason:state_reason;captured.attempt=operation.attempts;
+            captured.record=s->config.identity.record;captured.owner=s->config.identity.owner;captured.requested_socket=id;captured.current_socket=s->socket;captured.size=size;
+            captured.configured=s->observation.configured;captured.primary_closed=s->primary_closed;captured.primary_observed=s->primary_observed;captured.primary_failed=s->primary_failed;
+            captured.stopped=s->observation.stopped;captured.closed=s->observation.closed;captured.deadline_checked=!buffer_reason;captured.past_deadline_ms=past_deadline_ms;captured.result={status,{}};
+            if(!buffer_reason&&state_reason==128u)captured.result.refusal=BackendSendRefusal::DeadlineExpired;
+            auto increment=[&](std::uint64_t& count){if(count==std::numeric_limits<std::uint64_t>::max())s->observation.send_refusal_counter_saturated=true;else ++count;};
+            increment(s->observation.send_refusals);
+            if(!s->observation.first_send_refusal){s->observation.first_send_refusal=captured;emit_refusal=true;}else increment(s->observation.send_refusal_overflow);
+            refusal=captured;
+        }else s->Enter(PublicSocketOperation::Send);}
+    if(refusal){
+        FASTDDS_DSOFTBUS_PROBE_EVENT("BackendReject_BackendStatus_result",UINT64_MAX,-1,-1,int(refusal->result.status),static_cast<unsigned>(PublicSocketOperation::Send));
+        if(emit_refusal){const auto& r=*refusal;
+            std::fprintf(stderr,"FDDST_BACKEND_SEND_REFUSAL layer=PUBLIC_SOCKET_BACKEND branch=%s source=LOCAL_BACKEND_GATE reason_mask=%u send_attempt=%llu record=%llu owner=%llu passed_socket=%d current_socket=%d configured=%d api_called=%d api_returned=%d result_present=%d status=%d past_deadline_ms=%lld size=%llu\n",
+                r.branch==PublicSocketSendRefusalBranch::InvalidBuffer?"InvalidBuffer":"InvalidState",r.reason_mask,
+                static_cast<unsigned long long>(r.attempt),static_cast<unsigned long long>(r.record.value),static_cast<unsigned long long>(r.owner.value),r.requested_socket,r.current_socket,r.configured?1:0,
+                r.result.api_called?1:0,r.result.api_returned?1:0,r.result.provider_return?1:0,static_cast<int>(r.result.status),static_cast<long long>(r.past_deadline_ms),static_cast<unsigned long long>(r.size));std::fflush(stderr);}
+        return refusal->result;
+    }
     try {FASTDDS_DSOFTBUS_DDS_FRAME("SDK_SEND",id,p,size);FASTDDS_DSOFTBUS_PROBE_EVENT("SendBytes_enter",s->observation.entry_index,int(RecordRole::Client),id,0,size);const auto rc=::SendBytes(id,p,static_cast<std::uint32_t>(size));FASTDDS_DSOFTBUS_PROBE_EVENT("SendBytes_return",s->observation.entry_index,int(RecordRole::Client),id,rc,size);std::lock_guard<std::mutex> lock(s->gate);s->Returned(PublicSocketOperation::Send,rc);
         // NativeSendExecution must see even negative or unexpected positive raw results.
         return {BackendStatus::None,rc,true,true};

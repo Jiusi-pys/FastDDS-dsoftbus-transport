@@ -1,9 +1,12 @@
 // Host-only public Socket C seam. It moves opaque, length-bounded bytes between
-// independent processes and never parses RTPS/ROS or manufactures DDS results.
+// independent processes. Default forwarding never parses RTPS/ROS. An explicit
+// negative test profile alone may select one observed last DATA_FRAG for loss;
+// it never manufactures DDS results or adds a reliability protocol.
 #include <winsock2.h>
 #include <windows.h>
 #undef SendMessage
 #include "HostSocket.hpp"
+#include "../../probes/PublicSocketRtpsObservation.hpp"
 #include <softbus_bus_center.h>
 #include <socket.h>
 #include <array>
@@ -33,7 +36,77 @@ unsigned node_queries=0;
 const ISocketListener* listener=nullptr;
 std::thread accept_thread,read_thread;
 std::atomic<bool> stop{false};
+std::atomic<bool> threads_joined{false};
 std::atomic<std::uint64_t> sends{0},ingress{0},send_errors{0};
+std::atomic<std::uint64_t> fragment_drops{0};
+// One original value-only sample identity. This gate protects diagnostic state
+// only; parsing, command I/O and output happen outside it and all ownership gates.
+std::mutex fragment_gate;
+struct FragmentTarget {
+    bool known=false,selected=false;
+    std::array<std::uint8_t,16> writer{};
+    std::int32_t high=0;
+    std::uint32_t low=0,sample_size=0;
+    std::uint16_t fragment_size=0;
+} fragment_target;
+struct FragmentSelection {
+    bool drop=false;
+    experiment::FragmentObservation original;
+};
+bool FragmentDropCommand() {
+    std::ifstream command(cfg.fragment_control+".DROP",std::ios::binary);
+    char line[192]{};if(!command.getline(line,sizeof(line)))return false;
+    auto length=std::strlen(line);if(length&&line[length-1]=='\r')line[--length]='\0';
+    // Exactly one bounded line; stale PID, wrong run or trailing data is ignored.
+    if(command.peek()!=std::char_traits<char>::eof())return false;
+    char expected[192]{};
+    std::snprintf(expected,sizeof(expected),"HOST_FRAGMENT_CONTROL schema=1 run=%s side=B pid=%lu action=DROP",cfg.run.c_str(),static_cast<unsigned long>(GetCurrentProcessId()));
+    return std::strcmp(line,expected)==0;
+}
+FragmentSelection SelectFragmentDrop(const void* data,std::uint32_t n) {
+    if(cfg.fragment_control.empty())return {}; // No parser on the default Host path.
+    const auto observed=experiment::ObserveRtps(data,n);
+    // Only one DATA_FRAG with its allowed RTPS metadata/statistics may be lost.
+    // A packet containing other data/control work is forwarded unchanged.
+    if(!observed.valid||!observed.drop_shape_candidate||observed.fragments.size()!=1)return {};
+    const auto& value=observed.fragments.front();
+    if(!value.payload_bounds_known||value.key_flag||!value.fragment_start||!value.fragment_count||!value.fragment_size||!value.sample_size)return {};
+    const std::uint64_t total=(std::uint64_t(value.sample_size)+value.fragment_size-1)/value.fragment_size;
+    if(value.fragment_end>total||value.payload_offset>n||value.payload_bytes>n-value.payload_offset)return {};
+    const auto begin=std::uint64_t(value.fragment_start-1)*value.fragment_size;
+    if(begin>=value.sample_size)return {};
+    const auto expected_bytes=std::min<std::uint64_t>(std::uint64_t(value.fragment_count)*value.fragment_size,value.sample_size-begin);
+    if(value.payload_bytes<expected_bytes||value.payload_bytes>expected_bytes+3)return {};
+    bool identifies=false;
+    if(value.fragment_start==1&&value.sample_size>=9) {
+        const auto* p=static_cast<const std::uint8_t*>(data)+value.payload_offset;
+        const auto prefix=cfg.run+":best_effort:B:5";
+        // This opt-in fixture supports exactly the observed std_msgs String
+        // CDR_LE representation: encapsulation(4), string length(4), bytes/NUL.
+        // String length includes NUL and equals sample_size-8. The next real
+        // fixture byte is padding 'x', not ':' and not an ordinal digit.
+        if(value.payload_bytes>=8+prefix.size()+1&&p[0]==0&&p[1]==1&&p[2]==0&&p[3]==0) {
+            const auto length=std::uint32_t(p[4])|(std::uint32_t(p[5])<<8)|(std::uint32_t(p[6])<<16)|(std::uint32_t(p[7])<<24);
+            identifies=length==value.sample_size-8&&length>prefix.size()+1&&
+                    std::memcmp(p+8,prefix.data(),prefix.size())==0&&p[8+prefix.size()]=='x';
+            if(identifies&&std::uint64_t(8)+length<=value.payload_bytes)identifies=p[8+length-1]==0;
+        }
+    }
+    FragmentTarget original;
+    {
+        std::lock_guard<std::mutex> lock(fragment_gate);
+        if(identifies&&!fragment_target.known)fragment_target={true,false,value.writer_guid,value.sequence_hi,value.sequence_lo,value.sample_size,value.fragment_size};
+        original=fragment_target;
+    }
+    if(!original.known||original.selected||original.writer!=value.writer_guid||original.high!=value.sequence_hi||original.low!=value.sequence_lo||
+            original.sample_size!=value.sample_size||original.fragment_size!=value.fragment_size||value.fragment_end!=total||!FragmentDropCommand())return {};
+    {
+        std::lock_guard<std::mutex> lock(fragment_gate);
+        if(fragment_target.selected)return {};
+        fragment_target.selected=true;
+    }
+    return {true,value};
+}
 int socket_count=0;
 HANDLE ready=nullptr,peer_ready=nullptr;
 bool transfer(SOCKET s,char* p,int n,bool write) {
@@ -80,9 +153,17 @@ void StopLink() {
     stop.store(true);
     {std::lock_guard<std::mutex> l(gate);for(auto& s:sockets)if(s!=INVALID_SOCKET){::shutdown(s,SD_BOTH);closesocket(s);s=INVALID_SOCKET;}}
     if(accept_thread.joinable())accept_thread.join();if(read_thread.joinable())read_thread.join();
+    threads_joined=true;
     if(ready)CloseHandle(ready);if(peer_ready)CloseHandle(peer_ready);WSACleanup();
 }
-LinkObservation ObserveLink(){return {sends.load(),ingress.load(),send_errors.load()};}
+// Control-side observation only: after pumps and Host threads have been joined.
+LinkObservation ObserveLink(){return {sends.load(),ingress.load(),send_errors.load(),threads_joined.load(),fragment_drops.load()};}
+bool EndOriginalSendForHostTest(std::int32_t id){
+    {std::lock_guard<std::mutex> lock(gate);if(id<=0||id>=int(socket_capacity)||id!=outgoing_id||sockets[id]==INVALID_SOCKET)return false;}
+    ::Shutdown(id); // existing public Host seam, not a private SDK handle
+    std::unique_lock<std::mutex> lock(gate);
+    return terminal_changed.wait_for(lock,std::chrono::seconds(3),[&]{return terminal[id];});
+}
 void ReacceptControlReceipt(const char* action){
     if(!cfg.bounded_reaccept)return;
     std::ofstream file(cfg.reaccept_control+"."+action,std::ios::binary);
@@ -170,12 +251,29 @@ extern "C" int32_t Bind(int32_t id,const QosTV*,uint32_t,const ISocketListener* 
 extern "C" int32_t SendBytes(int32_t id,const void* data,uint32_t n) {
     using namespace fastdds_dsoftbus::ros2_host;
     if(!data||!n||n>65536||id<=1||id>=int(socket_capacity)||(!cfg.bounded_reaccept&&id!=2&&id!=3))return -607;
-    std::lock_guard<std::mutex> s(send_gate);SOCKET target;{std::lock_guard<std::mutex> l(gate);target=sockets[id];}
-    if(target==INVALID_SOCKET)return -608;
-    ++sends;
-    if(!cfg.forward)return 0;std::uint32_t size=htonl(n);
-    if(transfer(target,reinterpret_cast<char*>(&size),4,true)&&transfer(target,const_cast<char*>(static_cast<const char*>(data)),static_cast<int>(n),true))return 0;
-    ++send_errors;return -609;
+    // The actual public Host API has entered. The original borrowed arguments
+    // are observed before send_gate; this is not a pre-entry provider refusal.
+    const auto selected=SelectFragmentDrop(data,n);
+    std::int32_t result=0;bool dropped=false;
+    {
+        std::lock_guard<std::mutex> s(send_gate);SOCKET target;{std::lock_guard<std::mutex> l(gate);target=sockets[id];}
+        if(target==INVALID_SOCKET)result=-608;
+        else {
+            ++sends;
+            if(cfg.forward&&selected.drop)dropped=true;
+            else if(cfg.forward) {
+                std::uint32_t size=htonl(n);
+                if(!transfer(target,reinterpret_cast<char*>(&size),4,true)||!transfer(target,const_cast<char*>(static_cast<const char*>(data)),static_cast<int>(n),true)){++send_errors;result=-609;}
+            }
+        }
+    }
+    if(dropped) {
+        ++fragment_drops;
+        char writer[33]{};for(unsigned i=0;i<16;++i)std::snprintf(writer+2*i,3,"%02x",selected.original.writer_guid[i]);
+        std::fprintf(stdout,"HOST_FRAGMENT_DROP schema=1 run=%s side=B pid=%lu original_socket=%d writer=%s sequence_hi=%d sequence_lo=%u first=%u count=%u fragment_size=%u sample_size=%u bytes=%u api_called=1 actual_host_write=0 native_result=0 expected_negative=1 drops=1 identity=ORIGINAL_BORROWED_ARGS\n",cfg.run.c_str(),static_cast<unsigned long>(GetCurrentProcessId()),id,writer,selected.original.sequence_hi,selected.original.sequence_lo,selected.original.fragment_start,selected.original.fragment_count,selected.original.fragment_size,selected.original.sample_size,n);
+        std::fflush(stdout);
+    }
+    return result;
 }
 extern "C" void Shutdown(int32_t id) {
     using namespace fastdds_dsoftbus::ros2_host;

@@ -188,6 +188,7 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
     }
     std::int32_t Send(NativeSocketId id, const Route& route, const std::uint8_t* data,
             std::size_t size, SendQueue::Clock::time_point deadline, std::int32_t priority) override {
+        bool deadline_refused=false;
         // Reachable only from the controlled Host loop's admitted invocation.
         // Closing permits an invocation that won native entry before revocation;
         // the controller waits for that entire invocation before binding close.
@@ -218,7 +219,10 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
             // reports its own rejection, and the pump still records the execution failure.
             // Only a status returned *after* the SDK was entered (api_called) still latches.
             if (result.api_called) throw std::runtime_error("Host provider returned no send result");
+            deadline_refused=result.status==BackendStatus::InvalidState&&
+                result.refusal==BackendSendRefusal::DeadlineExpired&&!result.api_returned&&!result.provider_return;
         } catch (...) { Fault(BackendStatus::ProviderException,201); throw; }
+        if(deadline_refused)throw NativeSendDeadlineRefusal{};
         throw std::runtime_error("Host provider refused the send before SDK entry");
     }
     NativeSocketResult CreateListenerSocket() noexcept {

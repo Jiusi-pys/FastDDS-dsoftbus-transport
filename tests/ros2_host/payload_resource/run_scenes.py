@@ -54,6 +54,8 @@ def main():
     p.add_argument('--no-guard', action='store_true', help='negative control: omit payload keys (legacy unprotected)')
     p.add_argument('--capture-dir', type=Path, help='run each child under the per-process debug capture (Windows); dumps stay local')
     p.add_argument('--inject-close-incomplete', choices=('A', 'B'), help='Host-only counterexample: pin one side\'s close verdict to incomplete')
+    p.add_argument('--inject-send-terminal', choices=('A', 'B'), help='Host scheduling only: end an original connection after provider admission, before the real backend predicate')
+    p.add_argument('--paired-close', action='store_true', help='use the existing sealed/pump-joined native-close barrier on both sides')
     a = p.parse_args()
     m, b, n = a.limits if a.limits else SCENES[a.scene]
     run = '0123456789abcdef'  # the frozen id the test keystore grants name; no other id is authorized
@@ -73,7 +75,10 @@ def main():
             'locator_version=V1\nnative_name_contract=PACKAGE_SCOPED_V1\nauthorized_package=host.ros.test\n'
             'service_prefix=host.ros.test.v1\nbackend=HOST_OPAQUE_BYTES_TEST_ONLY',
             'run=' + run, 'side=' + str(index), 'port=' + str(ports[index]), 'peer_port=' + str(peers[index]),
-            'domain=201', 'forward=1', 'host_close_error=0'] + (['host_close_incomplete=1'] if a.inject_close_incomplete == side else []) + ([] if a.no_guard else [
+            'domain=201', 'forward=1', 'host_close_error=0'] +
+            (['host_send_terminal_control='+str((root/'REFUSE').resolve())] if a.inject_send_terminal == side else []) +
+            (['runtime_close_release='+str((root/(side+'-CLOSE')).resolve())] if a.paired_close else []) +
+            (['host_close_incomplete=1'] if a.inject_close_incomplete == side else []) + ([] if a.no_guard else [
             'payload_guard_profile=TEST_ONLY_BOUNDED', 'payload_max_sample_bytes=%d' % m,
             'payload_pool_budget_bytes=%d' % b, 'payload_max_allocations=%d' % n])) + '\n')
         env = os.environ.copy()
@@ -100,11 +105,15 @@ def main():
         ready = all(wait_for(a.output / (s + '.stdout'), 'RESOURCE_READY', 40) for s in 'AB')
         outcome['steps']['ready'] = ready
         if ready:
+            if a.inject_send_terminal:
+                signal(root, 'REFUSE')
             signal(root, 'START')
             outcome['steps']['pre_sent'] = wait_for(a.output / 'A.stdout', 'RESOURCE_PRE_SENT', 30)
             time.sleep(1.5)
             signal(root, 'EARLY')
             outcome['steps']['cancelled'] = wait_for(a.output / 'B.stdout', 'RESOURCE_CANCELLED', 20)
+            if a.inject_send_terminal:
+                signal(root, 'REFUSE')
             signal(root, 'PROGRESS')
             outcome['steps']['sent'] = wait_for(a.output / 'A.stdout', 'RESOURCE_SENT', 20)
             time.sleep(1.0)
@@ -113,6 +122,15 @@ def main():
             outcome['relay_errors_before_oracle'] = list(relay.errors)  # later errors are teardown noise
             wait_for(a.output / 'B.stdout', 'RESOURCE_DONE', 20)
             signal(root, 'CLEANUP')
+            if a.paired_close:
+                close_ready=all(wait_for(a.output/(s+'.stdout'),'ROS_RUNTIME_CLOSE_READY',20) for s in 'AB')
+                outcome['steps']['paired_close_ready']=close_ready
+                for s in 'AB':
+                    log=(a.output/(s+'.stdout')).read_text(errors='replace')
+                    row=re.search(r'ROS_RUNTIME_CLOSE_READY schema=1 run='+run+r' side='+s+r' pid=(\d+)',log)
+                    if row:
+                        (root/(s+'-CLOSE')).write_text('ROS_RUNTIME_CLOSE_RELEASE schema=1 run='+run+' side='+s+
+                            ' pid='+row.group(1)+' stage=RUNTIME_CLOSE reason='+('NORMAL_COMPLETION' if close_ready else 'WINDOW_FAILED')+'\n')
     finally:
         codes = {}
         for side, proc in procs.items():

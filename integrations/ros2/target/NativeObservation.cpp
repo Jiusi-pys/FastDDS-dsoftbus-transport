@@ -8,6 +8,7 @@
 #include <mutex>
 #include <memory>
 #include <stdexcept>
+#include <limits>
 
 namespace {
 constexpr std::size_t capacity = 8192;
@@ -24,12 +25,15 @@ struct ObserverState {
     fastdds_dsoftbus::ros2_target_observation::V1LocatorSnapshot v1_locators;
     fastdds_dsoftbus::ros2_target_observation::EndpointSnapshot endpoints;
     fastdds_dsoftbus::ros2_target_observation::SubmissionSnapshot submissions;
+    fastdds_dsoftbus::ros2_target_observation::ReceiveDecisionSnapshot receive_decisions;
     std::string run;
     unsigned side=0;
     std::atomic<std::uint64_t> observations{0},send_enter{0},send_return{0},send_error{0},ingress{0},overflow{0},malformed{0};
     std::mutex startup_mutex;
     fastdds_dsoftbus::ros2_diagnostics::Snapshot startup;
     std::atomic<std::uint64_t> capture_faults{0},exported_failure{0},output_errors{0};
+    std::atomic<bool> admissions_exported{false};
+    std::atomic<std::uint64_t> receive_capture_dropped{0};
     bool cleanup_started=false;
 };
 // Begin publishes one fully initialized, fixed-capacity metadata store. It owns
@@ -39,6 +43,10 @@ struct ObserverState {
 std::atomic<ObserverState*> published{nullptr};
 std::atomic<bool> begin_claimed{false};
 std::atomic<std::uint64_t> prebegin_faults{0};
+void increment(std::uint64_t& value,std::uint64_t& overflow) noexcept {
+    if(value!=(std::numeric_limits<std::uint64_t>::max)())++value;
+    else if(overflow!=(std::numeric_limits<std::uint64_t>::max)())++overflow;
+}
 ObserverState* trace_state() noexcept {
     auto* state=published.load(std::memory_order_acquire);
     if(!state)++prebegin_faults;
@@ -164,13 +172,28 @@ std::uint64_t SocketFrame(const char* event,std::int32_t socket,const std::uint8
     return observation;
 }
 }
-extern "C" void FastddsDsoftbusObserveSenderSubmission(std::uint64_t sender,const void* data,std::size_t bytes,int status,bool route_known,bool route_available,std::uint64_t route_revision,bool queue_admitted) noexcept {
+extern "C" void FastddsDsoftbusObserveSenderSubmission(std::uint64_t sender,const void* data,std::size_t bytes,bool decode_complete,int status,int queue_result,bool route_known,bool route_state_known,bool route_available,std::uint64_t route_revision) noexcept {
     auto* state=published.load(std::memory_order_acquire);if(!state)return;
-    if(!data||!bytes){std::lock_guard<std::mutex> lock(state->mutex);++state->submissions.uncorrelated;return;}
-    const auto packet=fastdds_dsoftbus::experiment::ObserveRtps(data,bytes);
+    // Decoding may allocate, so it stays outside both the sender gate and the
+    // leaf metadata gate. Scalar admission capture does not depend on decoding.
+    const auto packet=decode_complete&&data&&bytes?
+        fastdds_dsoftbus::experiment::ObserveRtps(data,bytes):fastdds_dsoftbus::experiment::RtpsObservation{};
     std::lock_guard<std::mutex> lock(state->mutex);
     auto& ledger=state->submissions;
-    if(!packet.valid){++ledger.uncorrelated;return;}
+    increment(ledger.total,ledger.counter_overflow);
+    const bool queue_known=queue_result!=-1,queue_admitted=queue_result==0;
+    if(status>=0&&std::size_t(status)<ledger.status_counts.size())increment(ledger.status_counts[std::size_t(status)],ledger.counter_overflow);
+    else increment(ledger.unknown_status,ledger.counter_overflow);
+    if(!queue_known)increment(ledger.queue_unknown,ledger.counter_overflow);
+    else if(queue_result>=0&&std::size_t(queue_result)<ledger.queue_counts.size())increment(ledger.queue_counts[std::size_t(queue_result)],ledger.counter_overflow);
+    else increment(ledger.queue_invalid,ledger.counter_overflow);
+    if(status!=0){
+        increment(ledger.refused,ledger.counter_overflow);
+        if(!ledger.first_refusal_present){ledger.first_refusal_present=true;
+            ledger.first_refusal={ledger.total,sender,bytes,route_revision,status,queue_result,
+                queue_known,route_known,route_state_known,route_available,decode_complete};}
+    }
+    if(!packet.valid||packet.data.empty()){increment(ledger.uncorrelated,ledger.counter_overflow);return;}
     for(const auto& frame:packet.data){
         const auto observation=++state->observations;
         auto found=std::find_if(ledger.values.begin(),ledger.values.begin()+ledger.count,[&](const auto& item){return item.sender==sender&&item.status==status&&item.writer==frame.writer_guid&&item.high==frame.sequence_hi&&item.low==frame.sequence_lo&&item.route_known==route_known&&item.route_available==route_available&&item.route_revision==route_revision&&item.queue_admitted==queue_admitted;});
@@ -180,9 +203,52 @@ extern "C" void FastddsDsoftbusObserveSenderSubmission(std::uint64_t sender,cons
     }
 }
 namespace fastdds_dsoftbus::ros2_target_observation {
+void ObserveReceiveDecision(const ReceiveDecisionSnapshot::Item& original) noexcept {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return;
+    // Original callback stack: never wait behind a structural metadata copy.
+    // A contended leaf store is an explicit coverage loss, not a green zero.
+    std::unique_lock<std::mutex> lock(state->mutex,std::try_to_lock);
+    if(!lock.owns_lock()){++state->receive_capture_dropped;return;}
+    auto& ledger=state->receive_decisions;
+    increment(ledger.total,ledger.counter_overflow);
+    if(original.branch_known&&original.branch>=0&&std::size_t(original.branch)<ledger.branch_counts.size())increment(ledger.branch_counts[std::size_t(original.branch)],ledger.counter_overflow);
+    else increment(ledger.unknown_branch,ledger.counter_overflow);
+    if(original.bridge_called&&original.reason>=0&&std::size_t(original.reason)<ledger.reason_counts.size())increment(ledger.reason_counts[std::size_t(original.reason)],ledger.counter_overflow);
+    else if(original.bridge_called)increment(ledger.unknown_reason,ledger.counter_overflow);
+    if(original.rejected){
+        increment(ledger.refused,ledger.counter_overflow);
+        if(!ledger.first_refusal_present){ledger.first_refusal_present=true;ledger.first_refusal=original;}
+    }
+}
+bool CaptureReceiveDecisions(ReceiveDecisionSnapshot& output) noexcept {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
+    std::lock_guard<std::mutex> lock(state->mutex);output=state->receive_decisions;
+    output.capture_dropped=state->receive_capture_dropped.load();return true;
+}
 bool CaptureSubmissions(SubmissionSnapshot& output) noexcept {
     auto* state=published.load(std::memory_order_acquire);if(!state)return false;
     std::lock_guard<std::mutex> lock(state->mutex);output=state->submissions;return true;
+}
+bool ExportAdmissions() noexcept {
+    auto* state=published.load(std::memory_order_acquire);if(!state)return false;
+    if(state->admissions_exported.exchange(true))return state->output_errors.load()==0;
+    SubmissionSnapshot sends;ReceiveDecisionSnapshot receives;
+    if(!CaptureSubmissions(sends)||!CaptureReceiveDecisions(receives)){++state->capture_faults;return false;}
+    const char* run=state->run.c_str();const char side=state->side?'B':'A';
+    std::fprintf(stdout,"ROS_SEND_ADMISSION_SUMMARY run=%s side=%c total=%llu refused=%llu uncorrelated=%llu structural_stored=%zu structural_overflow=%llu counter_overflow=%llu unknown_status=%llu queue_unknown=%llu queue_invalid=%llu scope=ORIGINAL_LOCAL_SUBMISSION native_entry=NOT_INFERRED final_host_threads_joined=1\n",
+        run,side,static_cast<unsigned long long>(sends.total),static_cast<unsigned long long>(sends.refused),static_cast<unsigned long long>(sends.uncorrelated),sends.count,static_cast<unsigned long long>(sends.overflow),static_cast<unsigned long long>(sends.counter_overflow),static_cast<unsigned long long>(sends.unknown_status),static_cast<unsigned long long>(sends.queue_unknown),static_cast<unsigned long long>(sends.queue_invalid));
+    for(std::size_t i=0;i<sends.status_counts.size();++i)if(sends.status_counts[i])std::fprintf(stdout,"ROS_SEND_ADMISSION_STATUS run=%s side=%c status=%zu count=%llu result_domain=RuntimeSendStatus\n",run,side,i,static_cast<unsigned long long>(sends.status_counts[i]));
+    for(std::size_t i=0;i<sends.queue_counts.size();++i)if(sends.queue_counts[i])std::fprintf(stdout,"ROS_SEND_QUEUE_STATUS run=%s side=%c status=%zu count=%llu result_domain=SendAdmission sdk_return=NOT_APPLICABLE\n",run,side,i,static_cast<unsigned long long>(sends.queue_counts[i]));
+    if(sends.first_refusal_present){const auto& f=sends.first_refusal;
+        std::fprintf(stdout,"ROS_SEND_ADMISSION_FIRST_REFUSAL run=%s side=%c operation=%llu sender=%llu bytes=%llu status=%d queue_known=%d queue_result=%d route_known=%d route_state_known=%d available=%d route_revision=%llu decode_complete=%d state_source=ORIGINAL_ADMISSION_REPORT native_entry=NOT_INFERRED diagnostic_identity=LOCAL_ONLY\n",run,side,static_cast<unsigned long long>(f.operation),static_cast<unsigned long long>(f.sender),static_cast<unsigned long long>(f.bytes),f.status,int(f.queue_known),f.queue_result,int(f.route_known),int(f.route_state_known),int(f.route_available),static_cast<unsigned long long>(f.route_revision),int(f.decode_complete));}
+    std::fprintf(stdout,"ROS_RECEIVE_DECISION_SUMMARY run=%s side=%c total=%llu refused=%llu counter_overflow=%llu unknown_branch=%llu unknown_reason=%llu capture_dropped=%llu scope=ORIGINAL_BINDING_AND_ADAPTER_DECISIONS final_host_threads_joined=1 sdk_epoch=NOT_PROVEN\n",run,side,static_cast<unsigned long long>(receives.total),static_cast<unsigned long long>(receives.refused),static_cast<unsigned long long>(receives.counter_overflow),static_cast<unsigned long long>(receives.unknown_branch),static_cast<unsigned long long>(receives.unknown_reason),static_cast<unsigned long long>(receives.capture_dropped));
+    for(std::size_t i=0;i<receives.branch_counts.size();++i)if(receives.branch_counts[i])std::fprintf(stdout,"ROS_RECEIVE_DECISION_BRANCH run=%s side=%c branch=%zu count=%llu\n",run,side,i,static_cast<unsigned long long>(receives.branch_counts[i]));
+    for(std::size_t i=0;i<receives.reason_counts.size();++i)if(receives.reason_counts[i])std::fprintf(stdout,"ROS_RECEIVE_ADMISSION_REASON run=%s side=%c reason=%zu count=%llu\n",run,side,i,static_cast<unsigned long long>(receives.reason_counts[i]));
+    if(receives.first_refusal_present){const auto& f=receives.first_refusal;
+        std::fprintf(stdout,"ROS_RECEIVE_DECISION_FIRST_REFUSAL run=%s side=%c layer=%d branch=%d sequence=%llu record_incarnation=%llu correlation=%llu socket=%d role=%d phase=%d bytes=%llu bridge_called=%d refused_receive=%d refused_receive_total=%llu status_known=%d status=%d stage=%d stage_name=%s reason=%d reason_name=%s result_known=%d result=%d native_status_known=%d native_status=%d native_known=%d native_slot=%llu native_incarnation=%llu native_generation=%llu native_route_version=%llu application_known=%d application_incarnation=%llu logical_token=%llu receiver_known=%d receiver_incarnation=%llu capacity_known=%d lifecycle_known=%d application_phase=%d receiver_phase=%d stopped=%d record_limit_known=%d record_limit=%zu records_used=%zu records_limit=%zu bytes_used=%zu bytes_limit=%zu local_records_used=%zu local_records_limit=%zu local_bytes_used=%zu local_bytes_limit=%zu copying_used=%zu copying_limit=%zu application_copying=%zu application_copying_limit=%zu state_source=ORIGINAL_DECISION_GATES diagnostic_identity=LOCAL_ONLY\n",
+            run,side,f.layer,f.branch,static_cast<unsigned long long>(f.sequence),static_cast<unsigned long long>(f.record_incarnation),static_cast<unsigned long long>(f.correlation),f.socket,f.role,f.phase,static_cast<unsigned long long>(f.bytes),int(f.bridge_called),int(f.refused_receive),static_cast<unsigned long long>(f.refused_receive_total),int(f.status_known),f.status,f.stage,f.stage_name,f.reason,f.reason_name,int(f.result_known),f.result,int(f.native_status_known),f.native_status,int(f.native_known),static_cast<unsigned long long>(f.native_slot),static_cast<unsigned long long>(f.native_incarnation),static_cast<unsigned long long>(f.native_generation),static_cast<unsigned long long>(f.native_route_version),int(f.application_known),static_cast<unsigned long long>(f.application_incarnation),static_cast<unsigned long long>(f.logical_token),int(f.receiver_known),static_cast<unsigned long long>(f.receiver_incarnation),int(f.capacity_known),int(f.lifecycle_known),f.application_phase,f.receiver_phase,int(f.stopped),int(f.record_limit_known),f.record_limit,f.records_used,f.records_limit,f.bytes_used,f.bytes_limit,f.local_records_used,f.local_records_limit,f.local_bytes_used,f.local_bytes_limit,f.copying_used,f.copying_limit,f.application_copying,f.application_copying_limit);}
+    if(std::fflush(stdout)||std::ferror(stdout)){++state->output_errors;return false;}
+    return true;
 }
 bool CaptureEndpoints(EndpointSnapshot& output) noexcept {
     auto* state=published.load(std::memory_order_acquire);if(!state)return false;

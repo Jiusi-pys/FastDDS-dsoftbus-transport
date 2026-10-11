@@ -42,6 +42,8 @@ HOST_IO_PATTERN = r'FDDST_HOST_IO [^\r\n]*sends=[1-9][0-9]* ingress=[1-9][0-9]* 
 
 # Explicit TEST_ONLY (M, B, N) forwarded to run_pair.py; None keeps the legacy unprotected profile.
 PAYLOAD_RESOURCE_TEST = None
+OBSERVE_FRAGMENTS = False
+FRAGMENT_CONTROL = None
 
 
 def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
@@ -58,6 +60,10 @@ def run_case(name, work, exe, bridge, fastdds_prefix, ros_prefix, pixi_prefix,
     command += extra
     if PAYLOAD_RESOURCE_TEST:
         command += ['--payload-resource-test'] + [str(v) for v in PAYLOAD_RESOURCE_TEST]
+    if OBSERVE_FRAGMENTS:
+        command += ['--observe-fragments']
+    if FRAGMENT_CONTROL:
+        command += ['--fragment-control', FRAGMENT_CONTROL, '--paired-close']
     (attempt / 'invocation.json').write_text(json.dumps({'name': name, 'argv': command,
         'activation': activation, 'environment': {key: os.environ.get(key) for key in
         ('PATH', 'AMENT_PREFIX_PATH', 'FDDST_ROS_FRAGMENT_BYTES')}}, indent=2), encoding='utf-8')
@@ -218,9 +224,17 @@ def main():
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--only', default=None)
     parser.add_argument('--payload-resource-test', nargs=3, type=int, metavar=('M_BYTES', 'B_BYTES', 'N_RECORDS'))
+    parser.add_argument('--observe-fragments', action='store_true')
+    parser.add_argument('--fragment-control', choices=['late-release', 'drop-last'])
     args = parser.parse_args()
     global PAYLOAD_RESOURCE_TEST
     PAYLOAD_RESOURCE_TEST = args.payload_resource_test
+    global OBSERVE_FRAGMENTS
+    OBSERVE_FRAGMENTS = args.observe_fragments
+    global FRAGMENT_CONTROL
+    FRAGMENT_CONTROL = args.fragment_control
+    if FRAGMENT_CONTROL and (args.only!='04' or not OBSERVE_FRAGMENTS or not PAYLOAD_RESOURCE_TEST):
+        parser.error('fragment control requires only04 and explicit guarded fragment observation')
 
     root = args.work.resolve()
     root.mkdir(parents=True, exist_ok=True)

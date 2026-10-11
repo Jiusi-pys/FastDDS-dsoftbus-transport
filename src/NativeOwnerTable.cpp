@@ -578,6 +578,18 @@ NativeCompletion NativeEgressBridge::Fault(NativeSendCallTicket& ticket,NativePr
     op.phase=NativeOperationPhase::Free;t.settled_=true;s.RefreshStopped(cell);
     return {NativeStatus::ProviderContractFault,f};
 }
+NativeCompletion NativeEgressBridge::RefuseDeadline(NativeSendCallTicket& ticket) noexcept
+{
+    auto& t=ticket.token_;if(!t.state_)return {NativeStatus::InvalidHandle};
+    auto& s=*t.state_;std::lock_guard<std::mutex> lock(s.gate);
+    const auto status=s.CheckToken(t,NativeCallKind::Send);if(status!=NativeStatus::None)return {status};
+    auto& op=s.operations[t.operation_slot_];auto& cell=s.owners[t.owner_slot_];
+    if(op.phase!=NativeOperationPhase::Entered)return {NativeStatus::NotEntered,cell.facts};
+    // Local provider invocation entered, public native API did not. Settle only
+    // this original ticket; don't manufacture SDK success or revoke its owner.
+    op.phase=NativeOperationPhase::Free;t.settled_=true;s.RefreshStopped(cell);
+    return {NativeStatus::DeadlineExpired,cell.facts};
+}
 std::mutex& NativeEgressBridge::TestGate(const std::shared_ptr<NativeState>& s) noexcept {return s->gate;}
 
 NativeReceiveGuard::NativeReceiveGuard(const NativeIdentityConstraint& pin) noexcept

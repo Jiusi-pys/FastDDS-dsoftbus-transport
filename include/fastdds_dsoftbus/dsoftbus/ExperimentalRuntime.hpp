@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 namespace fastdds_dsoftbus::dsoftbus::phase0 { class RuntimeProbeAccess; }
+namespace fastdds_dsoftbus::dsoftbus { class ProcessReceiveObserver; }
 
 namespace fastdds_dsoftbus::dsoftbus::experimental {
 // Opt-in, unqualified, one Participant per runtime. No worker threads are created.
@@ -15,6 +16,10 @@ namespace fastdds_dsoftbus::dsoftbus::experimental {
 class Runtime final {
 public:
     explicit Runtime(phase0::PublicSocketConfiguration);
+#if defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM) || defined(FASTDDS_DSOFTBUS_OBSERVATION_HOST_TEST)
+    // Host diagnostic assembly only. The ordinary/target constructor is unchanged.
+    Runtime(phase0::PublicSocketConfiguration,std::shared_ptr<ProcessReceiveObserver>);
+#endif
     ~Runtime();
     Runtime(const Runtime&) = delete;
     Runtime& operator=(const Runtime&) = delete;

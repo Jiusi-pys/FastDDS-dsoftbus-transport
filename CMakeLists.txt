@@ -756,7 +756,7 @@ if(BUILD_DSOFTBUS_PUBLIC_SOCKET_FAKE_TESTS)
         endforeach()
     endif()
 
-    foreach(_shim_case parameters lifetime receive early-bytes early-stop early-error foreign socket-error bind-error zero-handle send send-error send-positive send-throw send-reject send-paused repeat-close invalid entrance-identity default rollback-other observe-setup listen listen-error listen-stop)
+    foreach(_shim_case parameters lifetime receive early-bytes early-stop early-error foreign socket-error bind-error zero-handle send send-error send-positive send-throw send-reject send-paused send-admission-expired send-backend-expired send-wrong-socket send-backend-expired-close repeat-close invalid entrance-identity default rollback-other observe-setup listen listen-error listen-stop)
         add_test(NAME dsoftbus.public_socket_shim.${_shim_case} COMMAND public_socket_shim_tests ${_shim_case})
         set_tests_properties(dsoftbus.public_socket_shim.${_shim_case} PROPERTIES TIMEOUT 20)
     endforeach()

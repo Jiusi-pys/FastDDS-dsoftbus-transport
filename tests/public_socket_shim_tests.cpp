@@ -31,7 +31,7 @@ struct ShimFixture {
     bool TryOpen(){Check(facade->init(),"facade init");return facade->OpenInputChannel(L(2),&receiver,64);}
     void Open(){Check(facade->init(),"facade init");Check(facade->OpenInputChannel(L(2),&receiver,64),"actual shim Socket/Bind");Check(facade->OpenOutputChannel(senders,L(3)),"sender");}
     void Close(){facade->shutdown();Check(loop->Observe().close.adapter_drained,"adapter drain only");}
-    bool Submit(std::size_t n=4){std::uint8_t bytes[65]={1,2,3,4};std::vector<rtps::NetworkBuffer> bufs{{bytes,static_cast<std::uint32_t>(n)}};std::vector<Locator> peers{L(3)};rtps::Locators b(peers.begin()),end(peers.end());const auto ok=senders.front()->send(bufs,n,&b,&end,std::chrono::steady_clock::now()+5s,0);std::memset(bytes,9,sizeof(bytes));return ok;}
+    bool Submit(std::size_t n=4,std::chrono::steady_clock::time_point deadline=std::chrono::steady_clock::now()+5s){std::uint8_t bytes[65]={1,2,3,4};std::vector<rtps::NetworkBuffer> bufs{{bytes,static_cast<std::uint32_t>(n)}};std::vector<Locator> peers{L(3)};rtps::Locators b(peers.begin()),end(peers.end());const auto ok=senders.front()->send(bufs,n,&b,&end,deadline,0);std::memset(bytes,9,sizeof(bytes));return ok;}
 };
 void Parameters(){ShimFixture f;Check(fake_sdk::sockets==0,"construction is inert");f.Open();Check(fake_sdk::sockets==1&&fake_sdk::binds==1,"Fake SDK actually called");Check(std::string(fake_sdk::info.name)=="host.public.shim"&&std::string(fake_sdk::info.peerName)=="model.remote"&&fake_sdk::info.dataType==DATA_TYPE_BYTES,"public SocketInfo");Check(fake_sdk::listener&&fake_sdk::listener->OnBytes&&fake_sdk::listener->OnShutdown&&fake_sdk::listener->OnBind,"real listener fields");f.Close();Check(fake_sdk::closes==1,"void close called");auto fact=f.shim->Observe().operations[std::size_t(PublicSocketOperation::Shutdown)].last;Check(fact.called&&fact.returned&&!fact.provider_return,"void has no SDK rc");}
 void Lifetime(){SocketInfo captured{};const QosTV* q=nullptr;const ISocketListener* table=nullptr;{auto input=ShimConfig();ShimFixture f(input);input.identity.service_name="mutated";input.peer_name="mutated";f.Open();captured=fake_sdk::info;q=fake_sdk::qos;table=fake_sdk::listener;Check(fake_sdk::qos_count==1&&q[0].qos==QOS_TYPE_MIN_BW&&q[0].value==65536,"QoS not substituted");f.Close();}Check(std::string(captured.name)=="host.public.shim"&&std::string(captured.peerName)=="model.remote"&&std::string(captured.peerNetworkId)=="model.net"&&std::string(captured.pkgName)=="host.public.pkg"&&q[0].value==65536,"fixed bounded parameter storage survives control objects");std::uint8_t x=1;table->OnBytes(42,&x,1);Check(fake_sdk::closes==1,"late entry no SDK close");}
@@ -52,9 +52,79 @@ void Send(const std::string& which){ShimFixture f;f.Open();
     Check(f.Submit(),"original SenderResource admission");auto result=f.loop->PumpSend();
     if(which=="send-throw")Check(result.outcome==NativeSendOutcome::ReturnedByException&&!f.shim->Observe().operations[std::size_t(PublicSocketOperation::Send)].last_call->returned,"exception is not fabricated return");
     else Check(result.outcome==(which=="send-positive"?NativeSendOutcome::ReturnedInvalidCode:NativeSendOutcome::ReturnedSdkCode)&&result.actual_return_code==fake_sdk::send_result&&fake_sdk::sent==std::vector<std::uint8_t>({1,2,3,4}),"original owned ticket and raw SDK result");
-    Check(f.loop->Observe().tx.records==0&&f.loop->Observe().send.admitted_outstanding==0,"send ticket and payload settle");f.Close();
+    Check(fake_sdk::sends==1,"SendBytes entry independently counted");
+    Check(f.loop->Observe().tx.records==0&&f.loop->Observe().send.admitted_outstanding==0,"send ticket and payload settle");
+    const auto entered=f.shim->Observe();const auto refused=f.shim->Send(42,nullptr,1,std::chrono::steady_clock::now()+1s);const auto after=f.shim->Observe();
+    Check(!refused.api_called&&!refused.provider_return&&after.operations[std::size_t(PublicSocketOperation::Send)].last_call->called,"later local refusal cannot replace the last actual native-call fact");
+    if(which=="send-error")Check(entered.first_api_error&&entered.first_api_error->code==-801&&after.first_api_error->code==-801&&result.actual_return_code==-801,"entered native error stays latched separately from later local refusal");
+    if(which=="send-error")Check(result.original_owner&&result.original_owner->close_intent&&result.original_owner->failure==NativeStatus::OwnerUnavailable&&result.original_owner->error_code==-801,"entered SDK failure stays latched on the original native ticket owner");
+    if(which=="send-throw")Check(after.first_exception==PublicSocketOperation::Send&&!after.operations[std::size_t(PublicSocketOperation::Send)].last_call->returned,"entered exception fact cannot become a return or refusal");
+    if(which=="send-throw")Check(result.original_owner&&result.original_owner->close_intent&&result.original_owner->provider_fault==NativeProviderFault::ExceptionUnwind,"entered native exception keeps its original owner fault");
+    f.Close();if(which=="send-throw")Check(f.loop->Observe().close.status==BackendStatus::ProviderException&&f.shim->Observe().first_exception==PublicSocketOperation::Send,"entered native exception remains a failed-close contract latch");
 }
 void SendPaused(){ShimFixture f;f.Open();Check(f.Submit(),"submit");Event entered,release;std::thread pump,close;std::atomic<bool> closed=false;Cleanup join{[&]{release.Signal();if(pump.joinable())pump.join();if(close.joinable())close.join();}};fake_sdk::on_send=[&]{entered.Signal();release.Wait();Check(fake_sdk::borrowed_size==4&&fake_sdk::borrowed[0]==1,"borrow lives throughout Fake SDK call");};pump=std::thread([&]{f.loop->PumpSend();});entered.Wait();close=std::thread([&]{f.facade->shutdown();closed=true;});Check(f.loop->WaitSealed(std::chrono::steady_clock::now()+3s),"controller froze admission");Check(!closed&&fake_sdk::closes==0&&f.loop->Observe().tx.records==1&&f.loop->Observe().send.admitted_outstanding==1,"no early owner/payload release");release.Signal();pump.join();close.join();Check(closed&&fake_sdk::closes==1&&f.loop->Observe().tx.bytes==0,"normal control drain after SDK return");}
+void SendAdmissionExpired(){
+    ShimFixture f;f.Open();const auto deadline=std::chrono::steady_clock::now()+50ms;
+    Check(f.Submit(4,deadline),"prepared original queued work before deadline");std::this_thread::sleep_until(deadline+1ms);
+    const auto result=f.loop->PumpSend();const auto v=f.shim->Observe();
+    Check(result.outcome==NativeSendOutcome::NotEntered&&!result.actual_return_code&&fake_sdk::sends==0,"expired admission never invokes provider or native API");
+    Check(v.operations[std::size_t(PublicSocketOperation::Send)].attempts==0&&!v.first_send_refusal,"admission expiry is not a backend refusal");
+    Check(f.loop->Observe().tx.records==0&&f.loop->Observe().send.admitted_outstanding==0,"expired work releases original ownership credits");f.Close();
+    Check(f.loop->Observe().close.status==BackendStatus::None&&fake_sdk::closed_ids==std::vector<int32_t>{42},"original close owner remains valid");
+}
+struct SendGatePause {
+    Event entered,release;std::int32_t original_socket=-1;std::chrono::steady_clock::time_point original_deadline;std::atomic<bool> failed=false;
+    static void Invoke(void* opaque,std::int32_t original_socket,std::chrono::steady_clock::time_point deadline) noexcept {
+        auto& self=*static_cast<SendGatePause*>(opaque);self.original_socket=original_socket;self.original_deadline=deadline;
+        try{self.entered.Signal();self.release.Wait();}catch(...){self.failed=true;}
+    }
+};
+void SendBackendExpired(){
+    ShimFixture f;f.Open();SendGatePause barrier;std::thread pump;NativeSendRunResult result;
+    Cleanup join{[&]{barrier.release.Signal();if(pump.joinable())pump.join();}};
+    f.shim->SetBeforeSendHookForTest(&SendGatePause::Invoke,&barrier);
+    const auto deadline=std::chrono::steady_clock::now()+500ms;Check(f.Submit(4,deadline),"original send admission");
+    pump=std::thread([&]{result=f.loop->PumpSend();});barrier.entered.Wait();
+    Check(barrier.original_socket==42&&barrier.original_deadline==deadline&&f.loop->Observe().send.admitted_outstanding==1&&f.loop->Observe().tx.records==1,"provider invocation retains original deadline ticket and payload");
+    std::this_thread::sleep_until(deadline+1ms);barrier.release.Signal();pump.join();
+    Check(!barrier.failed&&result.outcome==NativeSendOutcome::RefusedDeadline&&result.status==NativeStatus::DeadlineExpired&&!result.actual_return_code&&fake_sdk::sends==0,"actual backend expiry refuses before SendBytes and caller records cancellation");
+    const auto v=f.shim->Observe();Check(v.first_send_refusal.has_value(),"actual refusal snapshot exists");const auto first=*v.first_send_refusal;
+    Check(first.branch==PublicSocketSendRefusalBranch::InvalidState&&first.reason_mask==128&&first.source==PublicSocketSendStateSource::LocalBackendGate,"executed predicate is local deadline expiry only");
+    Check(first.attempt==1&&first.record.value==311&&first.owner.value==411&&first.requested_socket==42&&first.current_socket==42&&first.configured,"snapshot carries immutable local backend association, not a current-map owner");
+    Check(first.result.status==BackendStatus::InvalidState&&first.result.refusal==BackendSendRefusal::DeadlineExpired&&!first.result.api_called&&!first.result.api_returned&&!first.result.provider_return&&!v.first_api_error&&!v.first_exception,"local deadline refusal is not an SDK code or exception");
+    Check(f.loop->Observe().tx.records==0&&f.loop->Observe().send.admitted_outstanding==0,"original invocation settles all ownership credits");
+    Check(result.original_owner&&result.original_owner->owned_id==42&&!result.original_owner->close_intent&&result.original_owner->provider_fault==NativeProviderFault::None,"snapshot of original ticket owner is neither closed nor faulted by deadline refusal");
+    f.shim->SetBeforeSendHookForTest(nullptr,nullptr);Check(f.Submit(),"independent valid work on the same original route still admitted");
+    const auto recovered=f.loop->PumpSend();Check(recovered.outcome==NativeSendOutcome::ReturnedSdkCode&&recovered.actual_return_code==0&&fake_sdk::sends==1,"permitted cancelled work cannot prevent later required progress");
+    Check(recovered.original_owner&&recovered.original_owner->slot==result.original_owner->slot&&recovered.original_owner->incarnation==result.original_owner->incarnation,"fresh work uses the same original supported owner");
+    // Later diagnostics preserve the first branch and expose omitted bounded records.
+    const auto later=f.shim->Send(42,nullptr,1,std::chrono::steady_clock::now()+1s);const auto after=f.shim->Observe();
+    Check(later.status==BackendStatus::InvalidBuffer&&!later.api_called&&after.send_refusals==2&&after.send_refusal_overflow==1&&after.first_send_refusal->reason_mask==first.reason_mask&&after.first_send_refusal->attempt==first.attempt,"bounded overflow visible, first operational observation retained");
+    f.Close();Check(f.loop->Observe().close.status==BackendStatus::None&&fake_sdk::closed_ids==std::vector<int32_t>{42},"permitted expired invocation does not poison original owner close");
+}
+void SendWrongSocket(){
+    ShimFixture f;f.Open();std::uint8_t byte=3;const auto result=f.shim->Send(43,&byte,1,std::chrono::steady_clock::now()+1s);
+    const auto v=f.shim->Observe();Check(v.first_send_refusal.has_value(),"wrong socket refusal snapshot");const auto& first=*v.first_send_refusal;
+    Check(result.status==BackendStatus::InvalidState&&result.refusal==BackendSendRefusal::Unspecified&&!result.api_called&&!result.api_returned&&!result.provider_return&&fake_sdk::sends==0,"unsupported original socket never enters native API or becomes permitted deadline cancellation");
+    Check(first.branch==PublicSocketSendRefusalBranch::InvalidState&&first.reason_mask==2&&first.requested_socket==43&&first.current_socket==42&&first.record.value==311&&first.owner.value==411,"executed original-id mismatch captured at rejection");
+    Check(f.loop->Observe().tx.records==0&&f.loop->Observe().send.admitted_outstanding==0&&!v.first_api_error,"foreign request acquired no owner or payload credits");f.Close();
+    Check(fake_sdk::closed_ids==std::vector<int32_t>{42},"only supported original owner closes");
+}
+void SendBackendExpiredClose(){
+    ShimFixture f;f.Open();SendGatePause barrier;std::thread pump,close;NativeSendRunResult result;std::atomic<bool> closed=false;
+    Cleanup join{[&]{barrier.release.Signal();if(pump.joinable())pump.join();if(close.joinable())close.join();}};
+    f.shim->SetBeforeSendHookForTest(&SendGatePause::Invoke,&barrier);
+    const auto deadline=std::chrono::steady_clock::now()+500ms;Check(f.Submit(4,deadline),"admit invocation before concurrent cleanup");
+    pump=std::thread([&]{result=f.loop->PumpSend();});barrier.entered.Wait();
+    close=std::thread([&]{f.facade->shutdown();closed=true;});Check(f.loop->WaitSealed(std::chrono::steady_clock::now()+3s),"legitimate controller froze original registration");
+    Check(!closed&&fake_sdk::closes==0&&f.loop->Observe().tx.records==1&&f.loop->Observe().send.admitted_outstanding==1,"control-side close cannot release active original ticket or native owner");
+    std::this_thread::sleep_until(deadline+1ms);barrier.release.Signal();pump.join();close.join();
+    const auto backend=f.shim->Observe();const auto final=f.loop->Observe();
+    Check(!barrier.failed&&result.outcome==NativeSendOutcome::RefusedDeadline&&result.status==NativeStatus::DeadlineExpired&&!result.actual_return_code&&result.original_owner&&result.original_owner->provider_fault==NativeProviderFault::None,"expired original invocation settles without an SDK success or native fault");
+    Check(backend.first_send_refusal&&backend.first_send_refusal->reason_mask==128&&!backend.first_send_refusal->result.api_called&&fake_sdk::sends==0,"concurrent cleanup still exercises actual deadline-only backend predicate");
+    Check(closed&&fake_sdk::closed_ids==std::vector<int32_t>{42}&&final.active_pumps==0&&final.tx.records==0&&final.send.admitted_outstanding==0&&final.close.adapter_drained&&final.close.status==BackendStatus::None,"original control closes once after refusal and completes local ownership lifetime");
+    f.shim->SetBeforeSendHookForTest(nullptr,nullptr);
+}
 void RepeatClose(){ShimFixture f;f.Open();fake_sdk::on_shutdown=[]{throw std::runtime_error("Fake void call throws");};f.Close();auto first=*f.shim->Observe().operations[std::size_t(PublicSocketOperation::Shutdown)].last_call;auto again=f.shim->Shutdown(42);std::cerr<<"close facts status="<<int(first.status)<<" called="<<first.called<<" returned="<<first.returned<<" code="<<bool(first.provider_return)<<" count="<<fake_sdk::closes<<" exceptions="<<f.shim->Observe().exceptions<<"\n";Check(first.status==BackendStatus::ProviderException&&first.called&&!first.returned&&!first.provider_return,"void exception facts");Check(again.status==first.status&&!again.called&&fake_sdk::closes==1&&f.shim->Observe().first_exception==PublicSocketOperation::Shutdown,"no duplicate responsibility/error overwrite");f.Close();Check(fake_sdk::closes==1&&f.loop->Observe().close.status==BackendStatus::ProviderException&&f.loop->Observe().close.sdk_drain==SdkDrain::Unproven,"adapter settlement is not SDK drain");}
 void Invalid(){auto c=ShimConfig();c.bind_qos.push_back({QOS_TYPE_MAX_WAIT_TIMEOUT,10});c.bind_qos.push_back({QOS_TYPE_MAX_LATENCY,20});ShimFixture f(c);Check(!f.TryOpen()&&fake_sdk::sockets==0,"contradictory numeric alias refused before public API");f.Close();Check(fake_sdk::closes==0&&f.loop->Observe().receive.active_applications==0,"no partial owner");}
 void EntranceIdentity(){
@@ -87,4 +157,4 @@ void Server(const std::string& which){
     Check(a->Close().adapter_drained&&attachments.SnapshotUsage().records==0&&attachments.SnapshotUsage().active_applications==0,"server setup rollback/drain");Check(fake_sdk::closed_ids==(which=="listen-stop"?std::vector<int32_t>{}:std::vector<int32_t>{42}),"observed listener already terminal; never close unknown accepted ID");if(which=="listen-stop")Check(shim->Observe().operations[std::size_t(PublicSocketOperation::Shutdown)].attempts==0,"terminal notification is not another close license");
 }
 }
-int main(int argc,char**argv){try{Check(argc==2,"case");std::string c=argv[1];if(c=="parameters")Parameters();else if(c=="lifetime")Lifetime();else if(c=="receive")Receive();else if(c.find("early-")==0)Early(c);else if(c=="foreign")Foreign();else if(c=="socket-error"||c=="bind-error"||c=="zero-handle")Results(c);else if(c=="send-paused")SendPaused();else if(c.find("send")==0)Send(c);else if(c=="repeat-close")RepeatClose();else if(c=="invalid")Invalid();else if(c=="entrance-identity")EntranceIdentity();else if(c=="default")Default();else if(c=="rollback-other")RollbackOther();else if(c=="observe-setup")ObserveSetup();else if(c.find("listen")==0)Server(c);else throw std::runtime_error("unknown case");std::cout<<"PASS FakeSDK "<<c<<'\n';return 0;}catch(const std::exception&e){loop_deny_allocations=false;std::cerr<<"FAIL FakeSDK "<<e.what()<<'\n';return 1;}}
+int main(int argc,char**argv){try{Check(argc==2,"case");std::string c=argv[1];if(c=="parameters")Parameters();else if(c=="lifetime")Lifetime();else if(c=="receive")Receive();else if(c.find("early-")==0)Early(c);else if(c=="foreign")Foreign();else if(c=="socket-error"||c=="bind-error"||c=="zero-handle")Results(c);else if(c=="send-paused")SendPaused();else if(c=="send-admission-expired")SendAdmissionExpired();else if(c=="send-backend-expired")SendBackendExpired();else if(c=="send-wrong-socket")SendWrongSocket();else if(c=="send-backend-expired-close")SendBackendExpiredClose();else if(c.find("send")==0)Send(c);else if(c=="repeat-close")RepeatClose();else if(c=="invalid")Invalid();else if(c=="entrance-identity")EntranceIdentity();else if(c=="default")Default();else if(c=="rollback-other")RollbackOther();else if(c=="observe-setup")ObserveSetup();else if(c.find("listen")==0)Server(c);else throw std::runtime_error("unknown case");std::cout<<"PASS FakeSDK "<<c<<'\n';return 0;}catch(const std::exception&e){loop_deny_allocations=false;std::cerr<<"FAIL FakeSDK "<<e.what()<<'\n';return 1;}}
