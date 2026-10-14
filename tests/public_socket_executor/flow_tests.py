@@ -193,17 +193,18 @@ class Flow(unittest.TestCase):
      if key.lower()=='psmodulepath':env.pop(key)
     env['PSModulePath']=str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/Modules')
     script=case.task/('executor' if data else 'executor-route-query')/'run-window.ps1'
-    proc=subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-ExecutionPolicy','Bypass','-File',str(script),'-WindowDirectory',str(window)],cwd=case.repo,env=env,capture_output=True,text=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
+    proc=subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-ExecutionPolicy','Bypass','-File',str(script),'-WindowDirectory',str(window)],cwd=case.repo,env=env,capture_output=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
     self.assertNotEqual(proc.returncode,0);self.assertFalse(marker.exists(),'unverified project guard executed before binding')
    finally:case.tearDown()
  @unittest.skipUnless(sys.platform=='win32','Windows PowerShell validator bootstrap')
  def test_powershell_validator_is_bound_before_execution(self):
-  window=self.data_window_fixture();marker=self.repo/'UNBOUND_PYTHON_VALIDATOR';p=self.task/'executor/task_contract.py';p.write_text("from pathlib import Path;Path("+repr(str(marker))+").write_text('bad')\n"+p.read_text())
+  window=self.data_window_fixture();marker=self.repo/'UNBOUND_PYTHON_VALIDATOR';p=self.task/'executor/task_contract.py'
+  p.write_text("from pathlib import Path;Path("+repr(str(marker))+").write_text('bad')\n"+p.read_text(encoding='utf-8'),encoding='utf-8')
   env=dict(os.environ)
   for key in list(env):
    if key.lower()=='psmodulepath':env.pop(key)
   env['PSModulePath']=str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/Modules')
-  proc=subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-ExecutionPolicy','Bypass','-File',str(self.task/'executor/run-window.ps1'),'-WindowDirectory',str(window)],cwd=self.repo,env=env,capture_output=True,text=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
+  proc=subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-ExecutionPolicy','Bypass','-File',str(self.task/'executor/run-window.ps1'),'-WindowDirectory',str(window)],cwd=self.repo,env=env,capture_output=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
   self.assertNotEqual(proc.returncode,0);self.assertFalse(marker.exists(),'Python validator executed before binding to reviewed contract')
  @unittest.skipUnless(sys.platform=='win32','Windows external guard omission')
  def test_external_guard_cannot_be_omitted(self):
@@ -214,7 +215,7 @@ class Flow(unittest.TestCase):
   for key in list(env):
    if key.lower()=='psmodulepath':env.pop(key)
   env['PSModulePath']=str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/Modules')
-  proc=subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-ExecutionPolicy','Bypass','-File',str(self.task/'executor-route-query/run-window.ps1'),'-WindowDirectory',str(self.w)],cwd=self.repo,env=env,capture_output=True,text=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
+  proc=subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),'-NoProfile','-ExecutionPolicy','Bypass','-File',str(self.task/'executor-route-query/run-window.ps1'),'-WindowDirectory',str(self.w)],cwd=self.repo,env=env,capture_output=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
   self.assertNotEqual(proc.returncode,0);self.assertFalse(marker.exists(),'omitted external guard was executed')
  def test_formal_analyzer_is_required_external_code(self):
   p=self.repo/'scripts/public_socket/analyze_shared.py';p.write_text(p.read_text()+'\n# unbound analyzer drift\n');self.f['execution_files']=[e for e in self.f['execution_files'] if Path(e['path'])!=p];put(self.contract,self.f)
