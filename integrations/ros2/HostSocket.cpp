@@ -4,6 +4,7 @@
 #include <windows.h>
 #undef SendMessage
 #include "HostSocket.hpp"
+#include "HostIoObservation.hpp"
 #include <softbus_bus_center.h>
 #include <socket.h>
 #include <array>
@@ -23,6 +24,9 @@ std::mutex gate,send_gate;
 constexpr std::size_t socket_capacity=16;
 std::array<SOCKET,socket_capacity> sockets=[] {std::array<SOCKET,socket_capacity> a{};a.fill(INVALID_SOCKET);return a;}();
 std::array<bool,socket_capacity> dial{},terminal{};
+std::array<std::uint64_t,socket_capacity> connection_epochs{};
+std::uint64_t next_connection_epoch=0; // observational only, protected by gate
+namespace io=io_observation;
 std::condition_variable terminal_changed;
 int next_id=1,outgoing_id=-1,accepted_id=-1;
 bool controlled_end=false,pause_reported=false;
@@ -36,8 +40,14 @@ std::atomic<bool> stop{false};
 std::atomic<std::uint64_t> sends{0},ingress{0},send_errors{0};
 int socket_count=0;
 HANDLE ready=nullptr,peer_ready=nullptr;
-bool transfer(SOCKET s,char* p,int n,bool write) {
-    while(n>0) {int k=write ? ::send(s,p,n,0) : ::recv(s,p,n,0);if(k<=0)return false;p+=k;n-=k;}return true;
+bool transfer(SOCKET s,char* p,int n,bool write,int id,std::uint64_t epoch,const char* phase,std::uint64_t send_id=0) {
+    auto event=io::Connection(write?"SEND_TRANSFER":"RECV_TRANSFER",id,epoch,s);event.phase=phase;event.send=send_id;
+    return io::Transfer(p,n,write,event,[&](char* data,int bytes){return write ? ::send(s,data,bytes,0) : ::recv(s,data,bytes,0);},[]{return WSAGetLastError();});
+}
+void close_observed(SOCKET s,int id,std::uint64_t epoch,const char* site,bool shut) {
+    auto event=io::Connection("CLOSE_ENTER",id,epoch,s);event.phase=site;io::Record(event);
+    if(shut){event.kind="SHUTDOWN_RETURN";event.begin=io::Point();event.result=::shutdown(s,SD_BOTH);event.error=event.result==SOCKET_ERROR?WSAGetLastError():0;event.error_known=event.result==SOCKET_ERROR;event.result_known=true;io::Record(event);}
+    event.kind="CLOSE_RETURN";event.begin=io::Point();event.result=closesocket(s);event.error=event.result==SOCKET_ERROR?WSAGetLastError():0;event.error_known=event.result==SOCKET_ERROR;event.result_known=true;io::Record(event);
 }
 void peer(PeerSocketInfo& p,bool incoming) {
     thread_local std::string network_copy;
@@ -46,22 +56,24 @@ void peer(PeerSocketInfo& p,bool incoming) {
     p.pkgName=const_cast<char*>(cfg.package.c_str());
     p.networkId=const_cast<char*>(network_copy.c_str());p.dataType=DATA_TYPE_BYTES;
 }
-void receive(SOCKET s,int id,const ISocketListener* callback) {
+void receive(SOCKET s,int id,const ISocketListener* callback,std::uint64_t epoch) {
+    io::Record(io::Connection("RECEIVE_ENTER",id,epoch,s));
     while(!stop.load()) {
-        std::uint32_t n=0;if(!transfer(s,reinterpret_cast<char*>(&n),4,false))break;
-        n=ntohl(n);if(!n||n>65536) {std::fputs("HOST_LINK_BAD_LENGTH\n",stderr);break;}
-        std::vector<unsigned char> bytes(n);if(!transfer(s,reinterpret_cast<char*>(bytes.data()),static_cast<int>(n),false))break;
+        std::uint32_t n=0;if(!transfer(s,reinterpret_cast<char*>(&n),4,false,id,epoch,"PREFIX"))break;
+        n=ntohl(n);if(!n||n>65536) {io::Record(io::Connection("RECEIVE_INVALID_LENGTH",id,epoch,s));std::fputs("HOST_LINK_BAD_LENGTH\n",stderr);break;}
+        std::vector<unsigned char> bytes(n);if(!transfer(s,reinterpret_cast<char*>(bytes.data()),static_cast<int>(n),false,id,epoch,"BODY"))break;
         if(callback&&callback->OnBytes&&!stop.load()){++ingress;callback->OnBytes(id,bytes.data(),n);}
     }
     // Model the actual terminal notification of this owned Host connection.
     // This is not an SDK cancellation/epoch claim and never invents a data take.
-    if(!stop.load()&&callback&&callback->OnShutdown)callback->OnShutdown(id,SHUTDOWN_REASON_PEER);
-    {std::lock_guard<std::mutex> lock(gate);if(sockets[id]==s){closesocket(s);sockets[id]=INVALID_SOCKET;}terminal[id]=true;}
+    io::Record(io::Connection(stop.load()?"RECEIVE_EXIT_STOP_OBSERVED":"RECEIVE_EXIT",id,epoch,s));
+    if(!stop.load()&&callback&&callback->OnShutdown){io::Record(io::Connection("ON_SHUTDOWN_ENTER",id,epoch,s));callback->OnShutdown(id,SHUTDOWN_REASON_PEER);io::Record(io::Connection("ON_SHUTDOWN_RETURN",id,epoch,s));}
+    {std::lock_guard<std::mutex> lock(gate);if(sockets[id]==s){close_observed(s,id,epoch,"RECEIVE_CLEANUP",false);sockets[id]=INVALID_SOCKET;}terminal[id]=true;}
     terminal_changed.notify_all();
 }
 }
 void ConfigureLink(LinkConfiguration c) {
-    cfg=std::move(c);node_network=cfg.side?"host.net.A":"host.net.B";WSADATA data;if(WSAStartup(MAKEWORD(2,2),&data)!=0)throw std::runtime_error("WSAStartup");
+    cfg=std::move(c);io::enabled=cfg.io_observation;node_network=cfg.side?"host.net.A":"host.net.B";WSADATA data;if(WSAStartup(MAKEWORD(2,2),&data)!=0)throw std::runtime_error("WSAStartup");
     const auto name="Local\\FastddsDsoftbusRos_"+cfg.run+"_"+std::to_string(cfg.side);
     ready=CreateEventA(nullptr,TRUE,FALSE,name.c_str());if(!ready||GetLastError()==ERROR_ALREADY_EXISTS)throw std::runtime_error("stale listener event");
 }
@@ -77,9 +89,13 @@ bool WaitPeerListener(unsigned ms) {
     }return false;
 }
 void StopLink() {
+    io::Record({"LINK_STOP_STORE_ENTER"});
     stop.store(true);
-    {std::lock_guard<std::mutex> l(gate);for(auto& s:sockets)if(s!=INVALID_SOCKET){::shutdown(s,SD_BOTH);closesocket(s);s=INVALID_SOCKET;}}
+    io::Record({"LINK_STOP_STORE_RETURN"});
+    {std::lock_guard<std::mutex> l(gate);for(std::size_t id=0;id<sockets.size();++id){auto& s=sockets[id];if(s!=INVALID_SOCKET){close_observed(s,static_cast<int>(id),connection_epochs[id],"STOP_LINK",true);s=INVALID_SOCKET;}}}
+    io::Record({"LINK_JOIN_ENTER"});
     if(accept_thread.joinable())accept_thread.join();if(read_thread.joinable())read_thread.join();
+    io::Record({"LINK_JOIN_RETURN"});
     if(ready)CloseHandle(ready);if(peer_ready)CloseHandle(peer_ready);WSACleanup();
 }
 LinkObservation ObserveLink(){return {sends.load(),ingress.load(),send_errors.load()};}
@@ -147,13 +163,13 @@ extern "C" int32_t Listen(int32_t id,const QosTV*,uint32_t,const ISocketListener
     using namespace fastdds_dsoftbus::ros2_host;
     if(id!=1||!cb)return -603;
     SOCKET s=::socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);sockaddr_in a{};a.sin_family=AF_INET;a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);a.sin_port=htons(cfg.port);
-    if(s==INVALID_SOCKET||::bind(s,reinterpret_cast<sockaddr*>(&a),sizeof(a))!=0||::listen(s,1)!=0){if(s!=INVALID_SOCKET)closesocket(s);return -604;}
-    {std::lock_guard<std::mutex> l(gate);sockets[1]=s;listener=cb;}
+    if(s==INVALID_SOCKET||::bind(s,reinterpret_cast<sockaddr*>(&a),sizeof(a))!=0||::listen(s,1)!=0){if(s!=INVALID_SOCKET)close_observed(s,id,0,"LISTEN_SETUP_FAILURE",false);return -604;}
+    {std::lock_guard<std::mutex> l(gate);sockets[1]=s;connection_epochs[1]=++next_connection_epoch;io::Record(io::Connection("CONNECTION_INSTALL",1,connection_epochs[1],s));listener=cb;}
     accept_thread=std::thread([s,cb]{do {SOCKET incoming=::accept(s,nullptr,nullptr);if(incoming==INVALID_SOCKET)return;
-        int id=3;{std::lock_guard<std::mutex> l(gate);if(cfg.bounded_reaccept){if(next_id>=int(socket_capacity)){closesocket(incoming);return;}id=next_id++;}sockets[id]=incoming;accepted_id=id;}
+        int id=3;std::uint64_t epoch=0;{std::lock_guard<std::mutex> l(gate);if(cfg.bounded_reaccept){if(next_id>=int(socket_capacity)){close_observed(incoming,-1,0,"ACCEPT_CAPACITY_FAILURE",false);return;}id=next_id++;}sockets[id]=incoming;epoch=connection_epochs[id]=++next_connection_epoch;io::Record(io::Connection("CONNECTION_INSTALL",id,epoch,incoming));accepted_id=id;}
         PeerSocketInfo p{};peer(p,true);
         if(!cb->OnNegotiate||!cb->OnNegotiate(id,p)){Shutdown(id);if(!cfg.bounded_reaccept)return;continue;}
-        if(cb->OnBind)cb->OnBind(id,p);receive(incoming,id,cb);
+        if(cb->OnBind)cb->OnBind(id,p);receive(incoming,id,cb,epoch);
         }while(cfg.bounded_reaccept&&!stop.load());});
     SetEvent(ready);std::fprintf(stderr,"HOST_LISTENER_READY side=%u\n",cfg.side);std::fflush(stderr);return 0;
 }
@@ -162,23 +178,27 @@ extern "C" int32_t Bind(int32_t id,const QosTV*,uint32_t,const ISocketListener* 
     if(!cb||id<=0||id>=int(socket_capacity)||(cfg.bounded_reaccept?!dial[id]:id!=2))return -605;
     if(read_thread.joinable())read_thread.join();
     SOCKET s=::socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);sockaddr_in a{};a.sin_family=AF_INET;a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);a.sin_port=htons(cfg.peer_port);
-    if(s==INVALID_SOCKET||::connect(s,reinterpret_cast<sockaddr*>(&a),sizeof(a))!=0){if(s!=INVALID_SOCKET)closesocket(s);return -606;}
-    {std::lock_guard<std::mutex> l(gate);sockets[id]=s;outgoing_id=id;}
+    if(s==INVALID_SOCKET||::connect(s,reinterpret_cast<sockaddr*>(&a),sizeof(a))!=0){if(s!=INVALID_SOCKET)close_observed(s,id,0,"BIND_SETUP_FAILURE",false);return -606;}
+    std::uint64_t epoch=0;{std::lock_guard<std::mutex> l(gate);sockets[id]=s;epoch=connection_epochs[id]=++next_connection_epoch;io::Record(io::Connection("CONNECTION_INSTALL",id,epoch,s));outgoing_id=id;}
     PeerSocketInfo p{};peer(p,false);if(cb->OnBind)cb->OnBind(id,p);
-    read_thread=std::thread([s,cb,id]{receive(s,id,cb);});return 0;
+    read_thread=std::thread([s,cb,id,epoch]{receive(s,id,cb,epoch);});return 0;
 }
 extern "C" int32_t SendBytes(int32_t id,const void* data,uint32_t n) {
     using namespace fastdds_dsoftbus::ros2_host;
-    if(!data||!n||n>65536||id<=1||id>=int(socket_capacity)||(!cfg.bounded_reaccept&&id!=2&&id!=3))return -607;
-    std::lock_guard<std::mutex> s(send_gate);SOCKET target;{std::lock_guard<std::mutex> l(gate);target=sockets[id];}
-    if(target==INVALID_SOCKET)return -608;
+    const auto send_id=io::enabled?io::send_ids.fetch_add(1,std::memory_order_relaxed)+1:0;
+    auto event=io::Connection("SEND_ENTER",id,0,INVALID_SOCKET);event.send=send_id;event.requested=static_cast<int>(n);io::Record(event);
+    const auto finish=[&](int result){event.kind="SEND_RETURN";event.result_known=true;event.result=result;io::Record(event);return result;};
+    if(!data||!n||n>65536||id<=1||id>=int(socket_capacity)||(!cfg.bounded_reaccept&&id!=2&&id!=3))return finish(-607);
+    std::lock_guard<std::mutex> s(send_gate);SOCKET target;{std::lock_guard<std::mutex> l(gate);target=sockets[id];event.epoch=connection_epochs[id];event.handle=static_cast<std::uint64_t>(target);}
+    event.kind="SEND_CAPTURE";io::Record(event);
+    if(target==INVALID_SOCKET)return finish(-608);
     ++sends;
-    if(!cfg.forward)return 0;std::uint32_t size=htonl(n);
-    if(transfer(target,reinterpret_cast<char*>(&size),4,true)&&transfer(target,const_cast<char*>(static_cast<const char*>(data)),static_cast<int>(n),true))return 0;
-    ++send_errors;return -609;
+    if(!cfg.forward)return finish(0);std::uint32_t size=htonl(n);
+    if(transfer(target,reinterpret_cast<char*>(&size),4,true,id,event.epoch,"PREFIX",send_id)&&transfer(target,const_cast<char*>(static_cast<const char*>(data)),static_cast<int>(n),true,id,event.epoch,"BODY",send_id))return finish(0);
+    ++send_errors;return finish(-609);
 }
 extern "C" void Shutdown(int32_t id) {
     using namespace fastdds_dsoftbus::ros2_host;
     if(id<1||id>=int(socket_capacity))return;std::lock_guard<std::mutex> l(gate);
-    if(sockets[id]!=INVALID_SOCKET){::shutdown(sockets[id],SD_BOTH);closesocket(sockets[id]);sockets[id]=INVALID_SOCKET;}
+    if(sockets[id]!=INVALID_SOCKET){close_observed(sockets[id],id,connection_epochs[id],"PUBLIC_SHUTDOWN",true);sockets[id]=INVALID_SOCKET;}
 }

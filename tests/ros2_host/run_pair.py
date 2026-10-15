@@ -3,6 +3,7 @@ import argparse,json,os,subprocess,time,secrets,socket,re,hashlib
 from pathlib import Path
 from control_files import publish_control
 p=argparse.ArgumentParser();p.add_argument('--exe',type=Path,required=True);p.add_argument('--bridge',type=Path,required=True);p.add_argument('--fastdds-prefix',type=Path,required=True);p.add_argument('--ros-prefix',type=Path,required=True);p.add_argument('--pixi-prefix',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['reliable','best_effort','dual'],default='reliable');p.add_argument('--forward',choices=['0','1'],default='1');p.add_argument('--host-close-error',choices=['0','1'],default='0');p.add_argument('--paired-close',action='store_true');p.add_argument('--asymmetric-cleanup',action='store_true');p.add_argument('--reaccept-host',action='store_true');p.add_argument('--reaccept-origin',choices=['A','B'],default='A');p.add_argument('--owned-normal-reaccept',action='store_true');p.add_argument("--route-lifecycle",choices=["new","same"])
+p.add_argument('--observe-host-io',action='store_true',help='Require complete process-local Host Socket diagnostic records')
 p.add_argument('--route-offline-writes',action='store_true');a=p.parse_args()
 if a.reaccept_host and (a.mode!='dual' or a.forward!='1'):raise ValueError('Reaccept fixture requires dual opaque-byte forwarding')
 if a.owned_normal_reaccept and not a.reaccept_host:raise ValueError('Owned normal model requires explicit Host reaccept')
@@ -24,6 +25,8 @@ for index,side in enumerate('AB'):
   'bridge_library='+str(a.bridge.resolve()),'fastdds_module='+str((a.fastdds_prefix/'bin/fastrtps-2.14.dll').resolve()),'fastcdr_module='+str((a.ros_prefix/'bin/fastcdr-2.2.dll').resolve()),'locator_version=V1\nnative_name_contract=PACKAGE_SCOPED_V1\nauthorized_package=host.ros.test\nservice_prefix=host.ros.test.v1\nbackend=HOST_OPAQUE_BYTES_TEST_ONLY',
   'run='+run,'side='+str(index),'port='+str(ports[index]),'peer_port='+str(ports[1-index]),
   'domain='+str(domain),'forward='+a.forward,'host_close_error='+a.host_close_error])+'\n')
+ if a.observe_host_io:
+  with conf.open('a') as stream:stream.write('host_io_observation=1\n')
  if a.reaccept_host:
   with conf.open('a') as stream:stream.write('host_reaccept=1\nreaccept_control='+str((a.output/(side+'-reaccept')).resolve())+'\n')
  if a.owned_normal_reaccept:
@@ -233,5 +236,11 @@ elif a.reaccept_host:
   err=(a.output/(side+'.stderr')).read_text(errors='replace')
   changes=re.findall(r'HOST_REACCEPT_REPLACED run='+run+r' side=\d+ old_id=(\d+) new_id=(\d+) source=HOST_PUBLIC_C_API sdk_epoch=NOT_PROVEN',err)
   if len(changes)!=1 or changes[0][0]==changes[0][1]:errors.append('reaccept_native_replacement:'+side)
+result['business_pass']=not timed and all(x.returncode==0 for x in processes.values()) and not errors
+if a.observe_host_io:
+ from host_io_capture import validate_capture
+ result['host_io_capture']={s:validate_capture(texts[s],run,s,processes[s].pid) for s in 'AB'}
+ for s in 'AB':
+  if not result['host_io_capture'][s]['complete'] or 'FDDST_HOST_IO_CAPTURE_INCOMPLETE' in (a.output/(s+'.stderr')).read_text(errors='replace'):errors.append('host_io_capture:'+s)
 result['errors']=errors;result['pass']=not timed and all(x.returncode==0 for x in processes.values()) and not errors
 (a.output/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result));raise SystemExit(0 if result['pass'] else 1)

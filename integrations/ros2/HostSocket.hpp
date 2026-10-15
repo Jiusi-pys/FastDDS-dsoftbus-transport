@@ -11,6 +11,7 @@ struct LinkConfiguration {
     std::string reaccept_control;
     bool route_lifecycle=false;
     std::string peer_udid;
+    bool io_observation=false; // explicit, Host-only diagnostic opt-in
 };
 void ConfigureLink(LinkConfiguration);
 bool WaitPeerListener(unsigned milliseconds);

@@ -1,4 +1,5 @@
 #include "HostSocket.hpp"
+#include "HostIoObservation.hpp"
 #include "BridgeOwner.hpp"
 #include "ShutdownCoordination.hpp"
 #include "BoundedNativeControl.hpp"
@@ -32,7 +33,7 @@ std::map<std::string,std::string> read(const char* path) {
         auto p=line.find('=');if(p==std::string::npos)throw std::runtime_error("configuration syntax");
         if(!m.emplace(line.substr(0,p),line.substr(p+1)).second)throw std::runtime_error("duplicate key");
     }
-    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="route_lifecycle"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order")throw std::runtime_error("unknown key");
+    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="route_lifecycle"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order"&&e.first!="host_io_observation")throw std::runtime_error("unknown key");
     return m;
 }
 unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsigned max) {
@@ -54,6 +55,7 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         bool forward=integer(m,"forward",1)!=0;
         const bool reaccept=m.count("host_reaccept")&&integer(m,"host_reaccept",1)!=0;
         const bool owned_normal=m.count("owned_normal_reaccept")&&integer(m,"owned_normal_reaccept",1)!=0;
+        const bool observe_io=fastdds_dsoftbus::ros2_host::io_observation::ConfigurationEnabled(m);
         const bool routes=m.count("route_lifecycle")&&integer(m,"route_lifecycle",1)!=0;
         if(routes&&!owned_normal)throw std::runtime_error("route model requires original retained-entity scene");
         if(owned_normal&&(!reaccept||!m.count("native_reaccept_order")||(m.at("native_reaccept_order")!="outgoing-first"&&m.at("native_reaccept_order")!="accepted-first")))throw std::runtime_error("explicit owned normal Host model required");
@@ -86,7 +88,7 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         const auto remote=config.directory.routes.front().key.remote_locator;
         const auto& local_name=config.directory.locals.front().local_listen_name;
         const auto& peer_name=config.directory.routes.front().fields.remote_listen_name;
-        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",local_name,peer_name,name(1-side,"outgoing"),forward,reaccept,reaccept?m.at("reaccept_control"):std::string{},routes,identity(1-side).udid});
+        fastdds_dsoftbus::ros2_host::ConfigureLink({side,static_cast<std::uint16_t>(port),static_cast<std::uint16_t>(peerport),owner->run,"host.ros.test",local_name,peer_name,name(1-side,"outgoing"),forward,reaccept,reaccept?m.at("reaccept_control"):std::string{},routes,identity(1-side).udid,observe_io});
         phase0::PublicSocketConfiguration b;
         b.identity={name(side,"outgoing"),{910+side*4},{1010+side*4}};
         b.listener_identity={local_name,{911+side*4},{1011+side*4}};
@@ -151,6 +153,8 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusClose(void* value) {
     const int close_result=p->CloseLocal();
     if(close_result==1) {std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr);return 1;}
     fastdds_dsoftbus::ros2_host::StopLink();
+    if(!fastdds_dsoftbus::ros2_host::io_observation::Export(p->run.c_str(),p->side))
+        std::fputs("FDDST_HOST_IO_CAPTURE_INCOMPLETE\n",stderr);
     const auto io=fastdds_dsoftbus::ros2_host::ObserveLink();const auto native=p->runtime->ObserveSocket();
     std::fprintf(stderr,"FDDST_HOST_IO run=%s side=%u sends=%llu ingress=%llu send_errors=%llu fake_sdk=%d rejected_callbacks=%llu\n",p->run.c_str(),p->side,static_cast<unsigned long long>(io.sends),static_cast<unsigned long long>(io.ingress),static_cast<unsigned long long>(io.send_errors),int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));
     const bool failed=p->failed.load();if(failed)std::fputs("FDDST_PUMP_ERROR_OBSERVED\n",stderr);

@@ -1,5 +1,19 @@
 # Project status
 
+## Windows Host IO diagnostic scope (2026-10-15)
+
+The independently reviewed, default-off Windows Host Socket diagnostic patch
+has a fresh post-review build/install and scoped final tester PASS: 27 CTest,
+29 Python checks, 7 actual DLL invalid-configuration cases and 4 synthetic
+runner replays. The one initial ordinary ROS Host reliable pair delivered
+10 writes/10 takes with complete A/B captures; B recorded one rejected
+callback. Final testing revalidated those same-source logs; the final DLL did
+not rerun the business pair. Native/RK3588A/cross-device tests are N/A for this
+Windows-only patch; broader product acceptance remains BLOCKED/unverified.
+Historical A/04 failures and device permission/deployment gates remain open.
+See [Host IO diagnostics](HOST_IO_DIAGNOSTICS.md) for usage, exact local evidence,
+retained failures and limitations. Main's pre-commit/publish gate is separate.
+
 Historical sections in this file retain the exact names, counts, hashes, protocol
 markers and permission identifiers from their original runs. They are labeled by
 their work-package dates and artifact paths; they do not describe the current
