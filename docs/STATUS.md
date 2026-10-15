@@ -864,3 +864,53 @@ board disconnection. Complete project-only permission-record recovery remains
 unestablished; no security write occurred. DEVICE_TESTED=false; overall native
 ROS 2 qualification remains NOT VERIFIED. Original no-barrier FAIL/cause
 NOT_PROVEN, PASS_MECHANISM_ONLY and R14 failures remain unchanged.
+
+
+## 2026-10-15 current bounded update: R18 published, loader diagnostic and R19 preparation
+
+This update supplements the earlier dated snapshots. R18_SOURCE_BUILD_HOST_STAGE
+was committed and pushed as `48c01f2597bf16db1ed35fbd79cc5c32826f0ab8` to existing
+origin branch `codex/flow-encoding-published-20261014`. Main PRE_COMMIT passed
+45 checks; graph HIGH risk was retained. At 18:27:04 UTC the SHA had zero GitHub
+workflow runs/check runs/status contexts: **CI NOT_RUN**, not PASS. No later CI
+state is inferred. Local receipts: `build/r18-action-native/main-publication/`.
+
+Each RK3588A subsequently ran the native main once and returned expected exit 3
+with exact missing-identity stderr (HDC exit 0). Both passed 104 before/after
+artifact hashes, quiescence, 106 exact-file cleanup and absence checks. This is
+**DEVICE_TESTED PASS only for native main load and missing-identity rejection**;
+it is not Action, target-bridge loading, accepted identity, Socket or cross-board
+communication evidence. The independent recovered-evidence review accepted that
+limited claim and required no repeat window. See the
+[Action update and current capability matrix](ROS2_ACTION_ACCEPTANCE.md#2026-10-15-update-publication-and-bounded-native-loader-evidence).
+
+The original empty HDC discovery remains recorded. Later normal-environment HDC
+discovery recovered both boards without establishing its unique historical cause.
+The sentinel fixture failure, corrected full-line parser and unexecuted
+pre-impact draft deviation are preserved in the recovered diagnostic evidence.
+
+R19's yaml-cpp, console_bridge and SQLite standalone target libraries have
+**BUILDS / static PASS** after independent review and final recheck. Wrapper
+canonical final is **PASS_SCOPED_CONFIGURATION_CONTRACT_FINAL**: three positive
+and sixteen negative configuration receipts were independently replayed, 4799
+current bindings passed, with zero new configure/build/install/target/device
+execution in that final check. **R19-V1 is CLOSED only for the frozen four-prefix
+and actual imported-target identity contract**. The 99-file aggregate is a bound
+input for later work; vendor opt/loader hooks, full relocatability, setup-only
+runtime and rosbag read/write are not established.
+
+R19-N1 is **CLOSED_FOR_DESIGN** after the next-dependency FIX1 review. Actual
+TinyXML2 alias/class_loader/pluginlib implementation preparation is in progress;
+its compilation, probes and runtime are not yet qualified. The next planned
+acceptance is fixed `std_msgs/msg/String` typed Writer/Reader with SQLite and no
+compression. See [R19 target preparation and capability matrix](ROS2_ROSBAG_TARGET_PREPARATION.md)
+for exact boundaries and evidence hashes. Local ignored build evidence is not
+included in the remote repository by these documentation links.
+
+Actual native Action/Socket/cross-board tests remain **NOT_RUN/BLOCKED**. Temporary
+permission authorization remains conditional on a complete current project-only
+original record and a supported lossless restoration route; neither is available.
+No grant/revoke/token switch/reload/security write occurred. Current permission
+state was NOT_QUERIED. Original unbarriered Action FAIL/cause NOT_PROVEN,
+mechanism-only PASS and R14 failures remain unchanged. Overall ROS 2 over native
+DSoftBus remains **NOT VERIFIED**; this documentation sync is not a product gate.

@@ -508,3 +508,87 @@ NO/BLOCKED values; new documentation evidence is separate in
 | `publication-scope-test-gate/EVIDENCE_MANIFEST.json` (20 entries) | `fca510e0f2dfe57c795f42a2157f7cc6ac9190b781cd09b1ac9451afbe3547b7` |
 | `loader-readiness-test/RESULT.json` | `b10cab0958638d5bccabb00ac9d317c377027c44a6c7d08b12c4bd628f61af64` |
 | `loader-readiness-test/EVIDENCE_MANIFEST.json` (15 entries) | `8e592bc80946bb43c0b28eed190e9eeb46157bb84350178111f87b9ababc26f5` |
+
+
+## 2026-10-15 update: publication and bounded native loader evidence
+
+This dated update supersedes only the pending publication, loader diagnostic
+and R19 wrapper statuses in the preceding historical snapshots. Their original
+FAIL/BLOCKED receipts remain unchanged. Overall native ROS 2 qualification is
+still **NOT VERIFIED**.
+
+R18_SOURCE_BUILD_HOST_STAGE was committed and pushed as
+`48c01f2597bf16db1ed35fbd79cc5c32826f0ab8` to the existing origin branch
+`codex/flow-encoding-published-20261014`. Main's PRE_COMMIT passed 45 checks;
+the six-file boundary was verified after publication. Graph risk remained HIGH.
+At 18:27:04 UTC GitHub reported zero workflow runs, check runs and commit-status
+contexts for this SHA: **CI NOT_RUN at that observation**, not PASS. The workflow
+inventory endpoint was rejected by the connector; zero workflows is not claimed.
+
+The subsequent reviewed loader diagnostic executed the bound native Action
+executable once on each RK3588A board using SDK23/AArch64 inputs:
+
+| Board | HDC target | Native exit / HDC exit | Result |
+| --- | --- | --- | --- |
+| A | `3e01ff55454d202020104033bf453b00` | 3 / 0 | PASS_NATIVE_MAIN_LOAD_AND_MISSING_IDENTITY_REJECTION_ONLY |
+| B | `3e01ff55454d202020104433991c3b00` | 3 / 0 | PASS_NATIVE_MAIN_LOAD_AND_MISSING_IDENTITY_REJECTION_ONLY |
+
+Executable SHA256:
+`fe938244ae64fae4201c04c9e1cd947b6eacf37ea4b2f2e8ac0d72e44a46c0a5`.
+Each run used an empty inherited environment, an explicit nonempty required-config
+path to an owned absent file, and absent token/admission inputs. stdout was empty;
+stderr was exactly `ROS_IDENTITY_REJECTED missing_or_invalid_external_input`
+followed by newline. The current `IdentityStartup.cpp` rejects these inputs before
+constructing Operations/TokenFirstEntry or entering Action business code. The
+required-config file was not read or written on this path.
+
+Both boards passed 104 artifact hashes before and after execution. Following
+quiescence, 106 exact owned names were removed and empty directories removed;
+separate absence checks passed. There were no timeouts, forced kills, automatic
+retries or residual remote resources. The 103-member main dependency closure
+excludes the separately deployed 104th target bridge: its loading is **not
+established**. Uncalled/lazy symbols and every initializer path are not qualified;
+dependency constructors are not asserted to be side-effect-free.
+
+The original 17:55 empty-discovery result remains BLOCKED. The same fixed HDC
+binary later observed both boards in the normal host environment; this supports
+an environment visibility explanation without proving the unique historical
+cause. A preflight sentinel substring parser mistakenly matched its own shell
+argv. Its original STOP and an unexecuted draft authored before graph impact are
+preserved, including that workflow deviation. The final full-line parser and
+five offline controls were reviewed; neither native command nor its byte-exact
+oracle was relaxed. Independent evidence review found no blocking finding and
+required no additional device execution for this limited claim.
+
+| Current capability | Supported extent and remaining obligation |
+| --- | --- |
+| Native main load and missing-identity rejection | **SUPPORTED for this diagnostic / DEVICE_TESTED PASS** on both boards. |
+| R18 five-goal Action with application readiness | **PARTIAL / HOST_TESTED PASS** on the Windows opaque-byte fake Socket seam; native Action remains unverified. |
+| Ordinary unbarriered Action feedback | **UNVERIFIED**, original run FAIL and cause NOT_PROVEN; no production race fix. |
+| Accepted identity selection/startup/restoration | **UNVERIFIED / BLOCKED** by complete project-only original record and supported lossless restoration prerequisites. |
+| Target bridge execution, actual Socket traffic, cross-board Action/discovery/reconnect/lifecycle | **UNVERIFIED / NOT_RUN/BLOCKED** for current R18 artifacts; native Action DEVICE_TESTED=false. |
+| Status-topic behavior, arbitrary Action/QoS, large/fragmented goals and security | **UNVERIFIED** in this acceptance stage. |
+| Session API fallback | **NOT SUPPORTED by project policy**; Socket API remains mandatory. |
+| R19 vendor wrappers | Scoped configuration contract now passes; see [R19 preparation](ROS2_ROSBAG_TARGET_PREPARATION.md). This is not rosbag runtime support. |
+
+No project permission grant/revoke, token switch, reload or security write was
+performed. Conditional permission authorization does not supply the missing
+complete project-only record and lossless restore route. Current DATASYNC state
+was **NOT_QUERIED**; historical DENIED is not a current observation. The rejected
+broad token-registry access route is not an alternative. The original unbarriered
+FAIL, mechanism-only result and R14 failures retain their previous meaning.
+
+The following evidence is local to the original checkout's ignored
+`build/r18-action-native/` directory, not bundled in the remote Git commit.
+Command/environment/stdout/stderr/exit receipts are in these sealed directories.
+
+| Receipt | SHA256 |
+| --- | --- |
+| `loader-readiness-test-recovered/RESULT.json` | `9217623d5cd834566d0d861040cd37a29a43bf055ccce169c6a343ad2201dba0` |
+| `loader-readiness-test-recovered/EVIDENCE_MANIFEST.json` (1082 files) | `75a685d22b7525b62ba32f5c87b6bfa63739669a79f1d531d1dcddaac5191814` |
+| `loader-readiness-recovered-review/RESULT.json` | `68a4d58dc3ae1ced7c8c652b8074af9f1341702350ef3ba95c90682ed5e854bf` |
+
+Publication receipts are `main-publication/PUBLICATION_RESULT.json`,
+`PRE_COMMIT.json` and `GITHUB_PUBLICATION_CHECK.json`. They record the earlier
+publication snapshot; later loader evidence does not rewrite its historical
+DEVICE_TESTED=false statement into an Action communication PASS.
