@@ -26,11 +26,20 @@ def model():
         add('A', 'TERMINAL', order=order, uuid=IDS[str(order)], code=code, values=values,
             prestate='CANCELING' if order == 40 else 'EXECUTING')
         add('B', 'RESULT', order=order, uuid=IDS[str(order)], code=code, values=values)
+    def readiness(pair):
+        phase, primary, secondary = ('PAIR', IDS['6'], IDS['40']) if pair else ('TAIL', IDS['5'], '-')
+        service = '/action_' + RUN + '/ready/' + phase.lower() + '/u' + primary + ('/u' + secondary if pair else '')
+        receipt = 'ready_v1:' + RUN + ':' + phase + ':' + primary + (':' + secondary if pair else '')
+        fields = dict(phase=phase, service=service, primary=primary, secondary=secondary)
+        add('B', 'READY_REQUEST', **fields, held=2 if pair else 1)
+        add('A', 'READY_ACCEPT', **fields, executing=2 if pair else 1)
+        add('B', 'READY_REPLY', **fields, success=1, receipt=receipt)
     action = '/action_' + RUN + '/fibonacci'
     add('A', 'SERVER_READY', action=action)
     add('B', 'CLIENT_READY', action=action)
     accept(6)
     accept(40)
+    readiness(True)
     add('A', 'CONCURRENT', normal=IDS['6'], target=IDS['40'], normal_active=1, target_active=1)
     feedback(6, '0,1')
     feedback(40, '0,1')
@@ -45,6 +54,7 @@ def model():
     accept(0)
     terminal(0, 6, '-')
     accept(5)
+    readiness(False)
     for value in ('0,1', '0,1,1', '0,1,1,2', '0,1,1,2,3'):
         feedback(5, value)
     terminal(5, 4, '0,1,1,2,3')
@@ -75,6 +85,8 @@ class ActionReceiptTests(unittest.TestCase):
         result = analyze(text(model()), RUN, PIDS)
         self.assertEqual((result['requests'], result['accepted'], result['canceled']), (5, 4, 1))
         self.assertFalse(result['status_topic_validated'])
+        self.assertFalse(result['unbarriered_action_validated'])
+        self.assertEqual(result['acceptance_precondition']['replies'], 2)
 
     def test_feedback_is_subsequence_not_full_delivery(self):
         records = model()
@@ -97,14 +109,99 @@ class ActionReceiptTests(unittest.TestCase):
             records['B'][position:position] = feedback
         self.bad(mutate)
 
-    def test_feedback_after_send_before_response_is_valid(self):
+    def test_feedback_before_response_violates_added_readiness_precondition(self):
+        # This remains a legal ordinary ROS/application-log ordering. The same
+        # historical vector now violates this acceptance application's added
+        # precondition; it is not reclassified as a production ROS error.
+        # Original vector/source: readiness-implementation/baseline (R18 evidence).
         records = model()
         for order in (6, 5):
             feedback = self.row(records, 'B', 'FEEDBACK', order=order)
             records['B'].remove(feedback)
             position = records['B'].index(self.row(records, 'B', 'RESPONSE', order=order))
             records['B'].insert(position, feedback)
+        with self.assertRaises(ValueError):
+            analyze(text(records), RUN, PIDS)
+
+    def test_feedback_while_readiness_reply_pending_is_valid(self):
+        records = model()
+        for phase, order in (('PAIR', 40), ('TAIL', 5)):
+            reply = self.row(records, 'B', 'READY_REPLY', phase=phase)
+            records['B'].remove(reply)
+            position = records['B'].index(self.row(records, 'B', 'FEEDBACK', order=order)) + 1
+            records['B'].insert(position, reply)
         analyze(text(records), RUN, PIDS)
+
+    def test_readiness_missing_duplicate_or_surplus_rejected(self):
+        for side, event in (('A', 'READY_ACCEPT'), ('B', 'READY_REQUEST'), ('B', 'READY_REPLY')):
+            for phase in ('PAIR', 'TAIL'):
+                with self.subTest(side=side, event=event, phase=phase, mutation='missing'):
+                    self.bad(lambda r: r[side].remove(self.row(r, side, event, phase=phase)))
+                with self.subTest(side=side, event=event, phase=phase, mutation='duplicate'):
+                    self.bad(lambda r: r[side].insert(-2, copy.copy(self.row(r, side, event, phase=phase))))
+                with self.subTest(side=side, event=event, phase=phase, mutation='surplus_foreign'):
+                    self.bad(lambda r: r[side].insert(-2, dict(self.row(r, side, event, phase=phase), phase='FOREIGN')))
+
+    def test_readiness_same_count_correlations_rejected(self):
+        for side, event, field, value in (
+                ('B', 'READY_REQUEST', 'service', '/foreign'),
+                ('A', 'READY_ACCEPT', 'primary', IDS['-1']),
+                ('B', 'READY_REPLY', 'secondary', IDS['0']),
+                ('B', 'READY_REQUEST', 'held', '1'),
+                ('A', 'READY_ACCEPT', 'executing', '1'),
+                ('B', 'READY_REPLY', 'success', '0'),
+                ('B', 'READY_REPLY', 'receipt', 'ready_v1:foreign:PAIR:' + IDS['6'] + ':' + IDS['40'])):
+            with self.subTest(side=side, event=event, field=field):
+                self.bad(lambda r: self.row(r, side, event, phase='PAIR').update({field: value}))
+
+    def test_consistently_swapped_pair_uuid_receipts_rejected(self):
+        def mutate(records):
+            for side, event in (('A', 'READY_ACCEPT'), ('B', 'READY_REQUEST'), ('B', 'READY_REPLY')):
+                row = self.row(records, side, event, phase='PAIR')
+                row.update(primary=IDS['40'], secondary=IDS['6'],
+                           service='/action_' + RUN + '/ready/pair/u' + IDS['40'] + '/u' + IDS['6'])
+                if event == 'READY_REPLY':
+                    row['receipt'] = 'ready_v1:' + RUN + ':PAIR:' + IDS['40'] + ':' + IDS['6']
+        self.bad(mutate)
+
+    def test_stale_tail_echo_rejected(self):
+        self.bad(lambda r: self.row(r, 'B', 'READY_REPLY', phase='TAIL').update(
+            receipt='ready_v1:' + RUN + ':TAIL:' + IDS['6']))
+
+    def test_readiness_request_before_handles_recorded_rejected(self):
+        for phase, order in (('PAIR', 40), ('TAIL', 5)):
+            def mutate(records):
+                request = self.row(records, 'B', 'READY_REQUEST', phase=phase)
+                records['B'].remove(request)
+                records['B'].insert(records['B'].index(self.row(records, 'B', 'RESPONSE', order=order)), request)
+            with self.subTest(phase=phase):
+                self.bad(mutate)
+
+    def test_feedback_before_readiness_grant_or_request_rejected(self):
+        for side, event in (('A', 'READY_ACCEPT'), ('B', 'READY_REQUEST')):
+            for phase, order in (('PAIR', 40), ('TAIL', 5)):
+                def mutate(records):
+                    gate = self.row(records, side, event, phase=phase)
+                    records[side].remove(gate)
+                    position = records[side].index(self.row(records, side, 'FEEDBACK', order=order)) + 1
+                    records[side].insert(position, gate)
+                with self.subTest(side=side, phase=phase):
+                    self.bad(mutate)
+
+    def test_readiness_phase_order_rejected(self):
+        def mutate(records):
+            pair = self.row(records, 'A', 'READY_ACCEPT', phase='PAIR')
+            tail = self.row(records, 'A', 'READY_ACCEPT', phase='TAIL')
+            a, b = records['A'].index(pair), records['A'].index(tail)
+            records['A'][a], records['A'][b] = tail, pair
+        self.bad(mutate)
+
+    def test_tail_grant_before_previous_terminal_rejected(self):
+        def mutate(records):
+            grant = self.row(records, 'A', 'READY_ACCEPT', phase='TAIL')
+            records['A'].remove(grant)
+            records['A'].insert(records['A'].index(self.row(records, 'A', 'TERMINAL', order=0)), grant)
+        self.bad(mutate)
 
     def test_incomplete_normal_feedback_subsequence_is_valid(self):
         records = model()

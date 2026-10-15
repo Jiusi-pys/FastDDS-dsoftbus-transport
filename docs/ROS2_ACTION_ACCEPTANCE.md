@@ -239,3 +239,272 @@ The last narrow permission observation was 2026-10-14T21:51:07Z: DENIED for
 Presence/permission was not refreshed in this phase. Owner-supported deployment
 and permission recovery plus a narrow GRANTED check remain prerequisites to
 native testing. No Host success substitutes for that missing acceptance.
+
+
+## R18 current evidence: Action acceptance WITH APPLICATION READINESS PRECONDITION
+
+Snapshot: 2026-10-15 after independent post-review final testing; candidate base
+`1fc72b77452daa80010d0edd578b315c264ba044`. All preceding sections are the preserved
+R12 historical record. This section does not reclassify that record or the R18
+original no-barrier failure. Overall R18 normal commit gate remains **BLOCKED**;
+documentation synchronization does not grant it.
+
+### Implementation and boundary
+
+The four-file candidate comprises the Action example CMake/main and the Action
+runner analyzer/model tests. CMake selects the existing Host package on Windows
+or Target package on OHOS; OHOS uses the existing business-main startup bridge.
+The new application-level `example_interfaces/srv/Trigger` handshake binds the
+run ID and accepted UUIDs to PAIR (orders 6/40) and TAIL (order 5). The client has
+accepted handles before requesting readiness; the server requires the expected
+executing goals and no prior feedback, grants each phase once, and then permits
+its timer to emit feedback. Negative readiness latches scenario failure; pending
+client service requests are removed on the exception path. Existing bounded
+waits and Action feedback/cancel/result/accounting requirements remain enforced.
+The analyzer permits feedback while the client awaits the readiness reply; it
+does not invent a cross-process timestamp order or require reply-before-feedback.
+A successful Trigger reply cannot substitute for Action feedback.
+
+This is an **acceptance precondition**, not a production Action, RMW, DDS/RTPS or
+Transport repair. Ordinary ROS applications may legally publish feedback before
+the receiver registers its goal handle; the observed typed-client scheduling
+risk remains. The compared registration/discard/readiness source blocks in Host
+rclcpp 28.1.16 and the bound native 28.1.22 inputs correspond, but this is neither
+complete binary equivalence nor native runtime validation. See the sealed
+`readiness-design-review/REPORT.md` and `mechanism-review/REPORT.md` under
+`build/r18-action-native/` for these narrow source/behavior boundaries.
+
+### Preserved failure, mechanism, initial and final stages
+
+Evidence paths below are relative to the original repository root, not the W3
+checkout. All earlier seals remain unchanged.
+
+| Stage | Actual execution and conclusion |
+| --- | --- |
+| Original native consumer preparation | Original configure FAIL (39-file seal) is retained; the separate corrected binding plan enabled build/static checks, not native execution. |
+| Original no-barrier Action | `consumer-initial-fix1-test/INITIAL_TEST_RESULT.json`: run `eb7af94cc32edb89`, A 63240/B 56964 both exit 4, `bounded_wait_expired`, no BUSINESS_DONE; runner/wrapper exit 1. One business window, no kill/timeout, exclusive rebind succeeds. FAIL remains authoritative; cause **NOT_PROVEN**. The extra Python-cache guard failure and subsequent attributed cleanup are separately recorded, not erased. |
+| Controlled mechanism | `mechanism-test/INITIAL_TEST_RESULT.json`: `22cabb3705443452`, A 72896/B 67076 exit 0; two publications/takes, three feedback dispatches including one explicit diagnostic redispatch. The same retained opaque object gave no callback before registration and one afterward; register-first control gave one callback. **PASS_MECHANISM_ONLY**, not proof of the original failure cause. One A-side adapter rejection and EOF/WSA10004 remain recorded. |
+| Readiness plan setup | `readiness-initial-test/` BLOCKED before execution because a proposed map output addressed an old sealed directory. FIX1 changes output paths only; the original map is preserved. The initial tester's separate ament-path classifier error is retained in `INVALID_PREDECLARATION_PATH_CHECK.json`; exact path classification corrected the collector, without a build/window retry. |
+| Independent readiness initial FIX1 | `readiness-initial-fix1-test/INITIAL_TEST_RESULT.json`: fresh native and Host configure/build each once, 70 model methods plus 17 synthetic controls, one run `569c03a07f4302fe`, A 56616/B 53764 exit 0, 5 requests/4 accepted/1 rejected/2 succeeded/1 canceled/1 aborted. PASS_WITH_APPLICATION_READINESS_PRECONDITION; one A-side adapter rejection remains. Native BUILDS/static only. |
+| Formal code review | `code-review/REVIEW.json`: NO_BLOCKING_FINDINGS_IN_SCOPED_CANDIDATE; no source changes required. Review executed 31 Action models, 26 offline cases and the original-oracle projection; these are distinct checks, not extra live windows. |
+| Canonical independent final | `readiness-final-test/FINAL_TEST_RESULT.json`: **PASS_WITH_APPLICATION_READINESS_PRECONDITION**, verified artifact reuse, zero new configure/build, fresh 70 models and 17 synthetic controls, exactly one final window `fe87b82ecd794c7e`. It is a new readiness scenario, not a retry/reclassification of the old no-barrier window. |
+
+Final model count is 31 Action + 31 receive + 7 I/O + 1 control = **70 methods**;
+**17 synthetic mutation concepts** are counted separately. They use a new
+readiness-positive fixture. The old ROS-legal early-feedback ordering violates
+this added precondition; rejecting it does not make that ROS behavior illegal.
+No broad core, lifecycle, serialized or native regression is inferred from these
+models.
+
+### Canonical final live observations
+
+A PID **54800** and B PID **79508** both exit **0**. Five requests yield four
+accepted goals and one rejected goal; terminals are two SUCCEEDED, one CANCELED
+and one ABORTED, including targeted cancellation while the normal goal remains
+active and successful follow-up work. PAIR and TAIL each have one request, grant
+and reply. Feedback passes the observed-subsequence oracle with the mandatory
+cancel prefix. Status-topic publication is **not validated**.
+
+Twelve selected runtime modules per side were checked by the canonical driver;
+independent live mapping checks cover thirteen including the executable. These
+are **cumulative observations, not a pre-START module barrier**. Both ports
+**55602/55603** permit simultaneous exclusive rebind; no forced kill or timeout
+occurred. The actual final result is `build/r18ready-final1/pair-once/result.json`
+(SHA256 `0f067d052cc65f4cde6d7c9acb4afec6552a4f1976e3ae259aec7198c117551a`).
+
+| Final process | Sends | Ingress/admitted/charged/refunded | Adapter rejections | Retained I/O termination observations |
+| --- | ---: | --- | ---: | --- |
+| A 54800 | 132 | 121 / 121 / 121 / 121 | 0 | Two EOF at receive-prefix boundary |
+| B 79508 | 121 | 132 / 132 / 132 / 132 | 0 | Two socket errors WSA10004 at receive-prefix boundary |
+
+Strict `full_host` capture and counter reconciliation pass. No send errors or
+matched stderr error lines were reported in this final window; the above I/O
+terminations remain present. Zero adapter rejections in this window is not a
+zero-error or whole-frame delivery claim. Payload-to-RTPS/business causality is
+**NOT_OBSERVED**; no attribution of all frames or explanation of the original
+failure follows from the counters.
+
+### Reproducible commands, artifacts and seal anchors
+
+Host environment: Windows, MSVC x64 Release `/MD`, C++17; bound Fast DDS 2.14.5
+SECURITY OFF / STATISTICS OFF, existing R11 Host bridge and h3 ROS runtime.
+`FakeSocketTcp` carries opaque bytes between real ROS/DDS processes on the Host;
+it is not native OpenHarmony DSoftBus. Native build uses SDK23, Ninja,
+`arm64-v8a`, Release, `c++_shared`, the selected Target install and exact package
+bindings. Cross-compilation and ELF checks do not execute those binaries.
+
+Full exact `argv`, working directory, captured environment and exit codes are
+preserved in `readiness-initial-fix1-test/{host,native}-{configure,build}.json`
+and `readiness-final-test/{model-action,model-receive,model-io,model-control,mutants,pair}.json`.
+The documentation seal's `docs-sync/COMMAND_RECEIPTS.json` copies those fields
+without shortening native CMake arguments. All ten commands exit 0. Final model
+commands are `C:/pixi_ws/.pixi/envs/default/python.exe -B -m unittest discover -s
+<root>/build/r18ready-final1/s/tests/ros2_host -p <pattern> -v`, with patterns
+`test_action_acceptance.py`, `test_host_receive_capture.py`, `host_io_capture_tests.py`
+and `test_control_files.py`. Synthetic controls execute the sealed `mutants.py`.
+The actual final pair invocation (paths rooted at the original checkout) is:
+
+```text
+C:/pixi_ws/.pixi/envs/default/python.exe -B <root>/build/r18ready-final1/s/tests/ros2_host/run_action_acceptance.py --exe <root>/build/r18ready1/host/Release/ros2_action_acceptance.exe --bridge <root>/build/r11diagfinalfix/p/bin/fastdds_dsoftbus_ros2_host_bridge.dll --fastdds-prefix <root>/build/g2a1/host214-install --ros-prefix <root>/build/ros2-target/h3/runtime --pixi-prefix C:/pixi_ws/.pixi/envs/default --output <root>/build/r18ready-final1/pair-once
+```
+
+The pair working directory is `<root>/build/r18ready-final1`; PATH begins with
+the bound Fast DDS, Host bridge and h3 runtime bins, then installed ROS/Pixi bins.
+`PYTHONDONTWRITEBYTECODE=1`, `CMAKE_BUILD_PARALLEL_LEVEL=1` and
+`MSBUILDDISABLENODEREUSE=1` are captured. These are executed receipts, not a claim
+that the abbreviated command alone recreates all external dependencies.
+
+`ARTIFACT_REUSE.json` binds the initial build command receipts, selected source,
+compile/link dependencies and runtime modules. Native executable
+`build/r18ready1/native/ros2_action_acceptance` SHA256 is
+`fe938244ae64fae4201c04c9e1cd947b6eacf37ea4b2f2e8ac0d72e44a46c0a5`.
+Its ELF/interpreter/NEEDED/startup-business connection and actual compiler inputs
+were inspected; the historical identity bridge is audit-traced, not freshly
+runtime-qualified. Final execution reuses the following identical A/B Host
+bindings; full absolute paths and sizes are in `INDEPENDENT_RUNTIME_CHECK.json`:
+
+| Module | SHA256 |
+| --- | --- |
+| `ros2_action_acceptance.exe` | `4168bdf3ffba2917b45cf820ec9c38614c02a55cb781dc2974766aa9584ca7d5` |
+| `fastdds_dsoftbus_ros2_host_bridge.dll` | `cef2b894dd397b46f0edb819f8bedc93df6cea326d8645a0006fd57e1440c572` |
+| `fastrtps-2.14.dll` | `60408a27139ce59bf9aaa92c080e799d98f1531b7318dfbf0abf7308e7d555a4` |
+| `fastcdr-2.2.dll` | `badcea3777c7a6b23961310dc5857e07c064d94af9babe52d2c097d8842d8c71` |
+| `rclcpp.dll` | `d06e9dbdc7c152d76716c582f8d0eb1284e7279ca21e7d9e225d87ef9f958673` |
+| `rclcpp_action.dll` | `9a0f108f07a18141b546a62ca9d7122ceadf8f90684c77ec03d966ea1babdb17` |
+| `rcl_action.dll` | `c496ec9288b8480b2918c21deee96314f56c86133177df640665b0a704df29ef` |
+| `rmw_fastrtps_cpp.dll` | `9f500042d4dbcf697fcf22c9eae9b07130839e301b5a417c701e219115395a6e` |
+| `rmw_fastrtps_shared_cpp.dll` | `19715630ddeb38c17c9aca78b3df08ad8475f28ffce27bdf78580daa51430c49` |
+| `example_interfaces__rosidl_typesupport_cpp.dll` | `3b9ab51c35b55fefccd55601ffb9fc827a066c7144ef6428b41e84b5712110c8` |
+| `example_interfaces__rosidl_typesupport_fastrtps_cpp.dll` | `bdda5f4fec12c0dae6482d9b254c5afe24d5e7eb3b25635a42e2972447ff9f7c` |
+| `action_msgs__rosidl_typesupport_cpp.dll` | `b9cc266d1ea070735cfb8fe9748930a6c28ba9d4f96ad4f0df44f87ac2da902c` |
+| `action_msgs__rosidl_typesupport_fastrtps_cpp.dll` | `e4d7129b550853d6c76a686bef6fc4a1d91e46a135d29c128481e23c3ab5267a` |
+
+| Evidence under `build/r18-action-native/` | SHA256 |
+| --- | --- |
+| `readiness-implementation/SOURCE_FREEZE.json` (3 readiness files + separately bound preexisting CMake) | `74c70071da566238427da2e5dab61e2bcfbd028553b3181418951232809ee1ed` |
+| `readiness-initial-fix1-test/INITIAL_TEST_RESULT.json` | `917a0cfca80120ce70f8a4ad38581f4e1cd79bdfbceac12eb86671a1ecff923a` |
+| `readiness-initial-fix1-test/EVIDENCE_MANIFEST.json` (237 files) | `23c88c4e87d21fe1849432f817469f344439b104586b08e9ecd6e8c55d657b45` |
+| `code-review/REVIEW.json` | `9e5d7a627d5a1d65d41124028db33d1f02ce43493e944a76d0d31e3f470b4808` |
+| `code-review/EVIDENCE_MANIFEST.json` (2314 inputs, 14 outputs) | `30fe779abdddd3358a1c2d45b37a44fd76bb3cb5fe5eade8ce7cc037cebaf0e1` |
+| `readiness-final-test/FINAL_TEST_RESULT.json` (canonical execution verdict) | `f3801cea755215356ac97d9120c49e96e12ee29b017903633e07debafc9ad9a8` |
+| `readiness-final-test/EVIDENCE_MANIFEST.json` (98 files) | `5a5c30d905249c5ea5a61335eafcce6d13b3fe3c5ec0344601af721959b3a24a` |
+| Original no-barrier `consumer-initial-fix1-test/EVIDENCE_MANIFEST.json` (212 files) | `c7bc5850fd8ad1dd4a346eb1a5ff4d899d23ba91177f3f6bf4a266231dba445a` |
+| `mechanism-test/EVIDENCE_MANIFEST.json` (116 files) | `9aecac788716bb4cd5660d8707407c03cd8aed921c83cde5f45d0d9c4a8e9e6e` |
+
+### Current capability and gate matrix
+
+| Capability / gate | Status and reason |
+| --- | --- |
+| Specified Action acceptance WITH APPLICATION READINESS PRECONDITION | **PARTIAL / HOST_TESTED PASS**: real ROS/DDS five-goal scenario, two readiness phases and cleanup, on the opaque-byte Host fake Socket seam only. |
+| Ordinary unbarriered Action feedback scheduling | **NOT VERIFIED; original run FAIL**. Legal early-feedback risk remains, original cause NOT_PROVEN. No production fix or universal delivery promise. |
+| Controlled typed-client dispatch mechanism | **HOST_TESTED PASS_MECHANISM_ONLY**; explicit diagnostic redispatch is not an application delivery guarantee. |
+| Target dependency/bridge/Action executable | **BUILDS / static PASS**, actual loader/native communication **NOT RUN**. Source correspondence does not prove native 28.1.22 behavior. |
+| Status topic, arbitrary Action/QoS, large/fragmented goals, reconnect, secure Action | **UNVERIFIED** in this phase; no test or full feature claim. |
+| RK3588A and cross-device R18 Action | **BLOCKED; DEVICE_TESTED=false**. Complete project-only permission-record snapshot and lossless restoration route remain prerequisites. |
+| Historical V1 cross-board pub/sub/service | Separate real-device evidence exists for its historical bound artifacts; it does not qualify R18 Action. |
+| R14 visibility | Prior strict 20 writes/19 takes and ten opaque frames per side remain **FAIL**; R18 does not alter that conclusion. |
+| R19 rosbag preparation | Only three pinned standalone vendor libraries have **BUILDS/static PASS**. Independent vendor review has no blocking findings for that scope; R19-V1 remains **OPEN**. Wrappers/imported targets, plugin, consumer, record/replay/runtime and device are **UNVERIFIED**. |
+| Documentation sync | Current evidence recorded; its own consistency gate is separate from normal implementation commit eligibility. |
+| R18 normal commit gate / Main graph PRE_COMMIT / commit / push / CI | **BLOCKED / not granted** for normal commit; Main checks and publication receipts remain pending. No commit/push/CI success is claimed. |
+| Overall ROS 2 over native DSoftBus | **NOT VERIFIED**; no aggregate completion percentage. |
+
+The user already conditionally authorized the existing `fastdds_dsoftbus_probe`
+identity's temporary `ohos.permission.DISTRIBUTED_DATASYNC` window on two boards,
+APL_NORMAL, followed by restoration. Execution remains blocked because complete
+original project-only attributes and a supported lossless restore operation are
+unestablished. No grant/revoke/token switch/reload or security configuration
+write was performed. `PERMISSION_AUTHORIZATION_STATE.md` and
+`PERMISSION_RECOVERY_REQUIRED_INPUT.md` distinguish authorization from that
+remaining prerequisite; broad native-token-registry access was previously
+rejected and is not an alternative. Main's R18 read-only board/platform records
+observed both boards and matching selected SoftBus DSOs, not Action execution or
+current permission qualification. Historical DENIED evidence and V1 permissions
+activity are not a complete current project record.
+
+R19 library evidence is separately sealed at
+`build/r19-rosbag-preparation/vendor-library-fix1-test/RESULT.json` SHA256
+`6c057a50eb3aab5ba818b4313887242018e9a23c8a143964115a9c9981b9b9ca`;
+`vendor-library-review/RESULT.json` SHA256
+`9cce6bd138da41ed77ad8b64df6a57004d268ffc307953740288449163cc00f7`.
+It supplies build/static inputs for future downstream work, not rosbag runtime
+acceptance. Earlier vendor/collector failures remain in their separate seals.
+
+R19 post-review final static recheck: `vendor-library-final-test/RESULT.json`
+SHA256 `96820ee89aa63109fa010dd41a8375f8b230147cdaf940fd3eaacf86b3453f7f`,
+92-file manifest `e540ebd0316c2f68f71befdc0111a9b7e0733f8ab1adf08e65399e067a18f0d2`.
+PASS_STATIC_ONLY; three fresh readelf commands exit 0, zero new configure/build/
+install. The open downstream/runtime/device limits above are unchanged.
+
+
+## R18 bounded source/build/Host stage: prospective publication qualification
+
+This later scope receipt supplements the preceding broader R18 assessment;
+it does not overwrite that assessment or its BLOCKED gate. Main's
+`build/r18-action-native/PUBLICATION_SCOPE_DECISION.json` defines
+**R18_SOURCE_BUILD_HOST_STAGE**: OHOS Action acceptance target build enablement
+plus Windows Action acceptance WITH APPLICATION READINESS PRECONDITION. The
+candidate remains the same four source/test paths and these two documentation
+paths; no production Transport, RMW or identity implementation was changed.
+
+Independent technical scope review found the six-file boundary coherent and no
+new blocking defect; a Host-only split was not required. The OHOS CMake wiring
+makes existing native startup/identity paths reachable from this example, and
+the readiness handshake changes application scheduling on either platform if
+executed. Therefore this stage does **not** claim absence of native runtime
+effects. It claims the exact bound target builds and the exact Windows scenario
+passes; native execution remains a separate required qualification.
+
+The independent scope tester sealed **Commit gate:
+PASS_FOR_EXACT_SOURCE_BUILD_HOST_STAGE** at 2026-10-15T18:12:27Z. It rechecked
+31,000 unique current paths with zero drift and accepted the unchanged
+source/build/artifact/input bindings. It reused the recorded post-review
+70 model methods, 17 synthetic controls and final Host run
+`fe87b82ecd794c7e`; this scope assessment performed **zero new model executions,
+zero builds and zero business windows**. Existing actual build/run commands,
+module hashes and counts in the preceding section remain the execution evidence.
+A new scope judgment is not a second build or a repeated live success.
+
+| Exact scoped claim / obligation | Current status |
+| --- | --- |
+| Selected SDK23 OHOS Action consumer configuration, compile/link and static ELF/startup-symbol checks | **BUILDS / static PASS**, bound artifact reuse; target was not executed. |
+| Windows five-goal Action and two Trigger readiness phases | **HOST_TESTED PASS_WITH_APPLICATION_READINESS_PRECONDITION**, real ROS/DDS over the opaque-byte fake Socket seam. |
+| Scoped independent tester release evidence | **PASS_FOR_EXACT_SOURCE_BUILD_HOST_STAGE**; applies only to the two claims above and the unchanged four source/test files. |
+| Scoped documentation readiness | **Ready for commit: YES for R18_SOURCE_BUILD_HOST_STAGE only**, subject to Main's remaining graph, exact staged identity and applicable PRE_COMMIT decision. This is not commit authorization. |
+| Native loader/symbol resolution and missing-identity rejection | **RequiredForNativeQualification — NOT_RUN/BLOCKED**. |
+| Native identity selection, startup and restoration | **RequiredForNativeQualification — NOT_RUN/BLOCKED**. |
+| Actual DSoftBus Socket operation and native Action acceptance | **RequiredForNativeQualification — NOT_RUN/BLOCKED**. |
+| Cross-board discovery, Action/readiness and lifecycle | **RequiredForNativeQualification — NOT_RUN/BLOCKED**. |
+| Original broader R18 gate / native product qualification | **BLOCKED / NOT VERIFIED**, unchanged. DEVICE_TESTED=false. |
+| Main graph/PRE_COMMIT, commit/push and CI | Pending separate Main receipts at this documentation snapshot; no success preclaimed. |
+
+Native obligations are **not N/A** and have not been waived because execution
+was unavailable. A build claim can be supported while runtime qualification
+remains required and unfulfilled. The original no-barrier run remains FAIL,
+cause NOT_PROVEN; the controlled mechanism experiment remains
+PASS_MECHANISM_ONLY. This publication scope does not repair production feedback
+scheduling or establish ordinary unbarriered Action support. It does not expand
+QoS, status-topic, fragmentation/security coverage, or change the R14 failures.
+
+The separate loader-readiness diagnostic stopped at its only HDC discovery
+at 17:55 UTC: exit 0, empty stdout/stderr, no observed target entries; zero remote
+commands, uploads or native executions. Result: BLOCKED_DEVICE_DISCOVERY_EMPTY.
+That observation does not establish physical disconnection or a successful
+loader test. The project-only original token-record and lossless-restoration
+prerequisite remains; no permission grant/revoke, token switch or security
+configuration change is inferred or authorized by this publication stage.
+
+All receipts below are under `build/r18-action-native/` at the original checkout.
+They supplement rather than rewrite `MAIN_GATE_R18_READINESS_20261015.json` and
+`docs-sync/RESULT.json`. Those original broader judgments retain their recorded
+NO/BLOCKED values; new documentation evidence is separate in
+`publication-scope-docs/`.
+
+| Scope evidence | SHA256 |
+| --- | --- |
+| `PUBLICATION_SCOPE_DECISION.json` | `ae37c1d674df06a1651063d6c7e6b3ede6493f94c52041aa8322466b90024f78` |
+| `publication-scope-review/RESULT.json` | `212e8e7cdafa17b883bef0f6787f2ec6492ce71ca8e2761cc090b0896869b4f4` |
+| `publication-scope-audit/g2-n1-supplement/RESULT.json` | `15aec3364f5980c0e626c278947d27e39212295c259c275fc3662d1e8ef17c24` |
+| `publication-scope-test-gate/RESULT.json` | `4ffa2d84f7a45006ee18df33a1cfee0be1915ab13f30049b4b36003ae4011f7a` |
+| `publication-scope-test-gate/EVIDENCE_MANIFEST.json` (20 entries) | `fca510e0f2dfe57c795f42a2157f7cc6ac9190b781cd09b1ac9451afbe3547b7` |
+| `loader-readiness-test/RESULT.json` | `b10cab0958638d5bccabb00ac9d317c377027c44a6c7d08b12c4bd628f61af64` |
+| `loader-readiness-test/EVIDENCE_MANIFEST.json` (15 entries) | `8e592bc80946bb43c0b28eed190e9eeb46157bb84350178111f87b9ababc26f5` |

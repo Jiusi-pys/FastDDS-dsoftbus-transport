@@ -777,3 +777,90 @@ over native DSoftBus NOT VERIFIED. R14's 20 writes/19 takes and ten opaque frame
 per side remain FAIL. Tester Commit gate PASS is Host-scoped; Main graph/
 PRE_COMMIT, commit/push and CI remain pending separate receipts at this snapshot.
 No aggregate completion percentage is claimed.
+
+
+## R18 Action acceptance with application readiness precondition (2026-10-15)
+
+R18's post-review final result is PASS_WITH_APPLICATION_READINESS_PRECONDITION.
+The example CMake supports the selected Windows Host/OHOS Target packages; its
+application-only Trigger handshake binds PAIR and TAIL to run/accepted UUIDs.
+This controls acceptance scheduling, not production Action/Transport semantics.
+Ordinary ROS-legal early-feedback risk remains. The original no-barrier run
+eb7af94cc32edb89 stays FAIL (both exit 4, bounded_wait_expired); cause NOT_PROVEN.
+The separate mechanism run stays PASS_MECHANISM_ONLY, not proof of that cause.
+
+Readiness initial FIX1 passed fresh native/Host builds, 70 model methods and 17
+synthetic controls. Original configure/map-path/classifier failures are retained.
+Formal review found no blocking findings and required no source change. Final
+validation reused hash-bound artifacts with zero new configure/build, reran 70
+models plus 17 synthetic controls, then executed one new readiness window:
+fe87b82ecd794c7e, A54800/B79508 exit 0; five requests, four accepted, one rejected,
+two succeeded, one canceled, one aborted, two readiness requests/grants/replies.
+Canonical 12 and independent 13 runtime modules per process were cumulatively
+observed, not checked by a pre-START module barrier. No kill/timeout; ports
+55602/55603 rebound simultaneously. A sends132/ingress121 and B sends121/ingress132,
+all ingress admitted/charged/refunded, zero adapter rejections in this final
+window. A two EOF and B two WSA10004 I/O terminations remain recorded. Complete
+accounting does not establish all-frame payload causality (NOT_OBSERVED).
+
+See [Action acceptance and R18 capability matrix](ROS2_ACTION_ACCEPTANCE.md#r18-current-evidence-action-acceptance-with-application-readiness-precondition)
+for exact command/environment receipts, artifact/module hashes, preserved history
+and limits. Canonical final result SHA256:
+f3801cea755215356ac97d9120c49e96e12ee29b017903633e07debafc9ad9a8;
+98-file manifest SHA256:
+5a5c30d905249c5ea5a61335eafcce6d13b3fe3c5ec0344601af721959b3a24a.
+
+Native dependency/bridge/consumer builds and static inspection pass; native
+loader/runtime, RK3588A Action and cross-device Action were not executed.
+Host28.1.16/native28.1.22 relevant source correspondence is not native proof.
+The temporary project permission window is conditionally authorized, but a
+complete project-only original record and lossless restoration route remain
+unavailable. No grant/revoke/token switch/reload/security write occurred. The
+R18 read-only board/platform observations do not establish permission or Action
+qualification. Historical V1 real cross-board pub/sub/service evidence remains
+separate and valid for its own artifacts; it does not qualify this change.
+
+R19's three standalone vendor libraries have BUILDS/static PASS and scoped
+independent review without blocking findings; R19-V1 remains OPEN. Wrappers,
+plugin, consumer, runtime record/replay and device are unverified. R14 strict
+20/19 and opaque-frame failures remain unchanged. DEVICE_TESTED=false for R18;
+native/cross-device BLOCKED; overall ROS 2 over native DSoftBus NOT VERIFIED.
+Documentation may be ready as a truthful record, but R18 normal Ready for commit
+is NO: required device/cross-device and applicable Main gates remain unmet.
+Main graph/PRE_COMMIT, commit/push and CI receipts are pending, not preclaimed.
+
+
+## R18_SOURCE_BUILD_HOST_STAGE scoped publication readiness (2026-10-15)
+
+A new prospective Main scope decision and independent technical/policy review
+retain the exact six-file candidate as OHOS Action consumer build enablement
+plus Windows readiness-constrained Action acceptance. No source split or
+production Transport/RMW/identity change occurred. Existing native startup is
+newly reachable from the example; absence of native runtime impact is not claimed.
+
+Independent tester Commit gate is PASS_FOR_EXACT_SOURCE_BUILD_HOST_STAGE:
+31,000 unique paths rechecked with zero drift; the recorded native build/static
+artifacts and canonical post-review Windows evidence remain bound. The scope
+assessment reused 70 model methods, 17 synthetic controls and run
+fe87b82ecd794c7e; new model/build/business executions are zero. This is not a
+second runtime success. Tester result SHA256:
+4ffa2d84f7a45006ee18df33a1cfee0be1915ab13f30049b4b36003ae4011f7a;
+20-entry manifest SHA256:
+fca510e0f2dfe57c795f42a2157f7cc6ac9190b781cd09b1ac9451afbe3547b7.
+
+Scoped documentation Ready for commit: YES only for R18_SOURCE_BUILD_HOST_STAGE.
+Main graph, staged-identity and applicable PRE_COMMIT remain separate pending
+gates; no commit/push/CI success is claimed. This supplements the preceding
+broader NO/BLOCKED snapshot without rewriting it. See the appended
+[Action scope matrix](ROS2_ACTION_ACCEPTANCE.md#r18-bounded-sourcebuildhost-stage-prospective-publication-qualification)
+and separate publication-scope-docs receipt.
+
+Native loader/symbol resolution, missing-identity rejection, identity selection/
+restoration, actual DSoftBus Socket/Action and cross-board discovery/readiness/
+lifecycle remain RequiredForNativeQualification: NOT_RUN/BLOCKED, not N/A.
+The 17:55 loader diagnostic stopped after one HDC discovery with exit 0 and empty
+output: zero remote commands/deployment/runtime. This is not proof of a physical
+board disconnection. Complete project-only permission-record recovery remains
+unestablished; no security write occurred. DEVICE_TESTED=false; overall native
+ROS 2 qualification remains NOT VERIFIED. Original no-barrier FAIL/cause
+NOT_PROVEN, PASS_MECHANISM_ONLY and R14 failures remain unchanged.

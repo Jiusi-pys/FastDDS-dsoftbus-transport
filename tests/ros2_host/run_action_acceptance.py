@@ -29,11 +29,14 @@ def analyze(texts, run, pids):
         'CANCEL_RESPONSE': {'uuid', 'return_code', 'count'},
         'TERMINAL': {'order', 'uuid', 'code', 'values', 'prestate'},
         'RESULT': {'order', 'uuid', 'code', 'values'},
+        'READY_REQUEST': {'phase', 'service', 'primary', 'secondary', 'held'},
+        'READY_ACCEPT': {'phase', 'service', 'primary', 'secondary', 'executing'},
+        'READY_REPLY': {'phase', 'service', 'primary', 'secondary', 'success', 'receipt'},
         'BUSINESS_DONE': {'requested', 'accepted', 'rejected', 'terminals', 'pending'},
         'CLOSED': {'result'},
     }
-    allowed = {'A': {'SERVER_READY', 'GOAL', 'ACCEPTED', 'FEEDBACK', 'CONCURRENT', 'CANCEL', 'TERMINAL', 'BUSINESS_DONE', 'CLOSED'},
-               'B': {'CLIENT_READY', 'SENT', 'RESPONSE', 'FEEDBACK', 'CANCEL_REQUEST', 'CANCEL_RESPONSE', 'RESULT', 'BUSINESS_DONE', 'CLOSED'}}
+    allowed = {'A': {'SERVER_READY', 'GOAL', 'ACCEPTED', 'FEEDBACK', 'CONCURRENT', 'CANCEL', 'TERMINAL', 'READY_ACCEPT', 'BUSINESS_DONE', 'CLOSED'},
+               'B': {'CLIENT_READY', 'SENT', 'RESPONSE', 'FEEDBACK', 'CANCEL_REQUEST', 'CANCEL_RESPONSE', 'RESULT', 'READY_REQUEST', 'READY_REPLY', 'BUSINESS_DONE', 'CLOSED'}}
     rows = {}
     for side in 'AB':
         rows[side] = []
@@ -88,6 +91,39 @@ def analyze(texts, run, pids):
             before('A', goal, one('A', 'ACCEPTED', order=order, uuid=ids[order]))
     if len(set(ids.values())) != 5:
         raise ValueError('duplicate goal UUID')
+    # Additional application acceptance precondition; the original Action checks
+    # below still apply. A service reply never substitutes for Action feedback.
+    for side, event in (('A', 'READY_ACCEPT'), ('B', 'READY_REQUEST'), ('B', 'READY_REPLY')):
+        if [r['phase'] for r in select(side, event)] != ['PAIR', 'TAIL']:
+            raise ValueError('readiness phase/count')
+    for phase, orders in (('PAIR', ('6', '40')), ('TAIL', ('5',))):
+        primary = ids[orders[0]]
+        secondary = ids['40'] if phase == 'PAIR' else '-'
+        service = '/action_' + run + '/ready/' + phase.lower() + '/u' + primary
+        receipt = 'ready_v1:' + run + ':' + phase + ':' + primary
+        if phase == 'PAIR':
+            service += '/u' + secondary
+            receipt += ':' + secondary
+        fields = dict(phase=phase, service=service, primary=primary, secondary=secondary)
+        request = one('B', 'READY_REQUEST', **fields, held=len(orders))
+        grant = one('A', 'READY_ACCEPT', **fields, executing=len(orders))
+        reply = one('B', 'READY_REPLY', **fields, success=1, receipt=receipt)
+        before('B', request, reply)
+        for order in orders:
+            before('B', one('B', 'RESPONSE', order=order), request)
+            before('A', one('A', 'ACCEPTED', order=order), grant)
+            for feedback in select('A', 'FEEDBACK', order=order):
+                before('A', grant, feedback)
+            for feedback in select('B', 'FEEDBACK', order=order):
+                before('B', request, feedback)
+        # Feedback is allowed while B spins awaiting the service response.
+        # There is intentionally no READY_REPLY-before-FEEDBACK constraint.
+        if phase == 'PAIR':
+            before('B', reply, one('B', 'CANCEL_REQUEST'))
+        else:
+            before('A', one('A', 'TERMINAL', order=0), grant)
+            before('B', one('B', 'RESULT', order=0), request)
+            before('B', reply, one('B', 'RESULT', order=5))
     expected = {'6': ('4', '0,1,1,2,3,5'), '40': ('5', '0,1'), '0': ('6', '-'), '5': ('4', '0,1,1,2,3')}
     for side, event in (('A', 'TERMINAL'), ('B', 'RESULT')):
         if [r['order'] for r in select(side, event)] != ['40', '6', '0', '5']:
@@ -116,8 +152,8 @@ def analyze(texts, run, pids):
                 before(side, one(side, 'ACCEPTED', order=order), row)
                 before(side, row, one(side, 'TERMINAL', order=order))
             else:
-                # spin_some may deliver feedback before the application records
-                # RESPONSE, but async_send_goal is always preceded by SENT.
+                # Preserve the original minimum ROS receipt order. The added
+                # application readiness precondition is checked separately above.
                 before(side, one(side, 'SENT', order=order), row)
                 if row['values'] not in [r['values'] for r in select('A', 'FEEDBACK', order=order)]:
                     raise ValueError('feedback not emitted')
@@ -147,9 +183,9 @@ def analyze(texts, run, pids):
     # one(...fields) is not sufficient by itself: reject surplus mismatched
     # milestones as well as duplicate valid milestones.
     counts = {'A': {'SERVER_READY': 1, 'GOAL': 5, 'ACCEPTED': 4, 'CONCURRENT': 1,
-                    'CANCEL': 1, 'TERMINAL': 4, 'BUSINESS_DONE': 1, 'CLOSED': 1},
+                    'CANCEL': 1, 'TERMINAL': 4, 'READY_ACCEPT': 2, 'BUSINESS_DONE': 1, 'CLOSED': 1},
               'B': {'CLIENT_READY': 1, 'SENT': 5, 'RESPONSE': 5, 'CANCEL_REQUEST': 1,
-                    'CANCEL_RESPONSE': 1, 'RESULT': 4, 'BUSINESS_DONE': 1, 'CLOSED': 1}}
+                    'CANCEL_RESPONSE': 1, 'RESULT': 4, 'READY_REQUEST': 2, 'READY_REPLY': 2, 'BUSINESS_DONE': 1, 'CLOSED': 1}}
     for side in 'AB':
         for event, count in counts[side].items():
             if len(select(side, event)) != count:
@@ -159,7 +195,10 @@ def analyze(texts, run, pids):
             'rejected_uuid': {'server': ids['-1'], 'client': 'NOT_EXPOSED_NULL_GOAL_HANDLE'},
             'observed_feedback': observed, 'concurrency': 'TWO_EXECUTING_SERVER_GOALS_NORMAL_ACTIVE_DURING_CANCEL',
             'feedback_oracle': 'VALID_OBSERVED_SUBSEQUENCE_WITH_MANDATORY_CANCEL_PREFIX',
-            'scope': 'REAL_ROS_WINDOWS_HOST_PARTIAL_ACTIONS_NOT_NATIVE', 'status_topic_validated': False}
+            'scope': 'REAL_ROS_WINDOWS_HOST_ACTION_ACCEPTANCE_WITH_APPLICATION_READINESS_NOT_NATIVE',
+            'acceptance_precondition': {'service': 'example_interfaces/srv/Trigger', 'phases': ['PAIR', 'TAIL'],
+                                        'requests': 2, 'grants': 2, 'replies': 2},
+            'unbarriered_action_validated': False, 'status_topic_validated': False}
 
 
 def main():
