@@ -1,5 +1,45 @@
 # Project status
 
+## R19 class_loader target build and static installation (2026-10-15 21:37 UTC)
+
+The fresh SDK23 AArch64 `c++_shared` build `class_loader-sdk-closure-fix1`
+has **CLASS_LOADER_TARGET_INPUT_BUILD_INSTALL_FINAL_STATIC_PASS** after initial
+execution, independent agentic review with no actionable findings, and fresh
+final static checks. Final testing reused the unchanged successful build and
+ran one new `llvm-readelf -h -d` (exit 0); it performed zero new configure,
+compile, link or install commands. Four objects, three actual link archives,
+112 outputs and 27 installed files are bound. Public exports are exactly
+`console_bridge;rcpputils`. **R19-PT1 is closed only for this named fresh
+class_loader build/static-install subset; R19-PT1 remains OPEN overall.**
+
+For this scope BUILDS=true; HOST_TESTED=false, DEVICE_TESTED=false,
+INTEGRATION_TESTED=false and VERIFIED=false. pluginlib, consumer probes,
+rosbag I/O, native ROS activation and device/cross-board execution were not run.
+The older class_loader implicit-header/link-input BLOCKED result, first
+configure setup failure, collector corrections and review/final checker
+failures remain preserved. Complete canonical argument comparisons use
+44/48/53 tokens. See [R19 target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md)
+for precise scope, artifact identity, retained failures and sealed evidence.
+
+The preceding documentation stage was published as
+`473312f2ab3c6bf9edcad65e4504c82226f41ee3` on
+`origin/codex/flow-encoding-published-20261014`. Its 20:30:59 UTC snapshot
+observed zero workflow/check runs/status contexts: **CI NOT_RUN**. Main's
+precheck receipt at 21:34:47 UTC records the same remote SHA. This update
+does not claim a subsequent commit, push or CI result. Final tester gate is
+**PASS_FOR_DOCS_ONLY_CLASS_LOADER_STATIC_EVIDENCE**; Main's graph, staging,
+pre-commit and publication gates remain separate.
+
+Native permission restoration remains **BLOCKED**: conditional permission
+authorization exists, but a complete current project-only native-token record
+and supported lossless restore route remain unavailable for either board.
+No grant/revoke/token switch/reload/security write occurred; current DATASYNC
+state is **NOT_QUERIED**. The full-token-registry route was rejected by
+automatic approval review and was not retried. R18's two-board native-main
+load/missing-identity rejection PASS remains a separate diagnostic claim,
+not communication acceptance. Overall ROS 2 over native DSoftBus remains
+**NOT VERIFIED**. Earlier dated sections retain their historical scope.
+
 ## Windows Host connection/receive diagnostics (2026-10-15 04:41:11 UTC)
 
 R11 independent final testing qualifies the 22-file Host diagnostic candidate
