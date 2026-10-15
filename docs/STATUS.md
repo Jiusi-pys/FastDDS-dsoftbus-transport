@@ -1,5 +1,29 @@
 # Project status
 
+## Windows Host ROS parameter acceptance (2026-10-15 03:34:47 UTC)
+
+The additive parameter acceptance target passed an independent fresh final build
+and one actual ROS Windows Host pair after review repair: 17 completed remote
+operations, three accepted mutations, four rejected batches with readback, and
+three change events. RPC 17 verifies the exact final name set; the server also
+asserts that the rejected undeclared parameter is absent. Complete captures are
+A 1030 / B 1085; both processes and driver exit 0. A's six rejected callbacks
+remain unexplained (B zero). Final declaration events were zero, so replay is
+not verified. The original failed compile and corrected 16-call initial run are
+preserved separately; 19 final synthetic log checks are not business runs.
+
+V1-07 is PARTIAL for this bounded Host scenario; full parameters, action and
+native/cross-device acceptance remain NOT VERIFIED. The 30-row denominator is
+unchanged, with no aggregate completion percentage. Testing used the immutable
+R8 W2 bridge, not the unfinished concurrent R11 diagnostics. This stage performs
+no historical A/04 rerun and makes no diagnostic qualification claim. Device
+permission remains last-known DENIED (2026-10-14T21:51:07Z), not freshly queried.
+See [ROS parameter acceptance](ROS2_PARAMETER_ACCEPTANCE.md) for scenario,
+commands, review/final evidence, hashes and remaining gaps. Tester commit gate
+PASS is scoped to these additive parameter files; Main's documentation, graph,
+pre-commit, publication and CI gates remain separate. Earlier sections below,
+including the R10 statement about parameters, retain their historical scope.
+
 ## Windows Host ROS service acceptance (2026-10-15)
 
 The additive service acceptance target passed independent initial and post-review
