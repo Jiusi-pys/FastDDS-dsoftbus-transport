@@ -1,4 +1,6 @@
 #include "HostSocket.hpp"
+#include "HostProfile.hpp"
+#include "HostProfileGuard.hpp"
 #include "HostIoObservation.hpp"
 #include "HostReceiveObservation.hpp"
 #include "HostCallbackObservation.hpp"
@@ -45,9 +47,21 @@ unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsign
 struct Owner:fastdds_dsoftbus::ros2_integration::BridgeOwner {bool host_close_error=false;};
 }
 extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookVersion(){return 21405;}
+extern "C" __declspec(dllexport) unsigned FastddsDsoftbusHookSecurity(){return HAVE_SECURITY;}
 extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsigned domain,void* raw,void** out) {
     *out=nullptr;
     try {
+#if FASTDDS_DSOFTBUS_HOST_HISTORICAL_PROFILE
+        // Qualify the actual exporting module before Owner allocation or any
+        // access to the factory-owned C++ QoS object. Keep the factory's own
+        // independent pre-Create security check intact.
+        fastdds_dsoftbus::ros2_host_profile::ValidateHistoricalFactory(
+            GetModuleHandleA("fastrtps-2.14.dll"),
+            std::filesystem::u8path(fastdds_dsoftbus::ros2_host_profile::factory_path), HAVE_SECURITY);
+        fastdds_dsoftbus::ros2_host_profile::RequireModulePath(
+            GetModuleHandleA("fastcdr-2.2.dll"),
+            std::filesystem::u8path(fastdds_dsoftbus::ros2_host_profile::cdr_path));
+#endif
         auto m=read(path);
         if(m.at("locator_version")!="V1"||m.at("native_name_contract")!="PACKAGE_SCOPED_V1"||m.at("authorized_package")!="host.ros.test")throw std::runtime_error("explicit V1 configuration required");
         if(m.at("backend")!="HOST_OPAQUE_BYTES_TEST_ONLY")throw std::runtime_error("backend unavailable; Host-only binary");
@@ -82,7 +96,9 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         fastdds_dsoftbus::ros2_target_observation::Begin(owner->run,side);
         fastdds_dsoftbus::ros2_target_observation::SetSourceForHostInjection();
         owner->diagnostic_control=[] {(void)fastdds_dsoftbus::ros2_target_observation::ExportPending();FastddsDsoftbusFactoryFlushTeardownPending();};
-        DSoftBusTransportDescriptor config(65536);
+        // The historical secure receiver caps its decrypt buffer at uint16_t's
+        // maximum. Advertise that Transport capacity; the SDK envelope stays 65536.
+        DSoftBusTransportDescriptor config(FASTDDS_DSOFTBUS_HOST_HISTORICAL_PROFILE ? 65535 : 65536);
         const auto identity=[&](unsigned index){return v1::DeviceIdentity{"host-ros",domain,index?"synthetic-host-B":"synthetic-host-A"};};
         const auto issue=config.ConfigureV1([&]{V1Deployment input{identity(side),17+side,v1::Profile::BytesNative,prefix+".ns",
             {{identity(1-side),18-side,side?"host.net.A":"host.net.B",name(side,"outgoing"),{name(1-side,"outgoing")}}}};input.native_name_scope={v1::NativeNameContract::PackageScopedV1,m.at("authorized_package"),m.at("service_prefix")};for(auto& peer:input.peers)peer.native_name_scope=input.native_name_scope;return input;}());
@@ -136,7 +152,7 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         }
         owner->descriptor=owner->runtime->MakeDescriptor(config);if(!owner->descriptor)throw std::runtime_error("descriptor issuance");
         auto& qos=*static_cast<fd::DomainParticipantQos*>(raw);
-        // The descriptor's maxMessageSize (65536) is above Fast DDS's default no-fragment ceiling (65500). Like the
+        // Both profile capacities are above Fast DDS's default no-fragment ceiling (65500). Like the
         // built-in UDP/TCP transports, init() accepts that only when the participant states the larger limit.
         qos.transport().max_msg_size_no_frag=config.maxMessageSize;
         qos.transport().use_builtin_transports=false;qos.transport().user_transports.clear();qos.transport().user_transports.push_back(owner->descriptor);

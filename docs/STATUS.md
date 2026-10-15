@@ -570,3 +570,54 @@ draft, with no approved aggregate or completion percentage. Tester Commit gate
 PASS and documentation readiness are scoped; Main graph/pre-commit/publication
 and CI receipts remain separate. Earlier sections are preserved verbatim as
 historical snapshots.
+
+
+## Historical Windows Host profile P1 (2026-10-15)
+
+R13 adds the explicit `historical-2147-security-statistics` selector while
+preserving `default-2145`. The historical package binds original Fast DDS
+2.14.7 SECURITY ON / STATISTICS ON, Fast CDR 2.2.8 compile inputs and a separately
+declared original runtime CDR DLL; MSVC x64 Release /MD is required. Before
+factory QoS access, the Bridge checks the actual factory module, hook ABI and
+security mode. The historical descriptor uses 65535 bytes; the default and SDK
+envelope remain 65536. No DDS/RTPS/QoS semantic or native-source change is made.
+The package is prefix-bound, not relocatable; its checks do not prove the full
+statistics ABI or runtime protection against same-path byte replacement.
+
+Independent review's R13-A1 Windows junction install-guard finding is CLOSED.
+The final independent tester reports SCOPE_QUALIFIED_FINAL_HOST_P1_PASS and
+Commit gate PASS: fresh default/historical builds and installs, 37 CTests each,
+60 parser tests, 16 synthetic module controls, four matcher models, 13 actual
+project-entry configurations with synthetic packages, real dependency/header/
+installed-package negatives, and a separate 3.6.2.0 core regression (21 groups).
+These categories are separate; the core run is not historical ABI evidence.
+
+One actual historical ROS pair (A 54928 / B 38840, both exit 0) established
+entity matching/service readiness with zero business samples/requests/callbacks.
+Live modules were captured on both sides. Strict full_host reconciliation
+passed with A 96 / B 94 ingress callbacks, equal admissions/charges/refunds and
+zero final refusals. One actual direct-DDS duplicate-ID failed-construction
+probe (68416, exit 0) verified exact failure-frame retention and cleanup with
+zero SDK entries. It does not prove Listen or ROS-node-construction failure.
+Initial FIX3's two Closing refusals retain unknown payload causality.
+
+Canonical evidence is build/r13-profile/final-test-port-qualified. The older
+final-test result remains BLOCKED: Windows excluded its planned ports before
+any ROS/DDS children started. Main accepted new ports after an exclusive-bind
+diagnostic, changing only ports/output paths; sources, binaries, policy,
+timeouts and oracles stayed unchanged. Both runtime scenarios then ran once.
+No network permission/settings were changed. Earlier initial FAIL rounds and
+fixture preparation errors remain preserved. See
+[historical Host profile qualification](ROS2_HISTORICAL_HOST_PROFILE.md) for
+configuration, capability matrix, exact command records, hashes and limits.
+
+Implementation PRESENT; build PASS; HOST_TESTED and INTEGRATION_TESTED apply
+only to bounded real ROS/DDS over the Host opaque-byte simulated lower layer.
+DEVICE_TESTED=false; native/cross-device BLOCKED; overall NOT VERIFIED. Last
+DISTRIBUTED_DATASYNC observation remains DENIED on both boards at
+2026-10-14T21:51:07Z, not refreshed. Original A/04, DATA_FRAG, historical business
+workloads and broad QoS/reconnect acceptance remain NOT_RUN or UNVERIFIED.
+SECURITY ON is not a payload-encryption claim. Main graph/PRE_COMMIT,
+commit/push and CI remain separate pending receipts at this documentation
+snapshot. Earlier sections are retained verbatim; no aggregate percentage is
+claimed.
