@@ -1,14 +1,86 @@
 # R19 ROS 2 target rosbag preparation
 
-Evidence snapshot: 2026-10-15, after class_loader canonical final at 21:37:15 UTC.
+Evidence snapshot: 2026-10-15, after pluginlib canonical final at 23:19:16 UTC.
 This records build/configuration prerequisites. **Actual rosbag recording,
 reading or replay over native DSoftBus is not yet verified.** The workspace
 source baseline is published R18 `48c01f2597bf16db1ed35fbd79cc5c32826f0ab8`.
-Preparation sources, binaries and receipts below live in the original checkout's
-ignored `build/r19-rosbag-preparation/`; they are local evidence, not artifacts
-included in the remote Git repository by this documentation commit.
+Preparation sources and receipts below live in the original checkout's ignored
+`build/r19-rosbag-preparation/`; current class_loader/pluginlib build and install
+outputs live in its sibling `build/r19next1/`. These are local evidence, not
+artifacts included in the remote Git repository by this documentation commit.
 
-## Current class_loader static qualification
+## Current pluginlib static qualification
+
+The fresh `pluginlib-sdk-closure-fix1` SDK23 AArch64 `c++_shared` build has
+**PASS_POST_REVIEW_FINAL_STATIC_PLUGINLIB_A** after the initial successful
+continuation, independent agentic review and final static replay/ELF checks.
+W3's tested baseline was clean detached
+`5e96a3aba1af8185a05ed195f114128557344ac8`. No production source changed in
+this static continuation. **R19-PT1 remains OPEN overall**; qualification is
+limited to this named build and static installation.
+
+The continuation ran seven authorized commands, all exit 0: object dry-run,
+one ordinary compilation, actual Ninja dependency collection, link dry-run,
+one actual link, ELF inspection and one install. Original successful configure,
+compiler-ID and ABI evidence was inherited, not rerun. The resulting object has
+669 actual dependency paths. The link reproducer has 22 regular members,
+20 bound input files and four selected libunwind archive members. Full ordered
+arguments, response selection, actual linker trace, SDK inputs and generated
+install mappings were checked; this is an enumerated input closure, not a
+claim about all possible process DLLs or SDK files.
+
+The built executable and installed
+`build/r19next1/install/pluginlib/lib/pluginlib/list_plugins` are both 391,200
+bytes, SHA256 `73e0beb073790cf4203fd7591f9c005a9490f6919e93b4a80872f162530b945a`.
+They are ELF64 little-endian AArch64 executables with interpreter
+`/lib/ld-musl-aarch64.so.1`, no RPATH/RUNPATH, and exactly eight NEEDED entries:
+`libament_index_cpp.so`, `libclass_loader.so`, `libconsole_bridge.so.1.0`,
+`librcpputils.so`, `librcutils.so`, `libtinyxml2.so.6`, `libc++_shared.so`,
+`libc.so`. All 29 installed files and 15 directories match the exact
+source/generated-byte mappings and membership. pluginlib itself is an
+INTERFACE target; no `libpluginlib.so` or real test-plugin DSO is claimed.
+
+The original `pluginlib-next-test` **A_BLOCKED** result and its 152-file seal
+remain unchanged. Its GATES expected the TinyXML2 alias spelling in the export.
+The separately reviewed FIX1 uses CMake 3.28.3 source behavior, actual source,
+trace and generated export to distinguish the exact ordered source/build list
+`ament_index_cpp::ament_index_cpp;class_loader::class_loader;rcutils::rcutils;rcpputils::rcpputils;tinyxml2::tinyxml2`
+from the exact generated/installed list
+`ament_index_cpp::ament_index_cpp;class_loader::class_loader;rcutils::rcutils;rcpputils::rcpputils;tinyxml2`.
+The last item is the original imported target, not permission to accept an
+arbitrary bare library. Target type, alias identity, location, header/library
+hashes, includes, SONAME and actual link path remain exact. The continuation
+qualifies only static build/install; it does not convert the original failure
+to PASS or validate a pluginlib-first consumer directory scope.
+
+Independent post-test review found no blocking findings and no source fix was
+required. Final testing replayed the complete sealed raw command, dependency,
+tar/ar, ELF, install and correction evidence, then ran two fresh bound
+`llvm-readelf --file-header --program-headers --dynamic` commands, one each on
+the built and installed executable. Both exited 0 with empty stderr and the
+same 4,813-byte stdout as the initial run. It performed zero new configure,
+compile, link, install, target or device executions. Collector-only failures,
+original helper bytes and narrow corrections remain sealed. Raw-byte hashes
+are canonical; LF-normalized mappings explain changes but never replace the
+raw seals. The exact known gcc-toolchain unused warning is explicitly classified
+and retained; flags were not changed and the warning was not suppressed.
+
+For application/transport behavior: BUILDS=true; HOST_TESTED=false,
+DEVICE_TESTED=false, INTEGRATION_TESTED=false, VERIFIED=false. The four
+positive/nine negative consumer configurations, real plugin loading/unloading,
+pluginlib-first/new-scope behavior, rosbag I/O and target/device execution are
+NOT_RUN. `list_plugins` compile/link success does not establish general
+TinyXML2 6 alias/API compatibility. The final tester gate is
+**PASS_FOR_DOCS_ONLY_PLUGINLIB_STATIC_EVIDENCE**.
+
+The preceding class_loader documentation commit
+`5e96a3aba1af8185a05ed195f114128557344ac8` was published to
+`origin/codex/flow-encoding-published-20261014`; CI at 21:47:50 UTC was NOT_RUN
+(zero workflow/check runs/status contexts). Main's 23:18:07 UTC precheck still
+observed that remote SHA. This new pluginlib stage has not been committed or
+pushed. Main graph/staging/PRE_COMMIT/publication/CI gates remain pending.
+
+## Earlier class_loader static qualification (21:37 UTC snapshot)
 
 The fresh `class_loader-sdk-closure-fix1` SDK23 AArch64 `c++_shared` target
 passed initial configure/build/link/install, independent agentic review (no
@@ -153,7 +225,8 @@ limit; UNVERIFIED does not mean inherently impossible.
 | Arbitrary relocation, setup-only library loading | UNVERIFIED | pkg-config retains original paths; no loader acceptance. |
 | TinyXML2 vendor metadata installation | PARTIAL / metadata-only initial PASS | Earlier parser-FIX1 execution installed 15 files with phony build steps; no new native TinyXML2 compilation or consumer/API qualification. |
 | Fresh class_loader SDK23 build and static install | SUPPORTED / BUILDS, final static PASS | Named fresh target only; review and final replay qualify inputs/ELF/27 install files. Overall R19-PT1 OPEN. |
-| class_loader consumer/runtime and pluginlib | UNVERIFIED / NOT_RUN | No consumer probes, pluginlib sequence or dynamic plugin loading. |
+| Fresh pluginlib SDK23 build and static install | SUPPORTED / BUILDS, final static PASS | Named build only; 669 actual dependencies, built/installed ELF and 29 installed files; overall R19-PT1 OPEN. |
+| class_loader/pluginlib consumers and runtime | UNVERIFIED / NOT_RUN | Planned four positive/nine negative consumer cases, pluginlib-first directory scope and real plugin loading/unloading remain unexecuted. |
 | Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Next bounded rosbag consumer; no actual rosbag I/O evidence yet. |
 | Plugin XML/ament-index/typesupport resource discovery | UNVERIFIED | Required beyond ELF checks before a plugin/rosbag runtime claim. |
 | Full rosbag CLI / rosbag2_transport / arbitrary types / compression | UNVERIFIED / outside first planned acceptance | No completeness claim from the fixed-type path. |
@@ -166,9 +239,11 @@ limit; UNVERIFIED does not mean inherently impossible.
 The dependency design targets tinyxml2_vendor 0.9.2, class_loader 2.7.1 and
 pluginlib 5.4.6 before rosbag2 storage/cpp/SQLite 0.26.11. The selected TinyXML2
 6 export is bare `tinyxml2`, while pluginlib expects `tinyxml2::tinyxml2`.
-The proposed adapter must bind the exact target location/hash/includes/SONAME,
-then prove the used API compile/link subset, repeated/nested/sibling scope and
-negative controls. It cannot establish general TinyXML2 9 compatibility.
+The adapter binds the exact target location/hash/includes/SONAME for the
+qualified static pluginlib build. The broader API consumer probes, repeated/
+nested/sibling scopes and negative controls remain unexecuted. The bounded
+list_plugins compile/link does not establish general TinyXML2 6 alias/API
+compatibility or TinyXML2 9 compatibility.
 pluginlib provides an INTERFACE target and a `list_plugins` executable; absence
 of `libpluginlib.so` is not itself a failure.
 
@@ -177,16 +252,17 @@ inputs. FIX1 freezes 371 inputs, adds unknown-input stop controls and removes
 duplicate package-dir arguments. Its independent review closes R19-N1
 **FOR_DESIGN only**. The plan/review's then-pending wrapper-final status remains
 an historical snapshot; the later canonical wrapper final is separately bound.
-The later 15-file TinyXML2 metadata installation and fresh class_loader static
-qualification are scoped above. They do not qualify the proposed alias's
-consumer/API compatibility, plugin loading or rosbag tests.
+The later 15-file TinyXML2 metadata installation and fresh class_loader and
+pluginlib static qualifications are scoped above. They do not qualify general
+alias consumer/API compatibility, plugin loading or rosbag tests.
 
 Actual native communication still requires the complete current project-only
 permission record and a supported lossless restore route. Conditional user
 authorization does not remove these prerequisites on either board; no
 grant/revoke/token switch/reload/security write is part of R19 preparation.
-Current DATASYNC state is NOT_QUERIED. Automatic approval review rejected the
-full-token-registry route; it was not retried. R18's two-board main-load and
+At 21:51:22 UTC HDC listed both boards USB Connected; this is visibility
+only, not new device execution. Current DATASYNC state is NOT_QUERIED.
+Automatic approval review rejected the full-token-registry route; it was not retried. R18's two-board main-load and
 missing-identity rejection PASS proves only that diagnostic, not communication.
 Overall ROS 2 over native DSoftBus: **NOT VERIFIED**.
 
@@ -217,6 +293,22 @@ local evidence; remote readers need the separately retained files to recheck it.
 | `next-dependency-sdk-rebuild-final-test/RESULT.json` | `2caadd9edf86e7994c321cb51ee6e31b53a24e88212c425cd96d277d761a3a39` |
 | `next-dependency-sdk-rebuild-final-test/REPORT.md` | `fbe74fb5845622832120a233868c5993f3185eb258a84f8d27c3dc0249bec96a` |
 | `next-dependency-sdk-rebuild-final-test/EVIDENCE_MANIFEST.json` (130 files) | `8706146e475c8cd3f13fe6ef41d27c131f6afd06b76ce412ef3495b092097718` |
+| `pluginlib-next-test/RESULT.json` (original A_BLOCKED) | `2a9f41111396cf0d105b72f398f6ae16fbf5c519d1b5e93a1f4300772bf9a2b0` |
+| `pluginlib-next-test/EVIDENCE_MANIFEST.json` (152 files) | `12a95d3ad2f6488242013137b5c793b62a1f6423a9760c8434b262549402641f` |
+| `pluginlib-export-contract-fix1/CONTRACT.json` (reviewed continuation contract) | `c7f9c158bd07be3584fd84eb5a478fb1b6bf6491d17133d90cd4350eab76af05` |
+| `pluginlib-export-contract-review/RESULT.json` | `df36581309e26ee59ea9129ff9e170919752d31b5aab8501be89def4a72b4fb1` |
+| `pluginlib-export-contract-fix1-test/RESULT.json` | `b50d8afd1cae0006936e0c883f8b1d7f79c939e241ec580518b1c87d83f39d0b` |
+| `pluginlib-export-contract-fix1-test/EVIDENCE_MANIFEST.json` (226 files) | `9e253c9e5da886a04de90ea53ae3a9d3fdcab22abd0a89c670f09eb265fa4678` |
+| `pluginlib-export-contract-fix1-test/INSTALLED_MANIFEST.json` (29 installed files) | `f0e2206c804a33e839d9049261192667cacfdb4b5f9ffc20ce32449ae5b4af0b` |
+| `pluginlib-post-test-review/RESULT.json` | `256516e572e83da68fb433f427876fb9d09d29bcbd8264f196bbb262174148a2` |
+| `pluginlib-post-test-review/EVIDENCE_MANIFEST.json` (6 files) | `b160636cbc4e0043f93be26d200ebf0c986a6ea43e5536ccd4f458a322ff46e4` |
+| `pluginlib-final-test/RESULT.json` | `f457823264e4223e04d2bc2489cf98678b7f950fad9c15eb58f725beb568b104` |
+| `pluginlib-final-test/REPORT.md` | `508db2cd4f4bc5d2a56488ea04f34f5086668d0dd9034209a55ab3c47f229605` |
+| `pluginlib-final-test/EVIDENCE_MANIFEST.json` (38 files) | `7e50cb07d8033039fdf463d3ec5439dc74ff748bba9fa3817ffa7d5df6c906e5` |
+| `class-loader-main-publication/PUBLICATION_RESULT.json` (preceding stage) | `5696caaa65d095a85cc5c3907827ec62801458bba7732c3fd4df2c009fe305b3` |
+| `class-loader-main-publication/CI_RESULT.json` (21:47:50 UTC NOT_RUN) | `4b5d4b65c533eb74121973eb18451b455fd7cb6b46110ba65459aa34a0fd7ef3` |
+| `PLUGINLIB_PUBLICATION_IDENTITY_PRECHECK.json` (read-only remote identity) | `fb3c64d496a5677b3d8b1e78d6cd46de9f3cd831c2ac2abd5e7ce55cf3362c8a` |
+| `pluginlib-board-readiness/RESULT.json` (visibility only) | `0f7ced5f4d3ca6c5f85ba5be30be6a2bf64e4636655b87d269c6ecfa259a5d79` |
 
 This document records bounded preparation evidence. Its documentation readiness
 does not grant an implementation, native communication or overall product gate.

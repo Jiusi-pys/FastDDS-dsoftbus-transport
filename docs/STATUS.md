@@ -1,5 +1,56 @@
 # Project status
 
+## R19 pluginlib target build and static installation (2026-10-15 23:19 UTC)
+
+The fresh SDK23 AArch64 `c++_shared` `pluginlib-sdk-closure-fix1` build has
+**PASS_POST_REVIEW_FINAL_STATIC_PLUGINLIB_A**. The successful continuation
+ran seven authorized commands (all exit 0), including one ordinary compilation,
+one link and one install. Independent agentic review found no blocking finding
+or required source fix. Final testing replayed the immutable raw evidence and
+ran two fresh readelf inspections of built/installed `list_plugins` (both exit
+0, outputs identical to the initial inspection); it did not rebuild, reinstall
+or execute the target. All 29 installed files and 15 directories match the
+source/generated-byte contract. **BUILDS=true; HOST_TESTED=false,
+DEVICE_TESTED=false, INTEGRATION_TESTED=false, VERIFIED=false** for runtime or
+transport behavior. R19-PT1 remains **OPEN overall**.
+
+pluginlib is an INTERFACE target plus `list_plugins`, not `libpluginlib.so`;
+no real test-plugin DSO was built or loaded. The original `pluginlib-next-test`
+A_BLOCKED result remains immutable. The reviewed continuation corrected the
+export expectation to CMake 3.28.3's original imported-target spelling:
+source/build ends in `tinyxml2::tinyxml2`, generated/installed export in
+`tinyxml2`. Exact target identity/location/hash checks were retained. Collector
+failures and the classified known gcc-toolchain warning remain recorded.
+See [R19 target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for the exact
+artifact, input closure, correction boundaries and local evidence hashes.
+
+class_loader's earlier static qualification remains valid. The planned four
+positive/nine negative consumer cases, pluginlib-first directory scope, real
+plugin loading/unloading, fixed String SQLite Writer/Reader and all DDS
+recording behavior remain **UNVERIFIED / NOT_RUN**. Compiling `list_plugins`
+does not establish general TinyXML2 6 alias/API compatibility or a full ROS 2
+runtime result.
+
+The preceding class_loader documentation stage was committed and pushed as
+`5e96a3aba1af8185a05ed195f114128557344ac8` to
+`origin/codex/flow-encoding-published-20261014`. Its 21:47:50 UTC CI observation
+had zero workflow/check runs/status contexts: **CI NOT_RUN**. Main's 23:18:07 UTC
+identity precheck found that same remote SHA. This pluginlib documentation
+stage has not been committed or pushed; Main graph/staging/PRE_COMMIT and
+publication/CI gates remain pending. Final tester gate is
+**PASS_FOR_DOCS_ONLY_PLUGINLIB_STATIC_EVIDENCE**. Referenced raw evidence is
+local ignored build content and is not included in the remote repository.
+
+At 21:51:22 UTC HDC listed both RK3588A boards USB Connected; that establishes
+visibility only, not new device testing. Native permission restoration remains
+**BLOCKED** pending a complete current project-only token record and supported
+lossless restore route, despite conditional authorization. Current DATASYNC is
+**NOT_QUERIED**. Automatic approval review's full-token-registry rejection was
+not retried; no security changes occurred. R18's bounded native-load/rejection
+and historical cross-board evidence retain their original limits. Overall ROS 2
+over native DSoftBus remains **NOT VERIFIED**. Earlier dated sections below are
+historical snapshots, including their then-unexecuted pluginlib status.
+
 ## R19 class_loader target build and static installation (2026-10-15 21:37 UTC)
 
 The fresh SDK23 AArch64 `c++_shared` build `class_loader-sdk-closure-fix1`
