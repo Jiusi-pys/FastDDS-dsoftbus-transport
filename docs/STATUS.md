@@ -1,5 +1,30 @@
 # Project status
 
+## Windows Host ROS service acceptance (2026-10-15)
+
+The additive service acceptance target passed independent initial and post-review
+fresh builds and one real ROS Windows Host pair at each stage: 14 server response
+calls, 12 verified accepted responses and two explicitly removed timeout requests.
+The scope covers four outstanding requests per direction, reverse replies,
+request/writer/value correlation, 250 ms application wait, recovery, client
+recreation and absent service. Final captures are complete (A 983/B 985), with
+zero rejected callbacks; initial B's two rejected callbacks remain in evidence.
+The exact response-send timeout warning now fails the gate, and the removed
+future must report the exact broken-promise code. Independent RMW late-response
+discard was not observed. Final testing used the R8 W2 final bridge DLL; this is
+new service evidence, not a rerun of the earlier pub/sub or historical A/04 cases.
+
+V1-05 remains PARTIAL; full service/action/parameters and native/cross-device
+acceptance remain NOT VERIFIED. The frozen 30-row capability denominator is
+unchanged, with no aggregate completion percentage. Failed startup/connect runs
+are retained; failed-connect abnormal teardown remains unqualified. Device
+permission was last known DENIED, with no fresh device/security changes. The
+parallel A/04 diagnostic lane produced a design only: peer endpoint identity and
+collision-safe refusal/release/budget evidence remain PLANNED. See
+[ROS service acceptance](ROS2_SERVICE_ACCEPTANCE.md) for exact scope, commands,
+initial/final evidence, review closure, retained failures and diagnostic priorities.
+Main's pre-commit/publication gate remains separate.
+
 ## Windows Host IO diagnostic scope (2026-10-15)
 
 The independently reviewed, default-off Windows Host Socket diagnostic patch
