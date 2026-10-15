@@ -23,9 +23,15 @@ bool RuntimeProbeBeforeConnect() noexcept {
 }
 namespace fastdds_dsoftbus::dsoftbus::experimental {
 struct Runtime::Impl {
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+    explicit Impl(phase0::PublicSocketConfiguration config,std::shared_ptr<ProcessReceiveObserver> observer={})
+        : binding(config), backend(std::make_shared<phase0::PublicSocketBackend>(std::move(config))),
+          loop(std::make_shared<host_test::HostProviderLoop>(backend,std::move(observer))) {}
+#else
     explicit Impl(phase0::PublicSocketConfiguration config)
         : binding(config), backend(std::make_shared<phase0::PublicSocketBackend>(std::move(config))),
           loop(std::make_shared<host_test::HostProviderLoop>(backend)) {}
+#endif
     const phase0::PublicSocketConfiguration binding;
     std::shared_ptr<phase0::PublicSocketBackend> backend;
     std::shared_ptr<host_test::HostProviderLoop> loop;
@@ -44,6 +50,10 @@ struct Runtime::Descriptor final : eprosima::fastdds::rtps::TransportDescriptorI
     std::shared_ptr<Impl> impl;
 };
 Runtime::Runtime(phase0::PublicSocketConfiguration config) : impl_(std::make_shared<Impl>(std::move(config))) {}
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+Runtime::Runtime(phase0::PublicSocketConfiguration config,std::shared_ptr<ProcessReceiveObserver> observer)
+    : impl_(std::make_shared<Impl>(std::move(config),std::move(observer))) {}
+#endif
 bool Runtime::SetPreConnectGate(std::function<bool()> gate) {
     // Refuse to change the coordination point once this runtime's descriptor, and
     // therefore its one-shot factory path, exists. The gate belongs to this

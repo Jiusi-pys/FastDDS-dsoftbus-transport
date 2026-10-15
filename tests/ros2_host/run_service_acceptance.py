@@ -92,6 +92,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('exe', 'bridge', 'fastdds-prefix', 'ros-prefix', 'pixi-prefix', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--observe-host-receive', action='store_true',
+                        help='Require the opt-in Host budget journal and unique peer endpoint joins')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     log_dir = args.output / 'ros-logs'
@@ -108,6 +110,9 @@ def main():
     processes, streams, commands, errors = {}, [], {}, []
     released, runtime_released, timed_out = False, False, False
     inputs = [args.exe, args.bridge, args.fastdds_prefix / 'bin/fastrtps-2.14.dll', args.ros_prefix / 'bin/fastcdr-2.2.dll']
+    if args.observe_host_receive:
+        inputs.extend(Path(__file__).with_name(name) for name in
+                      ('host_receive_capture.py', 'host_connection_capture.py', 'host_io_capture.py'))
     hashes = lambda: {str(p.resolve()): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
     before = hashes()
     try:
@@ -121,6 +126,9 @@ def main():
                 'side=' + str(index), 'port=' + str(ports[index]), 'peer_port=' + str(ports[1-index]),
                 'domain=201', 'forward=1', 'host_close_error=0', 'host_io_observation=1',
                 'runtime_close_release=' + str((args.output / (side + '.runtime')).resolve())]) + '\n')
+            if args.observe_host_receive:
+                with config.open('a') as stream:
+                    stream.write('host_receive_observation=1\n')
             env = os.environ.copy()
             for key in list(env):
                 if key.startswith(('FASTDDS_', 'FDDST_', 'FASTRTPS_')) or key in ('ROS_LOCALHOST_ONLY', 'RMW_FASTRTPS_USE_QOS_FROM_XML'):
@@ -184,6 +192,22 @@ def main():
                 raise ValueError('host traffic/error')
             if f'FDDST_ROS_CLOSED run={run} side={index} pump_joined=1 runtime_closed=1 local_only=1' not in stderr:
                 raise ValueError('runtime cleanup')
+        if args.observe_host_receive:
+            from host_receive_capture import validate_receive_capture
+            from host_connection_capture import match_connections
+            pids = {s: p.pid for s, p in processes.items()}
+            result['connections'] = match_connections(texts, run, pids)
+            result['receive_capture'] = {}
+            for s in 'AB':
+                final_stderr = (args.output / (s + '.stderr')).read_text()
+                counts = re.findall(r'FDDST_HOST_IO run=' + run + ' side=' + str('AB'.index(s)) + r' sends=[0-9]+ ingress=([0-9]+) ', final_stderr)
+                if len(counts) != 1:
+                    raise ValueError('independent final Host ingress count missing')
+                result['receive_capture'][s] = validate_receive_capture(texts[s], run, s, pids[s],
+                    profile='full_host', endpoints=[pair[s] for pair in result['connections']], expected_ingress=int(counts[0]))
+            for side in 'AB':
+                if 'FDDST_HOST_RX_CAPTURE_INCOMPLETE' in (args.output / (side + '.stderr')).read_text():
+                    raise ValueError('receive capture export incomplete')
     except (ValueError, KeyError, OSError) as exc:
         errors.append(str(exc))
     result['exclusive_rebind'] = []

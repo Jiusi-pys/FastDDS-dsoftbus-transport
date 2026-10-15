@@ -1,5 +1,36 @@
 # Project status
 
+## Windows Host connection/receive diagnostics (2026-10-15 04:41:11 UTC)
+
+R11 independent final testing qualifies the 22-file Host diagnostic candidate
+after both P2 review findings were repaired: fresh build/install, 31 CTest,
+60 Python cases and an installed C++17 consumer PASS. Macro-off core first ran
+131/132 with one original 90-second timeout; one original-limit rerun passed in
+30.04 seconds. Concurrent work and sandbox context both changed; cause remains
+UNATTRIBUTED. SDK23 ARM64 compile/link/ELF PASS is compile-only.
+
+Actual Windows TCP connection fixtures and bounded receive occupancy/release
+passed. The latter observed six callbacks, five charges/refunds, one LocalBytes
+refusal and an explicit accepted resend. A fresh two-process ROS service run
+passed 14 requests/response calls, 12 accepted responses, two timeout removals
+and two recreations, with strict full_host callback/connection/lifecycle joins.
+All 23 focused strict mutations were rejected. Retained compiler/timeout failures and negative-control forced cleanup
+remain explicit in the evidence.
+
+See [Host connection and receive observation](HOST_RECEIVE_OBSERVATION.md).
+Tester Commit gate PASS and documentation readiness are scoped to this diagnostic
+change; Main graph/pre-commit/publication/CI gates remain separate. Parameter
+stage `41cdcd13a791eb1e32b9a02f0fac8363f3d5def5` was already published separately.
+V1-05/V1-07 remain PARTIAL Host; denominator 30 and unknown aggregate completion
+are unchanged. No new full ROS feature is qualified. Historical A/04 was not
+rerun: current security-OFF 2.14.5 is not a qualified substitute for original
+security-ON 2.14.7, and DATA_FRAG identity is absent. Real callback overtaking
+and reconnect budget competition remain unverified. DEVICE_TESTED=false; both
+boards' permission is last-known DENIED at 2026-10-14T21:51:07Z, not refreshed.
+Native/cross-device acceptance remains BLOCKED and overall NOT VERIFIED.
+Earlier sections, including parameter evidence and R10 plans, remain historical.
+
+
 ## Windows Host ROS parameter acceptance (2026-10-15 03:34:47 UTC)
 
 The additive parameter acceptance target passed an independent fresh final build

@@ -12,13 +12,14 @@
 namespace io=fastdds_dsoftbus::ros2_host::io_observation;
 int main(int argc,char** argv){
     const std::string mode=argc==1?"normal":argv[1];
-    if(argc>2||(mode!="normal"&&mode!="overflow"&&mode!="output-failure"))return 2;
+    if(argc>2||(mode!="normal"&&mode!="overflow"&&mode!="connection-overflow"&&mode!="output-failure"))return 2;
     WSADATA wsa{};assert(WSAStartup(MAKEWORD(2,2),&wsa)==0);
     if(mode!="normal"){
         io::enabled=true;
-        if(mode=="overflow"){
+        if(mode=="overflow"||mode=="connection-overflow"){
             FILE* redirected=nullptr;assert(freopen_s(&redirected,"NUL","w",stdout)==0);
-            for(std::size_t i=0;i<=io::capacity;++i)io::Record({"TEST_OVERFLOW"});
+            if(mode=="overflow")for(std::size_t i=0;i<=io::capacity;++i)io::Record({"TEST_OVERFLOW"});
+            else for(std::size_t i=0;i<=io::connection_capacity;++i)io::connections.Append({"TEST_CONNECTION_OVERFLOW"});
             assert(!io::Export("0123456789abcdef",0));
         }else{
             io::Record({"TEST_OUTPUT_FAILURE"});
@@ -94,5 +95,15 @@ int main(int argc,char** argv){
     // Same raw handle in distinct observed epochs never aliases the identity.
     auto one=io::Connection("CONNECTION_INSTALL",2,1,42),two=io::Connection("CONNECTION_INSTALL",2,2,42);
     assert(one.handle==two.handle&&one.epoch!=two.epoch);
+    // Endpoint query failures are evidence, never synthesized addresses. Both
+    // enabled and disabled installation preserve the immediate caller WSA error.
+    for(bool on:{false,true}){
+        io::enabled=on;const auto before=io::connections.Reserved();WSASetLastError(10054);
+        io::Install(2,7,INVALID_SOCKET,"OUTGOING");assert(WSAGetLastError()==10054);
+        if(on){io::Event endpoint;assert(io::connections.Read(before,endpoint));
+            assert(endpoint.local_result==SOCKET_ERROR&&endpoint.peer_result==SOCKET_ERROR);
+            assert(endpoint.local_error!=0&&endpoint.peer_error!=0&&endpoint.local_port==0&&endpoint.peer_port==0);
+        }else assert(io::connections.Reserved()==before);
+    }
     WSACleanup();
 }

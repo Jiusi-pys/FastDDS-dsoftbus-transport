@@ -37,6 +37,10 @@ struct ReceiverIdentity
 struct ReceiveDiagnostic
 {
     std::uint64_t correlation=0;
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+    // Diagnostic-only immutable original budget/record, never lookup authority.
+    std::uint64_t observation_scope=0,observation_record=0;
+#endif
     ReceiverIdentity identity;
     NativeIdentityConstraint native;
     std::size_t size=0;

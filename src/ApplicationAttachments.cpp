@@ -1,5 +1,8 @@
 #include <fastdds_dsoftbus/dsoftbus/ApplicationAttachments.hpp>
 #include "ApplicationAttachmentsInternal.hpp"
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+#include <fastdds_dsoftbus/dsoftbus/HostReceiveJournal.hpp>
+#endif
 #include <algorithm>
 #include <condition_variable>
 #include <cstring>
@@ -24,8 +27,44 @@ struct AttachmentBudget final
     std::condition_variable changed;
     AttachmentUsage usage;
     std::uint64_t next_identity=1;
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+    const std::uint64_t observation_scope=host_rx_observation::NewScope();
+    std::uint64_t observation_gate=0,observation_record=0;
+#endif
     std::vector<AttachmentLocalBudget> locals;
 };
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+// Called only under the original budget mutex. Fixed scalar copy and bounded
+// lock-free publication; no callback, allocation, payload or extra gate.
+std::uint64_t ObserveBudget(AttachmentBudget& b,host_rx_observation::Kind kind,
+        std::size_t index,const ReceiveDiagnostic& diagnostic,RecordPhase phase,
+        std::size_t application_copying=0,std::uint32_t capacity_mask=0) noexcept
+{
+    if(!b.observation_scope)return 0;
+    host_rx_observation::Event event;event.kind=kind;
+    event.scope=b.observation_scope;event.record=diagnostic.observation_record;
+    event.gate=host_rx_observation::Next(b.observation_gate);
+    event.correlation=diagnostic.correlation;event.application=diagnostic.identity.application_incarnation;
+    event.receiver=diagnostic.identity.receiver_incarnation;event.logical_token=diagnostic.identity.logical_token;
+    event.local=index;event.size=diagnostic.size;event.phase=static_cast<int>(phase);
+    event.records=b.usage.records;event.bytes=b.usage.bytes;event.copying=b.usage.copying;
+    event.queued=b.usage.queued;event.taken=b.usage.taken;event.delivering=b.usage.delivering;
+    event.local_records=b.locals[index].records;event.local_bytes=b.locals[index].bytes;
+    event.records_limit=b.limits.records;event.bytes_limit=b.limits.bytes;
+    event.local_records_limit=b.limits.local_records;event.local_bytes_limit=b.limits.local_bytes;
+    event.copying_limit=b.limits.copying;
+    if(kind==host_rx_observation::Kind::CapacityRefusal){
+        event.application_copying_known=true;event.application_copying=application_copying;
+        event.application_copying_limit=std::numeric_limits<std::size_t>::max();event.capacity_mask=capacity_mask;
+        event.capacity_reason=static_cast<int>(capacity_mask&1u?RxAdmissionReason::GlobalRecords:
+                capacity_mask&2u?RxAdmissionReason::GlobalBytes:capacity_mask&4u?RxAdmissionReason::LocalRecords:
+                capacity_mask&8u?RxAdmissionReason::LocalBytes:capacity_mask&16u?RxAdmissionReason::CopyingLimit:
+                RxAdmissionReason::ApplicationCopyingExhausted);
+    }
+    event.ingress=host_rx_observation::CurrentIngress();
+    host_rx_observation::Append(event);return event.gate;
+}
+#endif
 struct AttachmentLocal final
 {
     Locator locator;
@@ -88,6 +127,9 @@ struct AttachmentRecord final
             std::lock_guard<std::mutex> lock(app->budget->mutex);
             Refund(*app->budget, budget_index, bytes.size(), phase);
             if(phase==RecordPhase::Delivering) --app->dispatching_activity;
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+            ObserveBudget(*app->budget,host_rx_observation::Kind::RefundRecord,budget_index,diagnostic,phase);
+#endif
         }
         // Payload storage is gone before reporting its actual release. This is
         // deliberately separate from invocation settlement and ledger counters.
@@ -132,7 +174,12 @@ AttachmentReceiveCapture::~AttachmentReceiveCapture() noexcept
     record_.reset(); // Charged record refund must finish before activity reaches zero.
     if(active_) {
         std::lock_guard<std::mutex> lock(app_->budget->mutex);
-        if(reserved_) Refund(*app_->budget,global_index_,size_,RecordPhase::Copying);
+        if(reserved_) {
+            Refund(*app_->budget,global_index_,size_,RecordPhase::Copying);
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+            ObserveBudget(*app_->budget,host_rx_observation::Kind::RefundCapture,global_index_,diagnostic_,RecordPhase::Copying);
+#endif
+        }
         --app_->copying_activity;app_->budget->changed.notify_all();
     }
 }
@@ -190,6 +237,10 @@ InputDeliveryResult ReceiveWork::Deliver()
         ++record->app->budget->usage.delivering;
         ++record->app->dispatching_activity;
         record->phase = detail::RecordPhase::Delivering;
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+        detail::ObserveBudget(*record->app->budget,host_rx_observation::Kind::Enter,
+                record->budget_index,record->diagnostic,record->phase);
+#endif
     }
     return record->app->inputs->Deliver(record->ticket, record->remote,
             record->bytes.data(), record->bytes.size());
@@ -502,6 +553,18 @@ ReceiveAdmissionResult ApplicationAttachments::CaptureReceive(const ApplicationC
         if (budget.usage.records == n.records || size > n.bytes - budget.usage.bytes ||
                 l.records == n.local_records || size > n.local_bytes - l.bytes || budget.usage.copying == n.copying ||
                 app->copying_activity == std::numeric_limits<std::size_t>::max()) {
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+            ReceiveDiagnostic refused;refused.correlation=capture.diagnostic_.correlation;
+            refused.identity={app->identity.application_incarnation,entry.observed_incarnation,app->identity.logical_token};
+            refused.size=size;refused.observation_scope=budget.observation_scope;
+            const auto refused_gate=detail::ObserveBudget(budget,host_rx_observation::Kind::CapacityRefusal,
+                    slot_index,refused,detail::RecordPhase::Copying,app->copying_activity,
+                    (budget.usage.records==n.records?1u:0u)|(size>n.bytes-budget.usage.bytes?2u:0u)|
+                    (l.records==n.local_records?4u:0u)|(size>n.local_bytes-l.bytes?8u:0u)|
+                    (budget.usage.copying==n.copying?16u:0u)|
+                    (app->copying_activity==std::numeric_limits<std::size_t>::max()?32u:0u));
+            if(diagnostic){diagnostic->observation_scope=budget.observation_scope;diagnostic->observation_gate=refused_gate;}
+#endif
             if(diagnostic) {
                 // Observe all capacity predicates only after the original
                 // short-circuit expression has rejected, under its same gate.
@@ -536,6 +599,16 @@ ReceiveAdmissionResult ApplicationAttachments::CaptureReceive(const ApplicationC
         budget.usage.high_records = std::max(budget.usage.high_records, budget.usage.records);
         budget.usage.high_bytes = std::max(budget.usage.high_bytes, budget.usage.bytes);
         budget.usage.high_copying = std::max(budget.usage.high_copying, budget.usage.copying);
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+        if(budget.observation_scope) {
+            capture.diagnostic_.observation_scope=budget.observation_scope;
+            capture.diagnostic_.observation_record=host_rx_observation::Next(budget.observation_record);
+            const auto gate=detail::ObserveBudget(budget,host_rx_observation::Kind::Charge,
+                    slot_index,capture.diagnostic_,detail::RecordPhase::Copying);
+            if(diagnostic){diagnostic->observation_scope=budget.observation_scope;
+                diagnostic->observation_record=capture.diagnostic_.observation_record;diagnostic->observation_gate=gate;}
+        }
+#endif
     } catch (const std::bad_alloc&) { return diagnostic?diagnostic->Return(RxAdmissionStage::Capture,
             RxAdmissionReason::CaptureAllocation,ReceiveAdmissionResult::AllocationFailure):ReceiveAdmissionResult::AllocationFailure; }
     return ReceiveAdmissionResult::Accepted;
@@ -588,6 +661,10 @@ ReceiveAdmissionResult ApplicationAttachments::CommitReceive(detail::AttachmentR
         return diagnostic?diagnostic->Return(RxAdmissionStage::Commit,RxAdmissionReason::Expired,
                 ReceiveAdmissionResult::Expired):ReceiveAdmissionResult::Expired;
     --budget.usage.copying;++budget.usage.queued;capture.record_->phase=detail::RecordPhase::Queued;
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+    detail::ObserveBudget(budget,host_rx_observation::Kind::Queue,capture.global_index_,
+            capture.diagnostic_,detail::RecordPhase::Queued);
+#endif
     auto* tail=capture.record_.get();
     if(control.tail) control.tail->next=std::move(capture.record_);else control.queue=std::move(capture.record_);
     control.tail=tail;
@@ -640,6 +717,9 @@ NativeStatus ApplicationAttachments::EnterReceive(ReceiveWork& work,InputReceive
     lease=app.inputs->TryAcquireReceiver(record.ticket); // Required initially empty output.
     if(!lease) return NativeStatus::Revoked;
     --budget.usage.taken;++budget.usage.delivering;++app.dispatching_activity;record.phase=detail::RecordPhase::Delivering;
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+    detail::ObserveBudget(budget,host_rx_observation::Kind::Enter,record.budget_index,record.diagnostic,record.phase);
+#endif
     return NativeStatus::None;
 }
 InputDeliveryResult ApplicationAttachments::InvokeReceive(ReceiveWork& work,InputReceiverLease& lease)
@@ -656,6 +736,9 @@ bool ApplicationAttachments::RequeueReceive(ReceiveWork& work)
     if(record.phase!=detail::RecordPhase::Taken||app.phase!=detail::ApplicationPhase::Active||
             entry.phase!=detail::ReceiverPhase::Open||entry.incarnation!=record.incarnation) return false;
     --budget.usage.taken;++budget.usage.queued;record.phase=detail::RecordPhase::Queued;
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+    detail::ObserveBudget(budget,host_rx_observation::Kind::Requeue,record.budget_index,record.diagnostic,record.phase);
+#endif
     auto* tail=work.record_.get();
     if(control.tail) control.tail->next=std::move(work.record_);else control.queue=std::move(work.record_);
     control.tail=tail;return true;
@@ -685,6 +768,9 @@ ReceiveWork ApplicationAttachments::TryTake()
     if (!record) return {};
     control.queue = std::move(record->next); if (!control.queue) control.tail = nullptr;
     --budget.usage.queued; ++budget.usage.taken; record->phase = detail::RecordPhase::Taken;
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+    detail::ObserveBudget(budget,host_rx_observation::Kind::Take,record->budget_index,record->diagnostic,record->phase);
+#endif
     return ReceiveWork(std::move(record));
 }
 AttachmentUsage ApplicationAttachments::SnapshotUsage() const

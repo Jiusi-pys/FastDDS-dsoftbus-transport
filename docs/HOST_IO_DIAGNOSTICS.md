@@ -1,5 +1,16 @@
 # Windows Host Socket IO diagnostics
 
+## R11 extension (2026-10-15 04:41:11 UTC)
+
+The sections below preserve the R8 implementation and execution record. R11
+adds endpoint matching and independent callback/receive/budget reconciliation,
+with a fresh final bridge and actual service rerun. See
+[Host connection and receive observation](HOST_RECEIVE_OBSERVATION.md) for the
+current capture contract, final tests, review repairs and remaining gaps. R8's
+27 CTest/29 Python counts and its final pub/sub NOT RUN statement remain
+historical facts; the R11 service run does not rerun that pub/sub scenario.
+
+
 This optional diagnostic records the Windows TCP Host seam used by the ROS 2
 transport harness. It does not execute the OpenHarmony DSoftBus SDK. The scoped
 patch was independently built, tested and reviewed on published base

@@ -1,5 +1,23 @@
 # ROS 2 Windows Host service acceptance
 
+## R11 diagnostic rerun (2026-10-15 04:41:11 UTC)
+
+Run `69350e7e061047a5` passed the existing bounded service scenario with the new
+R11 bridge and `--observe-host-receive`: 14 requests/response calls, 12 accepted
+responses, two timeout removals and two recreated clients. Both processes exited
+0, two connections matched, and A/B full_host captures reconciled 144/143
+callbacks and charges/refunds with zero refusals. Ports were released. This
+qualifies diagnostics around the existing PARTIAL Host scenario, not a new full
+ROS capability or native communication. The independent RMW late-discard and
+device limits remain. See [Host receive observation](HOST_RECEIVE_OBSERVATION.md)
+for exact source, binary, review and final execution evidence.
+
+The R10 records and historical plan below are preserved as dated evidence. R11
+implemented the diagnostic sensors, but A/04 replay remains blocked by the
+unqualified original security-enabled 2.14.7 profile and missing fragment
+identity; no historical rerun or root-cause resolution is claimed.
+
+
 The additive `examples/ros2_service_acceptance` executable and
 `tests/ros2_host/run_service_acceptance.py` qualify one bounded **V1-05 partial**
 service scenario. Two independent processes use ordinary `rclcpp` AddTwoInts

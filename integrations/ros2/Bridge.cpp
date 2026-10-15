@@ -1,5 +1,7 @@
 #include "HostSocket.hpp"
 #include "HostIoObservation.hpp"
+#include "HostReceiveObservation.hpp"
+#include "HostCallbackObservation.hpp"
 #include "BridgeOwner.hpp"
 #include "ShutdownCoordination.hpp"
 #include "BoundedNativeControl.hpp"
@@ -33,7 +35,7 @@ std::map<std::string,std::string> read(const char* path) {
         auto p=line.find('=');if(p==std::string::npos)throw std::runtime_error("configuration syntax");
         if(!m.emplace(line.substr(0,p),line.substr(p+1)).second)throw std::runtime_error("duplicate key");
     }
-    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="route_lifecycle"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order"&&e.first!="host_io_observation")throw std::runtime_error("unknown key");
+    for(auto& e:m)if(e.first!="bridge_library"&&e.first!="fastdds_module"&&e.first!="fastcdr_module"&&e.first!="backend"&&e.first!="run"&&e.first!="side"&&e.first!="port"&&e.first!="peer_port"&&e.first!="domain"&&e.first!="forward"&&e.first!="host_close_error"&&e.first!="runtime_close_release"&&e.first!="locator_version"&&e.first!="native_name_contract"&&e.first!="service_prefix"&&e.first!="authorized_package"&&e.first!="host_reaccept"&&e.first!="reaccept_control"&&e.first!="route_lifecycle"&&e.first!="owned_normal_reaccept"&&e.first!="native_reaccept_order"&&e.first!="host_io_observation"&&e.first!="host_receive_observation")throw std::runtime_error("unknown key");
     return m;
 }
 unsigned integer(const std::map<std::string,std::string>& m,const char* k,unsigned max) {
@@ -56,6 +58,7 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         const bool reaccept=m.count("host_reaccept")&&integer(m,"host_reaccept",1)!=0;
         const bool owned_normal=m.count("owned_normal_reaccept")&&integer(m,"owned_normal_reaccept",1)!=0;
         const bool observe_io=fastdds_dsoftbus::ros2_host::io_observation::ConfigurationEnabled(m);
+        const bool observe_receive=fastdds_dsoftbus::ros2_host_receive::ConfigurationEnabled(m);
         const bool routes=m.count("route_lifecycle")&&integer(m,"route_lifecycle",1)!=0;
         if(routes&&!owned_normal)throw std::runtime_error("route model requires original retained-entity scene");
         if(owned_normal&&(!reaccept||!m.count("native_reaccept_order")||(m.at("native_reaccept_order")!="outgoing-first"&&m.at("native_reaccept_order")!="accepted-first")))throw std::runtime_error("explicit owned normal Host model required");
@@ -96,7 +99,10 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusCreate(const char* path,unsi
         b.max_message_size=65536;b.bind_qos={{0,80},{1,2000}};b.listen_qos=b.bind_qos;
         b.bounded_reaccept_host=reaccept;
         b.route_lifecycle=routes;
-        owner->runtime=std::make_unique<experimental::Runtime>(b);
+        if(!host_rx_observation::Configure(observe_receive))throw std::runtime_error("Host receive observation configuration changed within process");
+        std::shared_ptr<ProcessReceiveObserver> receive_observer;
+        if(observe_receive)receive_observer=std::make_shared<fastdds_dsoftbus::ros2_host_receive::Observer>();
+        owner->runtime=std::make_unique<experimental::Runtime>(b,std::move(receive_observer));
         if(owned_normal){
             auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,m.at("native_reaccept_order")=="outgoing-first",m.at("reaccept_control"),true,routes);
             if(routes)owner->node_diagnostic_close=[control]{control->ExportNodeDiagnostics();};
@@ -155,7 +161,12 @@ extern "C" __declspec(dllexport) int FastddsDsoftbusClose(void* value) {
     fastdds_dsoftbus::ros2_host::StopLink();
     if(!fastdds_dsoftbus::ros2_host::io_observation::Export(p->run.c_str(),p->side))
         std::fputs("FDDST_HOST_IO_CAPTURE_INCOMPLETE\n",stderr);
+    if(!fastdds_dsoftbus::ros2_host_receive::Export(p->run.c_str(),p->side,GetCurrentProcessId()))
+        std::fputs("FDDST_HOST_RX_CAPTURE_INCOMPLETE\n",stderr);
     const auto io=fastdds_dsoftbus::ros2_host::ObserveLink();const auto native=p->runtime->ObserveSocket();
+    if(fastdds_dsoftbus::dsoftbus::host_rx_observation::Enabled()&&
+        !fastdds_dsoftbus::ros2_host_callback::ExportCoverage(p->run.c_str(),p->side,GetCurrentProcessId(),io.ingress,phase0::RuntimeProbeAccess::ObserveConnection(*p->runtime).adapter))
+        std::fputs("FDDST_HOST_RX_CAPTURE_INCOMPLETE\n",stderr);
     std::fprintf(stderr,"FDDST_HOST_IO run=%s side=%u sends=%llu ingress=%llu send_errors=%llu fake_sdk=%d rejected_callbacks=%llu\n",p->run.c_str(),p->side,static_cast<unsigned long long>(io.sends),static_cast<unsigned long long>(io.ingress),static_cast<unsigned long long>(io.send_errors),int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));
     const bool failed=p->failed.load();if(failed)std::fputs("FDDST_PUMP_ERROR_OBSERVED\n",stderr);
     p->descriptor.reset();p->runtime.reset();

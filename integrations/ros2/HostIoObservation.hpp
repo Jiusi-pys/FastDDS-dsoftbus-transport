@@ -28,6 +28,11 @@ struct Event {
     unsigned long thread=0;
     int socket=-1,requested=0,result=0,error=0,calls=0,partial=0;
     bool result_known=false,error_known=false;
+    // Used only by the separate connection-install ledger; IPv4 in host order.
+    const char* role="NONE";
+    std::uint32_t local_address=0,peer_address=0;
+    unsigned local_port=0,peer_port=0;
+    int local_result=-1,peer_result=-1,local_error=0,peer_error=0;
 };
 template<std::size_t Capacity> class Ledger {
     struct Slot { Event event{}; std::atomic<bool> ready{false}; };
@@ -50,6 +55,8 @@ public:
 };
 inline constexpr std::size_t capacity=16384;
 inline Ledger<capacity> ledger;
+inline constexpr std::size_t connection_capacity=64;
+inline Ledger<connection_capacity> connections;
 inline bool enabled=false; // configured once before starting Host threads
 inline std::atomic<std::uint64_t> sequence{0},send_ids{0};
 inline std::uint64_t Point() noexcept{return enabled?sequence.fetch_add(1,std::memory_order_relaxed)+1:0;}
@@ -62,6 +69,38 @@ inline void Record(Event value) noexcept {
 }
 inline Event Connection(const char* kind,int id,std::uint64_t epoch,SOCKET handle) noexcept {
     Event event;event.kind=kind;event.socket=id;event.epoch=epoch;event.handle=static_cast<std::uint64_t>(handle);return event;
+}
+// Called while the newly installed handle is protected by the Host gate, before
+// its receiver starts. Queries neither send traffic nor change socket options.
+inline void Install(int id,std::uint64_t epoch,SOCKET handle,const char* role) noexcept {
+    Record(Connection("CONNECTION_INSTALL",id,epoch,handle));
+    if(!enabled)return;
+    const int saved=WSAGetLastError();
+    auto e=Connection("ENDPOINTS",id,epoch,handle);e.role=role;
+    sockaddr_in local{},peer{};int local_size=sizeof(local),peer_size=sizeof(peer);
+    e.local_result=getsockname(handle,reinterpret_cast<sockaddr*>(&local),&local_size);
+    e.local_error=e.local_result==SOCKET_ERROR?WSAGetLastError():0;
+    if(e.local_result==0&&local_size==sizeof(local)&&local.sin_family==AF_INET){e.local_address=ntohl(local.sin_addr.s_addr);e.local_port=ntohs(local.sin_port);}
+    else if(e.local_result==0)e.local_result=-2; // unsupported address, never infer an identity
+    if(role[0]!='L'){
+        e.peer_result=getpeername(handle,reinterpret_cast<sockaddr*>(&peer),&peer_size);
+        e.peer_error=e.peer_result==SOCKET_ERROR?WSAGetLastError():0;
+        if(e.peer_result==0&&peer_size==sizeof(peer)&&peer.sin_family==AF_INET){e.peer_address=ntohl(peer.sin_addr.s_addr);e.peer_port=ntohs(peer.sin_port);}
+        else if(e.peer_result==0)e.peer_result=-2;
+    }
+    e.sequence=Point();e.thread=GetCurrentThreadId();connections.Append(e);WSASetLastError(saved);
+}
+inline bool ExportConnections(const char* run,unsigned side) noexcept {
+    const auto reserved=connections.Reserved();std::uint64_t published=0;bool ok=true;
+    for(std::size_t index=0;index<connection_capacity&&index<reserved;++index){Event e;if(!connections.Read(index,e))continue;++published;
+        if(std::fprintf(stdout,"HOST_CONNECTION_EVENT schema=1 run=%s side=%c pid=%lu seq=%llu socket=%d epoch=%llu handle=%llu role=%s local_address=%u local_port=%u peer_address=%u peer_port=%u local_result=%d local_error=%d peer_result=%d peer_error=%d\n",
+            run,side?'B':'A',GetCurrentProcessId(),e.sequence,e.socket,e.epoch,e.handle,e.role,e.local_address,e.local_port,e.peer_address,e.peer_port,e.local_result,e.local_error,e.peer_result,e.peer_error)<0)ok=false;
+    }
+    const auto stored=reserved<connection_capacity?reserved:connection_capacity;
+    const bool complete=reserved<=connection_capacity&&published==reserved&&ok;
+    if(std::fprintf(stdout,"HOST_CONNECTION_CAPTURE schema=1 run=%s side=%c pid=%lu capacity=%zu reserved=%llu published=%llu overflow=%llu unpublished=%llu complete=%d clock=PROCESS_LOCAL tuple_reuse=UNKNOWN\n",
+        run,side?'B':'A',GetCurrentProcessId(),connection_capacity,reserved,published,reserved-stored,stored-published,int(complete))<0)ok=false;
+    return complete&&ok;
 }
 // One record per completed prefix/body transfer, not per successful syscall.
 // A failure retains the exact failed request and immediate error. Successful
@@ -91,6 +130,7 @@ inline bool Export(const char* run,unsigned side) noexcept {
     const auto stored=reserved<capacity?reserved:capacity;
     const bool complete=reserved<=capacity&&published==reserved&&output_ok;
     if(std::fprintf(stdout,"HOST_IO_CAPTURE schema=1 run=%s side=%c capacity=%zu reserved=%llu published=%llu overflow=%llu unpublished=%llu complete=%d ordering=PROCESS_OBSERVATION_ONLY runtime_owner=NOT_OBSERVED successful_syscalls=AGGREGATED sdk_epoch=NOT_PROVEN\n",run,side?'B':'A',capacity,reserved,published,reserved-stored,stored-published,int(complete))<0)output_ok=false;
-    return std::fflush(stdout)==0&&std::ferror(stdout)==0&&complete&&output_ok;
+    const bool connections_ok=ExportConnections(run,side);
+    return std::fflush(stdout)==0&&std::ferror(stdout)==0&&complete&&output_ok&&connections_ok;
 }
 }

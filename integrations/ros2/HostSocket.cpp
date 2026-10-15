@@ -1,10 +1,17 @@
 // Host-only public Socket C seam. It moves opaque, length-bounded bytes between
 // independent processes and never parses RTPS/ROS or manufactures DDS results.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <winsock2.h>
 #include <windows.h>
 #undef SendMessage
 #include "HostSocket.hpp"
 #include "HostIoObservation.hpp"
+#if defined(FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION)
+#include <fastdds_dsoftbus/dsoftbus/HostReceiveJournal.hpp>
+#include "HostCallbackObservation.hpp"
+#endif
 #include <softbus_bus_center.h>
 #include <socket.h>
 #include <array>
@@ -62,7 +69,16 @@ void receive(SOCKET s,int id,const ISocketListener* callback,std::uint64_t epoch
         std::uint32_t n=0;if(!transfer(s,reinterpret_cast<char*>(&n),4,false,id,epoch,"PREFIX"))break;
         n=ntohl(n);if(!n||n>65536) {io::Record(io::Connection("RECEIVE_INVALID_LENGTH",id,epoch,s));std::fputs("HOST_LINK_BAD_LENGTH\n",stderr);break;}
         std::vector<unsigned char> bytes(n);if(!transfer(s,reinterpret_cast<char*>(bytes.data()),static_cast<int>(n),false,id,epoch,"BODY"))break;
-        if(callback&&callback->OnBytes&&!stop.load()){++ingress;callback->OnBytes(id,bytes.data(),n);}
+        if(callback&&callback->OnBytes&&!stop.load()){
+            const auto ingress_id=++ingress;
+#if defined(FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION)
+            fastdds_dsoftbus::ros2_host_callback::HostCallbackObservation callback_receipt(
+                {ingress_id,id,epoch,static_cast<std::uint64_t>(s),n});
+            fastdds_dsoftbus::dsoftbus::host_rx_observation::ScopedIngress observation_scope(
+                {ingress_id,id,epoch,static_cast<std::uint64_t>(s),n});
+#endif
+            callback->OnBytes(id,bytes.data(),n);
+        }
     }
     // Model the actual terminal notification of this owned Host connection.
     // This is not an SDK cancellation/epoch claim and never invents a data take.
@@ -164,9 +180,9 @@ extern "C" int32_t Listen(int32_t id,const QosTV*,uint32_t,const ISocketListener
     if(id!=1||!cb)return -603;
     SOCKET s=::socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);sockaddr_in a{};a.sin_family=AF_INET;a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);a.sin_port=htons(cfg.port);
     if(s==INVALID_SOCKET||::bind(s,reinterpret_cast<sockaddr*>(&a),sizeof(a))!=0||::listen(s,1)!=0){if(s!=INVALID_SOCKET)close_observed(s,id,0,"LISTEN_SETUP_FAILURE",false);return -604;}
-    {std::lock_guard<std::mutex> l(gate);sockets[1]=s;connection_epochs[1]=++next_connection_epoch;io::Record(io::Connection("CONNECTION_INSTALL",1,connection_epochs[1],s));listener=cb;}
+    {std::lock_guard<std::mutex> l(gate);sockets[1]=s;connection_epochs[1]=++next_connection_epoch;io::Install(1,connection_epochs[1],s,"LISTENER");listener=cb;}
     accept_thread=std::thread([s,cb]{do {SOCKET incoming=::accept(s,nullptr,nullptr);if(incoming==INVALID_SOCKET)return;
-        int id=3;std::uint64_t epoch=0;{std::lock_guard<std::mutex> l(gate);if(cfg.bounded_reaccept){if(next_id>=int(socket_capacity)){close_observed(incoming,-1,0,"ACCEPT_CAPACITY_FAILURE",false);return;}id=next_id++;}sockets[id]=incoming;epoch=connection_epochs[id]=++next_connection_epoch;io::Record(io::Connection("CONNECTION_INSTALL",id,epoch,incoming));accepted_id=id;}
+        int id=3;std::uint64_t epoch=0;{std::lock_guard<std::mutex> l(gate);if(cfg.bounded_reaccept){if(next_id>=int(socket_capacity)){close_observed(incoming,-1,0,"ACCEPT_CAPACITY_FAILURE",false);return;}id=next_id++;}sockets[id]=incoming;epoch=connection_epochs[id]=++next_connection_epoch;io::Install(id,epoch,incoming,"ACCEPTED");accepted_id=id;}
         PeerSocketInfo p{};peer(p,true);
         if(!cb->OnNegotiate||!cb->OnNegotiate(id,p)){Shutdown(id);if(!cfg.bounded_reaccept)return;continue;}
         if(cb->OnBind)cb->OnBind(id,p);receive(incoming,id,cb,epoch);
@@ -179,7 +195,7 @@ extern "C" int32_t Bind(int32_t id,const QosTV*,uint32_t,const ISocketListener* 
     if(read_thread.joinable())read_thread.join();
     SOCKET s=::socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);sockaddr_in a{};a.sin_family=AF_INET;a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);a.sin_port=htons(cfg.peer_port);
     if(s==INVALID_SOCKET||::connect(s,reinterpret_cast<sockaddr*>(&a),sizeof(a))!=0){if(s!=INVALID_SOCKET)close_observed(s,id,0,"BIND_SETUP_FAILURE",false);return -606;}
-    std::uint64_t epoch=0;{std::lock_guard<std::mutex> l(gate);sockets[id]=s;epoch=connection_epochs[id]=++next_connection_epoch;io::Record(io::Connection("CONNECTION_INSTALL",id,epoch,s));outgoing_id=id;}
+    std::uint64_t epoch=0;{std::lock_guard<std::mutex> l(gate);sockets[id]=s;epoch=connection_epochs[id]=++next_connection_epoch;io::Install(id,epoch,s,"OUTGOING");outgoing_id=id;}
     PeerSocketInfo p{};peer(p,false);if(cb->OnBind)cb->OnBind(id,p);
     read_thread=std::thread([s,cb,id,epoch]{receive(s,id,cb,epoch);});return 0;
 }
