@@ -621,3 +621,53 @@ SECURITY ON is not a payload-encryption claim. Main graph/PRE_COMMIT,
 commit/push and CI remain separate pending receipts at this documentation
 snapshot. Earlier sections are retained verbatim; no aggregate percentage is
 claimed.
+
+
+## Windows Host lifecycle acceptance (R15, 2026-10-15)
+
+R15 adds a standalone ordinary ROS lifecycle acceptance consumer and strict
+runner/oracle on the existing default-2145 SECURITY OFF / STATISTICS OFF Host
+package. Two OS processes exercise real ChangeState/GetState/
+GetAvailableTransitions services and TransitionEvent delivery, including callback
+FAILURE then SUCCESS, configure/activate/deactivate/cleanup, ERROR recovery
+success/failure, inactive shutdown and two finalized nodes. The lower layer is
+the TCP-backed Host fake DSoftBus Socket seam; no Transport/DDS/RTPS/RMW/native
+implementation or policy is changed.
+
+Independent review's P2 R15-C1 is CLOSED: START now requires a complete current
+module snapshot and both children still live (poll None), rather than historical
+module accumulation. This sequential observation is not an atomic liveness or
+tamper guarantee. Final fresh MSVC x64 Release /MD C++17 build, nine model
+methods (including eleven synthetic barrier controls), sixty related parser
+cases and one final real Host window passed. Canonical receipt is
+build/r15-lifecycle/final-test/FINAL_TEST_RESULT.json; tester Commit gate PASS
+is scoped to Host acceptance tooling.
+
+Final run 1fc377841d9c9a77: A 77236 / B 73444 exit 0, ten ChangeState responses,
+twelve state and twelve available-transition snapshots, twenty transition
+events, eleven callbacks and two finalized nodes. Current START module snapshots
+contain A twelve / B ten selected exact module bindings, both polls None.
+No forced kill or timeout; ports 61361/61362 allow exclusive rebind. A admits,
+charges and refunds all 148 ingress callbacks. B has 194 ingress, 177 admitted/
+charged/refunded and seventeen Adapter Closing/InvalidState pre-Bridge refusals.
+A retains two WSA10004 receive terminations and B two EOFs; both have zero send
+errors. Complete full_host accounting does not mean zero refusals/errors or
+known payload causality, which remains NOT_OBSERVED.
+
+The initial Host PASS and CRLF/LF provenance-seal failure/resolution remain
+preserved, along with all review/final evidence. See
+[ROS lifecycle Host acceptance](ROS2_LIFECYCLE_HOST_ACCEPTANCE.md) for exact
+scenario, commands, module/artifact hashes, test categories and capability
+matrix. Managed publisher gating, thrown-exception transitions, all shutdown
+origins, concurrent transitions, restart/reconnect, security-enabled lifecycle
+and native/cross-device lifecycle remain UNVERIFIED or BLOCKED.
+
+R14's strict 20 writes / 19 takes FAIL and ten opaque frames per side FAIL remain
+unchanged. Independently reviewed metadata research can associate callbacks,
+accounting and visible publishers, not encrypted inner endpoint/sample contents
+or the missing-take cause. A cross-security-layer observer would require a
+separately approved architecture exception and has not been implemented.
+DEVICE_TESTED=false; last known owner permission blocker remains DENIED on both
+boards at 2026-10-14T21:51:07Z, without a new check. ROS over native DSoftBus is
+NOT VERIFIED. Main graph/PRE_COMMIT, commit/push and CI are pending separate
+receipts at this snapshot. No aggregate completion percentage is claimed.
