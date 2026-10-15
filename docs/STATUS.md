@@ -534,3 +534,39 @@ N3-1 已在限定范围完成：既有 N2 `NativeSendExecution.cpp` 通过根 `C
 最终 tester 证据见 [.artifacts/verification/20260914T005000Z-permission-lifecycle-final](../.artifacts/verification/20260914T005000Z-permission-lifecycle-final)：Host CTest 10/10 PASS（权限流程 10 groups、快照守卫 158 checks）；官方平台 clang 路径下 OHOS probe 构建/链接 PASS。A/B 均完成同一已归属 native token 的 regrant、服务 GRANTED 验证、独立 Socket 创建并 Shutdown 恰好一次、revoke 后服务 DENIED 与 self 还原。A token `controlled A token reference`、B token `controlled B token reference`；最终项目记录保留为空权限身份，origin/transition JSON guard、外部记录结构及 provider hashes 均 PASS。
 
 既有 `com.kaihong.mdds` allowlist 未被替换；本次仅使用用户授权的新 `fastdds_dsoftbus_probe` 身份，最终保留空权限记录。权限 lifecycle review `.artifacts/review/20260914T004622Z-permission-lifecycle/REVIEW.md` 无 blocking finding。该证据只覆盖本机 Socket 生命周期和权限闭环，不覆盖 Listen/Bind/SendBytes、跨设备记录、SPDP/SEDP、用户数据或 RMW。该历史权限切片不证明完整 Transport 就绪；N1 限定提交门槛另见 N1_COMPLETION.md。
+
+
+## Windows Host ROS Action acceptance (2026-10-15 05:34:11 UTC)
+
+R12 adds a bounded ordinary ROS Action acceptance executable and oracle. After
+independent review repaired feedback-before-SENT acceptance, the final fresh
+VS2022 x64 Release /MD build, 61 synthetic model/helper cases and one actual
+Windows Host pair `c6a401090f2ecab8` passed: five requests, four accepted, one
+rejected, two succeeded, one canceled and one aborted. UUID/result ownership,
+actual feedback before targeted cancellation, exact cancel response and two
+concurrent executing goals are checked. Both processes exit 0 and ports
+50922/50923 allow exclusive rebind. Strict full_host reconciliation covers
+A 102/B 112 callbacks and equal charges/refunds, with zero final adapter/capacity
+refusals or send errors. Seventeen final actual-log mutants are rejected;
+synthetic replays are separate from actual ROS execution.
+
+V1-06 is PARTIAL for this Windows Host scenario only. Startup Reader errors on
+both sides remain recorded; OPTIONAL unique-flow fallback is a supported
+inference, not direct dynamic parameter/pointer proof. Strict unique-flow
+capability remains UNVERIFIED. Initial A's two Closing/InvalidState pre-bridge
+refusals retain UNKNOWN payload causality; final zeros do not erase them.
+See [ROS Action acceptance](ROS2_ACTION_ACCEPTANCE.md) for exact scenarios,
+review/final receipts, artifact hashes, command records and remaining gaps.
+
+The unchanged R11 bridge uses Fast DDS 2.14.5 SECURITY OFF / STATISTICS OFF;
+this is no original 2.14.7 SECURITY ON historical qualification. Full Action
+QoS/status delivery/replay/result retention/restart/reconnect/cancel-all/time
+cancel/natural cancellation race/large-message acceptance remain UNVERIFIED.
+Native SDK/core regressions are not newly claimed for these additive files.
+DEVICE_TESTED=false; native/cross-device acceptance remains BLOCKED and overall
+NOT VERIFIED. The last device permission observation remains DENIED on both
+boards at 2026-10-14T21:51:07Z, not refreshed. The 30-row reference remains a
+draft, with no approved aggregate or completion percentage. Tester Commit gate
+PASS and documentation readiness are scoped; Main graph/pre-commit/publication
+and CI receipts remain separate. Earlier sections are preserved verbatim as
+historical snapshots.
