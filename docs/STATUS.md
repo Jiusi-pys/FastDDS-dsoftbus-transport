@@ -671,3 +671,52 @@ DEVICE_TESTED=false; last known owner permission blocker remains DENIED on both
 boards at 2026-10-14T21:51:07Z, without a new check. ROS over native DSoftBus is
 NOT VERIFIED. Main graph/PRE_COMMIT, commit/push and CI are pending separate
 receipts at this snapshot. No aggregate completion percentage is claimed.
+
+
+## Managed lifecycle publisher Host acceptance (R16, 2026-10-15)
+
+R16 adds a standalone managed-publisher consumer and analyzer and extends the
+existing runner with a fixed managed-publisher scenario. The default R15 oracle
+and consumer remain unchanged and received full regression. Both use the existing
+default-2145 SECURITY OFF / STATISTICS OFF Windows Host fake Socket seam; no
+Transport/DDS/RTPS/RMW/security-policy or dependency source is changed.
+
+Independent review reports NO_ACTIONABLE_FINDINGS_FOUND. Final independent tests
+passed two fresh MSVC x64 Release /MD C++17 builds, seventeen model methods
+(including twenty-four barrier subcontrols), sixty related parser cases and one
+actual final window per scenario. R15 regression 4175433b256a6647 passed its
+10 changes / 12 states / 12 available snapshots / 20 events / 11 callbacks.
+R16 run 8925f9c43e172686 (A 39624 / B 74132) passed six changes, seven states,
+four probes, eight publish attempts, four deliveries, twelve events and six
+callbacks. Both publish overloads (const reference and moved unique pointer)
+were called in inactive and active phases. Actual QoS is reliable, volatile,
+KeepLast(10); stable publisher/received GID is
+010f6944c89ac1190000000000001303, implementation rmw_fastrtps_cpp.
+
+The four specified inactive attempts were not observed in remote subscriber
+callbacks during the matched finite window. This is not indefinite non-delivery,
+all-cache absence or an RTPS sequence fence. Both windows exited 0 without
+forced kill/timeout and all ports allowed exclusive rebind. Strict full_host
+reconciliation passed while retaining real pre-Bridge Closing/InvalidState
+adapter refusals: R15 A 149/149/0 and B 203/185/18; R16 A 92/78/14 and B
+134/134/0 (ingress/admitted/rejected). Callback identity and entered/returned
+records remain intact; payload causality is NOT_OBSERVED. Each process retains
+two DDS Error lines. Closing I/O records include R15 A two WSA10004 / B two EOF,
+and R16 A two EOF / B one WSA10004 plus one EOF. PASS is not zero-error proof.
+
+See [managed lifecycle publisher Host acceptance](ROS2_LIFECYCLE_PUBLISHER_HOST_ACCEPTANCE.md)
+for the capability matrix, exact commands/module and artifact hashes, canonical
+final 106-entry seal plus separate recheck receipt, and preserved initial/review/
+R15 publication evidence. Tester Commit gate PASS is limited to this Host
+acceptance-tooling stage. Main graph/PRE_COMMIT, commit/push and CI remain
+separate pending receipts at this snapshot.
+
+Main's read-only hdc list targets -v at 2026-10-15T12:24:23.860820Z exited 0 with
+empty stdout/stderr and no observed target entries; this is not a physical
+connection diagnosis. No board or permission operation occurred. The prior
+2026-10-14T21:51:07Z DENIED permission observation was not rechecked.
+DEVICE_TESTED=false; native/cross-device BLOCKED; ROS 2 over native DSoftBus
+remains NOT VERIFIED. Security-enabled publication, loaned/serialized/generic
+APIs, concurrent transition/publication, restart/reconnect remain UNVERIFIED.
+R14 strict 20 writes / 19 takes and ten opaque frames per side remain FAIL.
+No aggregate completion percentage is claimed.

@@ -60,7 +60,7 @@ original invalid-ID callback-return concern as a validated behavior.
 | Callback FAILURE, later SUCCESS, activate/deactivate/cleanup | Supported for the fixed Host sequence | Independent callback receipts and remote state/event checks |
 | ERROR recovery success and failure, finalized nodes | Supported for the tested branches | Both recovery outcomes and two finalized states observed |
 | Lifecycle feature coverage overall | Partial | One serialized scenario with two nodes; no full lifecycle conformance claim |
-| Managed publisher activation gating | Unverified | No managed publisher workload in this consumer |
+| Managed publisher activation gating | Not tested by R15; independent R16 finite Host acceptance is partial | No managed publisher workload in this consumer. See [R16 managed publisher acceptance](ROS2_LIFECYCLE_PUBLISHER_HOST_ACCEPTANCE.md) for the separate two-overload, matched-window evidence and limits |
 | Thrown callback exceptions and all shutdown origins | Unverified | Tested return codes and inactive shutdown do not cover those branches |
 | Concurrent transitions, restart/reconnect and stress | Unverified | Single-threaded executors and one outstanding service future |
 | Security-enabled lifecycle | Unverified | Uses default SECURITY OFF package; R13 does not supply lifecycle evidence |

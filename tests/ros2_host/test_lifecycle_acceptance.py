@@ -2,6 +2,7 @@
 import copy
 import contextlib
 import io
+import itertools
 import json
 import os
 from pathlib import Path
@@ -174,8 +175,8 @@ class LifecycleReceiptTests(unittest.TestCase):
         cases = ('complete', 'complete_after_incomplete', 'alternating_incomplete', 'previously_seen_missing',
                  'peer_exit_zero', 'peer_exit_nonzero', 'wrong_path', 'wrong_hash', 'changed_seen_hash',
                  'mapping_exception', 'mapping_process_gone')
-        for case in cases:
-            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+        for scenario, case in itertools.product(('lifecycle', 'managed-publisher'), cases + ('required_module_missing',)):
+            with self.subTest(scenario=scenario, case=case), tempfile.TemporaryDirectory() as directory:
                 scratch = Path(directory)
                 host, ros, dds = (scratch / n for n in ('host', 'ros', 'dds'))
                 exe, bridge = scratch / 'consumer.exe', host / 'bin/bridge.dll'
@@ -183,6 +184,10 @@ class LifecycleReceiptTests(unittest.TestCase):
                 files += [ros / 'bin' / n for n in (
                     'rclcpp.dll', 'rclcpp_lifecycle.dll', 'rcl_lifecycle.dll', 'rmw_fastrtps_cpp.dll',
                     'lifecycle_msgs__rosidl_typesupport_cpp.dll', 'lifecycle_msgs__rosidl_typesupport_fastrtps_cpp.dll')]
+                if scenario == 'managed-publisher':
+                    files += [ros / 'bin' / n for n in (
+                        'std_msgs__rosidl_typesupport_cpp.dll', 'std_msgs__rosidl_typesupport_fastrtps_cpp.dll',
+                        'std_srvs__rosidl_typesupport_cpp.dll', 'std_srvs__rosidl_typesupport_fastrtps_cpp.dll')]
                 extra = [ros / 'bin' / n for n in (
                     'lifecycle_msgs__rosidl_typesupport_c.dll', 'lifecycle_msgs__rosidl_typesupport_fastrtps_c.dll')]
                 for path in files + extra:
@@ -209,7 +214,8 @@ class LifecycleReceiptTests(unittest.TestCase):
                         self.side = command[1]; self.pid = 9001 if self.side == 'A' else 9002; self.returncode = None
                         processes[self.side] = self
                         for local, event, fields in ((1, 'READY', 'namespace=/lifecycle_' + command[2]), (2, 'MATCHED', 'nodes=2')):
-                            stdout.write(f'LIFECYCLE_ACCEPT run={command[2]} side={self.side} pid={self.pid} local={local} event={event} {fields}\n'.encode())
+                            prefix = 'LIFECYCLE_ACCEPT' if scenario == 'lifecycle' else 'PUBLISHER_ACCEPT'
+                            stdout.write(f'{prefix} run={command[2]} side={self.side} pid={self.pid} local={local} event={event} {fields}\n'.encode())
                         stdout.flush()
                     def poll(self): return self.returncode
                     def kill(self): self.returncode = -9
@@ -220,6 +226,7 @@ class LifecycleReceiptTests(unittest.TestCase):
                     def memory_maps(self, grouped=False):
                         count = mapping_calls.get(self.pid, 0) + 1; mapping_calls[self.pid] = count
                         paths = files + (extra if self.pid == 9001 else [])
+                        if case == 'required_module_missing': paths = [p for p in paths if p != files[-1]]
                         if case == 'mapping_exception': raise runner.psutil.AccessDenied(self.pid)
                         if case == 'mapping_process_gone': raise runner.psutil.NoSuchProcess(self.pid)
                         if case == 'alternating_incomplete' or (case == 'complete_after_incomplete' and count < 3):
@@ -245,6 +252,7 @@ class LifecycleReceiptTests(unittest.TestCase):
                     return clock[0]
 
                 argv = ['runner']
+                if scenario != 'lifecycle': argv += ['--scenario', scenario]
                 for key, path in (('exe', exe), ('bridge', bridge), ('fastdds-prefix', dds), ('ros-prefix', ros),
                                   ('pixi-prefix', scratch / 'pixi'), ('host-prefix', host), ('output', scratch / 'output')):
                     argv.extend(['--' + key, str(path)])
@@ -274,6 +282,16 @@ class LifecycleReceiptTests(unittest.TestCase):
                     if case in ('wrong_hash', 'changed_seen_hash'):
                         self.assertTrue(any('actual module binding' in e for e in result['errors']))
                     if case == 'mapping_exception': self.assertTrue(any('AccessDenied' in e for e in result['errors']))
+
+    def test_unknown_scenario_refused_before_process_creation(self):
+        argv = ['runner', '--scenario', 'arbitrary-module']
+        for name in ('exe','bridge','fastdds-prefix','ros-prefix','pixi-prefix','host-prefix','output'):
+            argv += ['--' + name, 'unused']
+        with patch('sys.argv', argv), patch.object(runner.subprocess, 'Popen') as child, \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
+            run_lifecycle_acceptance()
+        self.assertEqual(stopped.exception.code, 2)
+        child.assert_not_called()
 
 
 if __name__ == '__main__':

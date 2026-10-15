@@ -156,10 +156,15 @@ def run_lifecycle_acceptance():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('exe', 'bridge', 'fastdds-prefix', 'ros-prefix', 'pixi-prefix', 'host-prefix', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--scenario', choices=('lifecycle', 'managed-publisher'), default='lifecycle')
     args = parser.parse_args()
+    analyzer, prefix = analyze_lifecycle, 'LIFECYCLE_ACCEPT'
+    if args.scenario == 'managed-publisher':
+        from lifecycle_publisher_capture import analyze_publisher
+        analyzer, prefix = analyze_publisher, 'PUBLISHER_ACCEPT'
     args.output.mkdir(parents=True, exist_ok=False)
     result = {'passed': False, 'device_tested': False, 'native_tested': False,
-              'profile': 'default-2145', 'processes': {}, 'errors': []}
+              'profile': 'default-2145', 'scenario': args.scenario, 'processes': {}, 'errors': []}
     processes, streams, reservations = {}, [], []
     started = released = runtime_released = timed_out = False
     forced_kill = []
@@ -184,6 +189,10 @@ def run_lifecycle_acceptance():
         dlls.extend(args.ros_prefix / 'bin' / name for name in (
             'rclcpp.dll', 'rclcpp_lifecycle.dll', 'rcl_lifecycle.dll', 'rmw_fastrtps_cpp.dll',
             'lifecycle_msgs__rosidl_typesupport_cpp.dll', 'lifecycle_msgs__rosidl_typesupport_fastrtps_cpp.dll'))
+        if args.scenario == 'managed-publisher':
+            dlls.extend(args.ros_prefix / 'bin' / name for name in (
+                'std_msgs__rosidl_typesupport_cpp.dll', 'std_msgs__rosidl_typesupport_fastrtps_cpp.dll',
+                'std_srvs__rosidl_typesupport_cpp.dll', 'std_srvs__rosidl_typesupport_fastrtps_cpp.dll'))
         server_extra = [args.ros_prefix / 'bin' / name for name in (
             'lifecycle_msgs__rosidl_typesupport_c.dll', 'lifecycle_msgs__rosidl_typesupport_fastrtps_c.dll')]
         expected = {'A': {p.name.lower(): p.resolve() for p in dlls + server_extra},
@@ -191,6 +200,8 @@ def run_lifecycle_acceptance():
         inputs = dlls + server_extra + [package]
         inputs.extend(Path(__file__).with_name(n) for n in (
             'run_lifecycle_acceptance.py', 'control_files.py', 'host_io_capture.py', 'host_connection_capture.py', 'host_receive_capture.py'))
+        if args.scenario == 'managed-publisher':
+            inputs.append(Path(__file__).with_name('lifecycle_publisher_capture.py'))
         before = {str(p.resolve()): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
         result['inputs_before'] = before
         result['host_prefix'] = str(args.host_prefix.resolve())
@@ -255,7 +266,7 @@ def run_lifecycle_acceptance():
             texts = {s: (args.output / (s + '.stdout')).read_text(encoding='utf-8', errors='replace') for s in 'AB'}
             failed = any('ROS_FAILURE ' in texts[s] or processes[s].poll() not in (None, 0) for s in 'AB')
             def marker(side, event):
-                return re.search(r'^LIFECYCLE_ACCEPT run=' + run + ' side=' + side + ' pid=' + str(processes[side].pid) +
+                return re.search('^' + prefix + ' run=' + run + ' side=' + side + ' pid=' + str(processes[side].pid) +
                                  r' local=[1-9][0-9]* event=' + event + r' ', texts[side], re.M) is not None
             if not started and not failed and all(marker(s, 'MATCHED') and set(current[s]) == set(expected[s]) for s in 'AB'):
                 # Recheck both children after this iteration's complete maps.
@@ -296,7 +307,7 @@ def run_lifecycle_acceptance():
             raise ValueError('input binding or release')
         texts = {s: (args.output / (s + '.stdout')).read_text(encoding='utf-8') for s in 'AB'}
         pids = {s: p.pid for s, p in processes.items()}
-        result['business'] = analyze_lifecycle(texts, run, pids)
+        result['business'] = analyzer(texts, run, pids)
         for index, side in enumerate('AB'):
             stderr = (args.output / (side + '.stderr')).read_text(encoding='utf-8')
             combined = texts[side] + '\n' + stderr
