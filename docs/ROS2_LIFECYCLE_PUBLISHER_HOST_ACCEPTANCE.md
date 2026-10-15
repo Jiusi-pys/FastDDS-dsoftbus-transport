@@ -70,7 +70,7 @@ or absence of queued data after the last spin.
 | Deactivate/reactivate with stable writer identity | Supported in the tested sequence | Same public GID and actual receive GIDs, two active phases |
 | Reliable/volatile/KeepLast(10) | Observed for this scenario | Both endpoints query actual QoS; not a broad QoS conformance result |
 | Original lifecycle failure/recovery behavior | Host regression PASS | Full R15 scenario re-executed through modified runner |
-| Loaned, serialized and generic publication APIs | Unverified | Only the two named overloads exercised |
+| Loaned, serialized and generic publication APIs | Not tested by R16; independent R17 typed serialized Host acceptance is partial | R16 exercised only its two ordinary managed overloads. See [R17 typed serialized acceptance](ROS2_SERIALIZED_HOST_ACCEPTANCE.md); generic/loaned/lifecycle-serialized APIs remain unverified |
 | Concurrent publish/transition, restart, reconnect and stress | Unverified | Serialized callbacks and bounded fixed sequence |
 | Security-enabled lifecycle publisher | Unverified | Non-security default package only |
 | Native DSoftBus / RK3588A / cross-device | BLOCKED, unverified | No observed HDC target in latest discovery; prior owner permission blocker unresolved |

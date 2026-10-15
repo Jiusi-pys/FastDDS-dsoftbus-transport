@@ -175,7 +175,7 @@ class LifecycleReceiptTests(unittest.TestCase):
         cases = ('complete', 'complete_after_incomplete', 'alternating_incomplete', 'previously_seen_missing',
                  'peer_exit_zero', 'peer_exit_nonzero', 'wrong_path', 'wrong_hash', 'changed_seen_hash',
                  'mapping_exception', 'mapping_process_gone')
-        for scenario, case in itertools.product(('lifecycle', 'managed-publisher'), cases + ('required_module_missing',)):
+        for scenario, case in itertools.product(('lifecycle', 'managed-publisher', 'serialized'), cases + ('required_module_missing',)):
             with self.subTest(scenario=scenario, case=case), tempfile.TemporaryDirectory() as directory:
                 scratch = Path(directory)
                 host, ros, dds = (scratch / n for n in ('host', 'ros', 'dds'))
@@ -190,6 +190,11 @@ class LifecycleReceiptTests(unittest.TestCase):
                         'std_srvs__rosidl_typesupport_cpp.dll', 'std_srvs__rosidl_typesupport_fastrtps_cpp.dll')]
                 extra = [ros / 'bin' / n for n in (
                     'lifecycle_msgs__rosidl_typesupport_c.dll', 'lifecycle_msgs__rosidl_typesupport_fastrtps_c.dll')]
+                if scenario == 'serialized':
+                    files = files[:4] + [ros / 'bin' / n for n in (
+                        'rclcpp.dll', 'rcl.dll', 'rmw_fastrtps_cpp.dll', 'rmw_fastrtps_shared_cpp.dll',
+                        'std_msgs__rosidl_typesupport_cpp.dll', 'std_msgs__rosidl_typesupport_fastrtps_cpp.dll')]
+                    extra = []
                 for path in files + extra:
                     path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b'NOT_A_DLL_SYNTHETIC')
                 package = host / 'lib/cmake/FastDDSDSoftBusTransportRos2Host/FastDDSDSoftBusTransportRos2HostConfig.cmake'
@@ -214,7 +219,8 @@ class LifecycleReceiptTests(unittest.TestCase):
                         self.side = command[1]; self.pid = 9001 if self.side == 'A' else 9002; self.returncode = None
                         processes[self.side] = self
                         for local, event, fields in ((1, 'READY', 'namespace=/lifecycle_' + command[2]), (2, 'MATCHED', 'nodes=2')):
-                            prefix = 'LIFECYCLE_ACCEPT' if scenario == 'lifecycle' else 'PUBLISHER_ACCEPT'
+                            prefix = {'lifecycle':'LIFECYCLE_ACCEPT', 'managed-publisher':'PUBLISHER_ACCEPT',
+                                      'serialized':'SERIALIZED_ACCEPT'}[scenario]
                             stdout.write(f'{prefix} run={command[2]} side={self.side} pid={self.pid} local={local} event={event} {fields}\n'.encode())
                         stdout.flush()
                     def poll(self): return self.returncode

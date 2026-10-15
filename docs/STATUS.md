@@ -720,3 +720,60 @@ remains NOT VERIFIED. Security-enabled publication, loaned/serialized/generic
 APIs, concurrent transition/publication, restart/reconnect remain UNVERIFIED.
 R14 strict 20 writes / 19 takes and ten opaque frames per side remain FAIL.
 No aggregate completion percentage is claimed.
+
+
+## Typed serialized publication Host acceptance (R17 FIX1, 2026-10-15)
+
+R17 adds a standalone typed serialized consumer/oracle and fixed serialized
+scenario in the shared runner. The existing default-2145 SECURITY OFF /
+STATISTICS OFF Host package is unchanged. Two sequential request/reply exchanges
+use the SerializedMessage wrapper then raw rcl_serialized_message_t publish
+overload in both directions, with 17/4096-byte bodies and exact full application
+payload checks. Each process has one application publisher/subscription, plus
+ROS auxiliary endpoints. The TCP-backed Host fake Socket seam is not native
+OpenHarmony DSoftBus; no production Transport/DDS/RTPS/RMW change is present.
+
+The original R17 run c5d261aa51080285 remains FAIL: both children exited 4,
+A serialized_bounds and B bounded_wait_expired, zero serialization/attempt/
+return/receive business records. Numeric bounds and the exact failed conjunct
+were NOT_CAPTURED; later values cannot be backfilled. FIX1 follows the pinned
+rmw_fastrtps_cpp 8.4.3 source assigning both exposed length/capacity fields to
+data_length. Before remains 8192; after must equal length with full application
+payload bytes < length <=8192. This is an implementation-specific field contract,
+not physical heap shrinking or a general ROS capacity promise.
+
+Independent FIX1 initial testing passed; agentic review found no actionable
+findings. Final independent testing passed three fresh MSVC x64 Release /MD
+C++17 builds, twenty-five model methods (including 36 barrier subcontrols),
+sixty parser cases and one final actual window per R15/R16/R17 scenario.
+R17 final f9333cf6b0dc4fd7 (A 24196 / B 53532) passed two exchanges and four each
+serializations/attempts/returns/typed receives. New numeric diagnostics measured
+A 70/4149 and B 68/4147 after-capacity=length, before 8192. Both exited 0, no kill or
+timeout, ports 65508/65510 allow exclusive rebind; current modules are 10/10 with
+both polls None. R15/R16 regressions also passed all original business oracles.
+
+Strict full_host/counter reconciliation retains real shutdown observations:
+R15 B has 5 adapter Closing/InvalidState pre-Bridge rejections; R16 A has 14;
+R17 has 0. Final R17 A 52 / B 53 ingress are all admitted/charged/refunded. Each final
+process retains two DDS Error lines; EOF/WSA10004 remain recorded. Complete
+accounting and business PASS do not imply zero errors, payload causality, or an
+explanation for earlier failures. Payload causality remains NOT_OBSERVED.
+
+See [typed serialized Host acceptance](ROS2_SERIALIZED_HOST_ACCEPTANCE.md) for
+exact commands/environment, artifact/module hashes, initial FAIL/FIX1/final
+receipts and capability matrix. Generic dynamic-loader prerequisites were
+identified in planning, not as an observed runtime failure. Loan capability was
+not measured; DataSharing OFF does not prove all publisher loans unsupported.
+Only the inspected exact-version GenericSubscription handle_loaned_message is
+not implemented; generic serialized delivery is a distinct unverified path.
+Lifecycle-serialized APIs, arbitrary sizes/fragmentation, zero-copy, security,
+concurrency and restart/reconnect remain UNVERIFIED.
+
+Main's read-only hdc list targets -v at 14:12 UTC exited 0 with empty output and
+no target entries, not a physical-disconnection diagnosis. No board/permission
+operation occurred; the last DENIED permission evidence is still 2026-10-14 and was
+not rechecked. DEVICE_TESTED=false; native/cross-device BLOCKED; overall ROS2
+over native DSoftBus NOT VERIFIED. R14's 20 writes/19 takes and ten opaque frames
+per side remain FAIL. Tester Commit gate PASS is Host-scoped; Main graph/
+PRE_COMMIT, commit/push and CI remain pending separate receipts at this snapshot.
+No aggregate completion percentage is claimed.
