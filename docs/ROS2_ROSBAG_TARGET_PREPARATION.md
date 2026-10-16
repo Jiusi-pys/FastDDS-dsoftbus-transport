@@ -1,15 +1,65 @@
 # R19 ROS 2 target rosbag preparation
 
-Evidence snapshot: 2026-10-15, after pluginlib canonical final at 23:19:16 UTC.
+Current evidence snapshot: 2026-10-16 07:19 UTC, after seven-object final verification.
 This records build/configuration prerequisites. **Actual rosbag recording,
-reading or replay over native DSoftBus is not yet verified.** The workspace
+reading or replay over native DSoftBus is not yet verified.** The historical implementation
 source baseline is published R18 `48c01f2597bf16db1ed35fbd79cc5c32826f0ab8`.
 Preparation sources and receipts below live in the original checkout's ignored
 `build/r19-rosbag-preparation/`; current class_loader/pluginlib build and install
 outputs live in its sibling `build/r19next1/`. These are local evidence, not
 artifacts included in the remote Git repository by this documentation commit.
 
-## Current storage configuration qualification (2026-10-16 05:53 UTC snapshot)
+## Current seven-object qualification (2026-10-16 07:19 UTC pre-publication snapshot)
+
+Canonical final **ORIGINAL_GENERATED_7_OBJECTS_COMPILED_AND_STATICALLY_CHECKED**
+has Commit gate PASS only for this bounded stage, with mandatory
+**STOP_BEFORE_DSO_LINK**. Formal post-test review found no actionable blocking
+findings or required source/collector fix. Final verification at
+07:11:59–07:13:06 UTC was pure replay and fresh guards, exit 0, with no new
+compiler, configure, Ninja, link, readelf, install or device execution.
+
+Seven original generated compiler commands ran serially, once each, at
+06:52:51–06:53:17 UTC: all exited 0 without timeout, with empty stdout and
+exactly one newly authorized unused `--gcc-toolchain` warning per job. The
+complete expanded Ninja argv, including both original `-MD` occurrences and
+`-MT/-MF`, was retained. This was direct object compilation, not a Ninja package
+build. All seven outputs passed bounded ELF64 little-endian AArch64 ET_REL
+checks. Unique dependencies were 774/588/793/630/834/775/776 (union 846).
+
+The source-local private-header omission remains a historical pretest P2
+BLOCKED result. FIX1 added only its precise binding (4,898 total inputs);
+object-05 actually consumed `storage_factory_impl.hpp`. `ilog2.hpp` was absent
+from these seven depfiles, but its general source/search case remains UNKNOWN.
+The old 78 files stayed unchanged; exactly seven objects and seven depfiles
+were added, giving 92 files/132 members. Final fresh guards passed 18,383 file
+records, 173 memberships, 24 seals, 154 absences and all four checkout states.
+Protection is per-job terminal snapshots plus before/after guards, not realtime
+filesystem monitoring or complete transient-file/child-process/DLL closure.
+
+The failed relative-path preparation probe is retained. Before any RUN_START
+or compiler, collector V2 precisely bound Main's already-recorded Git LF/CRLF
+stderr and strengthened complete binary-diff hashes; original collectors and
+manifests remain intact. Two reviewer representation mistakes and their narrow
+corrections are retained. The final replay introduced no failure. Earlier
+configuration FAIL/STOP records and the five-string FIX2A repair remain history.
+
+**Complete Ninja package BUILDS is NOT VERIFIED. DSO link, actual final link
+inputs, install/RPATH, plugin runtime, local Writer/Reader and device tests are
+NOT_RUN; HOST_TESTED=false and DEVICE_TESTED=false.** SDK .32 versus board .31,
+and host generator 4.6.7 versus target runtime 4.6.9, have no general compatibility
+qualification. Bare `-lrt` has not been resolved by a final link. Next is a
+separately bounded final-DSO link with actual-input and installation oracles,
+then SQLite/cpp/local I/O. Overall ROS 2/native DSoftBus remains NOT VERIFIED.
+
+The last confirmed publication is `b94fa6f6375c541b3170e7fc73fea1633a5ac1cb`
+on existing `origin/codex/flow-encoding-published-20261014`. Its 06:02:41 UTC
+CI snapshot was NOT_RUN (zero workflows/checks/status contexts), recorded in
+`storage-configure-main-publication`. This pre-publication snapshot does not
+predict this stage's commit or CI; Main's later publication receipt owns those
+outcomes. Native permission/recovery blockers and local-component boundaries
+below remain unchanged. Dated earlier sections are historical snapshots.
+
+## Earlier storage configuration qualification (2026-10-16 05:53 UTC snapshot)
 
 FIX2A has final **CONFIGURE_INPUTS_AND_ID_ABI_STATIC_QUALIFIED**, with terminal
 **STOP_BEFORE_ORDINARY_OBJECTS**. Its sole configure ran at 05:19:53–05:19:55 UTC,
@@ -402,8 +452,9 @@ limit; UNVERIFIED does not mean inherently impossible.
 | Host-aware ament prefix helper and private Config shim | SUPPORTED / HOST_CONFIGURATION_TESTED within exact cases | Four isolated scripts and three real-ament dummy configurations; host installation unchanged; no ROS build or full process-input closure. |
 | Fresh pluginlib-first dependency discovery | SUPPORTED / HOST_CONFIGURATION_TESTED in one fixed root scope | FIX1 actual ament→pluginlib→vendor/module→CONFIG adapter order passed without TinyXML preloading; exact SDK dl data selection required; no runtime claim. |
 | class_loader/pluginlib runtime | UNVERIFIED / NOT_RUN | No real plugin DSO discovery/load/unload or ClassLoader lifecycle execution. |
-| rosbag2_storage configuration inputs and compiler ID/ABI | SUPPORTED within bounded static scope | FIX2A initial/review/final PASS; STOP_BEFORE_ORDINARY_OBJECTS; not storage BUILDS or HOST_TESTED. |
-| rosbag2_storage ordinary build/static installation | UNVERIFIED / NOT_RUN | Seven original objects, final DSO, actual link dependencies and install/RPATH still require execution evidence. |
+| rosbag2_storage configuration inputs and compiler ID/ABI | SUPPORTED within bounded static scope | FIX2A initial/review/final PASS; configuration-stage boundary retained historically; no general ABI/runtime compatibility claim. |
+| rosbag2_storage seven individual ordinary objects | PASS: compiled and statically checked | Seven unchanged generated argv, actual depfiles and AArch64 ET_REL outputs; final replay PASS; STOP_BEFORE_DSO_LINK. |
+| rosbag2_storage complete Ninja package / DSO / installation | UNVERIFIED / NOT_RUN | Direct object execution does not prove package BUILDS or HOST_TESTED; final link inputs, DSO and install/RPATH remain unexecuted. |
 | Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Next bounded rosbag consumer; no actual rosbag I/O evidence yet. |
 | Independent SQLite send-timestamp persistence | UNSUPPORTED in inspected source; runtime NOT_RUN | Current schema/write/read retain receive timestamp only; distinct send/receive runtime case remains required, with no invented returned-value claim. |
 | Plugin XML/ament-index/typesupport resource discovery | PARTIAL | Metadata bytes and six host CMake resources checked; target runtime XML/plugin/typesupport discovery unverified. |
@@ -438,8 +489,9 @@ The old read-only storage-readiness report and 19-command sketch remain
 historical, not execution authority. Current FIX2A qualifies the actual
 rosbag2_storage 0.26.11 configure path and ID/ABI evidence with 77 bound imported
 locations. It does not establish their ABI/runtime compatibility. Seven original
-translation units remain uncompiled; actual ordinary dependencies/link inputs
-and an install oracle derived from the final DSO/scripts are still required.
+translation units now have qualified individual object/dependency evidence;
+actual final link inputs and an install oracle derived from the DSO/scripts
+are still required.
 
 Current storage defaults to `mcap`; the future fixed String local round trip
 must explicitly choose `sqlite3`, with matching CDR serialization, close/reopen
@@ -477,6 +529,18 @@ local evidence; remote readers need the separately retained files to recheck it.
 
 | Receipt | SHA256 |
 | --- | --- |
+| `rosbag-storage-objects-pretest-review/RESULT.json` | `3da7a937d50683a9eb443aacfa587b33a29ac45a6968df0ec363c3bcc7d0a090` |
+| `rosbag-storage-objects-fix1-candidate/RESULT.json` | `aed715fde9c8eeafa9282d3e1dfc5690dd701c8ac685e174a3b22785f0c0126f` |
+| `rosbag-storage-objects-fix1-test/RESULT.json` | `4575e7bbffd9321e18bc264208ec455c079c4e9809b1d056313b764cf6fe7d50` |
+| `rosbag-storage-objects-fix1-test/EVIDENCE_MANIFEST.json` | `02c14feb535f75e70986ec4b6ea02f3fcbcbf8470aa8249ce69b9007a7422eb0` |
+| `rosbag-storage-objects-fix1-posttest-review/RESULT.json` | `d2c52116b1c219430d1934fa6bf0a214d84c20f0cdbc3e0bbacf3c2a05ecc615` |
+| `rosbag-storage-objects-fix1-posttest-review/EVIDENCE_MANIFEST.json` | `1afbf75e5847c664541c402e1f88d1d8059e0bddc134bc98ee0e8d908fa95671` |
+| `rosbag-storage-objects-fix1-final-test/RESULT.json` | `213f29ddb387f18d1006f500913a1c77afba986a6d2614290e82b465149003b7` |
+| `rosbag-storage-objects-fix1-final-test/REPORT.md` | `a6b86c1bd63516089e9189d026502a65b4bcad9bea34a63373588c39d346e5b2` |
+| `rosbag-storage-objects-fix1-final-test/EVIDENCE_MANIFEST.json` | `cdc75797f8a8506192b2b4a918da04b027103cadb9ca365ce30293be974033ba` |
+| `storage-configure-main-publication/PUBLICATION_RESULT.json` | `47b65aeb1552a5a6d680b472ee9ec8615a24de6765e304484b9744a7157adc4f` |
+| `storage-configure-main-publication/CI_RESULT.json` | `14fc30bdd162e3df4c5eb7f203fced4d0192ad023e07e99adb6511170a33eebf` |
+| `storage-configure-main-publication/EVIDENCE_MANIFEST.json` | `eb0b15049e5d88783e72324a94221dce9af26022f0a491b28a9ea5ce33c0be57` |
 | `rosbag-storage-fresh-test/RESULT.json` | `a942eff6adcc7a5069e24db2e4d9a26b80683e301c0b050d938e80d9f2cc466f` |
 | `rosbag-storage-generator-fix1-test/RESULT.json` | `5aea4f265b3b4350ea5c7d4e6332eee11d15ac17da471749befd068cc6f8c836` |
 | `rosbag-storage-generator-fix2-pretest-review/RESULT.json` | `fab7efd805467aa888da710bb29bcc3b2ace3c1934c90ca1d6839923e4e4039a` |

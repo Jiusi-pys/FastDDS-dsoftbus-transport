@@ -1,6 +1,51 @@
 # Project status
 
-## R19 storage configuration evidence (2026-10-16 05:53 UTC snapshot)
+## R19 seven storage objects (2026-10-16 07:19 UTC pre-publication snapshot)
+
+Final **ORIGINAL_GENERATED_7_OBJECTS_COMPILED_AND_STATICALLY_CHECKED** has
+bounded Commit gate PASS, with **STOP_BEFORE_DSO_LINK**. Seven original expanded
+Ninja compiler argv ran directly and serially at 06:52:51–06:53:17 UTC, once
+each, all exit 0. The original flags remain unchanged; every stdout is empty
+and each job has the exact newly authorized unused `--gcc-toolchain` warning.
+Actual depfiles select 846 distinct dependencies, and all seven outputs pass
+bounded AArch64 ET_REL checks. This does not establish a complete Ninja package
+BUILDS or HOST_TESTED result.
+
+Formal post-test review found no blocking finding or required source fix.
+Final testing at 07:11:59–07:13:06 UTC replayed the unchanged objects/dependencies
+and refreshed guards, with no new compile/configure/Ninja/link/readelf/install/
+device command or final failure. The old 78 files remain unchanged; fourteen
+object/depfile additions give 92 files/132 members. Fresh 18,383 file records,
+173 memberships, 24 seals, 154 absences and full four-tree Git guards passed.
+These are per-job terminal snapshots and before/after protection, not realtime
+filesystem or complete child-process/OS closure.
+
+The original private-header pretest P2 BLOCKED record remains; FIX1 added its
+exact binding, actually consumed by object-05. The general `ilog2.hpp` search
+case remains UNKNOWN despite non-consumption in all seven jobs. The failed
+relative-root preparation probe, original collector sources, precise pre-run
+V2 Git-warning/full-diff correction, two reviewer representation errors and
+all earlier configuration failures remain retained in local evidence.
+
+**Final DSO link, actual final link inputs, install/RPATH, plugin runtime,
+local Writer/Reader and device acceptance remain NOT_RUN.** SDK .32/board .31
+and generator 4.6.7/target runtime 4.6.9 compatibility remain unverified; bare
+`-lrt` final selection is untested. Next is a separate bounded final DSO link
+and installation oracle, then SQLite/cpp/local I/O. Native communication remains
+BLOCKED by the missing complete project-only recovery record and lossless
+restore route; the automatic approval rejection of the whole-registry route
+was not retried. DATASYNC remains NOT_QUERIED and permissions unchanged.
+Overall R19/native ROS 2 remains NOT VERIFIED.
+
+The preceding stage was published as `b94fa6f6375c541b3170e7fc73fea1633a5ac1cb`
+on existing `origin/codex/flow-encoding-published-20261014`; its 06:02:41 UTC
+CI observation was NOT_RUN (zero workflows/checks/status contexts), recorded
+in `storage-configure-main-publication`. Main's subsequent publication receipt
+records this stage's graph/PRE_COMMIT, commit/push and CI outcome. See
+[target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for the capability matrix
+and exact local evidence hashes. Earlier dated sections retain their history.
+
+## Earlier R19 storage configuration evidence (2026-10-16 05:53 UTC snapshot)
 
 Independent final testing reports **CONFIGURE_INPUTS_AND_ID_ABI_STATIC_QUALIFIED**,
 with mandatory terminal **STOP_BEFORE_ORDINARY_OBJECTS**. The one FIX2A
