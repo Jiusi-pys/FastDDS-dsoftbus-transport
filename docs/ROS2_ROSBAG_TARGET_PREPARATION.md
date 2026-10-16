@@ -1,15 +1,112 @@
 # R19 ROS 2 target rosbag preparation
 
-Current evidence snapshot: 2026-10-16 09:25 UTC, after original installation final verification.
+Current evidence snapshot: 2026-10-16 11:42 UTC, after SQLite package post-review final static verification.
 This records build/configuration prerequisites. **Actual rosbag recording,
 reading or replay over native DSoftBus is not yet verified.** The historical implementation
 source baseline is published R18 `48c01f2597bf16db1ed35fbd79cc5c32826f0ab8`.
 Preparation sources and receipts below live in the original checkout's ignored
-`build/r19-rosbag-preparation/`; current class_loader/pluginlib build and install
-outputs live in its sibling `build/r19next1/`. These are local evidence, not
+`build/r19-rosbag-preparation/`; class_loader/pluginlib outputs live in its sibling
+`build/r19next1/`; current SQLite package build/install is in `build/r19sqlite2/`. These are local evidence, not
 artifacts included in the remote Git repository by this documentation commit.
 
-## Current original installation qualification (2026-10-16 09:25 UTC pre-publication snapshot)
+## Current SQLite plugin package qualification (2026-10-16 11:42 UTC pre-publication snapshot)
+
+Final **SQLITE_PLUGIN_PACKAGE_BUILT_INSTALLED_STATICALLY_QUALIFIED** has
+bounded Commit gate PASS for the complete original rosbag2_storage_sqlite3
+0.26.11 package build and static installation only, with
+**STOP_BEFORE_CONSUMER_RUNTIME_OR_DEVICE**. OHOS SDK23 arm64-v8a/c++_shared
+builds all three original C++ translation units and preserves the original
+Python package/setup.cfg copies, generated setup.py/egg_info and compileall.
+BUILD_TESTING=OFF is the pre-authorized artifact scope; upstream unit/gmock/lint
+tests are NOT_RUN and static audits do not substitute for them.
+
+Five frozen commands each ran once, all exit 0 without timeout: configure
+PID 71444, Ninja build 58952, build readelf 73712, original install 43516 and
+installed readelf 65388. Seven original Ninja actions are three compiles, one
+shared link, two copies and egg_info. Exact stage files/members were 79/119,
+97/139 and 132/194; the final tree contains 132 files and 62 directories.
+Installation has 23 original copy operations, 33 exact-byte copies, the native
+manifest and a fresh pyc. The installed DSO is a distinct-identity exact copy
+of the 879,024-byte build DSO, SHA256
+`3f14707f37781f8db77e61232d78f1639002c51767ed3ee914780410286e09fd`.
+Both are ELF64 little-endian AArch64 ET_DYN with SONAME
+`librosbag2_storage_sqlite3.so`, 80 DT_NEEDED and no RPATH/RUNPATH. These
+static observations do not prove runtime dependency/undefined-symbol closure.
+
+FIX2 corrects the old candidate's omitted second package-metadata generator:
+the Python helper's function scope and final root-scope ament_package each
+invoke the original generator. The exact contract has 19 child occurrences,
+including both distinct parent chains. No upstream package/ament/RTPS/DDS or
+DSoftBus implementation was changed to accommodate it. Original FIX1 remains
+BLOCKED, with its 79-file/119-member tree unchanged. Earlier parser STOPs,
+developer-only audit results and Windows alias corrections remain recorded;
+none is retroactively relabeled PASS.
+
+Independent formal agentic review found no actionable findings (Tier 2) and
+requested no code change. Final tester PID 50752 ran 11:33:01-11:36:14 UTC,
+exit 0, empty stderr and no timeout. It rechecked the five historical receipts,
+their full snapshots and canonical audits; these commands were not rerun.
+Fresh current-tree install/installed-ELF audits and immutable configure/build
+components passed. Full before/after guards matched 26,278 protected file
+records, 41 historical seals, all four Git states, old SQLite 79/119 and storage
+138/194. Candidate/implementation/initial/review seal closures covered 698
+entries. Historical full configure/build/preinstall stage APIs were not called
+on the final installed tree, where their phase-specific absence/membership
+conditions no longer hold. No assertion was mocked or weakened. The final
+platform-probe, Windows argv and tuple/JSON harness failures remain retained
+with narrow tooling corrections; they were not target-package failures.
+
+Windows physical `Lib` and the original manifest's `lib` have the same native
+directory identity. Raw spelling is preserved; case-sensitive board layout is
+NOT_TESTED. The 519-byte host Python 3.12.3 pyc passed exact-source header and
+two recursive CodeType/filename checks without import or execution. The
+compileall child exit remains NOT_CAPTURED, and board Python/CLI compatibility
+is NOT_TESTED. Original host hooks/Windows absolute metadata, POSIX setup and
+relocation gaps remain. SDK .32/board .31 compatibility, transitive constructors
+and actual plugin load are unqualified. Finite hashes and terminal snapshots
+do not establish continuous OS/process/DLL monitoring.
+
+**BUILDS=true; static_install=PASS; HOST_TESTED=false, HOST_RUNTIME=false,
+DEVICE_TESTED=false, INTEGRATION_TESTED=false; overall NOT VERIFIED.** No
+C++ plugin load, Python CLI import, raw/typed SQLite write-close-reopen-read,
+loader, rosbag device or cross-board runtime has run. Device/integration tests
+are N/A to this narrow static stage, and remain required for runtime claims.
+Independent send-timestamp persistence is unsupported in inspected source;
+its exact runtime behavior remains untested.
+
+Next is the complete original rosbag2_cpp 0.26.11 package, followed separately
+by explicit sqlite3/cdr fixed std_msgs/msg/String local write-close-reopen-read.
+Sealed source-only readiness found all 13 direct dependency Config paths and
+20 original source-list entries/19 unique TUs; retain the duplicate source
+entry and inspect the actual generated graph. No cpp configure/build/install
+or consumer runtime is qualified by these notes. Preserve package-relative
+lib/share, plugin XML/index and real String definitions; check raw topic/type/
+format/count/order/receive timestamps plus typed payload and resource release.
+No Node/Participant is needed by the inspected local APIs, but transitive
+initializers remain untested and unexpected Transport/identity use must stop
+the future run. Windows fake-TCP/stub evidence is not real DSoftBus evidence.
+
+Native ROS 2/Actions/cross-board work still requires the full project-specific
+fastdds_dsoftbus_probe original token record and supported lossless recovery
+route. Existing conditional temporary permission authorization remains; the
+whole-registry route was rejected by automatic approval review and was not
+retried. No permission/security change or new device test occurred here.
+
+The separate 09:34:08 UTC read-only board receipt observed both USB Connected,
+OpenHarmony 6.1.0.31/Linux 6.6.101 aarch64, with 86,574,196/89,171,888 KiB
+available on the reported filesystem. Seven HDC client exits were 0 with empty
+stderr; independent remote exit was not captured. No deployment, permission
+query/change or runtime occurred. This historical resource observation neither
+asserts current connectivity nor establishes DEVICE_TESTED.
+
+Last confirmed publication is `a8afcba30f27a358172f24b19c6fbc465ce327fc` on
+existing `origin/codex/flow-encoding-published-20261014`, remote
+`git@github.com:Jiusi-pys/FastDDS-dsoftbus-transport.git`. Its 09:30:56.023975 UTC
+CI snapshot is NOT_RUN (zero workflows/checks/status contexts), retained in
+`storage-install-main-publication`. This pre-publication snapshot does not
+predict a new commit/CI result. Main owns graph/PRE_COMMIT and publication.
+
+## Earlier original installation qualification (2026-10-16 09:25 UTC pre-publication snapshot)
 
 Canonical final **ORIGINAL_STORAGE_INSTALL_AND_STATIC_QUALIFICATION** has
 bounded Commit gate PASS with **STOP_BEFORE_CONSUMER_OR_RUNTIME**. The original
@@ -536,7 +633,12 @@ limit; UNVERIFIED does not mean inherently impossible.
 | rosbag2_storage original installation/static tree | PASS within bounded static scope | Original script executed once; 42 byte-exact copies and generated manifest; final PASS; STOP_BEFORE_CONSUMER_OR_RUNTIME. |
 | rosbag2_storage POSIX setup / relocation | PARTIAL / UNVERIFIED | local_setup.sh absent; bat plus empty dsv and Windows absolute parent prefixes remain. Consumer/library callability has not been tested. |
 | rosbag2_storage complete Ninja package / consumer | UNVERIFIED / NOT_RUN | Separate compile/link/install qualifications do not establish a complete Ninja package build, consumer execution or HOST_TESTED. |
-| Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Next bounded rosbag consumer; no actual rosbag I/O evidence yet. |
+| Original rosbag2_storage_sqlite3 0.26.11 complete Ninja package | SUPPORTED / BUILDS, final static PASS | Three original TUs plus Python copies/setup.cfg/egg_info; seven original Ninja actions. Upstream unit/gmock/lint NOT_RUN under BUILD_TESTING=OFF. |
+| SQLite plugin original installation/static ELF | PASS within bounded static scope | 23 operations/33 copies, native manifest and fresh pyc; installed exact-copy DSO 879,024 bytes, 80 NEEDED, no RPATH/RUNPATH; no runtime closure. |
+| SQLite Windows Lib/lib staging | PARTIAL | Actual same-directory identity, original raw manifest preserved; case-sensitive target layout NOT_TESTED. |
+| SQLite Python CLI/bytecode compatibility | PARTIAL static metadata only | Host 3.12.3 fresh pyc exact-source/header/two CodeType checks; child exit NOT_CAPTURED; no import or board Python/CLI test. |
+| rosbag2_cpp direct dependency/source readiness | SOURCE_INSPECTED only | 13 Config paths present, 20 source entries/19 unique TUs; configure/build/install/runtime NOT_RUN. |
+| Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Explicit sqlite3/cdr, raw and typed close/reopen checks remain future work; no actual rosbag I/O evidence yet. |
 | Independent SQLite send-timestamp persistence | UNSUPPORTED in inspected source; runtime NOT_RUN | Current schema/write/read retain receive timestamp only; distinct send/receive runtime case remains required, with no invented returned-value claim. |
 | Plugin XML/ament-index/typesupport resource discovery | PARTIAL | Metadata bytes and six host CMake resources checked; target runtime XML/plugin/typesupport discovery unverified. |
 | Full rosbag CLI / rosbag2_transport / arbitrary types / compression | UNVERIFIED / outside first planned acceptance | No completeness claim from the fixed-type path. |
@@ -611,6 +713,21 @@ local evidence; remote readers need the separately retained files to recheck it.
 
 | Receipt | SHA256 |
 | --- | --- |
+| `rosbag-sqlite-plugin-fix2-candidate/EVIDENCE_MANIFEST.json` | `49afc6f7bdccdb6758def66a8ce20b1fe0be4a6343f68f49ae8183d0712552e9` |
+| `rosbag-sqlite-plugin-fix2-audit-implementation/EVIDENCE_MANIFEST.json` | `a5a46c92a44db30c244148303bce31243ccb5a8bc6ea55f2335693cfb3e37801` |
+| `rosbag-sqlite-plugin-fix2-test/RESULT.json` | `ad6552b48a4955d89459a210a0cd59e0b05391dc10534e6f3109be68ff35f590` |
+| `rosbag-sqlite-plugin-fix2-test/EVIDENCE_MANIFEST.json` | `8bd53498a64a2f1562aa88773cd621dbec7c45066f1aa9c91208a81ebda18e66` |
+| `rosbag-sqlite-plugin-fix2-posttest-review/RESULT.json` | `6359ce7409ff28fce37d0be2f63078ba445aa8754a78a35b1acabf9d8e7ac18f` |
+| `rosbag-sqlite-plugin-fix2-posttest-review/EVIDENCE_MANIFEST.json` | `605fd059e9b5c014b2d25ba9e66b8bc0b6e99b4cdd6084572aa97d41da2e6cb2` |
+| `rosbag-sqlite-plugin-fix2-final-test/RESULT.json` | `17e978aabdf9fbceea60f81a0e6986aad90e527ef4540ab49a8541a239a23915` |
+| `rosbag-sqlite-plugin-fix2-final-test/REPORT.md` | `9464c362930cc19362b63e3abc69447ebdc921e33c2d1c56e65313ac1422e6a1` |
+| `rosbag-sqlite-plugin-fix2-final-test/EVIDENCE_MANIFEST.json` | `0e3645f01358b831984e1e77520f796beb66a90d14e75e82a59d2395ff8cf05e` |
+| `rosbag-cpp-readiness-notes/RESULT.json` | `c3a0aa6c84b0367bfe5c199717004c9e40f7d2afd3c32c7e6e1557ee2beec0a1` |
+| `rosbag-cpp-readiness-notes/EVIDENCE_MANIFEST.json` | `4429fe3be06856b972f8ae2035a71adbfb4f8ebb845b6a3a8b4b8d4e7aeea381` |
+| `storage-runtime-board-readiness/RESULT.json` | `2b9112d75469e9aaae16c27e67db85f0282d086a5d5907407c506d0d6231cc36` |
+| `storage-runtime-board-readiness/EVIDENCE_MANIFEST.json` | `5e0d6461c2ccb7d4644945eeb9203976f3cdc3bb9702dfcca11a3e728844564d` |
+| `storage-install-main-publication/PUBLICATION_RESULT.json` | `e46b08aa16e15502cbe5d14349025d978c7cb957baf3509b7e58c82e7a69e35c` |
+| `storage-install-main-publication/CI_RESULT.json` | `07aa9b6167e2cb5f0974f33759416cf2e844dbd1540efc9d8f0de8b4eef16b4b` |
 | `rosbag-storage-install-test/RESULT.json` | `4cf7199b53815ce4976a5755f328051ffe643c3898c01d1eaf3acc3a6021a65f` |
 | `rosbag-storage-install-test/EVIDENCE_MANIFEST.json` | `124a24ae1f20184f0a9bc32ec9525f4ac95449ee7888948d2c44024870c8880b` |
 | `rosbag-storage-install-posttest-review/RESULT.json` | `da016ad66d82b4fbd60782ec1865d1f31d86a6512d6af70d29f9294455d53788` |

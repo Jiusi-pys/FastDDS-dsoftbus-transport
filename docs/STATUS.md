@@ -1,6 +1,62 @@
 # Project status
 
-## R19 original installation qualification (2026-10-16 09:25 UTC pre-publication snapshot)
+## R19 SQLite plugin original-package static qualification (2026-10-16 11:42 UTC pre-publication snapshot)
+
+Final **SQLITE_PLUGIN_PACKAGE_BUILT_INSTALLED_STATICALLY_QUALIFIED** has
+bounded Commit gate PASS for the original rosbag2_storage_sqlite3 0.26.11
+package build/static install, with **STOP_BEFORE_CONSUMER_RUNTIME_OR_DEVICE**.
+All three original C++ TUs, Python two-copy/setup.cfg/egg_info/compileall actions
+were retained for OHOS SDK23 arm64-v8a/c++_shared. Configure/Ninja/build-readelf/
+install/installed-readelf each ran once, exit 0 without timeout (PIDs
+71444/58952/73712/43516/65388). Seven Ninja actions gave 97/139 build files/
+members; original installation's 23 operations/33 copies plus manifest/pyc
+gave 132 files/194 members/62 directories. Built/installed DSO bytes match:
+879,024 bytes, AArch64 ET_DYN, expected SONAME, 80 NEEDED, no RPATH/RUNPATH.
+
+FIX2 binds both original metadata generators in function and root scopes,
+correcting the old 18-child candidate to exact 19 without changing upstream
+source. FIX1 remains BLOCKED. Initial parser STOPs and alias corrections stay
+historical. Formal Tier 2 agentic review found no actionable issue or required
+code change. Final tester PID 50752 at 11:33:01-11:36:14 UTC exited 0, empty
+stderr/no timeout: historical receipts/snapshots/canonical audits, fresh live
+install/installed-ELF and immutable configure/build checks passed. Complete
+guards matched 26,278 protected records, 41 seals, four Git states, old SQLite
+79/119 and storage 138/194. No target command or historical full-stage API was
+rerun. Three final harness platform/argv/tuple-JSON failures remain retained
+with narrow tooling fixes; they were not package-command failures.
+
+Only **BUILDS/static_install PASS** is qualified. HOST_TESTED/HOST_RUNTIME,
+DEVICE_TESTED and INTEGRATION_TESTED remain false; overall **NOT VERIFIED**.
+Pre-authorized BUILD_TESTING=OFF leaves upstream unit/gmock/lint NOT_RUN.
+Windows Lib/lib native alias does not qualify case-sensitive board layout;
+host Python 3.12.3 fresh pyc static checks do not qualify board Python/CLI.
+Compileall child exit is NOT_CAPTURED. Original host hooks/absolute metadata,
+POSIX setup/relocation, target ABI/loader and transitive constructor gaps
+remain; 80 NEEDED is not runtime closure. No plugin load or raw/typed SQLite
+write-close-reopen-read ran. Independent send-timestamp persistence remains
+source-unsupported and runtime-untested.
+
+Next is the complete original rosbag2_cpp package, then a fixed String local
+SQLite consumer. Source-only readiness found 13 existing dependency Configs
+and 20 original source entries/19 unique TUs; no cpp build/runtime has run.
+Native ROS 2/Actions/cross-board still need the complete project-specific
+fastdds_dsoftbus_probe original token record and supported lossless restore.
+Existing temporary authorization remains conditional; whole-registry automatic
+approval rejection was not retried. No permission/security change or new device
+test occurred. Host fake-TCP/stubs do not prove real DSoftBus communication.
+The separate 09:34:08 UTC two-board USB/platform/space observations were
+read-only: seven HDC client exits 0/empty stderr, independent remote exit
+uncaptured, no deployment/runtime/permission query or change. They do not
+establish current connectivity or device acceptance.
+
+Last confirmed publication: `a8afcba30f27a358172f24b19c6fbc465ce327fc` on existing
+`origin/codex/flow-encoding-published-20261014`; its 09:30:56.023975 UTC CI was
+NOT_RUN in `storage-install-main-publication`. Main's later graph/PRE_COMMIT/
+publication receipt owns this stage's commit and CI. See
+[target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for the current matrix,
+artifact/evidence hashes and retained historical snapshots.
+
+## Earlier R19 original installation qualification (2026-10-16 09:25 UTC pre-publication snapshot)
 
 Final **ORIGINAL_STORAGE_INSTALL_AND_STATIC_QUALIFICATION** has bounded Commit
 gate PASS, with **STOP_BEFORE_CONSUMER_OR_RUNTIME**. The original install script
