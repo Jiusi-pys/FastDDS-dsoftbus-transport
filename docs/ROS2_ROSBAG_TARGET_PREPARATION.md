@@ -1,5 +1,116 @@
 # R19 ROS 2 target rosbag preparation
 
+Current evidence snapshot: 2026-10-16 14:38 UTC, after independent post-review
+offline String final testing. **Four String messages now persist through actual
+SQLite write-close-reopen and raw/typed reads on each RK3588A board separately.**
+
+| Stage | Current result / next work |
+| --- | --- |
+| Completed | Storage/SQLite/cpp artifact preparation; local String consumer and explicit runtime bundle; 20 host controls; fresh independent A and B local persistence runs PASS. |
+| Current boundary | Direct offline rosbag2 Writer/Reader, sqlite3/CDR, four fixed messages, cache disabled. Two local runs do not establish communication between boards. |
+| Remaining | Full CLI/record/replay, general types/sizes/concurrency/crash recovery, and native ROS 2/DSoftBus cross-board acceptance remain unverified. |
+| Major decisions | Keep this offline capability separate from native transport work. Preserve Fast DDS/RTPS semantics and Socket-only policy. No new major direction decision is needed; native communication still needs full current project-only token-state and supported lossless restoration material. |
+
+Implementation PRESENT; original build PASS, reused with complete current
+bindings; host controls PASS; DEVICE_TESTED=PASS only for the offline fixed-String
+stage on A and B. Local Writer/Reader + SQLite integration PASS within that scope.
+Native DSoftBus INTEGRATION_TESTED=false; cross-device NOT_EXECUTED; overall
+ROS 2 over native DSoftBus **NOT VERIFIED**. Upstream rosbag gmock tests remain
+NOT_RUN under the original package BUILD_TESTING=OFF artifact scope.
+
+Last confirmed publication remains cpp static-stage documentation commit
+`57311e0f45aae5bdaae3b4578ef917d2e3682c27` on existing
+`origin/codex/flow-encoding-published-20261014`. Its 13:42:47 UTC exact-SHA CI
+snapshot is NOT_RUN: zero workflows/check runs/status contexts. This offline
+stage has no claimed commit/CI outcome; Main owns graph/PRE_COMMIT/publication.
+Ignored local evidence/artifacts below are not uploaded by these document links.
+
+## Offline String persistence: current bounded acceptance
+
+The new fixture uses original rosbag2_cpp Writer/Reader, explicit sqlite3/CDR
+and a fresh absolute bag URI, without Node, rclcpp::init or Participant. It writes
+empty, ASCII, non-ASCII and final-marker strings; independent fixed CDR bytes,
+receive timestamps 1700000000000000000 + i*1000000 ns, order, topic
+`/local_string`, type `std_msgs/msg/String`, serialization format and count all
+match. The raw Reader validates the exact original 263-byte String.msg definition;
+a distinct Reader reopens after raw Reader destruction to check typed payloads.
+Independent retrieved-database inspection reports SQLite integrity_check=ok and
+matching rows/metadata. Both 28,672-byte databases have SHA256
+`ec0dc919934f7e66ba67f975d44067757e2e0fda88158d1755013cec7cc618f6`.
+
+| Final fresh local run | Board / target | UTC start | HDC / remote exit | Remote prefix suffix |
+| --- | --- | --- | --- | --- |
+| A | 3e01ff55454d202020104033bf453b00 | 14:37:29.834772 | 0 / 0 | 20261016T143727_final_a |
+| B | 3e01ff55454d202020104433991c3b00 | 14:37:41.978857 | 0 / 0 | 20261016T143739_final_b |
+
+Each prefix is `/data/local/tmp/r19_rosbag_local_<suffix>`. All deployment hashes
+matched before/after and retrieved evidence matched device hashes. After each
+Writer, raw Reader and typed Reader close/destruction, bag_fds=0 and task_count=2
+with the exact baseline thread-ID set restored. A PIDs 32437/32440/32443 and B
+16599/16602/16604 were absent afterward. These are bounded normal-path resource
+checks; prefixes and prior failure outputs are retained as evidence. Fixture
+deadline is 30 seconds after entry; external supervision bounds startup/run at
+40 seconds. No native identity or permission operation occurred.
+
+The maintained ELF packager adds explicit mutually exclusive --consumer-only
+and legacy --bridge modes, plus --dynamic-root for SQLite/typesupport DSOs that
+DT_NEEDED alone does not select. It preserves legacy flat members/receipt fields;
+roots metadata is additive, with dependency/SONAME/collision/platform checks and
+a 60-second readelf bound. The standalone test builder binds exact installed
+libraries/resources, including original package.xml files, YAML and spdlog vendor
+dependencies. The bundle contains 89 ELF members and 71 resources; libc.so is
+the sole external. Only two pinned runtime line-list indexes are converted from
+CRLF to LF with entries/order/final-newline presence checked and originals
+retained. XML/package.xml/.msg/.idl copies stay byte-identical. These adaptations
+do not change upstream ROS/Fast DDS/DSoftBus code or protocol semantics.
+
+Original actual build `build/r19baglocal3` started at 14:19:01.372991 UTC (driver
+PID 26908, exit 0); compile/link/readelf/package receipts all exit 0. The
+124,128-byte executable SHA256 is
+`9723cb68cfa852c2397e2375ff651423911c2c6b30c1e10238ea27ecb4269a6a`.
+Initial independent testing passed. Formal Tier 2 review found no actionable
+findings and required no fixes. Main explicitly selected unchanged-artifact
+reuse in `rosbag-local-main-publication/VALIDATION_SCOPE_DECISION.json` after
+review: final testing checked complete source/header/link/resource/provenance
+and artifact bindings before/after, reran all 20 host controls, and performed
+both fresh device runs. **The final tester did not recompile.** Its finite
+checks bind 1,816 files and 186 artifact files; original build evidence includes
+851 header occurrences and 97 link-archive members. Host controls use mocked
+ELF metadata/pure resource bytes, distinct from the actual build/device evidence.
+Final tester Commit gate PASS covers only this offline stage.
+
+ROS_DISTRO was unset and its warning remains in raw stderr. Optional ros_distro
+and type_description_hash are empty; offered_qos_profiles is []. No endpoint
+QoS, type-hash completeness or independent send-time persistence is claimed.
+Actual loading and plugin/resource discovery passed for this exact bundle on the
+observed boards; arbitrary relocation/POSIX setup, broader ABI/SDK compatibility,
+other target versions and transitive behavior outside this run remain unqualified.
+No CLI/record/replay, large/concurrent/cache-enabled data, crash durability or
+native DSoftBus/cross-device communication was exercised. Named native/identity
+DSOs were rejected in the fixture's observed maps; this is not continuous loader
+monitoring or a general isolation proof.
+
+Earlier failures remain FAIL: initial CRLF plugin-index validation stopped before
+compilation; FIX1 compiled/linked but packaging lacked libyaml.so; FIX2 packaged
+but board A exited 1 because the SQLite plugin package.xml was absent. FIX3
+adds the exact missing original resources/dependencies and passes, retaining all
+old outputs. Reviewer SQLite file-open harness failures and final tester's
+retained harness failure are evidence-tool events, not retroactive device passes.
+Native communication still lacks full current project-only token-state and a
+supported lossless restoration route. Whole-registry read/dump/filter access was
+previously rejected by automatic approval review and was not retried; this stage
+made no security change.
+
+See [fixture usage and limits](../tests/ros2_host/rosbag_string/README.md) for the
+existing host/build driver, actual bounded fixture invocation and evidence layout.
+Receipts live under the original checkout's ignored
+`build/r19-rosbag-preparation/rosbag-local-*`; bundle/build output is
+`build/r19baglocal3/`. Detailed canonical hashes appear in the local ledger.
+Earlier dated sections preserve their original static-stage status; the current
+overview and capability matrix govern this newer offline acceptance.
+
+## Earlier cpp static-stage snapshot (2026-10-16 13:29 UTC)
+
 Current evidence snapshot: 2026-10-16 13:29 UTC, after independent post-review
 rosbag2_cpp final static verification. **Storage, the SQLite plugin and
 rosbag2_cpp now have qualified target build/install artifacts. Local String
@@ -748,26 +859,26 @@ limit; UNVERIFIED does not mean inherently impossible.
 | TinyXML2-preloaded static consumers | SUPPORTED / BUILDS, final static PASS | Four positive/nine negative cases; five objects/links and 15 metadata files; no target execution. |
 | Host-aware ament prefix helper and private Config shim | SUPPORTED / HOST_CONFIGURATION_TESTED within exact cases | Four isolated scripts and three real-ament dummy configurations; host installation unchanged; no ROS build or full process-input closure. |
 | Fresh pluginlib-first dependency discovery | SUPPORTED / HOST_CONFIGURATION_TESTED in one fixed root scope | FIX1 actual ament→pluginlib→vendor/module→CONFIG adapter order passed without TinyXML preloading; exact SDK dl data selection required; no runtime claim. |
-| class_loader/pluginlib runtime | UNVERIFIED / NOT_RUN | No real plugin DSO discovery/load/unload or ClassLoader lifecycle execution. |
+| class_loader/pluginlib runtime | PARTIAL / selected offline runtime PASS | Actual SQLite plugin discovery/load in the fixed String fixture passed on A/B; general ClassLoader/list_plugins/unload/failure coverage remains unverified. |
 | rosbag2_storage configuration inputs and compiler ID/ABI | SUPPORTED within bounded static scope | FIX2A initial/review/final PASS; configuration-stage boundary retained historically; no general ABI/runtime compatibility claim. |
 | rosbag2_storage seven individual ordinary objects | PASS: compiled and statically checked | Seven unchanged generated argv, actual depfiles and AArch64 ET_REL outputs; final replay PASS; STOP_BEFORE_DSO_LINK. |
 | rosbag2_storage original DSO link/static inspection | PASS within bounded static scope | Actual original link/readelf, 97 inputs and AArch64 ET_DYN checks; final PASS; STOP_BEFORE_INSTALL; no loader/ABI/runtime claim. |
 | rosbag2_storage original installation/static tree | PASS within bounded static scope | Original script executed once; 42 byte-exact copies and generated manifest; final PASS; STOP_BEFORE_CONSUMER_OR_RUNTIME. |
-| rosbag2_storage POSIX setup / relocation | PARTIAL / UNVERIFIED | local_setup.sh absent; bat plus empty dsv and Windows absolute parent prefixes remain. Consumer/library callability has not been tested. |
-| rosbag2_storage complete Ninja package / consumer | UNVERIFIED / NOT_RUN | Separate compile/link/install qualifications do not establish a complete Ninja package build, consumer execution or HOST_TESTED. |
+| rosbag2_storage POSIX setup / relocation | PARTIAL | Original setup/absolute metadata gaps persist; explicit process-local bundle prefixes work in the tested offline fixture only. Arbitrary relocation/setup-only loading remains unverified. |
+| rosbag2_storage complete Ninja package / consumer | PARTIAL | Complete original Ninja package run still NOT_RUN; separate artifacts are qualified and the fixed offline cpp/SQLite consumer now passes on A/B. |
 | Original rosbag2_storage_sqlite3 0.26.11 complete Ninja package | SUPPORTED / BUILDS, final static PASS | Three original TUs plus Python copies/setup.cfg/egg_info; seven original Ninja actions. Upstream unit/gmock/lint NOT_RUN under BUILD_TESTING=OFF. |
 | SQLite plugin original installation/static ELF | PASS within bounded static scope | 23 operations/33 copies, native manifest and fresh pyc; installed exact-copy DSO 879,024 bytes, 80 NEEDED, no RPATH/RUNPATH; no runtime closure. |
 | SQLite Windows Lib/lib staging | PARTIAL | Actual same-directory identity, original raw manifest preserved; case-sensitive target layout NOT_TESTED. |
 | SQLite Python CLI/bytecode compatibility | PARTIAL static metadata only | Host 3.12.3 fresh pyc exact-source/header/two CodeType checks; child exit NOT_CAPTURED; no import or board Python/CLI test. |
 | Original rosbag2_cpp 0.26.11 complete package and static install | SUPPORTED / BUILDS, final static PASS | Unchanged 20 source entries/19 unique TUs; full Ninja all 20 actions; 54 exact copies; 176 files/247 members. Runtime, upstream gmock, plugin load and ABI qualification remain NOT_RUN/NOT_VERIFIED. |
-| Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Explicit sqlite3/cdr, raw and typed close/reopen checks remain future work; no actual rosbag I/O evidence yet. |
+| Fixed String typed Writer/Reader with SQLite, no compression | SUPPORTED / offline DEVICE_TESTED PASS | Four fixed messages, sqlite3/CDR, zero cache; exact raw CDR/receive-time/order/definition/metadata/count, distinct typed reopen and resource release pass separately on A/B. Not cross-device communication. |
 | Independent SQLite send-timestamp persistence | UNSUPPORTED in inspected source; runtime NOT_RUN | Current schema/write/read retain receive timestamp only; distinct send/receive runtime case remains required, with no invented returned-value claim. |
-| Plugin XML/ament-index/typesupport resource discovery | PARTIAL | Metadata bytes and six host CMake resources checked; target runtime XML/plugin/typesupport discovery unverified. |
+| Plugin XML/ament-index/typesupport resource discovery | PARTIAL / exact offline bundle PASS | Actual SQLite plugin and String typesupport/definition discovery pass with 89 ELF members/71 resources; two exact runtime indexes use audited CRLF-to-LF copies. General plugin/type discovery remains unverified. |
 | Full rosbag CLI / rosbag2_transport / arbitrary types / compression | UNVERIFIED / outside first planned acceptance | No completeness claim from the fixed-type path. |
 | Generic/loaned/zero-copy recording or replay | UNVERIFIED | Not measured by these library/configuration tests. |
 | Native discovery/reconnect, pub/sub, service/action and QoS under recording | UNVERIFIED for R19 | No R19 runtime or DSoftBus communication window. Historical other-stage results are separate. |
-| Serialization, large/fragmented messages, concurrency and resource release under rosbag load | UNVERIFIED | Fixed-type future test must establish its own bounds and cleanup. |
-| RK3588A rosbag or cross-device record/replay | UNVERIFIED / NOT_RUN | Device-tested loader rejection is a separate R18 claim. |
+| Serialization, large/fragmented messages, concurrency and resource release under rosbag load | PARTIAL | Four small fixed String serializations and three normal release phases pass; large/fragmented/concurrent/cache-enabled/crash cases remain unverified. |
+| RK3588A rosbag or cross-device record/replay | PARTIAL | Direct offline local Writer/Reader persistence passes independently on both boards; cross-device and CLI record/replay remain NOT_EXECUTED. |
 | Session API fallback | UNSUPPORTED by project policy | Only DSoftBus Socket API may carry transport traffic. |
 
 The dependency design targets tinyxml2_vendor 0.9.2, class_loader 2.7.1 and
@@ -799,7 +910,8 @@ and link/static evidence. The original installation now has final static-tree
 qualification; consumer discovery and target environment/relocation checks
 remain separate, unexecuted stages.
 
-Current storage defaults to `mcap`; the future fixed String local round trip
+The earlier source-only plan below predates offline acceptance. Storage defaults to
+`mcap`; the fixed String local round trip
 must explicitly choose `sqlite3`, with matching CDR serialization, close/reopen
 and exact payload/topic/timestamp/count checks. It still needs storage, cpp
 and the SQLite plugin. Source inspection supports a local single-board
@@ -835,6 +947,9 @@ local evidence; remote readers need the separately retained files to recheck it.
 
 | Receipt | SHA256 |
 | --- | --- |
+| `rosbag-local-fix3-test/SEALED_MANIFEST.json` (104 files; initial PASS) | `c92c1b324d136fd0c8715b4086a4436ab68295bb214ad47d03358748441484b0` |
+| `rosbag-local-posttest-review/SEALED_MANIFEST.json` (44 files; no actionable findings) | `ea5cf2a8f630c0df8376a5cf29c31d481da0b984cb28fb958f9e4c8155d01aee` |
+| `rosbag-local-final-test/SEALED_MANIFEST.json` (174 files; canonical final offline PASS) | `0482fbf1baf0f1c42b952dde499c9468f04a4fb981f44a278adb1159f49ea27d` |
 | `rosbag-cpp-fix4-test/EVIDENCE_MANIFEST.json` (51 files; initial PASS) | `baf05d57333b89e418937413f1bdc56225ed3c9b472440961f1dedb44b5435d7` |
 | `rosbag-cpp-posttest-review/EVIDENCE_MANIFEST.json` (50 files; Tier 2, no actionable findings) | `89edebae81438d30742aa24394f228bba8090f76a902cb4d1d232e4e9f84b0c5` |
 | `rosbag-cpp-final-test/EVIDENCE_MANIFEST.json` (96 files; canonical final PASS) | `7598390d48c30b862452168df8c597f125e0425361cfd14901b2aeaa7a497b27` |

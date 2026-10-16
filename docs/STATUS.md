@@ -1,6 +1,62 @@
 # Project status
 
-## Current R19 capability overview (2026-10-16 13:29 UTC)
+## Current R19 capability overview (2026-10-16 14:38 UTC)
+
+**Offline String persistence now passes on each RK3588A board independently:**
+actual SQLite write-close-reopen, exact raw CDR and separate typed readback.
+
+- Completed: storage/SQLite/cpp artifact preparation, local consumer/bundle,
+  20 host controls, fresh local A/B runs with four fixed messages, original
+  definition/metadata/time/order checks and resource release.
+- Current boundary: direct rosbag2 Writer/Reader, sqlite3/CDR, cache disabled;
+  two independent local runs do not establish communication between boards.
+- Remaining: general CLI/record/replay/types/sizes/concurrency/crash recovery
+  and native ROS 2/DSoftBus cross-board acceptance remain unverified.
+- Major decisions: retain the offline/native separation, original ROS/Fast DDS
+  semantics and Socket-only policy. No new major direction decision is needed.
+  Native communication still requires full current project-only token-state
+  and supported lossless restoration material.
+
+Initial testing passed; formal Tier 2 review found no actionable findings and
+required no fixes; final independent tester Commit gate PASS is scoped to offline
+String persistence. Original actual 14:19:01 UTC compile/link/readelf/package
+artifacts in build/r19baglocal3 were reused unchanged by explicit Main decision,
+with full current source/header/link/resource/provenance/artifact checks before
+and after; final testing did not recompile. All 20 host controls reran, and A/B
+device runs were fresh. Host controls are mocked ELF/pure byte checks; actual
+device execution supplies the local persistence evidence.
+
+At 14:37:29 UTC board A and 14:37:41 UTC board B each returned HDC 0/remote 0.
+Four exact raw CDR rows and nanosecond receive timestamps/order, String.msg
+definition, topic/type/CDR/count/file metadata, distinct typed Reader reopen and
+independent SQLite integrity_check=ok passed. Both 28,672-byte databases share
+SHA256 `ec0dc919934f7e66ba67f975d44067757e2e0fda88158d1755013cec7cc618f6`.
+All three close/destruction phases report bag_fds=0/task_count=2 with baseline
+thread IDs restored; all six supervised PIDs were absent afterward. Deployment
+and retrieved-file hashes passed. Device evidence is local-only; no native
+transport or identity operation occurred.
+
+Implementation/build/local integration PASS; DEVICE_TESTED=PASS for this exact
+offline fixture on A/B. Native DSoftBus INTEGRATION_TESTED=false, cross-device
+NOT_EXECUTED; overall ROS 2 over native DSoftBus NOT VERIFIED. ROS_DISTRO was
+unset (warning retained), optional ros_distro/type_description_hash are empty,
+and offered_qos_profiles=[]. No endpoint QoS, independent send-time persistence,
+full CLI/record/replay, large/concurrent/cache/crash-durability or general ABI
+claim is made. Upstream rosbag gmock tests remain NOT_RUN. Earlier CRLF-index,
+missing-libyaml packaging and missing-package.xml device failures remain FAIL;
+review/final harness failures are retained separately.
+
+Last confirmed publication remains cpp static-stage commit
+`57311e0f45aae5bdaae3b4578ef917d2e3682c27` on existing
+`origin/codex/flow-encoding-published-20261014`; exact-SHA CI at 13:42:47 UTC was
+NOT_RUN (zero workflows/checks/status contexts). Main graph/PRE_COMMIT and this
+stage's publication/CI remain separate pending receipts. Earlier whole-registry
+access was rejected by automatic approval review and was not retried; no new
+security change occurred. See [current target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md)
+and [fixture usage](../tests/ros2_host/rosbag_string/README.md) for bounded
+reproduction, exact device receipts and initial/review/final evidence seals.
+
+## Earlier R19 static-stage capability snapshot (2026-10-16 13:29 UTC)
 
 **Storage, the SQLite plugin and rosbag2_cpp have qualified target build/install
 artifacts. Local String write/read and native ROS 2/DSoftBus cross-board
