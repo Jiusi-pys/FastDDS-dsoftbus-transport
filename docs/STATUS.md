@@ -1,5 +1,60 @@
 # Project status
 
+## R19 static consumers and host-aware ament wiring (2026-10-16 02:06 UTC)
+
+Independent post-review final testing qualifies **13 static consumer cases
+(4 positive, 9 expected negative)**, five ordinary AArch64 object/link pairs
+and 15 metadata-only installed files. Seven fresh readelf commands passed;
+final testing did not reconfigure, rebuild, reinstall or execute a target.
+The installed-pluginlib case preloads TinyXML2. It does **not** establish
+pluginlib-first discovery, actual plugin loading or ClassLoader lifecycle.
+The plugin XML deliberately names `not_a_runtime_plugin`.
+
+A private ament prefix helper changes only `NOT WIN32` to
+`NOT CMAKE_HOST_WIN32`; the installed host helper is unchanged. Four isolated
+script cases passed final testing (the non-Windows branch is a Windows-hosted
+model, not Linux testing). The private Config shim then passed two positive
+real-ament dummy configurations and one exact-version rejection case, each
+executed once with LANGUAGES NONE. Independent post-test review found no
+required source fix; final testing completely replayed their unchanged raw
+records without reconfiguration. This qualifies the measured Windows-host /
+OHOS-target prefix and directory-scope behavior, not a ROS package build.
+Full Python-import/native-DLL/OS-I/O closure remains NOT_PROVEN.
+
+B and pluginlib A originally omitted C ABI warning classification. The exact
+15 existing C jobs now have a reviewed retrospective decision and independent
+initial/final replay. This supplements current static assurance; it does not
+make the earlier gates compliant at execution time. Old STOP results,
+withdrawn CASE PASS labels, collector failures and uncertain loaded-source
+bytes from the failed overlapping collector remain preserved. Class_loader
+had a different original contract and receives only its named assurance
+supplement. No general or future warning exemption follows.
+
+R19-PT1 remains **OPEN**; ROS 2 over native DSoftBus remains **NOT VERIFIED**.
+Next is a separate fresh pluginlib-first LANGUAGES NONE acceptance, then the
+unchanged seven-source rosbag2_storage build with complete new input bindings.
+Storage, SQLite plugin loading and local Writer/Reader are still unbuilt or
+unverified in R19. Source inspection supports local component tests without
+native-token writes; their transitive runtime behavior still needs testing.
+Native cross-board communication independently remains BLOCKED by the missing
+complete current project-only token record and supported lossless restore
+route. DATASYNC is NOT_QUERIED; no security writes occurred. Automatic approval
+review's full-token-registry rejection was not retried. The last HDC visibility
+snapshot was 2026-10-15 23:35:14 UTC, both boards USB Connected, not a new device
+test. R14's original strict failures and R18 Action's bounded Host/fake-Socket
+scope remain unchanged.
+
+The preceding documentation stage was published as
+`770d3e8b75b6bd7168acbc7a23f175ed7e51b7b1` to
+`origin/codex/flow-encoding-published-20261014`; its 23:33:09 UTC CI snapshot
+was **NOT_RUN** (zero workflows/checks/status contexts). This two-document
+update is not yet committed/pushed. Final tester gates cover only static
+consumer evidence and bounded wiring evidence; Main graph/PRE_COMMIT and
+publication gates remain separate. See [the current capability matrix and
+local evidence ledger](ROS2_ROSBAG_TARGET_PREPARATION.md). Earlier dated
+sections below are historical snapshots, including then-unexecuted consumers
+and original A diagnostic conclusions.
+
 ## R19 pluginlib target build and static installation (2026-10-15 23:19 UTC)
 
 The fresh SDK23 AArch64 `c++_shared` `pluginlib-sdk-closure-fix1` build has
