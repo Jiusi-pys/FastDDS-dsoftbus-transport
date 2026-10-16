@@ -156,7 +156,8 @@ def run_lifecycle_acceptance():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('exe', 'bridge', 'fastdds-prefix', 'ros-prefix', 'pixi-prefix', 'host-prefix', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
-    parser.add_argument('--scenario', choices=('lifecycle', 'managed-publisher', 'serialized'), default='lifecycle')
+    parser.add_argument('--scenario', choices=('lifecycle', 'managed-publisher', 'serialized',
+                                             'fragment-reliable', 'fragment-best-effort'), default='lifecycle')
     args = parser.parse_args()
     analyzer, prefix = analyze_lifecycle, 'LIFECYCLE_ACCEPT'
     if args.scenario == 'managed-publisher':
@@ -165,6 +166,11 @@ def run_lifecycle_acceptance():
     elif args.scenario == 'serialized':
         from serialized_capture import analyze_serialized
         analyzer, prefix = analyze_serialized, 'SERIALIZED_ACCEPT'
+    elif args.scenario.startswith('fragment-'):
+        from fragment_capture import analyze_fragment
+        fragment_reliability = args.scenario[len('fragment-'):].replace('-', '_')
+        analyzer = lambda texts, run, pids: analyze_fragment(texts, run, pids, reliability=fragment_reliability)
+        prefix = 'FRAGMENT_ACCEPT'
     args.output.mkdir(parents=True, exist_ok=False)
     result = {'passed': False, 'device_tested': False, 'native_tested': False,
               'profile': 'default-2145', 'scenario': args.scenario, 'processes': {}, 'errors': []}
@@ -189,7 +195,7 @@ def run_lifecycle_acceptance():
         result['run'] = run
         log_dir = args.output / 'ros-logs'; log_dir.mkdir()
         dlls = [args.exe, args.bridge, args.fastdds_prefix / 'bin/fastrtps-2.14.dll', args.ros_prefix / 'bin/fastcdr-2.2.dll']
-        if args.scenario == 'serialized':
+        if args.scenario == 'serialized' or args.scenario.startswith('fragment-'):
             dlls.extend(args.ros_prefix / 'bin' / name for name in (
                 'rclcpp.dll', 'rcl.dll', 'rmw_fastrtps_cpp.dll', 'rmw_fastrtps_shared_cpp.dll',
                 'std_msgs__rosidl_typesupport_cpp.dll', 'std_msgs__rosidl_typesupport_fastrtps_cpp.dll'))
@@ -213,6 +219,8 @@ def run_lifecycle_acceptance():
             inputs.append(Path(__file__).with_name('lifecycle_publisher_capture.py'))
         elif args.scenario == 'serialized':
             inputs.append(Path(__file__).with_name('serialized_capture.py'))
+        elif args.scenario.startswith('fragment-'):
+            inputs.append(Path(__file__).with_name('fragment_capture.py'))
         before = {str(p.resolve()): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
         result['inputs_before'] = before
         result['host_prefix'] = str(args.host_prefix.resolve())
@@ -253,6 +261,8 @@ def run_lifecycle_acceptance():
             out = (args.output / (side + '.stdout')).open('wb'); err = (args.output / (side + '.stderr')).open('wb')
             streams.extend([out, err])
             command = [str(args.exe.resolve()), side, run]; result['commands'][side] = command
+            if args.scenario.startswith('fragment-'):
+                command.append(fragment_reliability)
             processes[side] = subprocess.Popen(command, env=env, stdout=out, stderr=err)
         deadline = time.monotonic() + 65
         while any(p.poll() is None for p in processes.values()):

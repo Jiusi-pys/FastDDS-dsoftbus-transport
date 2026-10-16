@@ -1,5 +1,13 @@
 # Fast DDS OpenHarmony DSoftBus Transport
 
+## 当前进展与导航（2026-10-16）
+
+- **R21 Host 阶段 PASS**：真实 Windows ROS 进程经 TCP fake DSoftBus Host seam，typed String 小包／66k／burst 的 Reliable 30/30、Best Effort 30/30；详见[验收范围与可复现命令](docs/ROS2_FRAGMENT_HOST_ACCEPTANCE.md)。
+- **R20 实机能力保留限定 PASS**：两板分别完成离线 String 持久化和 POSIX bundle 入口；这不是板间通信。见[目标准备与能力矩阵](docs/ROS2_ROSBAG_TARGET_PREPARATION.md)。
+- **当前阻塞／后续**：原生 DSoftBus／跨设备仍 BLOCKED，R14 旧失败不关闭；R22 QoS 边界仅 PLANNED。完整状态和证据边界见[项目状态](docs/STATUS.md)。
+
+以下带日期摘要保留其历史范围，不能替代上述当前状态，也不构成新的设备测试授权。
+
 本项目是 Fast DDS 的 OpenHarmony DSoftBus Socket Transport 适配层，不是独立的
 MDDS 中间件或新的 DDS/RMW 实现。公开命名已迁移为 `fastdds_dsoftbus`、
 `<fastdds_dsoftbus/dsoftbus/...>` 和 CMake 包 `FastDDSDSoftBusTransport`。

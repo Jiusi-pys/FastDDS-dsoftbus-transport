@@ -1,6 +1,36 @@
 # Project status
 
-## Current R20 capability overview (2026-10-16 15:54 UTC)
+## Current R21 capability overview (2026-10-16 16:56 UTC)
+
+**Scoped Windows Host delivery PASS:** typed String small/66k/burst in Reliable
+30/30 and strict Best Effort 30/30; R17 serialized regression 4/4. These are
+actual ROS processes over the TCP-backed fake DSoftBus Host seam.
+
+| Completed / current | Remaining / next |
+| --- | --- |
+| 68 controls, independent Tier 2 review with no code findings/fixes, final three actual windows once each, all six exit0/no forced kill/orphans/six port rebinds | Native/cross-device remains BLOCKED; general types/sizes/load/QoS and fragment/drop causality remain NOT VERIFIED. R14 old failures are not closed. |
+| Initial fresh MSVC x64 /MD build; final reuses source/compiler/dependency/artifact-verified outputs, no final recompile | R22 reliability offered/requested boundary is PLANNED read-only triage, not implemented/tested. |
+| R20 POSIX entry + local String storage on A/B retains earlier bounded device PASS | Those independent local runs do not establish native cross-device delivery. |
+
+Original queue limits are unchanged; no capacity refusal occurred. Final Reliable
+B has one AdapterPhase/InvalidState pre-Bridge decision during Closing; initial
+Reliable A's two decisions remain a separate observation. Full charge/refund and
+capture passed; business success does not mean zero rejected callbacks. Final
+testing completed across an infrastructure interruption without repeating a
+completed case: first tester ran controls/Reliable, finisher Best Effort/R17.
+The fixture impact-after-creation omission is preserved as a real process
+deviation with Main disposition, not a retroactive pre-edit PASS.
+
+See [R21 acceptance, commands and matrix](ROS2_FRAGMENT_HOST_ACCEPTANCE.md).
+Tester Commit gate PASS is Host scoped; Main graph/PRE_COMMIT/publication remain.
+Last confirmed publication is R20 `ab97486d814e58023f7d4f00c8bed7a945852b1a`,
+existing origin/codex/flow-encoding-published-20261014, exact-SHA 16:12:11 UTC CI
+NOT_RUN (zero runs/checks/status contexts). No R21 commit/CI is predicted.
+Missing project-only token-state/lossless restore material still blocks native
+communication; no registry retry/security action. Overall native ROS 2/DSoftBus
+NOT VERIFIED. No new major direction decision is required for this Host stage.
+
+## Earlier R20 capability snapshot (2026-10-16 15:54 UTC)
 
 **Generated `bundle/run` now starts the offline String fixture directly from an
 unrelated cwd on each RK3588A board, including a relocated path with spaces.**
