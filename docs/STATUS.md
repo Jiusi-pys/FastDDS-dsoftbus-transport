@@ -1,5 +1,46 @@
 # Project status
 
+## R19 storage configuration evidence (2026-10-16 05:53 UTC snapshot)
+
+Independent final testing reports **CONFIGURE_INPUTS_AND_ID_ABI_STATIC_QUALIFIED**,
+with mandatory terminal **STOP_BEFORE_ORDINARY_OBJECTS**. The one FIX2A
+configure ran 05:19:53–05:19:55 UTC, exit 0, followed by two ABI dependency
+queries, one Ninja command inventory and the input audit. Post-test review
+found no actionable findings. Final testing at 05:49–05:51 UTC replayed the
+unchanged evidence and refreshed guards; it ran no new configure or compiler.
+Seven ordinary objects, the storage DSO, install, readelf and runtime/device
+tests remain NOT_RUN. This is not storage BUILDS or HOST_TESTED.
+
+The 4,129 bound inputs include actual SDK 6.1.0.32 metadata and the selected
+unversioned RMW library. Both ament generated inputs are real outputs.
+The 59 source-bound dev diagnostics and 17 explicit child calls were audited;
+independent child stdout/exit remains UNOBSERVED. Original storage1's missing
+generator failure, storage2's new helper diagnostics/unbound RMW STOP, FIX2's
+exact Python-argument P2 and all collector failures remain preserved. FIX2A
+corrects only five contract path strings; it does not relax parser matching.
+
+Host rosidl generator 4.6.7 versus target runtime 4.6.9, and SDK 6.1.0.32 versus
+observed boards 6.1.0.31, have no compatibility qualification. Future `-lrt`
+has a known export source but no proven linker selection; FindFastRTPS cache
+hints prove neither API/ABI nor version compatibility. Next is separately
+gated ordinary compilation, then link/install and SQLite/cpp/local I/O.
+SQLite source does not persist an independent send timestamp; runtime
+reproduction remains unrun. Overall R19/native ROS 2 remains NOT VERIFIED.
+
+Both boards were observed online during the 03:36–03:37 UTC read-only resource
+baseline; no storage artifact was deployed or tested. DATASYNC was not queried
+and permissions were not changed. Native communication remains BLOCKED by the
+missing complete project-only recovery record and lossless restore route;
+automatic approval review's whole-registry rejection was not retried.
+
+At this snapshot the preceding stage was published as
+`7e5dd899f34a6b019ead41b328c79263e41de6bf` on the existing
+`origin/codex/flow-encoding-published-20261014`; its 03:32:38 UTC CI snapshot
+was NOT_RUN. This stage's subsequent graph/PRE_COMMIT, publication and CI
+outcome belong to Main's publication receipt, not this pre-publication snapshot.
+See [target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for current scope
+and evidence; earlier dated sections retain their historical state.
+
 ## R19 fresh pluginlib configuration (2026-10-16 03:23 UTC)
 
 The new root-scope **ament → pluginlib → TinyXML2** configuration has final

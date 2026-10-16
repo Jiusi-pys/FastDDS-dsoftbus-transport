@@ -9,7 +9,61 @@ Preparation sources and receipts below live in the original checkout's ignored
 outputs live in its sibling `build/r19next1/`. These are local evidence, not
 artifacts included in the remote Git repository by this documentation commit.
 
-## Current fresh pluginlib configuration qualification (2026-10-16 03:23 UTC)
+## Current storage configuration qualification (2026-10-16 05:53 UTC snapshot)
+
+FIX2A has final **CONFIGURE_INPUTS_AND_ID_ABI_STATIC_QUALIFIED**, with terminal
+**STOP_BEFORE_ORDINARY_OBJECTS**. Its sole configure ran at 05:19:53–05:19:55 UTC,
+exit 0 without retry. Two actual ABI Ninja dependency queries, one read-only
+Ninja command inventory and the strict input audit followed. Independent
+post-test review found no actionable findings or required implementation fix.
+Final testing at 05:49:16–05:51:41 UTC completed pure replay, supplementary raw
+checks and fresh guards, all exit 0, with no new configure/compiler/Ninja/
+readelf/install/device execution or final collector failure.
+
+The original seven-source SHARED storage target is unchanged. C and CXX each
+have a real compile-only compiler ID and separate ABI compile/link pair;
+their 11/15-member link archives and actual dependency records are qualified.
+The seven ordinary compile commands and prospective shared link are generated
+metadata only. **Ordinary objects, final storage DSO, install/RPATH, readelf,
+runtime and device tests are NOT_RUN. Storage BUILDS=false, HOST_TESTED=false,
+DEVICE_TESTED=false; overall NOT VERIFIED.**
+
+All 4,129 prospective input bindings include the SDK metadata actually read
+in root and both ABI contexts, plus the actual selected unversioned RMW DSO.
+The final audit covers 50,428 trace commands, 59 fully source-bound dev warnings,
+17 explicit child calls and 17 derived inputs, including two real current
+ament outputs. Child argv/callsite evidence is exact; independent child raw
+stdout/exit remains UNOBSERVED. Complete input-audit output selects 670 inputs
+with no unknown entry. Current 78 output files/118 members and fresh guards
+match their frozen bytes and membership. This finite closure is not an OS-wide
+process/DLL/Python-import proof.
+
+Failures remain historical: r19storage1 exited 1 on missing rosidl_generator_c;
+r19storage2 exited 0 but stopped on 14 new helper-line-18 diagnostics and an
+unbound RMW selection. FIX2 pretest review then blocked a five-call exact Python
+argv mismatch. FIX2A corrects only those five contract path strings, retaining
+unchanged strict parser/gate bytes. Six initial collector errors and the review
+tuple/JSON comparison error retain their original failures and narrow fixes;
+none was converted into a successful old run or a configure retry.
+
+Host generators 4.6.7 and target runtime/interfaces 4.6.9 qualify only the
+observed versionless CONFIG/registration path: no IDL generation/callback or
+generated-code compatibility test ran. SDK 6.1.0.32 versus observed board
+6.1.0.31 compatibility is also NOT_RUN. FindFastRTPS hints skip search/check
+paths and its module has no VERSION_VAR; configuration proves no minimum
+version, header/API or ABI compatibility. Future `-lrt` is traced to the bound
+fastrtps export, not a resolved rt library or successful link. Activity of 23
+unresolved static includes during ordinary compilation remains unknown.
+
+Next is separately reviewed ordinary compilation and actual dependency checks,
+then the final link and a generated install/RPATH oracle. SQLite/cpp and local
+Writer/Reader remain later unverified stages. This snapshot's prior published
+commit is `7e5dd899f34a6b019ead41b328c79263e41de6bf` on the existing
+`origin/codex/flow-encoding-published-20261014`; its 03:32:38 UTC CI observation
+was NOT_RUN. Main's later publication receipt records this stage's graph,
+PRE_COMMIT, commit/push and CI outcome. Dated sections below preserve history.
+
+## Earlier fresh pluginlib configuration qualification (2026-10-16 03:23 UTC snapshot)
 
 The FIX1 fresh root-scope LANGUAGES NONE configuration has canonical final
 **PASS_FINAL_READONLY_CONFIGURATION_EVIDENCE**. Its sole actual configure
@@ -348,8 +402,10 @@ limit; UNVERIFIED does not mean inherently impossible.
 | Host-aware ament prefix helper and private Config shim | SUPPORTED / HOST_CONFIGURATION_TESTED within exact cases | Four isolated scripts and three real-ament dummy configurations; host installation unchanged; no ROS build or full process-input closure. |
 | Fresh pluginlib-first dependency discovery | SUPPORTED / HOST_CONFIGURATION_TESTED in one fixed root scope | FIX1 actual ament→pluginlib→vendor/module→CONFIG adapter order passed without TinyXML preloading; exact SDK dl data selection required; no runtime claim. |
 | class_loader/pluginlib runtime | UNVERIFIED / NOT_RUN | No real plugin DSO discovery/load/unload or ClassLoader lifecycle execution. |
-| rosbag2_storage build/static installation | UNVERIFIED / NOT_RUN | Fresh-order prerequisite qualified; seven original translation units still need complete build bindings and compiler/link/install evidence. |
+| rosbag2_storage configuration inputs and compiler ID/ABI | SUPPORTED within bounded static scope | FIX2A initial/review/final PASS; STOP_BEFORE_ORDINARY_OBJECTS; not storage BUILDS or HOST_TESTED. |
+| rosbag2_storage ordinary build/static installation | UNVERIFIED / NOT_RUN | Seven original objects, final DSO, actual link dependencies and install/RPATH still require execution evidence. |
 | Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Next bounded rosbag consumer; no actual rosbag I/O evidence yet. |
+| Independent SQLite send-timestamp persistence | UNSUPPORTED in inspected source; runtime NOT_RUN | Current schema/write/read retain receive timestamp only; distinct send/receive runtime case remains required, with no invented returned-value claim. |
 | Plugin XML/ament-index/typesupport resource discovery | PARTIAL | Metadata bytes and six host CMake resources checked; target runtime XML/plugin/typesupport discovery unverified. |
 | Full rosbag CLI / rosbag2_transport / arbitrary types / compression | UNVERIFIED / outside first planned acceptance | No completeness claim from the fixed-type path. |
 | Generic/loaned/zero-copy recording or replay | UNVERIFIED | Not measured by these library/configuration tests. |
@@ -378,16 +434,12 @@ The later 15-file TinyXML2 metadata installation and fresh class_loader and
 pluginlib static qualifications are scoped above. They do not qualify general
 API compatibility, plugin loading or rosbag tests.
 
-The read-only storage-readiness report was sealed while B final and wiring
-were pending; those prerequisites and the subsequent fresh-order FIX1 now
-have canonical final PASS above, without rewriting that report. Actual
-rosbag2_storage 0.26.11 calls ament_cmake then pluginlib without preloading
-TinyXML2. Next is a newly reviewed storage plan with all seven original
-translation units, complete config/header/SDK/link inputs, and an install
-oracle derived from the actual
-DSO/generated scripts. The old 19-command sketch is not executable authority.
-The 74 selected imported DSOs have AArch64 headers, not proven ABI/runtime
-compatibility; 68 need new exact bindings. No storage configure/build ran.
+The old read-only storage-readiness report and 19-command sketch remain
+historical, not execution authority. Current FIX2A qualifies the actual
+rosbag2_storage 0.26.11 configure path and ID/ABI evidence with 77 bound imported
+locations. It does not establish their ABI/runtime compatibility. Seven original
+translation units remain uncompiled; actual ordinary dependencies/link inputs
+and an install oracle derived from the final DSO/scripts are still required.
 
 Current storage defaults to `mcap`; the future fixed String local round trip
 must explicitly choose `sqlite3`, with matching CDR serialization, close/reopen
@@ -398,13 +450,20 @@ not proof about all transitive DSO initializers. Missing permission restoration
 material must not block all local component preparation. Actual runtime loads
 must be checked, and unexpected Transport/identity activity must stop the run.
 Cross-board recording/playback separately requires real ROS/DSoftBus tests.
+The inspected SQLite backend stores and reads recv_timestamp, topic and data,
+not an independent send_timestamp. Matching-format SequentialReader does not
+reconstruct it. Runtime reproduction and the precise returned value remain
+NOT_RUN; future tests must not silently change expectations to hide this limit.
 
 Actual native communication still requires the complete current project-only
 permission record and a supported lossless restore route. Conditional user
 authorization does not remove these prerequisites on either board; no
 grant/revoke/token switch/reload/security write is part of R19 preparation.
-At 2026-10-16 02:47:09 UTC HDC listed both boards USB Connected; this is visibility
-only, not new device execution. Current DATASYNC state is NOT_QUERIED.
+At 2026-10-16 03:36–03:37 UTC read-only HDC observations found both boards USB
+Connected, aarch64, OpenHarmony 6.1.0.31, with about 82.6/85.1 GiB available
+on the filesystem reported for /data. These are resource observations only;
+HDC client exits were 0 but independent remote exits were not captured.
+No storage artifact was deployed/executed. Current DATASYNC is NOT_QUERIED.
 Automatic approval review rejected the full-token-registry route; it was not retried. R18's two-board main-load and
 missing-identity rejection PASS proves only that diagnostic, not communication.
 Overall ROS 2 over native DSoftBus: **NOT VERIFIED**.
@@ -418,6 +477,20 @@ local evidence; remote readers need the separately retained files to recheck it.
 
 | Receipt | SHA256 |
 | --- | --- |
+| `rosbag-storage-fresh-test/RESULT.json` | `a942eff6adcc7a5069e24db2e4d9a26b80683e301c0b050d938e80d9f2cc466f` |
+| `rosbag-storage-generator-fix1-test/RESULT.json` | `5aea4f265b3b4350ea5c7d4e6332eee11d15ac17da471749befd068cc6f8c836` |
+| `rosbag-storage-generator-fix2-pretest-review/RESULT.json` | `fab7efd805467aa888da710bb29bcc3b2ace3c1934c90ca1d6839923e4e4039a` |
+| `rosbag-storage-generator-fix2a-candidate/RESULT.json` | `d39a445c3112039a3ca113fcd40f62e795a1fcf0f3839ca4e85439da4c1c1403` |
+| `rosbag-storage-generator-fix2a-test/RESULT.json` | `19510a344efec6ac0374b051cf24638d8c9eae4ab3a64d575fea74e8c89ca7c2` |
+| `rosbag-storage-generator-fix2a-test/EVIDENCE_MANIFEST.json` (188 files) | `a964cbb3e2e2b4c8f52a2d164ee91325b7743b3d19cefe2d388ce9d2e2260dbb` |
+| `rosbag-storage-generator-fix2a-posttest-review/RESULT.json` | `61f296c3cad782a99f0f256d8db76b337c145db4c4414f1622927a4f7d8f95d2` |
+| `rosbag-storage-generator-fix2a-posttest-review/EVIDENCE_MANIFEST.json` (14 files) | `afaf26ec3d1331bb41e268b42bb5a41ebe9fb539adbd2b83d99d2d702a0fdcad` |
+| `rosbag-storage-generator-fix2a-final-test/RESULT.json` | `07091a5d2395eea161e25d628226883732092b1ebc0852de38d29486bab25414` |
+| `rosbag-storage-generator-fix2a-final-test/EVIDENCE_MANIFEST.json` (24 files) | `f8af4e73171cd6c41791e69d3a08f78bd78ae2094611a38e923b5e4f960237e3` |
+| `storage-local-acceptance-notes/NOTES.md` | `e1cefbc8ebf457461fe19116135c51bf33f92f05c8278af1fdaa932473f09c65` |
+| `storage-board-resources-readonly/RESULT.json` | `08db8bf32fe74148acae3c7c064b1c56cf6c452fd6ce1e9722214bf906b05169` |
+| `fresh-pluginlib-main-publication/PUBLICATION_RESULT.json` | `a974a442812590c35c40f0ec0ddb51a9cd346f6b0da8c5dd7b2fd13d1c8e5853` |
+| `fresh-pluginlib-main-publication/CI_RESULT.json` | `9f7cd839053c555424ca670d33ee88be16321c94719e914c366b0371c87acc0d` |
 | `fresh-pluginlib-order-test/RESULT.json` | `db3f1be3a3bfd3be3b182da7dc434dd9cf2332e18cc80f21db51be972fe44a90` |
 | `fresh-pluginlib-dl-investigation/RESULT.json` | `0a854ccf2f6b3142fad6d4a5b58052d077e6d868386c5890e11db002b9c5e3bb` |
 | `fresh-pluginlib-dl-review/RESULT.json` | `e5e69dc9d664aa31bebbd21c6562e8536ffc7d74a6922dd540b29d2ef10823a6` |
