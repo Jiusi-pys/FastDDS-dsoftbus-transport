@@ -1,6 +1,81 @@
 # Project status
 
-## R19 SQLite plugin original-package static qualification (2026-10-16 11:42 UTC pre-publication snapshot)
+## Current R19 capability overview (2026-10-16 13:29 UTC)
+
+**Storage, the SQLite plugin and rosbag2_cpp have qualified target build/install
+artifacts. Local String write/read and native ROS 2/DSoftBus cross-board
+recording remain unverified.**
+
+- Completed: rosbag2_storage original objects, DSO and installation; complete
+  original SQLite plugin and rosbag2_cpp 0.26.11 cross-builds/static installs.
+  Storage's individual receipts do not establish its complete Ninja package run.
+- Current next stage: implement/package a minimal local C++ std_msgs/msg/String
+  consumer with explicit sqlite3/CDR, then verify actual board write-close-reopen,
+  raw/typed count/topic/type/format/order/receive-time/payload/definition checks
+  and resource release. This consumer is still source-only planning.
+- Remaining: actual plugin loading and runtime ABI, CLI/record/replay, then
+  native ROS 2/DSoftBus and cross-board acceptance. No new major direction
+  decision is needed; preserve original package sources/metadata, the Transport
+  boundary, Socket-only policy and legacy transport packager behavior.
+
+Canonical rosbag2_cpp final **ROSBAG2_CPP_0.26.11_BUILT_STATICALLY_INSTALLED**
+has tester Commit gate PASS for BUILDS/static installation only. Initial testing
+passed; independent Tier 2 agentic review found no actionable findings and
+requested no implementation changes; post-review final testing passed. Main's
+graph/PRE_COMMIT/publication gates remain separate. **HOST_TESTED=false,
+HOST_RUNTIME=false, DEVICE_TESTED=false, INTEGRATION_TESTED=false; overall
+NOT VERIFIED.** Upstream gmock tests remain NOT_RUN under the authorized
+BUILD_TESTING=OFF artifact scope. Device/runtime are N/A to this static stage,
+but required for subsequent runtime claims.
+
+The unchanged original cpp target has 20 source entries/19 unique TUs. Full
+Ninja all executed 19 compiles and one shared link; original installation made
+54 exact-byte copies. Final tree: 176 files/247 members/71 directories.
+Built/installed DSOs are distinct files with identical 1,151,400 bytes, SHA256
+`63d04394abffea6176b7a2b7f88dea7cd8fed578d06b30f458bccf0ab92e27c4`,
+AArch64 ELF64 ET_DYN, SONAME librosbag2_cpp.so, 79 NEEDED and no RPATH/RUNPATH.
+This does not qualify physical loading, provider ABI or runtime closure.
+The five original configure/build/build-readelf/install/installed-readelf
+commands (PIDs 40932/60496/60592/26556/75768) each ran once, exit 0. No target
+command was repeated to correct an audit.
+
+Final tester PID 44840 at 13:27:18.887705–13:27:53.105293 UTC exited 0 with
+empty stderr, refreshing 7,763 finite inputs, 718 W3 tracked raw files plus
+two gitlinks, target membership, 13 seals, 17 read-only Git commands, 54 copies,
+five original receipt/chronology joins and final-compatible install/ELF audits.
+All 134 negative controls and symmetric positive comparison passed. Broader
+unrelated historical guards remain sealed provenance, not freshly retraversed.
+Original 18-versus-17 configure-child, class_loader physical-alias and tuple/list
+audit STOPs remain historical; new source-backed audit versions changed no
+source/tool/environment/configuration flags. Final tester PID 2464's W3-relative
+path harness STOP and narrow V2 correction are also preserved. No failure was
+retroactively marked PASS.
+
+SDK23/.32 versus board .31, Windows absolute metadata/POSIX setup/relocation,
+transitive constructors and plugin loading remain unqualified. The inspected
+local APIs need no Node/Participant; unexpected Transport/identity activity
+must stop the future run. Independent SQLite send-time persistence remains
+source-unsupported, runtime-unmeasured. Source-only acceptance/bundle notes
+do not establish implementation or device execution.
+
+Normal-user read-only HDC at 12:10:08 UTC observed both known USB boards
+Connected, client exit 0 and empty stderr, after an empty sandbox discovery.
+No deployment/runtime/permission operation occurred; connectivity is not
+DEVICE_TESTED. Native communication remains BLOCKED only on the full current
+project-specific token record and supported lossless restoration material.
+Earlier whole-registry automatic approval rejection was not retried; no new
+security write occurred. Windows fake TCP/stubs remain separate evidence.
+
+Last confirmed publication is SQLite documentation commit
+`a946e9e5e3e8e6d2442f3ac81ac00da23f8595ad` on existing
+`origin/codex/flow-encoding-published-20261014` (11:57:42 UTC commit receipt).
+Its 11:59:02 UTC exact-SHA CI snapshot is NOT_RUN: zero workflows/checks/status
+contexts. No cpp commit or future CI result is predicted. See
+[target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for exact phase times,
+current capability matrix, canonical initial/review/final seals and retained
+historical evidence. Local ignored artifacts/evidence are not remotely included.
+
+## Earlier R19 SQLite plugin original-package static qualification (2026-10-16 11:42 UTC pre-publication snapshot)
 
 Final **SQLITE_PLUGIN_PACKAGE_BUILT_INSTALLED_STATICALLY_QUALIFIED** has
 bounded Commit gate PASS for the original rosbag2_storage_sqlite3 0.26.11

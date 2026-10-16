@@ -1,15 +1,137 @@
 # R19 ROS 2 target rosbag preparation
 
-Current evidence snapshot: 2026-10-16 11:42 UTC, after SQLite package post-review final static verification.
-This records build/configuration prerequisites. **Actual rosbag recording,
-reading or replay over native DSoftBus is not yet verified.** The historical implementation
-source baseline is published R18 `48c01f2597bf16db1ed35fbd79cc5c32826f0ab8`.
-Preparation sources and receipts below live in the original checkout's ignored
-`build/r19-rosbag-preparation/`; class_loader/pluginlib outputs live in its sibling
-`build/r19next1/`; current SQLite package build/install is in `build/r19sqlite2/`. These are local evidence, not
-artifacts included in the remote Git repository by this documentation commit.
+Current evidence snapshot: 2026-10-16 13:29 UTC, after independent post-review
+rosbag2_cpp final static verification. **Storage, the SQLite plugin and
+rosbag2_cpp now have qualified target build/install artifacts. Local String
+write/read and native DSoftBus/ROS 2 cross-board recording remain unverified.**
 
-## Current SQLite plugin package qualification (2026-10-16 11:42 UTC pre-publication snapshot)
+| Stage | Current capability | Remaining work |
+| --- | --- | --- |
+| Completed artifact preparation | rosbag2_storage original objects, DSO and install; complete original SQLite plugin and rosbag2_cpp package cross-builds and static installs pass their bounded gates. | Storage's separate compile/link/install receipts do not establish a complete Ninja package run. None of these stages proves loading or runtime ABI. |
+| Current next stage | Prepare a minimal local C++ std_msgs/msg/String consumer with explicit sqlite3 and CDR. | Build/package it, then measure actual board write-close-reopen, raw/typed readback and resource release. This consumer is not implemented yet. |
+| Later integration | Existing Fast DDS Transport boundary and Socket-only policy remain. | Actual plugin loading, rosbag CLI/record/replay, native ROS 2/DSoftBus and cross-board acceptance have not run for R19. |
+| Major decisions | Continue with local persistence before native communication; preserve original package sources and metadata and the legacy transport packager behavior. | No new major direction decision is needed. Native communication still needs project-only complete token-state and supported lossless restoration material. |
+
+BUILDS=true and STATIC_INSTALL=PASS apply to the named qualified artifacts.
+HOST_TESTED=false, HOST_RUNTIME=false, DEVICE_TESTED=false and
+INTEGRATION_TESTED=false for this rosbag stage; overall **NOT VERIFIED**.
+Upstream gmock tests are NOT_RUN under the authorized BUILD_TESTING=OFF
+artifact scope. Device/runtime checks are N/A to this bounded static stage,
+but remain required for any subsequent runtime or integration claim.
+
+The last confirmed publication is SQLite documentation commit
+`a946e9e5e3e8e6d2442f3ac81ac00da23f8595ad` (11:57:42 UTC commit receipt,
+published by the later Main receipt) on existing
+`origin/codex/flow-encoding-published-20261014`. Its exact-SHA 11:59:02 UTC
+CI snapshot is NOT_RUN: zero workflows, check runs and status contexts.
+This cpp snapshot does not predict its own commit or CI result.
+
+Preparation sources and receipts live in the original checkout's ignored
+`build/r19-rosbag-preparation/`; current cpp output is `build/r19cpp1/`, SQLite
+output `build/r19sqlite2/`, storage output `build/r19storage3/`, and earlier
+class_loader/pluginlib output `build/r19next1/`. Local evidence and artifacts
+are not included in the remote repository by this documentation change.
+The historical R18 implementation baseline remains
+`48c01f2597bf16db1ed35fbd79cc5c32826f0ab8`.
+
+## rosbag2_cpp original-package build and static installation
+
+Canonical final **ROSBAG2_CPP_0.26.11_BUILT_STATICALLY_INSTALLED** has tester
+Commit gate PASS only for the original complete cross-build and static install.
+Initial independent testing passed; formal agentic review found no actionable
+findings (Tier 2), requested no implementation changes, and final independent
+testing passed. Main still owns graph, PRE_COMMIT and publication gates.
+
+Original rosbag2_cpp 0.26.11 sources and dependency contracts are unchanged:
+20 source entries contain 19 unique translation units, including the original
+duplicate introspection entry. The full native Ninja `all` graph executed
+19 compiles and one shared link. Original installation produced 54 byte-exact
+copies with distinct source/destination identities. Final output is 176 files,
+247 members and 71 directories. Both built and installed `librosbag2_cpp.so`
+are 1,151,400 bytes, SHA256
+`63d04394abffea6176b7a2b7f88dea7cd8fed578d06b30f458bccf0ab92e27c4`,
+with distinct identities: ELF64 little-endian AArch64 ET_DYN, SONAME
+`librosbag2_cpp.so`, 79 DT_NEEDED, no RPATH/RUNPATH. This static structure is
+not proof of provider ABI, dependency closure or physical DSO loading.
+
+All five actual commands ran once and exited 0; none was rerun to correct an
+audit. Exact argv, environment, raw logs, timestamps and predecessor joins are
+bound in final `PHASE_JOINS.json` and its original process receipts:
+
+| Original command | PID | UTC start–end | Original receipt directory |
+| --- | --- | --- | --- |
+| Configure | 40932 | 12:23:50.362189–12:23:55.547144 | rosbag-cpp-test |
+| Full Ninja build | 60496 | 12:43:54.824190–12:44:16.793210 | rosbag-cpp-fix1-test |
+| Build ELF inspection | 60592 | 12:59:07.160422–12:59:07.201393 | rosbag-cpp-fix3-test |
+| Original CMake installation | 26556 | 12:59:29.340922–12:59:29.626867 | rosbag-cpp-fix3-test |
+| Installed ELF inspection | 75768 | 12:59:49.666228–12:59:49.709010 | rosbag-cpp-fix3-test |
+
+The final tester V2 ran at 13:27:18.887705–13:27:53.105293 UTC, PID 44840,
+exit 0 with empty stderr. Fresh checks covered 7,763 finite input bindings,
+718 W3 raw tracked files plus two gitlinks, current 176/247 output, 54 copy
+contracts, 13 seals and 17 read-only Git commands. All five original receipts
+and source/chronology joins passed. Final-compatible installation/installed-ELF
+audits and 134 negative controls passed, as did symmetric positive ELF
+comparison. The sealed review's independent parser was reused with attribution;
+this does not claim a third parser. Broader unrelated historical guards remain
+sealed provenance, not newly repeated whole-tree coverage.
+
+Historical failures remain unchanged. The first configure audit expected 18
+children although the original source executes 17: the Python purelib probe
+is inside an uninvoked lazy macro. The original build audit rejected a
+source-explained class_loader.hpp and /./ physical alias. The later ELF audit
+stopped on tuple/list representation. New audit versions corrected only these
+source-backed contracts: exact raw dependency occurrences are retained, and
+lossless list/tuple normalization is limited to the two integer row shapes;
+all fields, scalar types, values and ordering stay strict. An inactive export
+branch is admitted only as exact original source and never as an executed
+forbidden install operation. No source, tool, environment or configuration
+flag was changed; continuation commands changed only future evidence paths.
+Earlier BLOCKED reports were not relabeled PASS.
+
+Final tester's first harness attempt (PID 2464, exit 1) completed seal checks
+then resolved relative W3 document paths against the root checkout. Its STOP,
+script and raw logs remain. V2 used the baseline's explicit W3 directory and
+unchanged expected bytes/hashes/UTF8 counts; no target or Git child ran before
+that failure. Review's own retained harness corrections are described in its
+REPORT.md. These evidence-tool corrections do not create new package executions.
+
+## Next local persistence acceptance and native limits
+
+The next minimal stage is a C++ local String consumer using explicit sqlite3,
+matching CDR, a fresh bag URI and deterministic payloads, including empty and
+non-ASCII strings. Actual board acceptance must write, close, reopen and check
+raw count/topic/type/serialization format/order/receive timestamps/exact bytes,
+then independently reopen for typed payload checks. Persisted String message
+definitions and bounded resource release must also pass; a Writer return alone
+is insufficient. Package exact dynamic ELF roots and original share metadata,
+plugin XML/ament index and real String definitions. Preserve existing transport
+packager callers and behavior. `CPP_FUTURE_BUNDLE_NOTES.json` and
+`CPP_LOCAL_RUNTIME_ACCEPTANCE_NOTES.json` are source-only plans, not implemented
+consumer or runtime evidence.
+
+The inspected local APIs need no Node/Participant, but transitive constructors
+and loading remain untested; unexpected Transport/identity activity must stop
+the run. Windows absolute CMake metadata, incomplete POSIX setup/relocation,
+SDK23/.32 versus board .31 compatibility, actual plugin load and runtime ABI
+remain unqualified. SQLite's inspected source does not persist an independent
+send timestamp; its precise runtime behavior is unmeasured. Python CLI, full
+record/replay, arbitrary types and native communication are separate stages.
+
+Read-only HDC at 12:10:08 UTC in the normal user environment observed both known
+boards USB Connected (client exit 0, empty stderr), after the earlier sandbox
+discovery returned empty. No deployment, runtime or permission operation ran;
+this is connectivity evidence, not DEVICE_TESTED or current-connectivity proof.
+Native communication is separately BLOCKED on a full current project-specific
+token record and supported lossless restoration material. Whole-registry access
+was rejected by automatic approval review and was not retried; no security write
+was attempted. These prerequisites do not block source-only local preparation.
+
+Earlier dated sections below retain their original phase boundaries and
+publication snapshots; the overview and current capability matrix govern the
+present state. Detailed canonical hashes are in the local evidence ledger.
+
+## Earlier SQLite plugin package qualification (2026-10-16 11:42 UTC pre-publication snapshot)
 
 Final **SQLITE_PLUGIN_PACKAGE_BUILT_INSTALLED_STATICALLY_QUALIFIED** has
 bounded Commit gate PASS for the complete original rosbag2_storage_sqlite3
@@ -637,7 +759,7 @@ limit; UNVERIFIED does not mean inherently impossible.
 | SQLite plugin original installation/static ELF | PASS within bounded static scope | 23 operations/33 copies, native manifest and fresh pyc; installed exact-copy DSO 879,024 bytes, 80 NEEDED, no RPATH/RUNPATH; no runtime closure. |
 | SQLite Windows Lib/lib staging | PARTIAL | Actual same-directory identity, original raw manifest preserved; case-sensitive target layout NOT_TESTED. |
 | SQLite Python CLI/bytecode compatibility | PARTIAL static metadata only | Host 3.12.3 fresh pyc exact-source/header/two CodeType checks; child exit NOT_CAPTURED; no import or board Python/CLI test. |
-| rosbag2_cpp direct dependency/source readiness | SOURCE_INSPECTED only | 13 Config paths present, 20 source entries/19 unique TUs; configure/build/install/runtime NOT_RUN. |
+| Original rosbag2_cpp 0.26.11 complete package and static install | SUPPORTED / BUILDS, final static PASS | Unchanged 20 source entries/19 unique TUs; full Ninja all 20 actions; 54 exact copies; 176 files/247 members. Runtime, upstream gmock, plugin load and ABI qualification remain NOT_RUN/NOT_VERIFIED. |
 | Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Explicit sqlite3/cdr, raw and typed close/reopen checks remain future work; no actual rosbag I/O evidence yet. |
 | Independent SQLite send-timestamp persistence | UNSUPPORTED in inspected source; runtime NOT_RUN | Current schema/write/read retain receive timestamp only; distinct send/receive runtime case remains required, with no invented returned-value claim. |
 | Plugin XML/ament-index/typesupport resource discovery | PARTIAL | Metadata bytes and six host CMake resources checked; target runtime XML/plugin/typesupport discovery unverified. |
@@ -713,6 +835,12 @@ local evidence; remote readers need the separately retained files to recheck it.
 
 | Receipt | SHA256 |
 | --- | --- |
+| `rosbag-cpp-fix4-test/EVIDENCE_MANIFEST.json` (51 files; initial PASS) | `baf05d57333b89e418937413f1bdc56225ed3c9b472440961f1dedb44b5435d7` |
+| `rosbag-cpp-posttest-review/EVIDENCE_MANIFEST.json` (50 files; Tier 2, no actionable findings) | `89edebae81438d30742aa24394f228bba8090f76a902cb4d1d232e4e9f84b0c5` |
+| `rosbag-cpp-final-test/EVIDENCE_MANIFEST.json` (96 files; canonical final PASS) | `7598390d48c30b862452168df8c597f125e0425361cfd14901b2aeaa7a497b27` |
+| `SQLITE_POST_PACKAGE_PUBLICATION_BASELINE.json` (accepted W3/doc baseline) | `ddd8d369fc78a66e7c71e3e2a59c95bd04c375cd6a00bd96a73df0e9dec82dd3` |
+| `sqlite-plugin-main-publication/EVIDENCE_MANIFEST.json` | `66afa9b3aca4a699fed0c3e68c10e2a2ce0e49b6a5665170da86b5c12f4bbe37` |
+| `cpp-board-readiness/EVIDENCE_MANIFEST.json` (connectivity only) | `46770e822aeec3c9e759b65347ee32b4eede7eb06581c164096762a60c5a4390` |
 | `rosbag-sqlite-plugin-fix2-candidate/EVIDENCE_MANIFEST.json` | `49afc6f7bdccdb6758def66a8ce20b1fe0be4a6343f68f49ae8183d0712552e9` |
 | `rosbag-sqlite-plugin-fix2-audit-implementation/EVIDENCE_MANIFEST.json` | `a5a46c92a44db30c244148303bce31243ccb5a8bc6ea55f2335693cfb3e37801` |
 | `rosbag-sqlite-plugin-fix2-test/RESULT.json` | `ad6552b48a4955d89459a210a0cd59e0b05391dc10534e6f3109be68ff35f590` |
