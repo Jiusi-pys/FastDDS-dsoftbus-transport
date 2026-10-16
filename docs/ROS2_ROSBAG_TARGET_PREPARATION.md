@@ -9,7 +9,48 @@ Preparation sources and receipts below live in the original checkout's ignored
 outputs live in its sibling `build/r19next1/`. These are local evidence, not
 artifacts included in the remote Git repository by this documentation commit.
 
-## Current consumer and ament configuration qualification (2026-10-16)
+## Current fresh pluginlib configuration qualification (2026-10-16 03:23 UTC)
+
+The FIX1 fresh root-scope LANGUAGES NONE configuration has canonical final
+**PASS_FINAL_READONLY_CONFIGURATION_EVIDENCE**. Its sole actual configure
+ran at 02:58:26 UTC, exit 0 without retry. TinyXML2 is absent before pluginlib;
+the observed route is ament, pluginlib, tinyxml2_vendor/FindTinyXML2, CONFIG
+adapter, original TinyXML targets/alias and pluginlib export. This supplies
+the order-specific prerequisite that Stage B's preloaded consumers could not.
+It does not qualify arbitrary directory scopes or runtime plugin loading.
+
+The earlier no-SDK configure exited 0 but correctly stopped on the missing-dl
+diagnostic; its STOP and the earlier pretest coverage gap remain immutable.
+FIX1 changes only isolated harness search context and strict assertions:
+one exact SDK23 `native/sysroot/usr/lib/aarch64-linux-ohos` CMAKE_LIBRARY_PATH,
+without SDK toolchain/compiler execution or preseeding lookup results. Actual
+trace proves the unchanged rcutils helper resets `_lib`, calls find_library,
+takes the success branch and appends the selected path with raw empty `_cfg`.
+The complete legacy list is original bootstrap `Lib/librcutils.so` followed
+once by that SDK `libdl.a`; modern `rcutils::rcutils` still exports literal `dl`.
+The exact realpath and all eight archive bytes are bound. The empty archive
+has no runtime or architecture-bearing code; matching its hash alone would
+not distinguish another ABI's archive. No dlopen/libc behavior is verified.
+
+Independent three-pass post-test review requested no source fix. Final testing
+ran 03:20:35–03:21:40 UTC, exit 0, replaying 3,133 trace commands, seven explicit
+process calls, 23 target properties and 13 generated files. Fresh before/after
+guards covered 9,174 entries and all four checkouts. It ran no new configure,
+compiler, linker, install, readelf or device command and had no final collector
+failure. Earlier initial/review collector failures and exact corrections remain
+sealed. Only the previously authorized exact unknown-OHOS diagnostic appeared;
+the missing-dl warning was resolved, not exempted. The named harness P2 is
+closed within this configuration scope. Full Python-import/native-DLL closure,
+OS-wide I/O monitoring and independent internal child streams remain unproven.
+
+Storage, SQLite/cpp, local Writer/Reader and native communication remain
+unverified; R19-PT1 remains OPEN overall. The preceding documentation stage
+was published as `53a13dfc5af752c03538a990bb0ae253238cfdd7` on the existing
+`origin/codex/flow-encoding-published-20261014`; CI at 02:23:05 UTC was NOT_RUN.
+This update still needs Main graph/PRE_COMMIT and commit/push/CI checks.
+Following dated sections are historical snapshots; the current matrix applies.
+
+## Earlier consumer and ament configuration qualification (2026-10-16 02:06 UTC snapshot)
 
 Stage B is **PASS_POST_REVIEW_FINAL_STATIC_CONSUMER_EVIDENCE**: four
 positive cases (positive, nested, siblings, installed_pluginlib), nine exact
@@ -305,9 +346,9 @@ limit; UNVERIFIED does not mean inherently impossible.
 | Fresh pluginlib SDK23 build and static install | SUPPORTED / BUILDS, final static PASS | Named build only; 669 actual dependencies, built/installed ELF and 29 installed files; overall R19-PT1 OPEN. |
 | TinyXML2-preloaded static consumers | SUPPORTED / BUILDS, final static PASS | Four positive/nine negative cases; five objects/links and 15 metadata files; no target execution. |
 | Host-aware ament prefix helper and private Config shim | SUPPORTED / HOST_CONFIGURATION_TESTED within exact cases | Four isolated scripts and three real-ament dummy configurations; host installation unchanged; no ROS build or full process-input closure. |
-| Fresh pluginlib-first dependency discovery | UNVERIFIED / next prerequisite | Existing B preloads TinyXML2; a DIR hint alone does not instantiate targets. |
+| Fresh pluginlib-first dependency discovery | SUPPORTED / HOST_CONFIGURATION_TESTED in one fixed root scope | FIX1 actual ament→pluginlib→vendor/module→CONFIG adapter order passed without TinyXML preloading; exact SDK dl data selection required; no runtime claim. |
 | class_loader/pluginlib runtime | UNVERIFIED / NOT_RUN | No real plugin DSO discovery/load/unload or ClassLoader lifecycle execution. |
-| rosbag2_storage build/static installation | UNVERIFIED / NOT_RUN | Seven original translation units planned; fresh-order acceptance, complete bindings and staged install oracle still required. |
+| rosbag2_storage build/static installation | UNVERIFIED / NOT_RUN | Fresh-order prerequisite qualified; seven original translation units still need complete build bindings and compiler/link/install evidence. |
 | Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Next bounded rosbag consumer; no actual rosbag I/O evidence yet. |
 | Plugin XML/ament-index/typesupport resource discovery | PARTIAL | Metadata bytes and six host CMake resources checked; target runtime XML/plugin/typesupport discovery unverified. |
 | Full rosbag CLI / rosbag2_transport / arbitrary types / compression | UNVERIFIED / outside first planned acceptance | No completeness claim from the fixed-type path. |
@@ -323,8 +364,8 @@ pluginlib 5.4.6 before rosbag2 storage/cpp/SQLite 0.26.11. The selected TinyXML2
 The adapter binds the exact target location/hash/includes/SONAME for the
 qualified static pluginlib build. The named preloaded consumer probes, repeated/
 nested/sibling scopes and nine negative controls now have final static PASS.
-They do not establish fresh pluginlib-first discovery, general TinyXML2 6 API
-compatibility or TinyXML2 9 compatibility.
+The separate FIX1 case now establishes the specific fresh root-scope order.
+Neither establishes general TinyXML2 6 API or TinyXML2 9 compatibility.
 pluginlib provides an INTERFACE target and a `list_plugins` executable; absence
 of `libpluginlib.so` is not itself a failure.
 
@@ -338,12 +379,12 @@ pluginlib static qualifications are scoped above. They do not qualify general
 API compatibility, plugin loading or rosbag tests.
 
 The read-only storage-readiness report was sealed while B final and wiring
-were pending; those two evidence prerequisites now have canonical final PASS
-above, without rewriting that report. Actual rosbag2_storage 0.26.11 calls
-ament_cmake then pluginlib without preloading TinyXML2. Next is a separate
-fresh root-scope LANGUAGES NONE acceptance of that order, followed by a newly
-reviewed storage plan with all seven original translation units, complete
-config/header/SDK/link inputs, and an install oracle derived from the actual
+were pending; those prerequisites and the subsequent fresh-order FIX1 now
+have canonical final PASS above, without rewriting that report. Actual
+rosbag2_storage 0.26.11 calls ament_cmake then pluginlib without preloading
+TinyXML2. Next is a newly reviewed storage plan with all seven original
+translation units, complete config/header/SDK/link inputs, and an install
+oracle derived from the actual
 DSO/generated scripts. The old 19-command sketch is not executable authority.
 The 74 selected imported DSOs have AArch64 headers, not proven ABI/runtime
 compatibility; 68 need new exact bindings. No storage configure/build ran.
@@ -362,7 +403,7 @@ Actual native communication still requires the complete current project-only
 permission record and a supported lossless restore route. Conditional user
 authorization does not remove these prerequisites on either board; no
 grant/revoke/token switch/reload/security write is part of R19 preparation.
-At 2026-10-15 23:35:14 UTC HDC listed both boards USB Connected; this is visibility
+At 2026-10-16 02:47:09 UTC HDC listed both boards USB Connected; this is visibility
 only, not new device execution. Current DATASYNC state is NOT_QUERIED.
 Automatic approval review rejected the full-token-registry route; it was not retried. R18's two-board main-load and
 missing-identity rejection PASS proves only that diagnostic, not communication.
@@ -377,6 +418,18 @@ local evidence; remote readers need the separately retained files to recheck it.
 
 | Receipt | SHA256 |
 | --- | --- |
+| `fresh-pluginlib-order-test/RESULT.json` | `db3f1be3a3bfd3be3b182da7dc434dd9cf2332e18cc80f21db51be972fe44a90` |
+| `fresh-pluginlib-dl-investigation/RESULT.json` | `0a854ccf2f6b3142fad6d4a5b58052d077e6d868386c5890e11db002b9c5e3bb` |
+| `fresh-pluginlib-dl-review/RESULT.json` | `e5e69dc9d664aa31bebbd21c6562e8536ffc7d74a6922dd540b29d2ef10823a6` |
+| `fresh-pluginlib-order-dl-fix1-test/RESULT.json` | `c3d4d6565437209a5346ab0aebfa3cec3111c7f4231bd74fa16f53d884ab7aa5` |
+| `fresh-pluginlib-order-dl-fix1-test/EVIDENCE_MANIFEST.json` (57 files) | `24439ca609930a092e2bcb6a47734b9b5fddd2346e659bf8cbff2c162ef7d4ce` |
+| `fresh-pluginlib-order-dl-fix1-post-review/RESULT.json` | `39405bee9cc7433bbd47c4e01b66d669bdf6cec94ff37d18f71832b650f72d78` |
+| `fresh-pluginlib-order-dl-fix1-post-review/EVIDENCE_MANIFEST.json` (13 files) | `cd9df01c1e88a752cf6f3a80185350b331e4e90e91de8b28f0ce6cbe6824577e` |
+| `fresh-pluginlib-order-dl-fix1-final-test/RESULT.json` | `c650e1c71f290177d793d4a153f66800215cf821148ebeb4faa695cb89280106` |
+| `fresh-pluginlib-order-dl-fix1-final-test/EVIDENCE_MANIFEST.json` (22 files) | `059e3980b21a6d630fc60a75fa4782a91f69645bc4a8a449804dc11e25f6fca7` |
+| `consumer-wiring-main-publication/PUBLICATION_RESULT.json` | `8c380b18d2f98a40a7a9eed7b97415e635ce8b04bf9d594d7d2d80119479f868` |
+| `consumer-wiring-main-publication/CI_RESULT.json` | `ec86dacd8c76ba4d8618393056b71f1e8e15591186270144b440e832aac541af` |
+| `fresh-order-board-visibility/RESULT.json` | `e8df9fbfdd9f42bdc637d6e481887825a5410e3dd4ee244e341c436ef10192e1` |
 | `pluginlib-consumers-diagnostic-complete-replay/RESULT.json` | `fbbe3ed5fb2d97a123715ca6d1d4f87ae6bb7ff7e4db4420865b44ab1c36feaa` |
 | `pluginlib-consumers-diagnostic-complete-replay/EVIDENCE_MANIFEST.json` (93 files) | `5f2339e9382ece0e91e2e6fe7e7b2b1007bb8d2a8ba32e897de54d7040e4378a` |
 | `pluginlib-consumers-post-test-review/RESULT.json` | `707913198befe682d7bddc7693e80a013abd82bc83dfef569651079f45a9f9f5` |

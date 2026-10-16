@@ -1,5 +1,40 @@
 # Project status
 
+## R19 fresh pluginlib configuration (2026-10-16 03:23 UTC)
+
+The new root-scope **ament → pluginlib → TinyXML2** configuration has final
+**PASS_FOR_BOUNDED_FRESH_PLUGINLIB_CONFIGURATION_EVIDENCE_ONLY**. TinyXML2
+is absent before pluginlib; the original vendor/module, CONFIG adapter and
+imported targets then load in the required order. The sole FIX1 configure ran
+at 02:58:26 UTC, exit 0. Independent post-test review required no source fix;
+final read-only replay at 03:20:35–03:21:40 UTC passed, with no new configure,
+compiler, link, install, readelf or device execution.
+
+The original missing-dl STOP and pretest coverage gap remain unchanged. FIX1
+adds one exact SDK CMAKE_LIBRARY_PATH to the isolated harness and proves the
+unchanged rcutils helper's real lookup and complete two-library legacy export;
+the modern interface remains literal `dl`. The selected `libdl.a` is an
+eight-byte empty archive, not runtime loader code. This closes the named
+harness search-context P2 only. Collector failures and the broader Python/DLL/
+OS-observation limits remain in the evidence; no warning was waived.
+
+Next is the original seven-source rosbag2_storage build with its own full
+compiler/link/install qualification, then SQLite/cpp and local Writer/Reader
+acceptance. Those steps, runtime plugin loading and native ROS/DSoftBus remain
+**UNVERIFIED**; R19-PT1 stays **OPEN overall**. Local component preparation can
+proceed without token writes, subject to unverified transitive DSO behavior.
+The latest HDC snapshot (02:47:09 UTC) showed both boards USB Connected only.
+DATASYNC remains NOT_QUERIED, no permissions changed, and native communication
+still needs a complete current project-only record and lossless restore route.
+The rejected whole-token-registry route was not retried.
+
+The preceding consumer/wiring documentation stage was pushed as
+`53a13dfc5af752c03538a990bb0ae253238cfdd7` to the existing
+`origin/codex/flow-encoding-published-20261014`; its 02:23:05 UTC CI snapshot
+was NOT_RUN. This update is not yet committed/pushed; Main's graph/PRE_COMMIT
+and publication gates remain pending. See [target preparation and evidence](ROS2_ROSBAG_TARGET_PREPARATION.md).
+Earlier dated sections preserve their then-current scope and failures.
+
 ## R19 static consumers and host-aware ament wiring (2026-10-16 02:06 UTC)
 
 Independent post-review final testing qualifies **13 static consumer cases
