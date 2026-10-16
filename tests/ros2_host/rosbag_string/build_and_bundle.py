@@ -7,6 +7,7 @@ Independent tester owns invocation and interpretation of execution evidence.
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -89,6 +90,7 @@ def main():
     worktree = Path(__file__).resolve().parents[3]
     source = Path(__file__).with_name('main.cpp').resolve()
     packager = worktree/'integrations/ros2/target/package_elf.py'
+    entry_helper = worktree/'integrations/ros2/target/runtime_entry.py'
     evidence = repo/'build/r19-rosbag-preparation'
     inputs = []
 
@@ -101,6 +103,8 @@ def main():
 
     bound(evidence/'CPP_POST_PACKAGE_PUBLICATION_BASELINE.json',
           'a13c1b52f3bd3ed094c93a4502bdab751a02dd391ffe2e76880a7335be0d1b41')
+    bound(evidence/'LOCAL_STRING_POST_PUBLICATION_BASELINE.json',
+          'd9227a37138a55ca771f9d833f42ad06a334681f496941eb44ea57310b14f11e')
     reports = {}
     for name, digest in [('CONFIGURE_AUDIT.json', 'ad0e28ade84ecbd8a6ee39c49bd4cd85dd7c548286e2ef9214ae8f7c776dacd8'),
                          ('BUILD_AUDIT.json', '59c8d2cd31d6b457b596427261b541a32483b3c18b7ae185d1cf48210b171202')]:
@@ -113,7 +117,7 @@ def main():
     compiler, linker, readelf = (sdk/'llvm/bin'/x for x in ('clang++.exe', 'ld.lld.exe', 'llvm-readelf.exe'))
     if Path(config['ninja']['compile'][0]['compiler_argv'][0]).resolve() != compiler:
         raise ValueError('SDK differs qualified compiler binding')
-    for path in (source, Path(__file__), packager, Path(sys.executable), compiler, linker, readelf):
+    for path in (source, Path(__file__), packager, entry_helper, Path(sys.executable), compiler, linker, readelf):
         bound(path)
     cpp = repo/'build/r19cpp1/install/rosbag2_cpp'
     storage = repo/'build/r19storage3/install/rosbag2_storage'
@@ -295,6 +299,10 @@ def main():
             raise ValueError('Unexpected non-index resource transformation')
         copied.append(row)
     save(output/'RESOURCES.json', copied)
+    entry_spec = importlib.util.spec_from_file_location('runtime_entry', entry_helper)
+    entry_module = importlib.util.module_from_spec(entry_spec)
+    entry_spec.loader.exec_module(entry_module)
+    entry_module.install_entry(output/'bundle', [exe.name], [relative for _, relative in resources])
     # Recheck selected immutable inputs after all host tools. Headers and linker implicit
     # inputs remain evidenced losslessly by main.o.d and link-inputs.tar for tester inspection.
     for row in inputs:
@@ -306,8 +314,11 @@ def main():
     save(output/'RUN_SPEC.json', dict(scope='PLANNED_LOCAL_PERSISTENCE_NOT_EXECUTED',
          device='3e01ff55454d202020104033bf453b00', device_label='A', required_preflight='Explicit target; fresh absent deployment directory and bag URI',
          remote_prefix_template='/data/local/tmp/r19_rosbag_local_<unique>',
-         argv=['<prefix>/lib/rosbag_string_persistence', '<prefix>/bag', '<prefix>/share/std_msgs/msg/String.msg'],
-         environment={'AMENT_PREFIX_PATH': '<prefix>', 'LD_LIBRARY_PATH': '<prefix>/lib', 'RMW_IMPLEMENTATION': 'rmw_fastrtps_cpp'},
+         argv=['<prefix>/run', 'rosbag_string_persistence', '<prefix>/bag', '<prefix>/share/std_msgs/msg/String.msg'],
+         environment={'RMW_IMPLEMENTATION': 'rmw_fastrtps_cpp'},
+         entry_environment_policy='run replaces AMENT_PREFIX_PATH and LD_LIBRARY_PATH from its own physical prefix; all other variables inherited',
+         entry_posix_mode='0755; preserve/set on fresh deployed project run file',
+         entry_cwd_policy='caller cwd preserved; test from unrelated cwd',
          outer_timeout_seconds=40, fixture_timeout_seconds=30,
          expected_exit=0, expected_status='PASS', messages=4, no_deployment_or_runtime_performed=True))
     save(output/'BUNDLE_MANIFEST.json', [record(p) for p in sorted((output/'bundle').rglob('*')) if p.is_file()])

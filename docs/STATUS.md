@@ -1,6 +1,42 @@
 # Project status
 
-## Current R19 capability overview (2026-10-16 14:38 UTC)
+## Current R20 capability overview (2026-10-16 15:54 UTC)
+
+**Generated `bundle/run` now starts the offline String fixture directly from an
+unrelated cwd on each RK3588A board, including a relocated path with spaces.**
+
+- Completed: fresh target compile/link/readelf/package; exact four-message
+  SQLite raw/typed persistence, definition/metadata/time/order checks and cleanup;
+  both review path defects fixed and verified on A/B.
+- Current boundary: declared executable/resource entry, unchanged argv/cwd/child
+  exit, only AMENT_PREFIX_PATH/LD_LIBRARY_PATH replaced. Actual ROS fixture
+  qualification is still offline String; A/B are independent local runs.
+- Remaining: full ROS setup/CLI/record/replay/general types/QoS/concurrency/cache/
+  crash/native cross-device remain NOT VERIFIED. R21 bounded Host delivery
+  diagnostic is PLANNED, not implemented.
+- Major decisions: use generated run with no manual prefix exports, preserve
+  Transport/Socket-only boundaries and keep native permission work separate.
+
+Final post-review tester Commit gate PASS is POSIX-entry/local-String scoped:
+20 legacy controls PASS; 15 entry methods yield **11 PASS and 4 Windows SKIP**.
+Fresh r19baglocal5 build at 15:49 UTC passed; direct A/B entry returned HDC 0 /
+remote 0 with fds=0/tasks=2 after all three close/destruction phases and PID/hash
+checks PASS. Actual physical LF/sibling/alias cases rejected before any child;
+explicit-shell and `./` leading-dash cases preserved exact values/exit. Earlier
+failures and final sandbox infrastructure failure remain; unchanged normal-user
+retry PASS does not rewrite them. DEVICE_TESTED applies to this bounded entry +
+offline persistence; overall native ROS 2/DSoftBus remains NOT VERIFIED.
+
+Last published P023 is `e13696ed6a5d185ae29e3cf1ddf5a574cf27f4c5` on existing
+origin/codex/flow-encoding-published-20261014; exact-SHA CI 14:53:27 UTC NOT_RUN
+(zero workflows/checks/status contexts). R20 graph/PRE_COMMIT/publication/CI
+remain Main gates. Missing full current project-only token-state/lossless restore
+material still blocks native communication; no registry retry or security action.
+See [current preparation/evidence](ROS2_ROSBAG_TARGET_PREPARATION.md) and
+[direct entry usage](../tests/ros2_host/rosbag_string/README.md). Historical dated
+snapshots below retain their own scope and publication state.
+
+## Earlier R19 offline capability snapshot (2026-10-16 14:38 UTC)
 
 **Offline String persistence now passes on each RK3588A board independently:**
 actual SQLite write-close-reopen, exact raw CDR and separate typed readback.
