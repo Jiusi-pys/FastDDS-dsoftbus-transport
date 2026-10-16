@@ -1,6 +1,6 @@
 # R19 ROS 2 target rosbag preparation
 
-Current evidence snapshot: 2026-10-16 08:27 UTC, after storage DSO final verification.
+Current evidence snapshot: 2026-10-16 09:25 UTC, after original installation final verification.
 This records build/configuration prerequisites. **Actual rosbag recording,
 reading or replay over native DSoftBus is not yet verified.** The historical implementation
 source baseline is published R18 `48c01f2597bf16db1ed35fbd79cc5c32826f0ab8`.
@@ -9,7 +9,44 @@ Preparation sources and receipts below live in the original checkout's ignored
 outputs live in its sibling `build/r19next1/`. These are local evidence, not
 artifacts included in the remote Git repository by this documentation commit.
 
-## Current storage DSO qualification (2026-10-16 08:27 UTC pre-publication snapshot)
+## Current original installation qualification (2026-10-16 09:25 UTC pre-publication snapshot)
+
+Canonical final **ORIGINAL_STORAGE_INSTALL_AND_STATIC_QUALIFICATION** has
+bounded Commit gate PASS with **STOP_BEFORE_CONSUMER_OR_RUNTIME**. The original
+generated CMake install script ran once at 09:11:59 UTC (PID 54060), exit 0,
+empty stderr and no timeout, with strip explicitly OFF. Its 65 trace events
+contain the original 20 INSTALL operations and sole final manifest WRITE.
+All 42 copies are byte-exact independent regular files; one manifest and
+16 directories bring the stage to 138 files/194 members, preserving the old
+95 files. The installed DSO retains the linked 985,840 bytes and SHA256
+`c828299f96f0901e1eb8a0b8c69f49ae0d57bc348d5ee4a0afded01faa4ba7be`.
+
+Formal post-test review found no actionable findings. Final pure replay and
+fresh guards at 09:21:01–09:21:57 UTC passed with no new failure or reinstall:
+18,572 file records, 173 memberships, 34 seals, 215 absences and all four Git
+states matched. Installed metadata was inspected as bytes, not executed as a
+consumer. Earlier failures, including the candidate CRLF preparation assertion,
+remain historical. Terminal snapshots/trace do not prove continuous filesystem,
+OS-process/DLL coverage or OpenHarmony POSIX permissions.
+
+The installed tree has **no `local_setup.sh`**, retains `local_setup.bat`, an
+empty `local_setup.dsv`, and a `package.dsv` referencing those Windows/DSV files.
+Its parent-prefix resource contains absolute Windows paths. Separate `.sh`
+environment hooks do not supply a complete POSIX setup entry. This is a target
+environment/relocation gap, not evidence that the library cannot be called.
+Consumer discovery, loading, ABI/SDK-board compatibility, SQLite/cpp/local I/O,
+runtime and device checks remain unexecuted; complete Ninja package build also
+remains NOT_RUN. Native project-only recovery/restore blockers and SQLite's
+independent send-timestamp source limitation persist. Overall NOT VERIFIED.
+
+The last confirmed publication is `069aa7a64188172d3c1b160d9ffc15cf212452e8`
+on existing `origin/codex/flow-encoding-published-20261014`; CI at
+08:34:30.710397 UTC was NOT_RUN, recorded in `storage-link-main-publication`.
+Main's later publication receipt owns this stage's commit/CI outcome. Any
+consumer or target environment work needs its own bounded plan and verification;
+this stage grants neither runtime execution nor a broader acceptance result.
+
+## Earlier storage DSO qualification (2026-10-16 08:27 UTC pre-publication snapshot)
 
 Canonical final **ORIGINAL_STORAGE_DSO_LINKED_AND_STATICALLY_INSPECTED** has
 bounded Commit gate PASS and **STOP_BEFORE_INSTALL**. The unchanged 900-byte
@@ -496,7 +533,9 @@ limit; UNVERIFIED does not mean inherently impossible.
 | rosbag2_storage configuration inputs and compiler ID/ABI | SUPPORTED within bounded static scope | FIX2A initial/review/final PASS; configuration-stage boundary retained historically; no general ABI/runtime compatibility claim. |
 | rosbag2_storage seven individual ordinary objects | PASS: compiled and statically checked | Seven unchanged generated argv, actual depfiles and AArch64 ET_REL outputs; final replay PASS; STOP_BEFORE_DSO_LINK. |
 | rosbag2_storage original DSO link/static inspection | PASS within bounded static scope | Actual original link/readelf, 97 inputs and AArch64 ET_DYN checks; final PASS; STOP_BEFORE_INSTALL; no loader/ABI/runtime claim. |
-| rosbag2_storage complete Ninja package / installation | UNVERIFIED / NOT_RUN | Direct object/link execution does not establish complete package BUILDS or HOST_TESTED; installation oracle and execution remain pending. |
+| rosbag2_storage original installation/static tree | PASS within bounded static scope | Original script executed once; 42 byte-exact copies and generated manifest; final PASS; STOP_BEFORE_CONSUMER_OR_RUNTIME. |
+| rosbag2_storage POSIX setup / relocation | PARTIAL / UNVERIFIED | local_setup.sh absent; bat plus empty dsv and Windows absolute parent prefixes remain. Consumer/library callability has not been tested. |
+| rosbag2_storage complete Ninja package / consumer | UNVERIFIED / NOT_RUN | Separate compile/link/install qualifications do not establish a complete Ninja package build, consumer execution or HOST_TESTED. |
 | Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Next bounded rosbag consumer; no actual rosbag I/O evidence yet. |
 | Independent SQLite send-timestamp persistence | UNSUPPORTED in inspected source; runtime NOT_RUN | Current schema/write/read retain receive timestamp only; distinct send/receive runtime case remains required, with no invented returned-value claim. |
 | Plugin XML/ament-index/typesupport resource discovery | PARTIAL | Metadata bytes and six host CMake resources checked; target runtime XML/plugin/typesupport discovery unverified. |
@@ -532,8 +571,9 @@ historical, not execution authority. Current FIX2A qualifies the actual
 rosbag2_storage 0.26.11 configure path and ID/ABI evidence with 77 bound imported
 locations. It does not establish their ABI/runtime compatibility. Seven original
 translation units and the original DSO now have qualified object/dependency
-and link/static evidence. An installation oracle derived from the actual DSO
-and generated scripts, then installation execution, are still required.
+and link/static evidence. The original installation now has final static-tree
+qualification; consumer discovery and target environment/relocation checks
+remain separate, unexecuted stages.
 
 Current storage defaults to `mcap`; the future fixed String local round trip
 must explicitly choose `sqlite3`, with matching CDR serialization, close/reopen
@@ -571,6 +611,15 @@ local evidence; remote readers need the separately retained files to recheck it.
 
 | Receipt | SHA256 |
 | --- | --- |
+| `rosbag-storage-install-test/RESULT.json` | `4cf7199b53815ce4976a5755f328051ffe643c3898c01d1eaf3acc3a6021a65f` |
+| `rosbag-storage-install-test/EVIDENCE_MANIFEST.json` | `124a24ae1f20184f0a9bc32ec9525f4ac95449ee7888948d2c44024870c8880b` |
+| `rosbag-storage-install-posttest-review/RESULT.json` | `da016ad66d82b4fbd60782ec1865d1f31d86a6512d6af70d29f9294455d53788` |
+| `rosbag-storage-install-posttest-review/EVIDENCE_MANIFEST.json` | `87abf0b8b0ce556133de40cf69abab38da4633c0d55ed4dc65cab1f113db8a8c` |
+| `rosbag-storage-install-final-test/RESULT.json` | `49b0110dcaeaceabcae8d701c04a87ec8befa6834147c46fff7138fd2297d69d` |
+| `rosbag-storage-install-final-test/REPORT.md` | `5803c9381212e718e4552167c213bd7451853e792992883bdfc4486e7a789865` |
+| `rosbag-storage-install-final-test/EVIDENCE_MANIFEST.json` | `c91105837dbfaab6cb1ad571a8f7f55fa1bdded8c054676da87c28873cedfb46` |
+| `storage-link-main-publication/PUBLICATION_RESULT.json` | `4f6a10e11ab9df38efd54f321d242288b371ecad1f8e41422fe3ca19af32c2f6` |
+| `storage-link-main-publication/CI_RESULT.json` | `4309c5eeaba35b9c3299cc65e448dc8f6d12a95c22789ed9e5b634c39e7472ef` |
 | `rosbag-storage-link-test/RESULT.json` | `0982c62bd3bade4627559ff358950de2764852fdd1be2cc9ad4bb8a7b8b40c89` |
 | `rosbag-storage-link-test/EVIDENCE_MANIFEST.json` | `400b89591f081722d36e7723a5a7ece0355f7a3266d182670aad874d9272acac` |
 | `rosbag-storage-link-posttest-review/RESULT.json` | `c8c2fc59b88504c74debb2e10fc5a1ad7b1f1507d8c2dd9d8ce4fd16baf214a1` |

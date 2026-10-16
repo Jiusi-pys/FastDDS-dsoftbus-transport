@@ -1,6 +1,31 @@
 # Project status
 
-## R19 storage DSO static qualification (2026-10-16 08:27 UTC pre-publication snapshot)
+## R19 original installation qualification (2026-10-16 09:25 UTC pre-publication snapshot)
+
+Final **ORIGINAL_STORAGE_INSTALL_AND_STATIC_QUALIFICATION** has bounded Commit
+gate PASS, with **STOP_BEFORE_CONSUMER_OR_RUNTIME**. The original install script
+ran once at 09:11:59 UTC (PID 54060), exit 0 and empty stderr. Its 42 exact
+copies, manifest and 16 directories give 138 files/194 members; the old 95 files
+and installed DSO bytes are unchanged. All 65 trace events, 20 INSTALL operations
+and the sole final WRITE passed. Formal review found no actionable findings;
+final replay/fresh guards at 09:21:01–09:21:57 UTC passed with no failure or
+reinstall, including 18,572 file records and all four protected Git states.
+
+POSIX setup remains incomplete: no local_setup.sh, original bat plus empty dsv,
+and absolute Windows parent prefixes. Separate shell hooks do not constitute
+a target setup entry. This does not prove the library is uncallable. Complete
+Ninja package build, consumer/loader, SQLite/cpp/local I/O, runtime and device
+checks remain NOT_RUN. Native project-only permission recovery/restore remains
+BLOCKED; earlier failures and the whole-registry approval rejection are retained.
+No new board test or permission change occurred. Overall NOT VERIFIED.
+
+Last confirmed publication: `069aa7a64188172d3c1b160d9ffc15cf212452e8` on existing
+`origin/codex/flow-encoding-published-20261014`, with 08:34:30.710397 UTC CI NOT_RUN
+in `storage-link-main-publication`. Main's later receipt records this stage's
+publication/CI. See [target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for
+capabilities, limits and canonical hashes; earlier dated sections preserve history.
+
+## Earlier R19 storage DSO static qualification (2026-10-16 08:27 UTC pre-publication snapshot)
 
 Final **ORIGINAL_STORAGE_DSO_LINKED_AND_STATICALLY_INSPECTED** has bounded
 Commit gate PASS with **STOP_BEFORE_INSTALL**. The original link ran once at
