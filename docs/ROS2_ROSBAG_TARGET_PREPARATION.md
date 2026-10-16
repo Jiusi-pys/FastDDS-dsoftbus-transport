@@ -1,6 +1,6 @@
 # R19 ROS 2 target rosbag preparation
 
-Current evidence snapshot: 2026-10-16 07:19 UTC, after seven-object final verification.
+Current evidence snapshot: 2026-10-16 08:27 UTC, after storage DSO final verification.
 This records build/configuration prerequisites. **Actual rosbag recording,
 reading or replay over native DSoftBus is not yet verified.** The historical implementation
 source baseline is published R18 `48c01f2597bf16db1ed35fbd79cc5c32826f0ab8`.
@@ -9,7 +9,48 @@ Preparation sources and receipts below live in the original checkout's ignored
 outputs live in its sibling `build/r19next1/`. These are local evidence, not
 artifacts included in the remote Git repository by this documentation commit.
 
-## Current seven-object qualification (2026-10-16 07:19 UTC pre-publication snapshot)
+## Current storage DSO qualification (2026-10-16 08:27 UTC pre-publication snapshot)
+
+Canonical final **ORIGINAL_STORAGE_DSO_LINKED_AND_STATICALLY_INSPECTED** has
+bounded Commit gate PASS and **STOP_BEFORE_INSTALL**. The unchanged 900-byte
+original command linked once at 08:04:21 UTC; the declared static readelf ran
+once at 08:04:54–08:04:55 UTC. Both exited 0 without timeout or stderr.
+All 97 actual inputs, 181 ordered response tokens and 121 trace lines passed
+exact qualification. The actual `-lrt` selection is now the bound SDK sysroot
+`librt.a` (eight-byte empty archive); its path matters, not only its hash.
+
+The 985,840-byte `librosbag2_storage.so` has SHA256
+`c828299f96f0901e1eb8a0b8c69f49ae0d57bc348d5ee4a0afded01faa4ba7be`.
+It is AArch64 ET_DYN with SONAME `librosbag2_storage.so`, no RPATH/RUNPATH,
+78 ordered NEEDED entries explained by actually supplied DSOs, and 252 named
+dynamic imports. These are static observations, not loader, provider ABI or
+runtime closure. Only the three planned rsp/DSO/reproduction-tar files were
+added: old 92 files/132 members became 95/135, without changing old outputs.
+
+Formal post-test review found no blocking finding or required implementation
+fix. Final verification at 08:20:48–08:24:51 UTC replayed immutable bytes and
+refreshed 18,507 file records, 173 memberships, 29 seals, 215 absences and all
+four Git states, with no new toolchain invocation. Preparation's same-name ar
+member parsing failure, reviewer read/syntax errors and final Windows audit-argv
+representation exit 1 retain their raw records and narrow corrections. The
+final V2 guard pass succeeded; these collector events were not link failures.
+Protection remains terminal snapshots and before/after sampling, not continuous
+filesystem/process/DLL coverage; archive names do not disambiguate same-name
+members or prove that every archived member linked.
+
+**Complete Ninja package build, installation, SQLite/cpp/local I/O, plugin
+runtime and device acceptance remain NOT_RUN; overall NOT VERIFIED.** Next is
+an installation oracle based on this actual DSO and the generated install
+script, before any install execution. SDK .32/board .31 and generator 4.6.7/
+target runtime 4.6.9 compatibility, native project-only recovery/restore blockers
+and the SQLite independent send-timestamp source limitation remain unchanged.
+The last confirmed publication is `0e493f839fec66b4c85a1fd22559b7dbade17661`
+on existing `origin/codex/flow-encoding-published-20261014`; its 07:25:32 UTC
+CI snapshot was NOT_RUN (zero workflows/checks/status contexts), recorded in
+`storage-objects-main-publication`. Main's later publication receipt owns this
+stage's commit/CI outcome. Earlier dated sections retain their historical scope.
+
+## Earlier seven-object qualification (2026-10-16 07:19 UTC pre-publication snapshot)
 
 Canonical final **ORIGINAL_GENERATED_7_OBJECTS_COMPILED_AND_STATICALLY_CHECKED**
 has Commit gate PASS only for this bounded stage, with mandatory
@@ -454,7 +495,8 @@ limit; UNVERIFIED does not mean inherently impossible.
 | class_loader/pluginlib runtime | UNVERIFIED / NOT_RUN | No real plugin DSO discovery/load/unload or ClassLoader lifecycle execution. |
 | rosbag2_storage configuration inputs and compiler ID/ABI | SUPPORTED within bounded static scope | FIX2A initial/review/final PASS; configuration-stage boundary retained historically; no general ABI/runtime compatibility claim. |
 | rosbag2_storage seven individual ordinary objects | PASS: compiled and statically checked | Seven unchanged generated argv, actual depfiles and AArch64 ET_REL outputs; final replay PASS; STOP_BEFORE_DSO_LINK. |
-| rosbag2_storage complete Ninja package / DSO / installation | UNVERIFIED / NOT_RUN | Direct object execution does not prove package BUILDS or HOST_TESTED; final link inputs, DSO and install/RPATH remain unexecuted. |
+| rosbag2_storage original DSO link/static inspection | PASS within bounded static scope | Actual original link/readelf, 97 inputs and AArch64 ET_DYN checks; final PASS; STOP_BEFORE_INSTALL; no loader/ABI/runtime claim. |
+| rosbag2_storage complete Ninja package / installation | UNVERIFIED / NOT_RUN | Direct object/link execution does not establish complete package BUILDS or HOST_TESTED; installation oracle and execution remain pending. |
 | Fixed String typed Writer/Reader with SQLite, no compression | UNVERIFIED / PLANNED | Next bounded rosbag consumer; no actual rosbag I/O evidence yet. |
 | Independent SQLite send-timestamp persistence | UNSUPPORTED in inspected source; runtime NOT_RUN | Current schema/write/read retain receive timestamp only; distinct send/receive runtime case remains required, with no invented returned-value claim. |
 | Plugin XML/ament-index/typesupport resource discovery | PARTIAL | Metadata bytes and six host CMake resources checked; target runtime XML/plugin/typesupport discovery unverified. |
@@ -489,9 +531,9 @@ The old read-only storage-readiness report and 19-command sketch remain
 historical, not execution authority. Current FIX2A qualifies the actual
 rosbag2_storage 0.26.11 configure path and ID/ABI evidence with 77 bound imported
 locations. It does not establish their ABI/runtime compatibility. Seven original
-translation units now have qualified individual object/dependency evidence;
-actual final link inputs and an install oracle derived from the DSO/scripts
-are still required.
+translation units and the original DSO now have qualified object/dependency
+and link/static evidence. An installation oracle derived from the actual DSO
+and generated scripts, then installation execution, are still required.
 
 Current storage defaults to `mcap`; the future fixed String local round trip
 must explicitly choose `sqlite3`, with matching CDR serialization, close/reopen
@@ -529,6 +571,15 @@ local evidence; remote readers need the separately retained files to recheck it.
 
 | Receipt | SHA256 |
 | --- | --- |
+| `rosbag-storage-link-test/RESULT.json` | `0982c62bd3bade4627559ff358950de2764852fdd1be2cc9ad4bb8a7b8b40c89` |
+| `rosbag-storage-link-test/EVIDENCE_MANIFEST.json` | `400b89591f081722d36e7723a5a7ece0355f7a3266d182670aad874d9272acac` |
+| `rosbag-storage-link-posttest-review/RESULT.json` | `c8c2fc59b88504c74debb2e10fc5a1ad7b1f1507d8c2dd9d8ce4fd16baf214a1` |
+| `rosbag-storage-link-posttest-review/EVIDENCE_MANIFEST.json` | `a40f2cb58942fd3ce44396338add29991ffeb0252402ee5ef2c1cd5588695878` |
+| `rosbag-storage-link-final-test/RESULT.json` | `8f75830d0aed3f6082e57d627abcc246f9fd54f53938a009ba07f4f3d571347a` |
+| `rosbag-storage-link-final-test/REPORT.md` | `774a0a19f965a5515f06851beba4d6b449dee069f2f23764e8842dc1acdb8e90` |
+| `rosbag-storage-link-final-test/EVIDENCE_MANIFEST.json` | `44d7d428fb93b32510fd8aafa2ee8f82c360e8e3b1ab620485d2329d10f965cf` |
+| `storage-objects-main-publication/PUBLICATION_RESULT.json` | `68df063359d78b4ba6a102d6c7917d1fce7833e73266ff78fca6e85d9ca139e1` |
+| `storage-objects-main-publication/CI_RESULT.json` | `f64e2cadc46d766a0a34bdb0c38f6a5dd2fa16ccd852e7280697e01e4cd2822e` |
 | `rosbag-storage-objects-pretest-review/RESULT.json` | `3da7a937d50683a9eb443aacfa587b33a29ac45a6968df0ec363c3bcc7d0a090` |
 | `rosbag-storage-objects-fix1-candidate/RESULT.json` | `aed715fde9c8eeafa9282d3e1dfc5690dd701c8ac685e174a3b22785f0c0126f` |
 | `rosbag-storage-objects-fix1-test/RESULT.json` | `4575e7bbffd9321e18bc264208ec455c079c4e9809b1d056313b764cf6fe7d50` |

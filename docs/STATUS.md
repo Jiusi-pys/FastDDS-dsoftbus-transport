@@ -1,6 +1,39 @@
 # Project status
 
-## R19 seven storage objects (2026-10-16 07:19 UTC pre-publication snapshot)
+## R19 storage DSO static qualification (2026-10-16 08:27 UTC pre-publication snapshot)
+
+Final **ORIGINAL_STORAGE_DSO_LINKED_AND_STATICALLY_INSPECTED** has bounded
+Commit gate PASS with **STOP_BEFORE_INSTALL**. The original link ran once at
+08:04:21 UTC and static readelf once at 08:04:54–08:04:55 UTC, both exit 0
+with empty stderr. All 97 actual inputs, 181 response tokens and 121 trace
+lines were qualified. The 985,840-byte AArch64 ET_DYN has the expected SONAME,
+78 statically explained NEEDED entries, no RPATH/RUNPATH and 252 named dynamic
+imports. This is not proof of loader, ABI or runtime compatibility.
+
+Formal post-test review found no blocking issue. Final verification at
+08:20:48–08:24:51 UTC replayed evidence and refreshed all guards without another
+toolchain execution. The three planned rsp/DSO/tar outputs give 95 files/135
+members; old 92 files are unchanged. Fresh 18,507 file records, 173 memberships,
+29 seals, 215 absences and four Git states passed. The archive parser preparation
+failure, reviewer read/syntax errors and final Windows audit-argv collector
+exit 1 remain recorded with narrow fixes; none was a real link failure.
+Protection remains sampled, not continuous filesystem/process/OS closure.
+
+Complete Ninja package build, installation, SQLite/cpp/local I/O, plugin
+runtime and device tests remain NOT_RUN. Next is a separately reviewed install
+oracle derived from the real DSO/generated scripts. Native project-only
+permission recovery and lossless restore remain BLOCKED; the whole-registry
+automatic-approval rejection was not retried. SQLite's independent send-timestamp
+source limitation and SDK/board compatibility gaps remain. Overall NOT VERIFIED.
+
+The last confirmed publication is `0e493f839fec66b4c85a1fd22559b7dbade17661`
+on existing `origin/codex/flow-encoding-published-20261014`; its 07:25:32 UTC
+CI snapshot was NOT_RUN, recorded in `storage-objects-main-publication`.
+Main's subsequent publication receipt records this stage's commit/push and CI.
+See [target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for exact artifact
+and evidence hashes, current capabilities and retained historical snapshots.
+
+## Earlier R19 seven storage objects (2026-10-16 07:19 UTC pre-publication snapshot)
 
 Final **ORIGINAL_GENERATED_7_OBJECTS_COMPILED_AND_STATICALLY_CHECKED** has
 bounded Commit gate PASS, with **STOP_BEFORE_DSO_LINK**. Seven original expanded
