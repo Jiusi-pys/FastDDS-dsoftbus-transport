@@ -1,6 +1,6 @@
 # R25 native C++ Action on two RK3588A boards
 
-> **Publication / successor (2026-10-17):** This native C++ stage was published as `4794ffb08d2d1cf49e758a0a4627f4aa2c87de92` to existing `origin/codex/flow-encoding-published-20261014`; CI was NOT_RUN at 08:31:44 UTC (zero runs/checks/status contexts). The later [ordinary Python/CLI node-discovery stage](ROS2_ORDINARY_CLI_NODE_DISCOVERY_ACCEPTANCE.md) separately passes single-Node lifecycle and bidirectional stock no-daemon node listing, with its publication still pending. Neither stage qualifies ordinary Action CLI or rosbag. The native-stage pre-commit statements below remain historical snapshots.
+> **Publication / successor (2026-10-17 22:34 UTC):** This native C++ stage was published as `4794ffb08d2d1cf49e758a0a4627f4aa2c87de92`; Python/CLI node discovery followed as `471d344050dccae6cb10396d3432fc9f88a92ff7` on existing `origin/codex/flow-encoding-published-20261014` (20:30:40 UTC CI NOT_RUN). [Topic/echo evidence](ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md) is separately scoped and the current Host repair awaits publication. Ordinary Action CLI AB/BA remain NOT_RUN, and rosbag remains UNVERIFIED. Native-stage statements below are historical snapshots, not proof of those unexecuted commands.
 
 At 2026-10-17 08:13:12–08:14:19 UTC, the independently reviewed native window
 `484675d3f084d757` passed its Action, native-path, SPDP, process-exit and cleanup

@@ -25,7 +25,7 @@ LABELS = ('targets', 'external_hashes', 'directory_absence', 'directory_create',
 FROZEN = {'query_stage.py': '51ff5ba76389cb6d26ae3477b9f235ce6bd2ef38cc9c6f6b9dbf429d60d688ef',
           'execute.py': 'b8a55630fd401b22df8af8c58bfd08066757529d603e6ccdc193d1e8b940cd82',
           'run_actionbag_native.py': 'f9fa38d1a1629ccd976b5ba57f36fcea205cc03a544276eee01c3c7977ac6712',
-          'run_actionbag_cli.py': '3d348d26157311d5fd5d1f05248d4454ca238296ae8f0154936fac061a03c40e'}
+          'run_actionbag_cli.py': '3568820a923ee3aebec056aece1f53c2582ed235837e13904c838c7fc35282b3'}
 PRODUCTS = {'actionbag_peer_query': 'b37c36c8c2744ee7990cfa2cd3a95c690ab532ad9497383564d883c436ce7a92',
             'libmdds_actionbag_token_bridge.so': 'd7e503a01c8d5d86fd49858bb7e375f49e71585081d87f450cf0521f7611ee57',
             'libc++_shared.so': 'd1a368b58e7cb80a7422b8bd344ec9328a43884d62f409af6e9ec161c73a2f4d'}

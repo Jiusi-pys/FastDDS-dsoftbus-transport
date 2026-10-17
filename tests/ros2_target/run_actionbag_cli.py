@@ -154,8 +154,15 @@ def ordinary_business(case, run, texts, pids, plan, final=False):
         pubs = [r for r in records[fixture] if r['event'] == 'PUBLISH']
         if any(r.get('data') != payload for r in pubs): raise ValueError('Incorrect publisher payload')
         if not data or not pubs: return False
-        if len(data) != 1 or len(all_data) != 1 or ordinary_yaml(all_data[0], 'data') != {'data': payload} or not any(type(r.get('matched')) is int and r['matched'] >= 1 for r in pubs):
+        if len(data) != 1 or len(all_data) != 1 or ordinary_yaml(all_data[0], 'data') != {'data': payload}:
             raise ValueError('Exact CLI echo/matched publisher missing')
+        if not any(type(r.get('matched')) is int and r['matched'] >= 1 for r in pubs):
+            # Board snapshots are read sequentially. A valid CLI receipt can
+            # precede the next publisher snapshot containing its match event.
+            # Only incomplete live evidence may wait within the existing budget.
+            if final or any(type(r.get('matched')) is not int or r['matched'] != 0 for r in pubs):
+                raise ValueError('Exact CLI echo/matched publisher missing')
+            return False
         return True
     accepted = re.findall(r'^Goal accepted with ID: ([0-9a-f]{32})$', text, re.M)
     if accepted and (len(accepted) != 1 or int(accepted[0], 16) == 0): raise ValueError('Accepted UUID invalid/duplicate')

@@ -1,6 +1,39 @@
 # Project status
 
-## Current ordinary Python/CLI node-discovery evidence (2026-10-17 20:11 UTC)
+## Current ordinary topic/echo evidence (2026-10-17 22:34 UTC)
+
+**Fresh stock topic echo AB/BA PASS on the real RK3588A pair after a four-file
+Host readiness repair.** In BA, successive snapshots show publisher matched=0,
+then the CLI's exact YAML, then publisher matched=1 before normal close. The
+repair waits only for incomplete live evidence within the original deadline;
+incorrect data, malformed matches and final missing matches still fail.
+[Commands, artifacts and retained evidence](ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md).
+
+| Capability | Status and evidence boundary |
+| --- | --- |
+| Python entry / single Node / stock no-daemon node discovery | Previously DEVICE_TESTED PASS and published as `471d344050dccae6cb10396d3432fc9f88a92ff7`; selected single-lifetime scope only. |
+| Topic graph AB/BA and stock topic pub AB/BA | PARTIAL: original real pre-repair source/run evidence reverified. Not rerun with this four-file patch. Historical pub AB preparation receipt discrepancy retains its independent disposition and missing outer-raw limitation. |
+| Stock topic echo AB/BA | SUPPORTED for exact String payload, reliable/volatile/depth10, one Node/context per process, no-daemon/once/timeout20. Fresh AB `c67a4d427026c670` and BA `a039923ab6958e31` PASS. |
+| Host echo readiness / consumer binding | HOST_TESTED and used in fresh target windows. Synthetic negative fixtures remain Host-only; actual device metadata was independently constructed and checked. |
+| Native package/build | Reused unchanged qualified package: 2,811 members / 167 ELF. Python compile PASS; new C++ build N/A for this four Host-file change. |
+| Public/native close and owned process exit | PARTIAL: both windows delete/close/finalize return 0, restore=1, all four owned PIDs absent, signals=0. SDK global callback drain/quiescence NOT PROVEN. |
+| Native C++ Action | Earlier bounded published evidence unchanged. Ordinary Action CLI AB/BA are NOT_RUN, not inferred from topic results. |
+| Optional unique flows | PARTIAL: known failed first Reader attempt/retry retained; unique flows NOT_PROVIDED, strict mode NOT_TESTED. |
+| QoS breadth, reconnect, large messages, concurrent applications | UNVERIFIED beyond prior separately dated scopes. Fixed String delivery is not general load/recovery acceptance; R22 STOPPED. |
+| rosbag / complete ROS 2 parity | Bag NOT_INCLUDED / UNVERIFIED; full ROS 2 parity NOT VERIFIED. Dedicated SEDP wire qualification remains absent. |
+
+Final execution Commit gate PASS applies only to the four changed Host files.
+Independent final tester reverified 15 seals / 9,341 files and the current
+source freeze; old echo FAIL/BLOCKED windows and local audit errors remain
+unchanged. Main documentation/graph/PRE_COMMIT/publication are separate gates.
+R22 five files and bag builder are excluded. Last confirmed publication is
+`471d344050dccae6cb10396d3432fc9f88a92ff7` on existing
+`origin/codex/flow-encoding-published-20261014`; its 20:30:40 UTC CI snapshot is
+NOT_RUN (zero runs/checks/status contexts), not CI PASS. Earlier sections below
+retain their historical publication and capability states.
+
+
+## Earlier ordinary Python/CLI node-discovery evidence (2026-10-17 20:11 UTC)
 
 **Bounded real RK3588A AB/BA node-discovery PASS.** Stock
 `ros2 node list --no-daemon --spin-time 3` found the opposite public rclpy Node

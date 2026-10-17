@@ -120,6 +120,15 @@ class PeerEvidenceViewTests(unittest.TestCase):
         with mock.patch.object(self.tool, 'inventory', return_value=changed):
             with self.assertRaisesRegex(ValueError, 'Source changed'):self.tool.recheck()
 
+    def test_unselected_ordinary_consumer_rejected(self):
+        cli_file = Path(__file__).with_name('run_actionbag_cli.py').resolve()
+        original_sha = view.PeerEvidenceView.sha
+        for unselected in ('3d348d26157311d5fd5d1f05248d4454ca238296ae8f0154936fac061a03c40e', '0' * 64):
+            with self.subTest(unselected=unselected), mock.patch.object(
+                    view.PeerEvidenceView, 'sha', side_effect=lambda p: unselected if Path(p).resolve() == cli_file else original_sha(p)):
+                with self.assertRaisesRegex(ValueError, 'Frozen ordinary consumer changed'):
+                    view.PeerEvidenceView(ARGS.binding)
+
     def test_frozen_routes_and_expired_prepare_without_processes(self):
         # Read exact existing consumers; any subprocess would fail this test.
         cli_file = Path(__file__).with_name('run_actionbag_cli.py')
@@ -143,12 +152,54 @@ class PeerEvidenceViewTests(unittest.TestCase):
         selection.update(schema=1, case='imports_cdr_pair', package=checklist['package_directory'],
                          readiness={'path': str(ready), 'sha256': self.tool.sha(ready)},
                          routes={'path': str(routes), 'sha256': self.tool.sha(routes)})
+        # Private synthetic metadata exercises the current consumer's expiry
+        # gate. Historical source qualifications and receipts are not rewritten
+        # or presented as qualification of this newer host consumer.
+        originals = {name: copy.deepcopy(selection[name]) for name in ('ordinary_freeze', 'external', 'readiness')}
+        values = {}
+        for name, descriptor in originals.items():
+            self.assertEqual(self.tool.sha(descriptor['path']), descriptor['sha256'])
+            values[name] = self.tool.load(Path(descriptor['path']))
+        fixture = self.work / 'synthetic-current-consumer-inputs'
+        fixture.mkdir()
+        frozen = copy.deepcopy(values['ordinary_freeze'])
+        for row in frozen['files']:
+            source = cli.REPO / row['path']
+            row.update(sha256=self.tool.sha(source), bytes=source.stat().st_size)
+        self.assertEqual({k: v for k, v in frozen.items() if k != 'files'},
+                         {k: v for k, v in values['ordinary_freeze'].items() if k != 'files'})
+        self.assertEqual(frozen['source_sha256'], self.tool.sha(cli.PROBE))
+        self.assertEqual([r for r in frozen['files'] if r['path'].endswith('actionbag_runtime_probe.py')],
+                         [r for r in values['ordinary_freeze']['files'] if r['path'].endswith('actionbag_runtime_probe.py')])
+        frozen_file = fixture / 'FREEZE.json';frozen_file.write_text(json.dumps(frozen, indent=2) + '\n')
+        external = copy.deepcopy(values['external'])
+        external['source_freeze_sha256'] = self.tool.sha(frozen_file)
+        self.assertEqual({k: v for k, v in external.items() if k != 'source_freeze_sha256'},
+                         {k: v for k, v in values['external'].items() if k != 'source_freeze_sha256'})
+        external_file = fixture / 'EXTERNAL.json';external_file.write_text(json.dumps(external, indent=2) + '\n')
+        readiness = copy.deepcopy(values['readiness'])
+        readiness.update(ordinary_source_freeze_sha256=self.tool.sha(frozen_file), external_closure_sha256=self.tool.sha(external_file))
+        rebound = {'ordinary_source_freeze_sha256', 'external_closure_sha256'}
+        self.assertEqual({k: v for k, v in readiness.items() if k not in rebound},
+                         {k: v for k, v in values['readiness'].items() if k not in rebound})
+        readiness_file = fixture / 'READINESS.json';readiness_file.write_text(json.dumps(readiness, indent=2) + '\n')
+        for name, path in (('ordinary_freeze', frozen_file), ('external', external_file), ('readiness', readiness_file)):
+            selection[name] = {'path': str(path), 'sha256': self.tool.sha(path)}
+        (fixture / 'PROVENANCE.json').write_text(json.dumps({
+            'status': 'SYNTHETIC_HOST_ONLY_NOT_DEPLOYABLE', 'originals': originals,
+            'synthetic': {k: selection[k] for k in originals},
+            'new_source_review_or_device_qualification_asserted': False,
+            'purpose': 'Current consumer must still reject the unchanged expired route; subprocess and shell calls forbidden',
+        }, indent=2) + '\n')
         selected = self.work / 'OFFLINE_ONLY_EXPIRED_SELECTION.json'
         selected.write_text(json.dumps(selection, indent=2) + '\n')
         incomplete = self.work / 'expired-prepare-retained'
         with self.assertRaisesRegex(ValueError, 'Fresh independently captured paired routes required') as error:
             cli.ordinary_prepare(argparse.Namespace(inputs=selected, output=incomplete))
         self.assertTrue((incomplete / 'PLAN.json').is_file())
+        self.assertEqual(self.tool.load(routes), route)
+        for descriptor in originals.values():
+            self.assertEqual(self.tool.sha(descriptor['path']), descriptor['sha256'])
         (self.work / 'EXPIRED_PREPARE_REJECTION.json').write_text(json.dumps({
             'status': 'EXPECTED_LOCAL_REJECTION_NO_HDC', 'exception': str(error.exception),
             'observed_utc_unchanged': route['observed_utc'], 'incomplete_directory_retained': str(incomplete),

@@ -1,6 +1,6 @@
 # R23 native ROS 2 CLI startup
 
-> **Current cross-reference (2026-10-17 20:11 UTC):** R24 project-linked no-Node ABI and [R25 native C++ Action](ROS2_NATIVE_ACTION_ACCEPTANCE.md) are published. The subsequent [ordinary project CLI node-discovery stage](ROS2_ORDINARY_CLI_NODE_DISCOVERY_ACCEPTANCE.md) has independently reviewed/tested implementation and real RK3588A AB/BA PASS for single public Node lifecycle and stock `ros2 node list --no-daemon --spin-time 3`. Its Main graph/PRE_COMMIT and publication gates remain pending. Ordinary topic/Action CLI, daemon mode and bag communication remain UNVERIFIED. The R23 generic deployment results below retain their original scope.
+> **Current boundary (2026-10-17 22:34 UTC):** Project Python/CLI node discovery was published as `471d344050dccae6cb10396d3432fc9f88a92ff7` (CI NOT_RUN). [Topic/echo acceptance](ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md) records topic graph/pub AB/BA under the preceding runner and fresh echo AB/BA after the four Host-file readiness repair; current-source execution gate PASS is separate from pending Main graph/PRE_COMMIT/publication. Daemon mode, ordinary Action CLI and rosbag remain unverified. The R23 generic deployment results below retain their original scope.
 
 As of 2026-10-17 04:42 UTC, the existing generic OpenHarmony deployment passes
 bounded CLI startup on two RK3588A boards. This qualifies real Python/native

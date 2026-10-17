@@ -6,7 +6,8 @@
 - **Recorded limitation:** each board logged a failed optional unique-flow Reader attempt; independent review confirmed the existing RMW retries with original QoS on the same custom Transport. Unique flows were not provided, strict mode was not tested, and startup was not error-free.
 - **R24 project-linked Python PASS, no Node:** native imports, exact String CDR and help/resource queries remain qualified and published as `d8b0fdfecaa654183c57d4b973cc936234080667`. [Dependencies and reproduction](docs/ROS2_PROJECT_PYTHON_ABI.md).
 - **R25 ordinary Python/CLI node discovery PASS, bounded:** single public Node lifecycle and stock `ros2 node list --no-daemon --spin-time 3` passed on the real RK3588A pair in both directions. [Commands, evidence and limits](docs/ROS2_ORDINARY_CLI_NODE_DISCOVERY_ACCEPTANCE.md).
-- **Next boundaries:** ordinary topic graph/pub/echo, Action CLI and rosbag record/play remain UNVERIFIED; R22 Host QoS work remains STOPPED. See the [current capability matrix](docs/STATUS.md). Native C++ Action was published as `4794ffb08d2d1cf49e758a0a4627f4aa2c87de92` (CI NOT_RUN at 08:31:44 UTC); the Python/CLI stage awaits Main graph/PRE_COMMIT and publication gates.
+- **Ordinary topic evidence:** topic graph/pub passed in both directions under the preceding runner; the current four-file Host readiness repair has independent review/post-review tests and fresh real AB/BA `topic echo` PASS. [Results and evidence boundaries](docs/ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md).
+- **Publication / next boundaries:** Python/CLI node discovery was published as `471d344050dccae6cb10396d3432fc9f88a92ff7` (20:30:40 UTC CI NOT_RUN, zero runs/checks). The echo repair awaits Main graph/PRE_COMMIT/publication. Ordinary Action CLI remains NOT_RUN, rosbag UNVERIFIED, R22 STOPPED; [current matrix](docs/STATUS.md).
 
 
 以下带日期摘要保留其历史范围，不能替代上述当前状态，也不构成新的设备测试授权。

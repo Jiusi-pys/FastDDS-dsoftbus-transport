@@ -114,6 +114,96 @@ class OrdinaryCliTests(unittest.TestCase):
         self.assertTrue(M.ordinary_business('imports_cdr_pair', RUN, no_node, PIDS, PLAN))
         with self.assertRaises(ValueError): M.ordinary_business('imports_cdr_pair', RUN, {**no_node, 'A': no_node['A'].replace('00010000', '00060000')}, PIDS, PLAN)
 
+    def test_echo_sequential_snapshots(self):
+        # The device failure read the publisher before the CLI. The later CLI
+        # snapshot contained its payload while the earlier publisher snapshot
+        # did not yet contain its positive match observation.
+        for case, cli, fixture in [('topic_echo_AB', 'A', 'B'), ('topic_echo_BA', 'B', 'A')]:
+            with self.subTest(case=case):
+                events = [{'event': 'ENTITY_READY', 'entity': 'publisher'},
+                          {'event': 'PUBLISH', 'data': 'payload_' + RUN, 'matched': 0}]
+                texts = {cli: 'data: payload_' + RUN + '\n---\n',
+                         fixture: ordinary_modeled_records(fixture, 'publisher', events)}
+                self.assertFalse(M.ordinary_business(case, RUN, texts, PIDS, PLAN))
+                with self.assertRaises(ValueError):
+                    M.ordinary_business(case, RUN, texts, PIDS, PLAN, final=True)
+                for bad in ('data: wrong\n---\n', texts[cli] * 2):
+                    with self.subTest(bad=bad), self.assertRaises(ValueError):
+                        M.ordinary_business(case, RUN, {**texts, cli: bad}, PIDS, PLAN)
+                wrong = ordinary_modeled_records(fixture, 'publisher', events +
+                    [{'event': 'PUBLISH', 'data': 'wrong', 'matched': 0}])
+                with self.assertRaises(ValueError):
+                    M.ordinary_business(case, RUN, {**texts, fixture: wrong}, PIDS, PLAN)
+                for matched in (False, True, '1', -1):
+                    invalid = ordinary_modeled_records(fixture, 'publisher', events +
+                        [{'event': 'PUBLISH', 'data': 'payload_' + RUN, 'matched': matched}])
+                    with self.subTest(matched=matched):
+                        with self.assertRaises(ValueError):
+                            M.ordinary_business(case, RUN, {**texts, fixture: invalid}, PIDS, PLAN)
+                        with self.assertRaises(ValueError):
+                            M.ordinary_business(case, RUN, {**texts, fixture: invalid}, PIDS, PLAN, final=True)
+                texts[fixture] = ordinary_modeled_records(fixture, 'publisher', events +
+                    [{'event': 'PUBLISH', 'data': 'payload_' + RUN, 'matched': 1}])
+                self.assertTrue(M.ordinary_business(case, RUN, texts, PIDS, PLAN))
+                self.assertTrue(M.ordinary_business(case, RUN, texts, PIDS, PLAN, final=True))
+                self.assertFalse(M.ordinary_business(case, RUN, {**texts, cli: ''}, PIDS, PLAN))
+
+    def test_echo_waits_for_evidence_without_extending_deadline(self):
+        # Exercise the real workflow and predicate with modeled device reads.
+        # No fixture finish or normal close may occur on the mixed-age snapshot.
+        for case in ('topic_echo_AB', 'topic_echo_BA'):
+            definition = next(c for c in PLAN['ordered_cases'] if c['id'] == case)
+            cli, fixture = definition['cli_side'], definition['fixture_side']
+            for arrival in ('next_poll', 'never', 'after_deadline'):
+                with self.subTest(case=case, arrival=arrival):
+                    clock, releases, writes = {'now': 0.0, 'round': 0}, [], {}
+                    runner = M.OrdinaryCliRunner.__new__(M.OrdinaryCliRunner)
+                    runner.run, runner.case, runner.definition, runner.design = RUN, case, definition, PLAN
+                    runner.roles = {cli: None, fixture: 'publisher'}
+                    runner.owned = {s: {'child': {'pid': PIDS[s]}} for s in 'AB'}
+                    runner.closed = set()
+                    runner.launch, runner.maps, runner.wait_exit = Mock(), Mock(), Mock()
+                    runner.write = lambda name, value: writes.update({name: value})
+                    def finish(side, reason):
+                        self.assertGreaterEqual(clock['round'], 2)
+                        self.assertLess(clock['now'], 35)
+                    runner.finish_fixture = Mock(side_effect=finish)
+                    def publish(side, name, data):
+                        releases.append((side, name, clock['now']))
+                    def poll(side):
+                        if runner.stage == 'LISTENER':
+                            return ('ROS_LISTENER_READY run=' + RUN + ' side=' + side +
+                                    ' pid=' + str(PIDS[side]) + ' listener=1 fake_sdk=0'), ''
+                        if runner.stage == 'BUSINESS' and side == 'A':
+                            clock['round'] += 1
+                            clock['now'] += 1 if arrival != 'after_deadline' else 18
+                        ready = ('ROS_RUNTIME_CLOSE_READY schema=1 run=' + RUN + ' side=' + side +
+                                 ' pid=' + str(PIDS[side]) + ' stage=RUNTIME_CLOSE stopping=1 sealed=1 active_pumps=0 pump_joined=1')
+                        if side == cli: return 'data: payload_' + RUN + '\n---\n' + ready, ''
+                        events = [{'event': 'ENTITY_READY', 'entity': 'publisher'},
+                                  {'event': 'PUBLISH', 'data': 'payload_' + RUN, 'matched': 0}]
+                        if clock['round'] >= 2 and arrival != 'never':
+                            events.append({'event': 'PUBLISH', 'data': 'payload_' + RUN, 'matched': 1})
+                        return ordinary_modeled_records(fixture, 'publisher', events) + '\n' + ready, ''
+                    runner.publish, runner.poll = publish, poll
+                    with patch.object(M.time, 'monotonic', side_effect=lambda: clock['now']), patch.object(
+                            M.time, 'sleep', side_effect=lambda seconds: clock.update(now=clock['now'] + seconds)):
+                        if arrival == 'next_poll': runner.workflow()
+                        else:
+                            with self.assertRaisesRegex(ValueError, 'Absolute35s business deadline exceeded'):
+                                runner.workflow()
+                    self.assertEqual(writes['CLOCK.json']['business_origin'], 0)
+                    self.assertEqual(writes['CLOCK.json']['business_deadline'], 35)
+                    self.assertEqual(writes['CLOCK.json']['normal_close_release_deadline'], 50)
+                    closes = [r for r in releases if r[1] == 'control.RUNTIME_CLOSE']
+                    if arrival == 'next_poll':
+                        self.assertEqual(clock['round'], 2)
+                        self.assertEqual([r[0] for r in closes], ['A', 'B'])
+                    else:
+                        self.assertEqual(closes, [])
+                        runner.finish_fixture.assert_not_called()
+                        runner.wait_exit.assert_not_called()
+
     def test_maps(self):
         package = '/data/local/tmp/mdds_dds_' + RUN + '_A/package'
         names = ['actionbag_python', 'lib/libpython3.12.so.1.0', 'python/rclpy/_rclpy_pybind11.cpython-312-aarch64-linux-ohos.so'] + [

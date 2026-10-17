@@ -1,5 +1,7 @@
 # R25 ordinary ROS 2 CLI node discovery on RK3588A
 
+> **Publication / successor (2026-10-17 22:34 UTC):** This exact 11-file node-discovery stage was published as `471d344050dccae6cb10396d3432fc9f88a92ff7` to existing `origin/codex/flow-encoding-published-20261014`; 20:30:40 UTC CI was NOT_RUN (zero runs/checks/status contexts). [Later topic/echo evidence](ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md) distinguishes pre-repair topic/pub runs from fresh echo AB/BA after a four Host-file repair. That repair still awaits Main graph/PRE_COMMIT/publication. The dated pre-commit body below is retained unchanged.
+
 At 2026-10-17 20:11 UTC, the independent final execution gate is **PASS for the
 11-file Python entry / CLI packaging / bidirectional node-discovery stage**.
 Stock `ros2 node list --no-daemon --spin-time 3` found the opposite board's
