@@ -9,12 +9,14 @@
 namespace fastdds_dsoftbus_probe {
 
 enum class TokenEntryMode { Record, ListNodes };
+enum class TokenIdentity { LegacyProbe, ActionBag };
 
 struct TokenAdmission {
     TokenEntryMode mode = TokenEntryMode::Record;
     bool cli_valid = false;
     bool preflight_asserted = false; // Operator assertion, not internally verified authorization.
     std::uint64_t target = 0;
+    TokenIdentity identity = TokenIdentity::LegacyProbe;
 };
 
 bool ParseTokenArgument(std::string_view text, std::uint64_t& token) noexcept;
@@ -46,7 +48,8 @@ struct OwnedTokenObservation {
     int permission_granted = 0;
 };
 
-bool IsOwnedNormalGranted(std::uint64_t target, const OwnedTokenObservation& observation) noexcept;
+bool IsOwnedNormalGranted(std::uint64_t target, const OwnedTokenObservation& observation,
+        TokenIdentity identity = TokenIdentity::LegacyProbe) noexcept;
 
 class TokenEntryOperations {
 public:

@@ -1,6 +1,13 @@
 // Installed integration startup; the ordinary business source remains ROS-only.
 #include "identity/token_first_entry.hpp"
 #include "identity/token_bridge.h"
+#if defined(FASTDDS_DSOFTBUS_ACTIONBAG_IDENTITY)
+#include "identity/actionbag_identity.hpp"
+#include "identity/actionbag_token_bridge.h"
+#define MddsTokenBridgeGetSelfToken MddsActionbagTokenBridgeGetSelfToken
+#define MddsTokenBridgeSetSelfToken MddsActionbagTokenBridgeSetSelfToken
+#define MddsTokenBridgeVerify MddsActionbagTokenBridgeVerify
+#endif
 #include <charconv>
 #include <cerrno>
 #include <cstdio>
@@ -62,6 +69,16 @@ public:
 };
 }
 int main(int argc, char** argv) {
+#if defined(FASTDDS_DSOFTBUS_ACTIONBAG_IDENTITY)
+    const char* identity_name = std::getenv("FASTDDS_DSOFTBUS_NATIVE_IDENTITY");
+    if (!std::getenv("FASTDDS_DSOFTBUS_REQUIRED_CONFIG") || !identity_name ||
+            std::strcmp(identity_name, mdds_actionbag::identity_name)) {
+        std::fputs("ROS_IDENTITY_REJECTED explicit_actionbag_identity_required\n", stderr); return 3;
+    }
+    constexpr auto identity_kind = fastdds_dsoftbus_probe::TokenIdentity::ActionBag;
+#else
+    constexpr auto identity_kind = fastdds_dsoftbus_probe::TokenIdentity::LegacyProbe;
+#endif
     if (!std::getenv("FASTDDS_DSOFTBUS_REQUIRED_CONFIG"))
         return FastddsDsoftbusRosBusinessMain(argc,argv);
     const char* selected = std::getenv("FASTDDS_DSOFTBUS_NATIVE_TOKEN");
@@ -73,7 +90,7 @@ int main(int argc, char** argv) {
     }
     Operations operations;
     fastdds_dsoftbus_probe::TokenFirstEntry identity(operations);
-    if (!identity.Begin({fastdds_dsoftbus_probe::TokenEntryMode::Record,true,true,token})) return 3;
+    if (!identity.Begin({fastdds_dsoftbus_probe::TokenEntryMode::Record,true,true,token,identity_kind})) return 3;
     // Identity is selected and verified before any rclcpp init/thread/entity.
     int business=4;
     try { business=FastddsDsoftbusRosBusinessMain(argc,argv); }

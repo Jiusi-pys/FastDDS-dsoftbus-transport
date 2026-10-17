@@ -1,5 +1,7 @@
 # ROS 2 Windows Host Action acceptance
 
+> **Native successor (2026-10-17):** [R25 native C++ Action](ROS2_NATIVE_ACTION_ACCEPTANCE.md) passed the same bounded business oracle on real RK3588A/native SoftBus, with separate native-path proof. The two Reader errors per board are a recorded optional unique-flow failure recovered by the existing RMW original-QoS retry; strict unique-flow support remains unverified. This does not change the R18 Host evidence below or qualify ordinary CLI, unbarriered Action or status-topic behavior.
+
 As of 2026-10-15 05:34:11 UTC, independent final testing supports **V1-06
 PARTIAL: Windows Host Action acceptance**. A fresh build and one actual pair
 of ordinary ROS processes passed the bounded scenario below after independent

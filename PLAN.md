@@ -1,5 +1,7 @@
 # Fast DDS / OpenHarmony DSoftBus Transport 实施计划
 
+> **Current bounded stage (2026-10-17):** R25 native C++ Action business/path passed on both RK3588A boards with the dedicated normal/DATASYNC-only identity. Independent post-run review classifies the two Reader errors per board as recovery from an optional unique-flow request using original QoS on the same custom Transport; unique flows were not provided and strict mode was not tested. No R25 publication or overall VERIFIED claim. Next stages are target token-first Python, ordinary Action CLI and native rosbag, each requiring independent review/testing. [Current matrix](docs/STATUS.md) and [R25 evidence](docs/ROS2_NATIVE_ACTION_ACCEPTANCE.md) supersede older blanket permission-block statements only within this exact scope. Historical plans below remain snapshots.
+
 > **历史计划归档说明（实验基线整理）**：下列带日期的状态均为当时快照，包括旧的 INVESTIGATING 和 PRE_COMMIT 记录；不作为当前提交许可。当前限定实验范围、外部依赖和证据边界以 [EXPERIMENT_BASELINE](docs/EXPERIMENT_BASELINE.md) 为准。P0/PF 仍 BLOCKED，生产默认 NativeUnavailable；准备候选不等于授权提交。
 
 > **当前状态更正（2026-09-21）**：工程任务恢复为 `INVESTIGATING / BREAKTHROUGH_ANALYSIS`，平台资格仍为 P0 `BLOCKED / NOT QUALIFIED`，生产 Transport 仍为 `NativeUnavailable`。当前 Host Debug/Release CTest 各 35/35；BYTES 1 秒候选预算 FAIL，RAW/RAW_ENCRYPTED native 压力已观测但各仅 1/64 接收且取消未触发；六项 RAW 边界逐字节通过但不形成生产容量资格。P1 纯逻辑和必要 P2/P3 主机诊断可继续，P4 native backend 未进入，三板测试 `DEFERRED`，PRE_COMMIT `FAIL`。详见 [docs/P0_IMPLEMENTATION_20260920.md](docs/P0_IMPLEMENTATION_20260920.md)；其余内容保留为历史计划，不能当作完成证据。

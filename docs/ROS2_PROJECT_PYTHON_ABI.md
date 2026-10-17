@@ -1,5 +1,7 @@
 # R24 project-linked Python ABI, no Node
 
+> **Publication/current boundary (2026-10-17):** R24 was published as `d8b0fdfecaa654183c57d4b973cc936234080667` on existing `origin/codex/flow-encoding-published-20261014`; its 06:12:24 UTC CI snapshot is NOT_RUN (zero runs/checks/status contexts). [R25 native C++ Action](ROS2_NATIVE_ACTION_ACCEPTANCE.md) adds bounded native business/path evidence and a new dedicated identity, with a documented optional unique-flow retry. It does not upgrade this no-Node Python scope. The separate token-first Python repair has Host evidence/review but no target execution; ordinary CLI/Node/action/bag remain UNVERIFIED. Earlier publication/permission statements below are historical R24 snapshots.
+
 At 2026-10-17 06:02 UTC, fresh build/package and independent A/B execution pass
 for **PROJECT_LINKED_PYTHON_ABI_NO_NODE**. The isolated prefix uses project Fast
 DDS 2.14.5/Fast CDR 2.2.5 and project RMW libraries before the first rclpy import.

@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.22)
+project(actionbag_identity_tests LANGUAGES CXX)
+get_filename_component(_repo "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+add_executable(actionbag_identity_tests main.cpp "${_repo}/integrations/ros2/target/identity/token_first_entry.cpp")
+target_include_directories(actionbag_identity_tests PRIVATE "${_repo}/integrations/ros2/target/identity")
+target_compile_features(actionbag_identity_tests PRIVATE cxx_std_17)
+enable_testing()
+add_test(NAME actionbag.identity_flow COMMAND actionbag_identity_tests)

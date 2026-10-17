@@ -1,6 +1,49 @@
 # Project status
 
-## Current R24 capability overview (2026-10-17 06:02 UTC)
+## Current R25 native Action evidence (2026-10-17)
+
+**Bounded native C++ Action business/path PASS on both RK3588A boards, with
+a recorded optional unique-flow retry.** Run `484675d3f084d757` used fresh peer
+run `fe7c9c0cb93d52df`, the new dedicated normal/DATASYNC-only identity and
+actual project Fast DDS/RMW with native SoftBus. Five requests produced four
+acceptances, one rejection, two successes, one cancellation and one abort.
+Both children restored tokens and exited 0 without forced signals.
+
+Both A and B logged `No unicast locators to create unique flows` and
+`Problem creating associated Reader`; independent post-run review traced the
+existing RMW's OPTIONALLY_REQUIRED retry to the original QoS on the same
+Participant/custom Transport. Unique flows were not provided; STRICTLY_REQUIRED
+was not tested. This is neither builtin fallback nor an error-free startup.
+The sealed tester report remains unchanged. The 08:25 UTC additive final tester
+supplement restores scoped PASS after the temporary log-triage hold; Main's full
+graph/PRE_COMMIT/publication gate is separate. See
+[native Action artifacts, commands, limitations and evidence](ROS2_NATIVE_ACTION_ACCEPTANCE.md).
+
+| Capability | Status and evidence boundary |
+| --- | --- |
+| Fixed native identity and peer directory | SUPPORTED for the exact R25 identity on A/B: native/normal APL, DATASYNC only, token restoration, one local/online directory query per fresh run, SDK buffer release and private local UDID export. Old probe identity remains DENIED. |
+| Native C++ Action | PARTIAL: five requests, four accepted, one rejected; two succeeded, one canceled, one aborted; UUID correlation, feedback and concurrent server goals pass in one actual paired window with application readiness barriers. The recorded optional unique-flow failure recovers through the existing RMW original-QoS retry; it is not an error-free startup. |
+| Native transport path | SUPPORTED for that bounded run: actual project RMW/Fast DDS maps and real SoftBus provider, fake_sdk=0, builtin/intraprocess=0, DataSharing OFF; bidirectional SDK send/ingress and writer/sequence matches. This is not production qualification. |
+| Discovery | PARTIAL: actual V1 metatraffic/user locators in the same SPDP DATA and peer ingress pass; successful Action functionally exercises endpoint discovery. No dedicated SEDP wire oracle, general graph or reconnect test in R25. |
+| Pub/sub and service | PARTIAL: Action feedback/results and PAIR/TAIL Trigger readiness service work in this scenario. Prior dated general pub/sub/service results retain their own scope; R25 adds no general CLI topic/service acceptance. |
+| Serialization and message size | PARTIAL: fixed Fibonacci Action payloads in R25 and fixed String CDR on A/B in R24. R21 small/66k/burst String remains Host TCP-backed fake-DSoftBus evidence, not native large-message acceptance. |
+| Unique network flow endpoints | PARTIAL: this OPTIONALLY_REQUIRED attempt does not provide unique flows; the existing RMW retries with original QoS on the same custom Transport. STRICTLY_REQUIRED is UNVERIFIED / not executed, not a claim of permanent incompatibility. |
+| QoS and failure recovery | UNVERIFIED beyond the scenario's existing profile. No all-QoS, status-topic, unbarriered Action, reconnect, packet-loss or crash-recovery claim. R22 remains STOPPED / UNVERIFIED. |
+| Resource lifecycle | PARTIAL: public Participant deletion, pump join, local runtime close, original token restore, child exit 0 and owned Action directory cleanup pass without forced signals. SDK global callback drain/epoch/quiescence and same-process repeated Participant lifetimes are not established here. |
+| Project Python ABI | SUPPORTED only for R24 no-Node imports, fixed String CDR and help/resource queries. Full ABI and NumPy API coverage remain UNVERIFIED. |
+| Project Python Node / ordinary CLI Action | UNVERIFIED on target. Separate token-first Python launcher repair has Host evidence/review only; CLI overlay CLI-01 repair passed independent Host retesting and awaits formal review; Action Python types have build evidence only. These ongoing changes are excluded from this native 14-file stage. |
+| rosbag | PARTIAL only for earlier R19/R20 offline local String SQLite persistence. Ordinary record/play over native DSoftBus, rosbag2_py and remote replay remain UNVERIFIED. |
+| Unsupported execution choices in this stage | Session API, builtin UDP/TCP fallback and generic ROS provider substitution are excluded. Daemon mode and multiple successful Participant lifetimes per process are not qualified. |
+
+The new identity readiness PASS supersedes the earlier blanket permission
+block only for this exact identity and scenario. Old probe DENIED and earlier
+failed/blocked runs remain historical facts. No registry-wide access occurred.
+R25 publication is PENDING Main's full gate. Last confirmed publication is
+R24 `d8b0fdfecaa654183c57d4b973cc936234080667` on existing
+`origin/codex/flow-encoding-published-20261014`; 06:12:24 UTC CI NOT_RUN
+(zero runs/checks/status contexts). Earlier dated snapshots below are retained.
+
+## Earlier R24 capability overview (2026-10-17 06:02 UTC)
 
 **PROJECT_LINKED_PYTHON_ABI_NO_NODE: PASS on both RK3588A boards.** The isolated
 slice selects project Fast DDS 2.14.5/Fast CDR 2.2.5 and project RMW libraries

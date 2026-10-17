@@ -2,9 +2,11 @@
 
 ## Current progress and navigation (2026-10-17)
 
-- **R24 project-linked Python PASS, bounded:** fresh target build/package and both RK3588A boards passed native imports, exact String CDR round-trip and CLI help/resource queries with project Fast DDS 2.14.5/Fast CDR 2.2.5. See [dependencies, reproduction and limits](docs/ROS2_PROJECT_PYTHON_ABI.md).
-- **Earlier evidence remains scoped:** [R23 generic CLI](docs/ROS2_NATIVE_CLI_STARTUP.md), [R21 Host String delivery](docs/ROS2_FRAGMENT_HOST_ACCEPTANCE.md) and [R20 local persistence/POSIX entry](docs/ROS2_ROSBAG_TARGET_PREPARATION.md) retain their recorded results.
-- **Current boundary:** R24 creates no Node/Participant or daemon and performs no communication. Native DSoftBus/cross-device remains BLOCKED; R22 Host QoS expansion remains STOPPED / UNVERIFIED. See [current capability matrix](docs/STATUS.md).
+- **R25 native C++ Action business/path PASS, bounded:** one real RK3588A pair exercised goals, feedback, concurrent execution, cancellation, rejection, abort and normal completion over native DSoftBus with project DDS/RMW. [Results and limits](docs/ROS2_NATIVE_ACTION_ACCEPTANCE.md).
+- **Recorded limitation:** each board logged a failed optional unique-flow Reader attempt; independent review confirmed the existing RMW retries with original QoS on the same custom Transport. Unique flows were not provided, strict mode was not tested, and startup was not error-free.
+- **R24 project-linked Python PASS, no Node:** native imports, exact String CDR and help/resource queries remain qualified and published as `d8b0fdfecaa654183c57d4b973cc936234080667`. [Dependencies and reproduction](docs/ROS2_PROJECT_PYTHON_ABI.md).
+- **Next boundaries:** ordinary Action CLI, Python Node and rosbag record/play remain UNVERIFIED; R22 Host QoS work remains STOPPED. See the [current capability matrix](docs/STATUS.md). R25 commit/push/CI remain pending.
+
 
 以下带日期摘要保留其历史范围，不能替代上述当前状态，也不构成新的设备测试授权。
 

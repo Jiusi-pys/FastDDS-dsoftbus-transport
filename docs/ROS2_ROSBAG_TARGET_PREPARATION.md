@@ -1,5 +1,7 @@
 # ROS 2 target rosbag preparation
 
+> **Current cross-reference (2026-10-17):** [R25 native C++ Action](ROS2_NATIVE_ACTION_ACCEPTANCE.md) has bounded native business/path PASS using the new dedicated identity, with a documented optional unique-flow retry. This supplies no rosbag record/play or rosbag2_py acceptance. R21 Host delivery and R24 no-Node Python have since been published; the R19/R20 local SQLite results and older permission/publication statements below remain dated snapshots. Ordinary native recording and cross-board replay remain UNVERIFIED.
+
 Current evidence: 2026-10-16 15:54 UTC. **R20's generated POSIX `bundle/run`
 entry and the offline String fixture pass final post-review testing on both
 RK3588A boards independently.**
