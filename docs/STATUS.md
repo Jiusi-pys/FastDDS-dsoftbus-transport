@@ -1,6 +1,52 @@
 # Project status
 
-## Current R21 capability overview (2026-10-16 16:56 UTC)
+## Current R23 capability overview (2026-10-17 04:42 UTC)
+
+**Native CLI startup is SUPPORTED within the existing generic UDPv4 deployment
+on both RK3588A boards. Project-linked Python and native DSoftBus communication
+remain UNVERIFIED / BLOCKED.**
+
+| Capability | Current evidence and boundary |
+| --- | --- |
+| Generic native Python/CLI entry and imports | SUPPORTED, bounded: real CPython 3.12.7/AArch64 OHOS, native rclpy extension, CLI help on A/B; no Node initialization or daemon command. |
+| Generic CLI resource queries | SUPPORTED, bounded: `ros2 pkg prefix rclpy` and `ros2 interface show std_msgs/msg/String`, independently on A/B. |
+| Project-linked Python/rclpy/CLI | UNVERIFIED: generic Fast DDS 2.14.6 / Fast CDR 2.2.7 differs from project 2.14.5 / 2.2.5. Loaded-library provenance does not qualify substituting the project stack. |
+| Project DSoftBus CLI Node/daemon, pub/sub, service, action, QoS, cross-board delivery | UNVERIFIED / BLOCKED; R23 creates no Node, starts no daemon and exchanges no messages. Earlier R18/R20/R21 results retain their exact separate scopes. |
+| R21 typed String Host delivery | Earlier bounded PASS: Reliable 30/30 and Best Effort 30/30 over the TCP fake DSoftBus seam; not native communication. R14 old failures remain open. |
+| R20 POSIX entry/local String persistence; R18 action evidence | Earlier bounded results unchanged; see their dated records and [target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) / [action acceptance](ROS2_ACTION_ACCEPTANCE.md). No broader claim follows from R23. |
+| R22 Host QoS boundary expansion | STOPPED / UNVERIFIED by user correction. Five uncommitted files retained unchanged; no further Host expansion is underway. |
+
+Implementation PRESENT; Python AST checks PASS; fresh C++ build N/A (two additive
+Python scripts, no Transport/DDS/RTPS changes). Initial help-oracle failure is
+retained; corrected initial testing PASS, independent Tier 2 agentic review
+completed with no findings and 14 local fault controls, then final independent
+testing PASS with 34 checks. Fresh A/B probe/help/two-query tasks all returned
+host 0/remote 0 with empty task stderr. Owned scratch cleanup and process
+snapshots passed; those snapshots do not establish global daemon absence.
+DEVICE_TESTED=PASS only for this CLI/import/resource scope. DSoftBus integration
+and cross-device communication are NOT_TESTED; overall native ROS 2/DSoftBus
+remains NOT VERIFIED. Tester Commit gate PASS is R23 scoped.
+
+The next small step is an isolated project Python/library prefix selected before
+the first rclpy import, reusing the existing CPython and suitable R18 rcl_action
+artifacts. Complete the measured dependency closure and determine extension
+compatibility there; neither compatibility nor a mandatory rclpy rebuild is
+established. No new RMW or broad ROS rebuild is justified by this evidence.
+
+Project DATASYNC remained denied at the last 2026-10-16 query. A new persistent
+identity is NOT_APPROVED / NOT_EXECUTED; prior whole-registry access was rejected
+by automatic approval review and not retried. No security/global changes occurred.
+Last confirmed publication before R23 is R21
+`ed7e26c413d0f5a7553f69b0df7aad58d65908a3` on the existing
+`origin/codex/flow-encoding-published-20261014`. R23 publication and Main's final
+graph/PRE_COMMIT gates are PENDING; no R23 SHA or CI success is predicted.
+
+See [R23 reproduction, exact artifacts and local evidence seals](ROS2_NATIVE_CLI_STARTUP.md).
+Evidence under the original workspace's ignored `build/r23-native-cli` is local,
+not uploaded by these documentation references. Dated snapshots below retain
+their historical scope and publication state.
+
+## Earlier R21 capability overview (2026-10-16 16:56 UTC)
 
 **Scoped Windows Host delivery PASS:** typed String small/66k/burst in Reliable
 30/30 and strict Best Effort 30/30; R17 serialized regression 4/4. These are
