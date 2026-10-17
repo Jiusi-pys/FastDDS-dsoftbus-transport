@@ -1,6 +1,44 @@
 # Project status
 
-## Current R25 native Action evidence (2026-10-17)
+## Current ordinary Python/CLI node-discovery evidence (2026-10-17 20:11 UTC)
+
+**Bounded real RK3588A AB/BA node-discovery PASS.** Stock
+`ros2 node list --no-daemon --spin-time 3` found the opposite public rclpy Node
+in runs `ad29a5b4d0d83169` and `becffc43fccc35dc`. Both host runs and all recorded
+remote exits were 0; public/native close, Python finalization, token restoration
+and all four owned-PID absence checks passed per window without forced signals.
+This uses the exact qualified 89-provider package and real DSoftBus Socket
+with fake_sdk=0 / builtin=0. [Commands, artifacts and sealed evidence](ROS2_ORDINARY_CLI_NODE_DISCOVERY_ACCEPTANCE.md).
+
+| Capability | Status and evidence boundary |
+| --- | --- |
+| Owned project Python entry / single public Node | SUPPORTED within tested single-lifetime scope: target no-Node entry cases, single-Node window and AB/BA lifecycle. Full Python/NumPy/ROS ABI is UNVERIFIED. |
+| Ordinary no-daemon node listing | SUPPORTED for the exact A-to-B and B-to-A fixtures; DEVICE_TESTED PASS. Dedicated SEDP wire attribution and general reconnect remain UNVERIFIED. |
+| CLI/types/rosgraph package | BUILD and HOST_TESTED PASS; stock node command target-tested. Presence of other CLI commands or generated Action types is not their runtime acceptance. |
+| Native C++ Action | PARTIAL, separately published: bounded goal/feedback/cancel/reject/abort/concurrency evidence below remains applicable. Ordinary Action CLI is UNVERIFIED. |
+| Topic graph, ordinary pub/echo, services and QoS | NOT VERIFIED BY THIS STAGE. Topic graph/pub/echo are next frozen cases; prior dated native/Host results keep their own scope. R22 remains STOPPED. |
+| Serialization / sizes / load / recovery | Fixed CDR and prior native Action evidence retain their scopes; large native payloads, broad types, stress, reconnect and failure recovery are not qualified by node listing. |
+| Resource lifecycle | PARTIAL: process-local public/native close, finalization, restoration and exit pass. SDK global callback drain/quiescence and same-process repeated Participant lifetimes remain NOT PROVEN. |
+| Unique network flows | PARTIAL: known optional first-Reader failure and existing RMW original-QoS retry are retained. Unique flows NOT_PROVIDED; strict mode NOT_TESTED. |
+| rosbag record/play / remote replay | UNVERIFIED; bag builder/package excluded from this stage. Earlier local SQLite evidence is unchanged. |
+| Unsupported choices / overall status | Session API, builtin fallback and provider substitution excluded. Daemon mode is not qualified. Full ROS 2 parity: NOT VERIFIED. |
+
+The independent final tester reports execution Commit gate PASS for the exact
+11 source files; six component initial/review/post-review chains and the actual
+AB/BA runs were revalidated. Main graph/PRE_COMMIT and publication for this
+stage remain pending. R22 five files, bag and unrelated worktrees are excluded.
+Original failed/blocked windows and the two historical CLI preservation FAIL
+assertions remain intact; their separately reviewed launcherfix2 disposition
+does not relabel old evidence as PASS.
+
+Last confirmed publication is native C++ Action
+`4794ffb08d2d1cf49e758a0a4627f4aa2c87de92` on existing
+`origin/codex/flow-encoding-published-20261014`; its 08:31:44 UTC CI snapshot is
+NOT_RUN (zero runs/checks/status contexts). Dated sections below retain the
+state known at their time; they are superseded only within the scope above.
+
+
+## Earlier R25 native Action evidence (2026-10-17 08:25 UTC)
 
 **Bounded native C++ Action business/path PASS on both RK3588A boards, with
 a recorded optional unique-flow retry.** Run `484675d3f084d757` used fresh peer

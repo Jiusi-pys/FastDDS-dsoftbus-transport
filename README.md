@@ -5,7 +5,8 @@
 - **R25 native C++ Action business/path PASS, bounded:** one real RK3588A pair exercised goals, feedback, concurrent execution, cancellation, rejection, abort and normal completion over native DSoftBus with project DDS/RMW. [Results and limits](docs/ROS2_NATIVE_ACTION_ACCEPTANCE.md).
 - **Recorded limitation:** each board logged a failed optional unique-flow Reader attempt; independent review confirmed the existing RMW retries with original QoS on the same custom Transport. Unique flows were not provided, strict mode was not tested, and startup was not error-free.
 - **R24 project-linked Python PASS, no Node:** native imports, exact String CDR and help/resource queries remain qualified and published as `d8b0fdfecaa654183c57d4b973cc936234080667`. [Dependencies and reproduction](docs/ROS2_PROJECT_PYTHON_ABI.md).
-- **Next boundaries:** ordinary Action CLI, Python Node and rosbag record/play remain UNVERIFIED; R22 Host QoS work remains STOPPED. See the [current capability matrix](docs/STATUS.md). R25 commit/push/CI remain pending.
+- **R25 ordinary Python/CLI node discovery PASS, bounded:** single public Node lifecycle and stock `ros2 node list --no-daemon --spin-time 3` passed on the real RK3588A pair in both directions. [Commands, evidence and limits](docs/ROS2_ORDINARY_CLI_NODE_DISCOVERY_ACCEPTANCE.md).
+- **Next boundaries:** ordinary topic graph/pub/echo, Action CLI and rosbag record/play remain UNVERIFIED; R22 Host QoS work remains STOPPED. See the [current capability matrix](docs/STATUS.md). Native C++ Action was published as `4794ffb08d2d1cf49e758a0a4627f4aa2c87de92` (CI NOT_RUN at 08:31:44 UTC); the Python/CLI stage awaits Main graph/PRE_COMMIT and publication gates.
 
 
 以下带日期摘要保留其历史范围，不能替代上述当前状态，也不构成新的设备测试授权。
