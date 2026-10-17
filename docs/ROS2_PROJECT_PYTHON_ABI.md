@@ -1,6 +1,6 @@
 # R24 project-linked Python ABI, no Node
 
-> **Current boundary (2026-10-17 22:34 UTC):** R24 remains the no-Node ABI baseline; native C++ Action was published separately as `4794ffb08d2d1cf49e758a0a4627f4aa2c87de92`, then Python/CLI node discovery as `471d344050dccae6cb10396d3432fc9f88a92ff7` (CI NOT_RUN). [Current topic/echo evidence](ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md) adds historical topic graph/pub AB/BA and fresh echo AB/BA on the unchanged qualified native package. The four Host-file readiness repair has execution Commit gate PASS; Main graph/PRE_COMMIT/publication remain pending. Ordinary Action CLI and rosbag remain unverified. These selected paths do not broaden R24 into full Python/NumPy/ROS ABI qualification; the body below is its historical snapshot.
+> **Current boundary (2026-10-17 23:34 UTC):** R24 remains the no-Node ABI baseline. Node discovery and echo repair were subsequently published; current HEAD is `cb9c54dc6564362b52dc652e55ae9f7b5559749e` (CI NOT_RUN). [Ordinary Action CLI AB/BA](ROS2_ORDINARY_CLI_ACTION_ACCEPTANCE.md) now passes fixed positive order=6 goal/feedback/result on the unchanged project Python/native package. This documentation-only stage awaits Main graph/PRE_COMMIT/publication. General ABI coverage, CLI cancellation/rejection/abort/concurrency and rosbag remain unverified. The historical R24 body below is not broadened by these selected paths.
 
 At 2026-10-17 06:02 UTC, fresh build/package and independent A/B execution pass
 for **PROJECT_LINKED_PYTHON_ABI_NO_NODE**. The isolated prefix uses project Fast

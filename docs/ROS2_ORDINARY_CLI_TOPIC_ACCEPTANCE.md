@@ -1,5 +1,7 @@
 # R25 ordinary topic commands and echo readiness repair
 
+> **Publication / successor (2026-10-17 23:34 UTC):** This four-file echo repair was published as `cb9c54dc6564362b52dc652e55ae9f7b5559749e` to existing `origin/codex/flow-encoding-published-20261014`; 22:49:05 UTC CI was NOT_RUN (zero runs/checks/status contexts). [Ordinary Action CLI AB/BA](ROS2_ORDINARY_CLI_ACTION_ACCEPTANCE.md) subsequently passed fixed positive order=6 goal/feedback/result on unchanged sources/package. That evidence documentation awaits publication; historical pre-commit and Action NOT_RUN statements below describe the earlier echo-stage snapshot.
+
 At 2026-10-17 22:34 UTC, independent final testing reports **execution Commit
 gate PASS for four Host Python files**. Fresh stock `ros2 topic echo` AB/BA
 windows passed on the real RK3588A pair using the unchanged qualified native

@@ -1,6 +1,39 @@
 # Project status
 
-## Current ordinary topic/echo evidence (2026-10-17 22:34 UTC)
+## Current ordinary Action CLI evidence (2026-10-17 23:34 UTC)
+
+**Stock `ros2 action send_goal` AB/BA PASS for one positive Fibonacci order=6
+goal per direction on the real RK3588A pair.** Each CLI received an accepted
+nonzero UUID, five ordered feedback prefixes, exact result `[0,1,1,2,3,5,8]`
+and SUCCEEDED, correlated with the opposite public rclpy server before close.
+[Actual commands, artifacts, raw evidence and limits](ROS2_ORDINARY_CLI_ACTION_ACCEPTANCE.md).
+
+| Capability | Status and evidence boundary |
+| --- | --- |
+| Ordinary Action CLI AB/BA | SUPPORTED within two fresh fixed order=6 windows; DEVICE_TESTED PASS. One Node/context and one successful goal per process. |
+| Native C++ Action | Earlier independently published bounded cancellation/rejection/abort/concurrent-goal evidence remains separate; it does not qualify those ordinary CLI behaviors. |
+| Native path / local lifecycle | Actual Socket, project RMW/DDS and exact providers verified. Public delete/RuntimeClose/finalize=0, restore=1, all four owned PIDs absent and signals=0 in each window. SDK global callback quiescence NOT PROVEN. |
+| Python/node/topic/echo | Prior dated evidence retains its exact source/run scope, including old-runner topic/pub limitation. No fresh topic or general service test is claimed by Action success. |
+| Ordinary CLI cancel/reject/abort/preemption/concurrent goals | UNVERIFIED: not executed in the two positive-goal windows. Status-topic behavior is not separately qualified. |
+| Serialization / QoS / size / recovery | Fixed Fibonacci payload only. Broader QoS, large messages, reconnect and stress remain UNVERIFIED; R22 remains STOPPED. |
+| Optional unique flows / wire attribution | Unique flows NOT_PROVIDED; known optional retry retained, strict mode NOT_TESTED. Dedicated SEDP and direct Action UUID-to-RTPS mapping not qualified. |
+| rosbag / complete ROS 2 parity | Bag excluded / UNVERIFIED; full ROS 2 parity NOT VERIFIED. |
+
+This stage changes documentation only. Published source bytes, post-review Host
+tests and qualified native build/package were revalidated; no new compile,
+product suite or native rebuild is claimed. Independent final execution Commit
+gate PASS applies to this fixed Action evidence; Main documentation/graph/
+PRE_COMMIT/publication remain separate. Original failures and local errata are
+retained. R22 five files and bag builder remain excluded.
+
+Last confirmed publication is echo repair
+`cb9c54dc6564362b52dc652e55ae9f7b5559749e` on existing
+`origin/codex/flow-encoding-published-20261014`; its 22:49:05 UTC CI snapshot is
+NOT_RUN (zero runs/checks/status contexts), not PASS. Historical sections below
+retain their earlier publication and capability state.
+
+
+## Earlier ordinary topic/echo evidence (2026-10-17 22:34 UTC)
 
 **Fresh stock topic echo AB/BA PASS on the real RK3588A pair after a four-file
 Host readiness repair.** In BA, successive snapshots show publisher matched=0,

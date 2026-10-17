@@ -1,6 +1,6 @@
 # R23 native ROS 2 CLI startup
 
-> **Current boundary (2026-10-17 22:34 UTC):** Project Python/CLI node discovery was published as `471d344050dccae6cb10396d3432fc9f88a92ff7` (CI NOT_RUN). [Topic/echo acceptance](ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md) records topic graph/pub AB/BA under the preceding runner and fresh echo AB/BA after the four Host-file readiness repair; current-source execution gate PASS is separate from pending Main graph/PRE_COMMIT/publication. Daemon mode, ordinary Action CLI and rosbag remain unverified. The R23 generic deployment results below retain their original scope.
+> **Current boundary (2026-10-17 23:34 UTC):** Node discovery and echo repair are published through `cb9c54dc6564362b52dc652e55ae9f7b5559749e` (CI NOT_RUN). [Ordinary Action CLI AB/BA](ROS2_ORDINARY_CLI_ACTION_ACCEPTANCE.md) adds real fixed order=6 accepted goal, five ordered feedback prefixes and SUCCEEDED result in both directions on unchanged published sources/package. Its documentation publication gates remain pending. Daemon mode, CLI cancellation/rejection/abort/concurrent goals and rosbag remain unverified. The R23 generic deployment results below retain their original scope.
 
 As of 2026-10-17 04:42 UTC, the existing generic OpenHarmony deployment passes
 bounded CLI startup on two RK3588A boards. This qualifies real Python/native

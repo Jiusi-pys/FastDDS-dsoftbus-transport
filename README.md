@@ -7,7 +7,8 @@
 - **R24 project-linked Python PASS, no Node:** native imports, exact String CDR and help/resource queries remain qualified and published as `d8b0fdfecaa654183c57d4b973cc936234080667`. [Dependencies and reproduction](docs/ROS2_PROJECT_PYTHON_ABI.md).
 - **R25 ordinary Python/CLI node discovery PASS, bounded:** single public Node lifecycle and stock `ros2 node list --no-daemon --spin-time 3` passed on the real RK3588A pair in both directions. [Commands, evidence and limits](docs/ROS2_ORDINARY_CLI_NODE_DISCOVERY_ACCEPTANCE.md).
 - **Ordinary topic evidence:** topic graph/pub passed in both directions under the preceding runner; the current four-file Host readiness repair has independent review/post-review tests and fresh real AB/BA `topic echo` PASS. [Results and evidence boundaries](docs/ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md).
-- **Publication / next boundaries:** Python/CLI node discovery was published as `471d344050dccae6cb10396d3432fc9f88a92ff7` (20:30:40 UTC CI NOT_RUN, zero runs/checks). The echo repair awaits Main graph/PRE_COMMIT/publication. Ordinary Action CLI remains NOT_RUN, rosbag UNVERIFIED, R22 STOPPED; [current matrix](docs/STATUS.md).
+- **Ordinary Action CLI PASS, bounded:** stock `ros2 action send_goal` accepted one Fibonacci order=6 goal in each direction, with five feedback prefixes and exact successful result on the real RK3588A pair. [Commands, evidence and limits](docs/ROS2_ORDINARY_CLI_ACTION_ACCEPTANCE.md).
+- **Publication / next boundaries:** echo repair was published as `cb9c54dc6564362b52dc652e55ae9f7b5559749e` (22:49:05 UTC CI NOT_RUN). This Action evidence documentation awaits Main graph/PRE_COMMIT/publication; ordinary CLI cancellation/rejection/abort/concurrency, rosbag and broader QoS/reconnect remain UNVERIFIED; R22 STOPPED. [Current matrix](docs/STATUS.md).
 
 
 以下带日期摘要保留其历史范围，不能替代上述当前状态，也不构成新的设备测试授权。
