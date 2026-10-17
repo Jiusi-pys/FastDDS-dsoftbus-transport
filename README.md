@@ -2,9 +2,9 @@
 
 ## Current progress and navigation (2026-10-17)
 
-- **R23 native CLI startup PASS, bounded:** both RK3588A boards ran the existing generic CPython/rclpy deployment, CLI help and two resource queries. No Node or DSoftBus communication was exercised. See [scope, reproduction and evidence](docs/ROS2_NATIVE_CLI_STARTUP.md).
-- **Earlier evidence remains scoped:** [R21 Host String delivery](docs/ROS2_FRAGMENT_HOST_ACCEPTANCE.md) and [R20 local persistence/POSIX entry](docs/ROS2_ROSBAG_TARGET_PREPARATION.md) retain their recorded results.
-- **Current boundary:** project-linked Python/CLI remains UNVERIFIED; native DSoftBus/cross-device remains BLOCKED. R22 Host QoS expansion is STOPPED / UNVERIFIED, with five uncommitted files retained. See [current capability matrix](docs/STATUS.md).
+- **R24 project-linked Python PASS, bounded:** fresh target build/package and both RK3588A boards passed native imports, exact String CDR round-trip and CLI help/resource queries with project Fast DDS 2.14.5/Fast CDR 2.2.5. See [dependencies, reproduction and limits](docs/ROS2_PROJECT_PYTHON_ABI.md).
+- **Earlier evidence remains scoped:** [R23 generic CLI](docs/ROS2_NATIVE_CLI_STARTUP.md), [R21 Host String delivery](docs/ROS2_FRAGMENT_HOST_ACCEPTANCE.md) and [R20 local persistence/POSIX entry](docs/ROS2_ROSBAG_TARGET_PREPARATION.md) retain their recorded results.
+- **Current boundary:** R24 creates no Node/Participant or daemon and performs no communication. Native DSoftBus/cross-device remains BLOCKED; R22 Host QoS expansion remains STOPPED / UNVERIFIED. See [current capability matrix](docs/STATUS.md).
 
 以下带日期摘要保留其历史范围，不能替代上述当前状态，也不构成新的设备测试授权。
 

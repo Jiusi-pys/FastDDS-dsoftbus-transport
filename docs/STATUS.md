@@ -1,6 +1,53 @@
 # Project status
 
-## Current R23 capability overview (2026-10-17 04:42 UTC)
+## Current R24 capability overview (2026-10-17 06:02 UTC)
+
+**PROJECT_LINKED_PYTHON_ABI_NO_NODE: PASS on both RK3588A boards.** The isolated
+slice selects project Fast DDS 2.14.5/Fast CDR 2.2.5 and project RMW libraries
+before importing the measured rclpy candidate. Actual imports, exact String CDR
+and three CLI commands pass. This is bounded ABI execution evidence, not full
+ROS ABI qualification or native DSoftBus communication acceptance.
+
+| Capability | Current evidence and boundary |
+| --- | --- |
+| Project-linked CPython/rclpy/native imports | SUPPORTED, bounded: unchanged CPython 3.12.7, reused exact rclpy candidate, actual native NumPy core and 115 PROJECT_SLICE loaded native files per board with matching A/B/package hashes. Full NumPy APIs remain UNVERIFIED. |
+| String serialization/deserialization | SUPPORTED for fixed `project-python-ABI-中文`: exact independent CDR bytes and unchanged round-trip on A/B, without a Node or Participant. Other types/ABI paths remain UNVERIFIED. |
+| Isolated CLI help/resource queries | SUPPORTED: help, `pkg prefix rclpy` resolves to the fresh slice, `interface show std_msgs/msg/String` passes. Global Python and generic wrapper remain unchanged; R23 generic CLI evidence remains separately scoped. |
+| CLI Node/daemon; native DSoftBus and cross-board communication | UNVERIFIED / BLOCKED. No rclpy.init, Context initialization, Node, Participant, daemon, DSoftBus call or message exchange in R24. |
+| Pub/sub, large messages and bursts | R21 earlier bounded Host PASS: typed String small/66k/burst, Reliable 30/30 and Best Effort 30/30 over TCP fake DSoftBus. General types/sizes/load/concurrency remain UNVERIFIED; R14 failures remain open. |
+| Service, action, discovery/graph | Earlier dated evidence retains its exact scope; [Host integration](ROS2_HOST_INTEGRATION.md) and [R18 action acceptance](ROS2_ACTION_ACCEPTANCE.md) are not upgraded by R24's imports. No current project Python Node/CLI service/action/discovery acceptance. |
+| QoS and reconnect | Existing bounded QoS results unchanged; broader QoS, reconnect and failure/recovery acceptance remain UNVERIFIED. R22 Host QoS expansion is STOPPED / UNVERIFIED with five files retained uncommitted. |
+| Resource lifecycle | R24 owned build-process cleanup and exact scratch/archive removal PASS; bounded snapshots show no remaining visible owned processes. This does not establish global daemon absence, SDK drain/quiescence or concurrent DDS resource lifecycle. Earlier lifecycle limits remain. |
+| Offline persistence / POSIX entry | R20 earlier local String persistence and entry PASS unchanged; no recording/replay or cross-board persistence claim added. |
+
+Implementation PRESENT; fresh build PASS (35 commands, 769 AArch64 compile
+units including 98 generated Python units, 2,342 installed artifacts); package
+PASS (2,058 recorded files, 141 ELF members). Formal Tier 2 review found one P2
+build-timeout process-ownership defect; it was fixed, focused review passed 23
+cases/controls, then final tester rebuilt and re-ran A/B. Final ownership checks
+passed 21 cases plus sibling-survival and handle-stability controls. All 38
+device checks passed, task host/remote exits were 0 and task stderr was empty.
+Build, HOST_TESTED and DEVICE_TESTED are PASS only for this no-node scope;
+broader Transport integration is N/A to these four additive Python/CMake tools.
+DSoftBus integration remains BLOCKED / NOT_VERIFIED. Tester Commit gate PASS
+is scoped to R24; original failures and the tester counting correction remain.
+
+The next unresolved integration boundary is project Python Node/CLI lifecycle
+with the required identity and native communication validation. The successful
+candidate reuse does not require a new RMW, prove all rclpy APIs, or authorize
+permission work. Project DATASYNC remained denied at the last 2026-10-16 query;
+new persistent identity is NOT_APPROVED / NOT_EXECUTED. Prior whole-registry
+access was rejected by automatic approval review and not retried. No security,
+permission, network or global installation change occurred in R24.
+
+Last confirmed publication is R23 `9d5d70c5e8c90fb3d33c2a34c5ed8132d1ce293c` on
+existing `origin/codex/flow-encoding-published-20261014`; its CI is NOT_RUN
+(zero runs/checks/status contexts). R24 Main graph/PRE_COMMIT, commit, push and
+CI remain PENDING. See [R24 reproduction and sealed evidence](ROS2_PROJECT_PYTHON_ABI.md).
+Local ignored build inputs/evidence are not uploaded by these documentation
+references. Dated snapshots below retain their historical scope and status.
+
+## Earlier R23 capability overview (2026-10-17 04:42 UTC)
 
 **Native CLI startup is SUPPORTED within the existing generic UDPv4 deployment
 on both RK3588A boards. Project-linked Python and native DSoftBus communication
