@@ -837,6 +837,13 @@ endif()
 
 include(cmake/FastDDSDSoftBusTransportLibraryDelivery.cmake)
 
+if(BUILD_TESTING AND TARGET fastdds_dsoftbus_provider_adapter_phase0)
+    add_executable(process_restart_observation_tests tests/ros2_target/process_restart_observation_tests.cpp)
+    target_link_libraries(process_restart_observation_tests PRIVATE fastdds_dsoftbus_provider_adapter_phase0)
+    add_test(NAME dsoftbus.process_restart.observation COMMAND process_restart_observation_tests)
+    set_tests_properties(dsoftbus.process_restart.observation PROPERTIES TIMEOUT 10)
+endif()
+
 if(BUILD_TESTING)
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)

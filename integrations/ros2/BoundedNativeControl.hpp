@@ -2,6 +2,7 @@
 // Finite run/phase coordinator over the existing owner/control path. No SDK
 // symbols, owner-table mutations, payload transport or extra threads live here.
 #include "BridgeOwner.hpp"
+#include "ProcessRestartObservation.hpp"
 #include "target/NativeObservation.hpp"
 #include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
@@ -27,13 +28,14 @@ class BoundedNativeControl final {
     using Probe=dsoftbus::phase0::RuntimeProbeAccess;
     BridgeOwner& owner;
     const unsigned domain;
-    const bool outgoing_first,host_model,route_model;
+    const bool outgoing_first,host_model,route_model,process_observation;
     const std::string path;
     bool armed=false,requested=false,ended=false,settled=false,ready=false,published=false;
     int old_id=-1,listener=-1;
     int original_dial=-1,original_accepted=-1;
     std::uint64_t original_dial_owner=0,original_accepted_owner=0;
     bool both_lanes_settled=false;
+    bool process_ready=false,process_published=false;
     std::size_t client_entry=0,listener_entry=0;
     std::uint64_t old_owner=0,sequence=0,last_wall=0;
     std::uint64_t exported_node_observation=0; // diagnostic sequence, not SDK epoch
@@ -96,8 +98,10 @@ class BoundedNativeControl final {
             static_cast<unsigned long long>(close.calls-initial_shutdown_calls),static_cast<unsigned long long>(close.returns-initial_shutdown_returns),static_cast<unsigned long long>(last_wall),sdk.outgoing_socket.value_or(-1),sdk.accepted_socket.value_or(-1));std::fflush(stdout);
     }
 public:
-    BoundedNativeControl(BridgeOwner& value,unsigned d,bool first,std::string control,bool model=false,bool routes=false)
-        :owner(value),domain(d),outgoing_first(first),host_model(model),route_model(routes),path(std::move(control)){}
+    BoundedNativeControl(BridgeOwner& value,unsigned d,bool first,std::string control,bool model=false,bool routes=false,bool process=false)
+        :owner(value),domain(d),outgoing_first(first),host_model(model),route_model(routes),process_observation(process),path(std::move(control)){
+        if(process&&(routes||value.side))throw std::runtime_error("process observation requires non-route A");
+    }
     void CheckClock(){std::lock_guard<std::mutex> lock(clock_gate);const auto wall=WallTime();if(last_wall&&wall<last_wall)throw std::runtime_error("wall clock rollback");last_wall=wall;}
     bool PermitReplacement(){
         if(refused.load()||!armed)return false;
@@ -183,6 +187,25 @@ public:
         }
         if(!armed)return true;
         if(!sdk.listener_socket||*sdk.listener_socket!=listener||sdk.listener_stopped||sdk.listener_entry_index!=listener_entry||sdk.entry_index!=client_entry)throw std::runtime_error("listener/entry continuity failed");
+        if(process_observation){
+            const ProcessRestartObservation original{original_dial,original_accepted,original_dial_owner,original_accepted_owner};
+            const auto emit_process=[&](const char* stage){
+                std::fprintf(stdout,"NATIVE_PROCESS_OWNERS schema=1 run=%s side=A stage=%s listener=%d listener_entry=%zu client_entry=%zu old_dial=%d old_accepted=%d old_dial_owner=%llu old_accepted_owner=%llu new_dial=%d new_accepted=%d new_dial_owner=%llu new_accepted_owner=%llu dial_shutdown_returned=%d accepted_shutdown_returned=%d dial_on_shutdown=%d accepted_on_shutdown=%d callbacks=0 receivers=0 wall_ms=%llu source=%s sdk_epoch=NOT_PROVEN sdk_drain=NOT_PROVEN\n",
+                    owner.run.c_str(),stage,listener,listener_entry,client_entry,original_dial,original_accepted,
+                    static_cast<unsigned long long>(original_dial_owner),static_cast<unsigned long long>(original_accepted_owner),
+                    view.adapter.binding.socket,view.adapter.accepted.socket,
+                    static_cast<unsigned long long>(view.adapter.binding.owner_incarnation),static_cast<unsigned long long>(view.adapter.accepted.owner_incarnation),
+                    int(view.adapter.retired_outgoing.shutdown_returned),int(view.adapter.retired_accepted.shutdown_returned),
+                    int(view.adapter.retired_outgoing.on_shutdown_seen),int(view.adapter.retired_accepted.on_shutdown_seen),
+                    static_cast<unsigned long long>(last_wall),host_model?"HOST_OPAQUE_PUBLIC_API_SHAPE":"SDK_PUBLIC_SOCKET");std::fflush(stdout);
+            };
+            if(!process_ready&&original.OldBothReady(view.adapter)){
+                process_ready=true;emit_process("OLD_BOTH_READY");
+            }
+            if(process_ready&&!process_published&&original.NewBothActive(view.adapter)){
+                Endpoints("PROCESS_AFTER");process_published=true;emit_process("NEW_BOTH_ACTIVE");
+            }
+        }
         const bool origin=outgoing_first?owner.side==0:owner.side==1;
         ObserveRoute();
         if(route_model&&Control("END"))throw std::runtime_error("Socket END cannot trigger route scene");

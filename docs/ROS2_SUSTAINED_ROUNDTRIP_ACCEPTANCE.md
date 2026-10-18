@@ -1,5 +1,9 @@
 # R26 bounded sustained String roundtrip acceptance
 
+> **Current S1/S2 navigation (2026-10-18 13:52 UTC):** S1 remains published as `9cdbc84ed1371d53f4ee53b88dad5b3e5f1612ab`, CI NOT_RUN at its recorded exact-SHA check. The newly authorized [R27 S2 experiment](ROS2_PROCESS_RESTART_ACCEPTANCE.md) now has independent DEVICE/INTEGRATION PASS for one explicit ON normal B process replacement with A remaining alive (PRE5/POST5). Tester gate PASS; Main PRE_COMMIT and R27 publication pending. Default automatic reconnect, repeated/long-duration recovery and SDK epoch/drain remain unqualified. Earlier blocked snapshots below remain historical evidence, not the current S2 verdict.
+
+> **Publication and subsequent stage update (2026-10-18):** This S1 acceptance was published as `9cdbc84ed1371d53f4ee53b88dad5b3e5f1612ab` on existing `origin/codex/flow-encoding-published-20261014`; exact-SHA CI at 11:45:04.427145 UTC was NOT_RUN. The separate [R27 process-restart candidate](ROS2_PROCESS_RESTART_ACCEPTANCE.md) is implemented/built/host-tested but its two real windows are BLOCKED, before accepted PRE/restart ARM/B1 launch. It remains uncommitted; device-dependent actions and normal commit are paused. S1's bounded PASS is unchanged and does not establish restart. The original snapshot below is retained.
+
 Evidence snapshot: 2026-10-18 11:35 UTC. **S1 DEVICE_TESTED and
 INTEGRATION_TESTED PASS for 200 application pub/sub roundtrips on two RK3588A
 boards. Overall ROS 2 capability remains NOT VERIFIED.** Independent final

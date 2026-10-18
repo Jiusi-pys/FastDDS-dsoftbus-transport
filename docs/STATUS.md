@@ -1,5 +1,49 @@
 # Project status
 
+## Current R27 acceptance: bounded PASS (2026-10-18 13:52 UTC)
+
+[Independent Q3 evidence and limits](ROS2_PROCESS_RESTART_ACCEPTANCE.md): implementation, OFF/ON build,
+reviewed host tests and explicit ON cross-device single B replacement PASS.
+Tester commit gate PASS; documentation Ready for commit YES. Main graph and
+PRE_COMMIT are still pending; R27 is uncommitted, unpublished and has no new CI
+result. Latest published S1 remains `9cdbc84ed1371d53f4ee53b88dad5b3e5f1612ab` (exact-SHA CI NOT_RUN).
+
+| Capability | Current qualification |
+| --- | --- |
+| S1 bounded sustained echo | Prior 200 roundtrips PASS, published; not a long-duration/leak-freedom claim. |
+| S2 explicit ON one normal B replacement | DEVICE_TESTED / INTEGRATION_TESTED PASS; A continuity, PRE5/POST5, 40 identical side CDR records, three normal exits, six PID absences and tokens restored. |
+| Default automatic reconnect | Not enabled/supported by this qualification; NO_REACCEPT protection unchanged outside the opt-in experiment. |
+| S3 / repeated recovery / services/actions / broad QoS | NOT_RUN in this stage; historical bounded action/CLI/rosbag qualifications unchanged. |
+| SDK epoch/drain / payload-to-RTPS mapping | NOT_PROVEN / NOT_DIRECTLY_MAPPED; unique-flow NOT_PROVIDED, strict UNTESTED; dedicated SEDP NOT_QUALIFIED. |
+| Capture anomaly | Root cause unresolved; reviewed one-shot read-only resample exists, unused in Q3. Both earlier BLOCKED runs remain failures. |
+
+Overall ROS 2 NOT VERIFIED. The 13:08 stop below is retained history, superseded
+for the newly authorized and executed Q3 only; it is not the current stage gate.
+
+## Current R27 process restart: BLOCKED (2026-10-18 13:08 UTC)
+
+**Implementation PRESENT / BUILDS PASS / HOST_TESTED PASS; DEVICE restart
+acceptance BLOCKED. Ready for commit: NO.** Ten candidate source files remain
+uncommitted. Device-dependent actions are paused; no third window or normal
+R27 commit is permitted by this status. [Actual failures and evidence](ROS2_PROCESS_RESTART_ACCEPTANCE.md).
+
+| Capability / gate | Current evidence and limit |
+| --- | --- |
+| Candidate build and independent review | Fresh OFF/ON bridge builds, 23 TUs each; implementation review and canonical post-ACK host tests passed. Host/fake results do not qualify native replacement. |
+| Window1 `5180c04d159faad2` | Five echo roundtrips / 20 identical 32-byte side CDRs, then both ACK failures. No PHASE_COMPLETE/PRE/ARM/B1. Later tail-budget HDC timeout surfaced BLOCKED; not offline-board proof. |
+| Reviewed ACK repair | Probe-only cap 2 to 5 s, clamped by 40 s lifetime, early failure visibility; business/probe/close remain 35/40/50 s. Exact original heartbeat cause unproven. |
+| Window2 `6124a63b48af7b87` | Both raw PRE phase completions and five echo roundtrips, no ACK false; A0050 host0 but stdout/stderr empty and remote marker missing. Remote UNKNOWN; no host PRE.json, no ARM, no B1 launch. Not 35 s exhaustion or proof of offline boards. |
+| Failure cleanup | Both windows: child71, four owned PIDs absent, tokens restored, no forced signals. This is failure cleanup, not normal scenario completion. |
+| Process restart / default reconnect | Experimental restart NOT VERIFIED / BLOCKED. Default automatic reconnect remains unsupported/not enabled; no claim of permanent impossibility. |
+| Earlier capabilities | Published S1 and prior bounded native Action/ordinary CLI/rosbag results retained. General QoS/service/action coverage, long tests, SDK epoch/quiescence and full ROS 2 remain NOT VERIFIED; R22 STOPPED. |
+| Graph / publication | Prior graph check only four tracked files including R22; untracked scope incomplete and ACK postdates index. PRE_COMMIT NOT_RUN/BLOCKED, not PASS. Current R27 has no commit/push/CI result. |
+
+Latest published S1 HEAD is `9cdbc84ed1371d53f4ee53b88dad5b3e5f1612ab` on
+existing `origin/codex/flow-encoding-published-20261014`; exact-SHA CI at
+11:45:04.427145 UTC was NOT_RUN. All original failed windows and host evidence
+remain preserved. The retained host HDC log excerpt is auxiliary only; root
+cause remains unresolved. Older sections below are dated acceptance snapshots.
+
 ## Current R26 S1 sustained application roundtrips (2026-10-18 11:35 UTC)
 
 **DEVICE_TESTED / INTEGRATION_TESTED PASS for 200 fixed String pub/sub echo
