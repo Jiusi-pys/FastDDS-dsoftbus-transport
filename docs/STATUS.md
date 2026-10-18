@@ -1,5 +1,28 @@
 # Project status
 
+> **Publication-state timestamp:** Any R28 Main gate/publication/CI pending statement in this document describes the **2026-10-18 16:41 UTC pre-commit documentation snapshot**, not a permanent current-state assertion. The finite scene evidence is PASS; Main records the actual commit, remote branch and CI outcome separately in root-relative `build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json` when publication completes. No future commit SHA or CI success is prefilled.
+
+## Current R28: two finite replacements PASS (2026-10-18 16:41 UTC)
+
+[Acceptance and preserved failures](ROS2_REPEATED_RESTART_ACCEPTANCE.md). Implementation/build/host review and
+DEVICE_TESTED / CROSS_DEVICE_TESTED PASS are limited to explicit bounded A,
+two normal B replacements and 15 String application echo roundtrips. Tester
+gate PASS; documentation Ready for commit YES; Main PRE_COMMIT and R28
+commit/push/CI pending. Published R27 HEAD is `46ef5523fdee66421dc29b23aaeae9e095d8fa0d`, recorded CI NOT_RUN.
+
+| Capability | Qualification / remaining limit |
+| --- | --- |
+| Continuous A, normal B0 -> B1 -> B2 | Finite real-device PASS: one Runtime/Participant, 20 endpoints, seven continuity anchors; 60 side payloads match four CDR copies per exchange. |
+| Normal lifecycle | Four child/finalize rc0, tokens restored, eight owned PIDs absent, no forced signals. Q1's historical B0 restore remains NOT_PROVEN. |
+| Resource observations | Three native/five OS samples PASS; owners 3/5/7, FD 19/17/19/17/19, threads 23, RSS 82872 -> 83464 KiB. Leak freedom NOT_PROVEN. |
+| Default reconnect / SDK epoch-drain | Not established; default reset limit remains 1, explicit non-route native A alone permits 2. No unbounded or default automatic recovery claim. |
+| General ROS 2 recovery | Service/action recovery, long-duration/load, general types/large messages/broad QoS remain NOT_TESTED by R28; earlier bounded Action/CLI/rosbag qualifications retained. |
+| Transport qualification | Unique flow NOT_PROVIDED / strict UNTESTED; dedicated SEDP NOT_QUALIFIED; no direct per-payload RTPS sequence mapping. |
+
+Overall ROS 2 NOT VERIFIED; R22 STOPPED. Q1 FAIL, Q2 expected production-entry
+rejection and Q3 BLOCKED remain their original results; Q4 does not rewrite them.
+Older sections below are historical snapshots, including R27's former pending gate.
+
 ## Current R27 acceptance: bounded PASS (2026-10-18 13:52 UTC)
 
 [Independent Q3 evidence and limits](ROS2_PROCESS_RESTART_ACCEPTANCE.md): implementation, OFF/ON build,

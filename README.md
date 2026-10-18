@@ -1,5 +1,7 @@
 # Fast DDS OpenHarmony DSoftBus Transport
 
+> **Publication-state timestamp:** Any R28 Main gate/publication/CI pending statement in this document describes the **2026-10-18 16:41 UTC pre-commit documentation snapshot**, not a permanent current-state assertion. The finite scene evidence is PASS; Main records the actual commit, remote branch and CI outcome separately in root-relative `build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json` when publication completes. No future commit SHA or CI success is prefilled.
+
 ## Current progress and navigation (2026-10-18)
 
 - **R25 native C++ Action business/path PASS, bounded:** one real RK3588A pair exercised goals, feedback, concurrent execution, cancellation, rejection, abort and normal completion over native DSoftBus with project DDS/RMW. [Results and limits](docs/ROS2_NATIVE_ACTION_ACCEPTANCE.md).
@@ -11,8 +13,9 @@
 - **Rosbag native ABI prerequisite PASS, no Node:** the SQLite rosbag overlay builds and composes; real imports, String/Resume CDR, native QoS conversions and stock parser checks passed on both RK3588A boards. Recording/playback and communication are NOT_RUN in this stage. [Evidence and limits](docs/ROS2_ROSBAG_ABI_ACCEPTANCE.md).
 - **Rosbag record/play DEVICE_TESTED PASS, bounded:** record5 A-to-B persisted ten original String CDR messages; play1 B-to-A resumed through one actual service call and received all ten byte-for-byte in order. Normal close/exit, owned PID absence and token restoration passed. [Evidence, prior failures and limits](docs/ROS2_ROSBAG_RECORDPLAY_ACCEPTANCE.md).
 - **R26 sustained pub/sub echo DEVICE_TESTED PASS, bounded:** 200 exact String application roundtrips, normal paired exit and identity restoration passed on the RK3588A pair; resource samples do not prove leak freedom. This is not ROS service/action traffic. [Evidence and restart limits](docs/ROS2_SUSTAINED_ROUNDTRIP_ACCEPTANCE.md).
-- **R27 single process restart DEVICE/INTEGRATION PASS, bounded:** explicit ON Q3 kept A alive through one normal B replacement, PRE5/POST5 exact String echo and normal cleanup. Tester gate PASS; Main PRE_COMMIT/publication pending. Both earlier BLOCKED runs retained. [Evidence and limits](docs/ROS2_PROCESS_RESTART_ACCEPTANCE.md).
-- **Publication / next boundaries:** S1 published as `9cdbc84ed1371d53f4ee53b88dad5b3e5f1612ab` (2026-10-18 11:45:04.427145 UTC CI NOT_RUN); R27 remains uncommitted pending Main gate. Default automatic reconnect is not enabled; SDK epoch/drain, repeated/long-duration and service/action recovery remain unverified. Full ROS 2 NOT VERIFIED; R22 STOPPED. [Current matrix](docs/STATUS.md).
+- **R27 single process restart PASS, published:** explicit ON one normal B replacement with continuous A and PRE5/POST5 String echo is published as `46ef5523fdee66421dc29b23aaeae9e095d8fa0d`. [Evidence and limits](docs/ROS2_PROCESS_RESTART_ACCEPTANCE.md).
+- **R28 repeated process restart DEVICE/CROSS-DEVICE PASS, finite:** two normal B replacements, continuous A, 15 String echo roundtrips and normal four-process completion passed. Business 34.532/35 s; resource samples do not prove long-duration stability or leak freedom. [Evidence and limits](docs/ROS2_REPEATED_RESTART_ACCEPTANCE.md).
+- **Publication / next boundaries:** R27 published on the existing branch (2026-10-18 14:14:15.875911 UTC CI NOT_RUN); R28 awaits Main graph/PRE_COMMIT and publication. Default automatic reconnect, SDK epoch/drain, service/action recovery and full ROS 2 remain unverified; R22 STOPPED. [Current matrix](docs/STATUS.md).
 
 
 以下带日期摘要保留其历史范围，不能替代上述当前状态，也不构成新的设备测试授权。

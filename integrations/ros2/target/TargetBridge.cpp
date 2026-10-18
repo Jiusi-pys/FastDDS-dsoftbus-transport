@@ -34,7 +34,7 @@ Values read(const char* path) {
     while (std::getline(input, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         const auto equals = line.find('=');
-        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release"&&line.substr(0,equals)!="native_reaccept_order"&&line.substr(0,equals)!="native_reaccept_control"&&line.substr(0,equals)!="route_lifecycle"&&line.substr(0,equals)!="process_restart_observation") ||
+        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release"&&line.substr(0,equals)!="native_reaccept_order"&&line.substr(0,equals)!="native_reaccept_control"&&line.substr(0,equals)!="route_lifecycle"&&line.substr(0,equals)!="process_restart_observation"&&line.substr(0,equals)!="process_restart_cycles") ||
                 !values.emplace(line.substr(0, equals), line.substr(equals + 1)).second)
             throw std::runtime_error("configuration syntax/duplicate/unknown key");
     }
@@ -127,6 +127,10 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         const bool process_observation=values.count("process_restart_observation")&&integer(values,"process_restart_observation",1)!=0;
         if(values.count("process_restart_observation")&&(!bounded_native||routes||side))
             throw std::runtime_error("process observation requires non-route bounded A");
+        const unsigned restart_cycles=values.count("process_restart_cycles")?integer(values,"process_restart_cycles",2):1;
+        if(values.count("process_restart_cycles")&&
+                (restart_cycles!=2||!process_observation||!bounded_native||routes||side))
+            throw std::runtime_error("two process restarts require explicit non-route bounded A observation");
         if (integer(values, "domain", 232) != domain) throw std::runtime_error("domain mismatch");
         for (const auto* key : {"fastdds_module", "fastcdr_module", "softbus_module", "connect_release"})
             if (!std::filesystem::path(values.at(key)).is_absolute()) throw std::runtime_error("absolute input required");
@@ -149,11 +153,12 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         backend.peer_name = config.directory.routes.front().fields.remote_listen_name; backend.max_message_size = 65536;
         backend.bind_qos = {{0,80},{1,2000}}; backend.listen_qos = backend.bind_qos;
         backend.bounded_native_reaccept_experiment=bounded_native;backend.route_lifecycle=routes;
+        backend.bounded_native_reset_limit=restart_cycles;
         owner->runtime = std::make_unique<experimental::Runtime>(backend);
         if(bounded_native){
             const auto expected="/data/local/tmp/mdds_dds_"+owner->run+"_"+(side?"B":"A")+"/control.NATIVE_REACCEPT";
             if(values.at("native_reaccept_control")!=expected)throw std::runtime_error("native control window path");
-            auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,values.at("native_reaccept_order")=="outgoing-first",expected,false,routes,process_observation);
+            auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,values.at("native_reaccept_order")=="outgoing-first",expected,false,routes,process_observation,restart_cycles);
             if(routes)owner->node_diagnostic_close=[control]{control->ExportNodeDiagnostics();};
             if(!phase0::RuntimeProbeAccess::BoundedReplacementGate(*owner->runtime,[control]{return control->PermitReplacement();}))throw std::runtime_error("native replacement gate installation");
             owner->before_pump=[control]{try{return control->Step();}catch(const std::exception& error){control->Refuse(error.what());return true;}catch(...){control->Refuse();return true;}};

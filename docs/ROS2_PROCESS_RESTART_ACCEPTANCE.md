@@ -1,5 +1,9 @@
 # R27 bounded process restart acceptance
 
+> **Publication-state timestamp:** Any R28 Main gate/publication/CI pending statement in this document describes the **2026-10-18 16:41 UTC pre-commit documentation snapshot**, not a permanent current-state assertion. The finite scene evidence is PASS; Main records the actual commit, remote branch and CI outcome separately in root-relative `build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json` when publication completes. No future commit SHA or CI success is prefilled.
+
+> **Publication / successor update (2026-10-18 16:41 UTC):** R27 was committed and pushed as `46ef5523fdee66421dc29b23aaeae9e095d8fa0d` to existing `origin/codex/flow-encoding-published-20261014`; its [actual publication receipt](../../../../build/r27-process-restart/main-process-restart-publication/POST_PUBLISH.json) at 14:14:15.875911 UTC records exact-SHA CI NOT_RUN. Former pending-publication text below is the preserved pre-commit snapshot. The subsequent [R28 finite two-replacement experiment](ROS2_REPEATED_RESTART_ACCEPTANCE.md) passed independent real-device acceptance with 15 String echo roundtrips; its Main gate/publication remain pending. This extends only the explicit bounded experiment, not default reconnect, SDK epoch/drain or general recovery.
+
 ## Current Q3 final acceptance (2026-10-18 13:52 UTC)
 
 **IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED / INTEGRATION_TESTED PASS,

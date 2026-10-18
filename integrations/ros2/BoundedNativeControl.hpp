@@ -3,6 +3,7 @@
 // symbols, owner-table mutations, payload transport or extra threads live here.
 #include "BridgeOwner.hpp"
 #include "ProcessRestartObservation.hpp"
+#include "RepeatedProcessRounds.hpp"
 #include "target/NativeObservation.hpp"
 #include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
@@ -28,6 +29,7 @@ class BoundedNativeControl final {
     using Probe=dsoftbus::phase0::RuntimeProbeAccess;
     BridgeOwner& owner;
     const unsigned domain;
+    const unsigned process_cycles;
     const bool outgoing_first,host_model,route_model,process_observation;
     const std::string path;
     bool armed=false,requested=false,ended=false,settled=false,ready=false,published=false;
@@ -46,6 +48,10 @@ class BoundedNativeControl final {
     std::mutex clock_gate;
     std::chrono::steady_clock::time_point next_poll{};
     std::atomic<bool> refused{false};
+    std::mutex round_gate;
+    RepeatedProcessRounds repeated;
+    unsigned sample_mask=0;
+    bool repeated_complete=false;
     static std::uint64_t WallTime(){
 #if defined(_WIN32)
         const auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -97,15 +103,109 @@ class BoundedNativeControl final {
             listener,listener_entry,client_entry,old_id,fresh,static_cast<unsigned long long>(old_owner),static_cast<unsigned long long>(incarnation),int(old.shutdown_entered),int(old.shutdown_returned),int(old.on_shutdown_seen),old.callback_inflight,old.receive_inflight,
             static_cast<unsigned long long>(close.calls-initial_shutdown_calls),static_cast<unsigned long long>(close.returns-initial_shutdown_returns),static_cast<unsigned long long>(last_wall),sdk.outgoing_socket.value_or(-1),sdk.accepted_socket.value_or(-1));std::fflush(stdout);
     }
+    static ProcessRestartObservation Pair(const dsoftbus::phase0::AdapterObservation& v){
+        return {v.binding.socket,v.accepted.socket,v.binding.owner_incarnation,v.accepted.owner_incarnation};
+    }
+    void EmitRepeated(const char* stage,const dsoftbus::phase0::BoundedConnectionSnapshot& view){
+        const auto& old=repeated.Original();const auto current=Pair(view.adapter);
+        const auto& dial=view.adapter.retired_outgoing;const auto& accepted=view.adapter.retired_accepted;
+        std::fprintf(stdout,"NATIVE_REPEAT_EVENT schema=1 run=%s side=A round=%u stage=%s listener=%d listener_entry=%zu client_entry=%zu old_dial=%d old_accepted=%d old_dial_owner=%llu old_accepted_owner=%llu new_dial=%d new_accepted=%d new_dial_owner=%llu new_accepted_owner=%llu retired_dial=%d retired_accepted=%d retired_dial_owner=%llu retired_accepted_owner=%llu dial_shutdown_returned=%d accepted_shutdown_returned=%d dial_on_shutdown=%d accepted_on_shutdown=%d old_callbacks=%zu old_receives=%zu permit_consumed=%d wall_ms=%llu source=%s sdk_epoch=NOT_PROVEN sdk_drain=NOT_PROVEN\n",
+            owner.run.c_str(),repeated.Round(),stage,listener,listener_entry,client_entry,old.dial,old.accepted,
+            static_cast<unsigned long long>(old.dial_owner),static_cast<unsigned long long>(old.accepted_owner),current.dial,current.accepted,
+            static_cast<unsigned long long>(current.dial_owner),static_cast<unsigned long long>(current.accepted_owner),
+            dial.owned_id.value_or(-1),accepted.owned_id.value_or(-1),static_cast<unsigned long long>(dial.incarnation),static_cast<unsigned long long>(accepted.incarnation),
+            int(dial.shutdown_returned),int(accepted.shutdown_returned),int(dial.on_shutdown_seen),int(accepted.on_shutdown_seen),
+            dial.callback_inflight+accepted.callback_inflight,dial.receive_inflight+accepted.receive_inflight,int(repeated.Consumed()),
+            static_cast<unsigned long long>(last_wall),host_model?"HOST_OPAQUE_PUBLIC_API_SHAPE":"SDK_PUBLIC_SOCKET");std::fflush(stdout);
+    }
+    bool RepeatedStep(const dsoftbus::phase0::PublicSocketObservation& sdk,const dsoftbus::phase0::BoundedConnectionSnapshot& view){
+        const auto& v=view.adapter;
+        if(Control("ARM")||Control("REPLACE")||Control("END")||Control("ARM3")||Control("REPLACE3"))
+            throw std::runtime_error("repeated control outside two-round contract");
+        if(repeated_complete)return true;
+        if(v.provider_status!=dsoftbus::phase0::BackendStatus::None||v.listener_stopped||sdk.listener_stopped||
+                view.native.admission_sealed||view.native.entered_context_lost||v.accepted_phase==dsoftbus::phase0::AcceptedPhase::Failed)
+            throw std::runtime_error("native reaccept admission failed");
+        const auto round=repeated.Round();
+        if(round&&(!sdk.listener_socket||*sdk.listener_socket!=listener||sdk.entry_index!=client_entry||sdk.listener_entry_index!=listener_entry))
+            throw std::runtime_error("listener/entry continuity failed");
+        if(Control("COMPLETE")){
+            if(round!=2||!repeated.Active()||!repeated.Consumed()||sample_mask!=7||v.outgoing_stopped||
+                    v.accepted_phase!=dsoftbus::phase0::AcceptedPhase::Active)
+                throw std::runtime_error("early repeated observation completion");
+            // Main has checked all three message phases and the final resource
+            // sample. End only this experiment's observations before public DDS
+            // deletion; the normal pump, close, diagnostics and return checks
+            // continue unchanged. No new native operation is authorized here.
+            repeated_complete=true;
+            std::fprintf(stdout,"NATIVE_REPEAT_COMPLETE schema=1 run=%s side=A round=2 phase=2 permit_closed=1 wall_ms=%llu source=%s sdk_epoch=NOT_PROVEN sdk_drain=NOT_PROVEN\n",
+                owner.run.c_str(),static_cast<unsigned long long>(last_wall),host_model?"HOST_OPAQUE_PUBLIC_API_SHAPE":"SDK_PUBLIC_SOCKET");
+            std::fflush(stdout);return true;
+        }
+        if((round==0&&(Control("ARM2")||Control("REPLACE1")||Control("REPLACE2")))||
+                (round==1&&(Control("REPLACE2")||(!repeated.Active()&&Control("ARM2")))))
+            throw std::runtime_error("early repeated round control");
+        const auto next=round+1;
+        if(next<=2&&Control(("ARM"+std::to_string(next)).c_str())){
+            if(!(sample_mask&(1u<<(next-1))))throw std::runtime_error("repeated phase sample missing before ARM");
+            if(!sdk.listener_socket||!sdk.outgoing_socket||!sdk.accepted_socket||v.outgoing_stopped||
+                    v.accepted_phase!=dsoftbus::phase0::AcceptedPhase::Active||
+                    *sdk.outgoing_socket!=v.binding.socket||*sdk.accepted_socket!=v.accepted.socket)
+                throw std::runtime_error("repeated active anchor incomplete");
+            repeated.Arm(next,Pair(v),*sdk.listener_socket,v.listener.owner_incarnation);
+            listener=*sdk.listener_socket;client_entry=sdk.entry_index;listener_entry=sdk.listener_entry_index;
+            old_id=v.binding.socket;old_owner=v.binding.owner_incarnation;armed=true;process_ready=false;
+            Endpoints(("R28_BEFORE"+std::to_string(next)).c_str());EmitRepeated("ARMED",view);
+        }
+        if(repeated.Round()&&!repeated.Active()){
+            const auto& old=repeated.Original();
+            if(!process_ready&&old.OldBothReady(v)){process_ready=true;EmitRepeated("OLD_BOTH_READY",view);}
+            if(old.NewBothActive(v)){
+                if(!process_ready)throw std::runtime_error("repeated readiness missing");
+                repeated.Commit(Pair(v));published=true;
+                Endpoints(("R28_AFTER"+std::to_string(repeated.Round())).c_str());EmitRepeated("NEW_BOTH_ACTIVE",view);
+            }
+        }
+        for(unsigned phase=0;phase<3;++phase){
+            if((sample_mask&(1u<<phase))||!Control(("SAMPLE"+std::to_string(phase)).c_str()))continue;
+            if((phase==0&&repeated.Round()!=0)||(phase&&(!repeated.Active()||repeated.Round()!=phase))||
+                    v.outgoing_stopped||v.accepted_phase!=dsoftbus::phase0::AcceptedPhase::Active||!sdk.listener_socket)
+                throw std::runtime_error("repeated sample phase mismatch");
+            const auto& n=view.native;const auto& calls=sdk.operations;
+            Endpoints(("R28_SAMPLE"+std::to_string(phase)).c_str());
+            std::fprintf(stdout,"NATIVE_REPEAT_RESOURCE schema=1 run=%s side=A phase=%u owners=%zu owned_ids=%zu high_water=%zu namespaces=%zu callbacks=%zu receives=%zu ready=%zu listening=%zu retained=%zu failed_retained=%zu setup_reserved=%zu setup_entered=%zu send_reserved=%zu send_entered=%zu close_reserved=%zu close_entered=%zu owner_limit=%zu dial=%d accepted=%d listener=%d socket_calls=%llu shutdown_calls=%llu shutdown_returns=%llu wall_ms=%llu source=%s sdk_drain=NOT_PROVEN\n",
+                owner.run.c_str(),phase,n.owners,n.owned_ids,n.owner_high_water,n.namespaces,n.callbacks,n.receives,
+                n.phases[std::size_t(dsoftbus::NativeOwnerPhase::Ready)],n.phases[std::size_t(dsoftbus::NativeOwnerPhase::Listening)],n.phases[std::size_t(dsoftbus::NativeOwnerPhase::RetainedNotQuiescent)],n.phases[std::size_t(dsoftbus::NativeOwnerPhase::FailedRetained)],
+                n.setup.reserved,n.setup.entered,n.send.reserved,n.send.entered,n.close.reserved,n.close.entered,n.limits.total_owners,
+                v.binding.socket,v.accepted.socket,*sdk.listener_socket,
+                static_cast<unsigned long long>(calls[std::size_t(dsoftbus::phase0::PublicSocketOperation::Socket)].calls),
+                static_cast<unsigned long long>(calls[std::size_t(dsoftbus::phase0::PublicSocketOperation::Shutdown)].calls),
+                static_cast<unsigned long long>(calls[std::size_t(dsoftbus::phase0::PublicSocketOperation::Shutdown)].returns),
+                static_cast<unsigned long long>(last_wall),host_model?"HOST_OPAQUE_PUBLIC_API_SHAPE":"SDK_PUBLIC_SOCKET");std::fflush(stdout);
+            sample_mask|=1u<<phase;
+        }
+        return true;
+    }
 public:
-    BoundedNativeControl(BridgeOwner& value,unsigned d,bool first,std::string control,bool model=false,bool routes=false,bool process=false)
-        :owner(value),domain(d),outgoing_first(first),host_model(model),route_model(routes),process_observation(process),path(std::move(control)){
+    BoundedNativeControl(BridgeOwner& value,unsigned d,bool first,std::string control,bool model=false,bool routes=false,bool process=false,unsigned cycles=1)
+        :owner(value),domain(d),process_cycles(cycles),outgoing_first(first),host_model(model),route_model(routes),process_observation(process),path(std::move(control)){
         if(process&&(routes||value.side))throw std::runtime_error("process observation requires non-route A");
+        if((cycles!=1&&cycles!=2)||(cycles==2&&(!process||routes||value.side)))throw std::runtime_error("repeated process mode requires two non-route A cycles");
     }
     void CheckClock(){std::lock_guard<std::mutex> lock(clock_gate);const auto wall=WallTime();if(last_wall&&wall<last_wall)throw std::runtime_error("wall clock rollback");last_wall=wall;}
     bool PermitReplacement(){
-        if(refused.load()||!armed)return false;
-        try {CheckClock();return Control("REPLACE");}catch(...){Refuse();throw;}
+        std::lock_guard<std::mutex> lock(round_gate);
+        if(refused.load()||!armed||repeated_complete)return false;
+        try {CheckClock();
+            if(process_cycles==2){
+                const auto round=repeated.Round();
+                if(!process_ready||!Control(("REPLACE"+std::to_string(round)).c_str()))return false;
+                const auto view=Probe::ObserveConnection(*owner.runtime);
+                if(!repeated.CanReplaceOutgoing(view.adapter)||!repeated.Consume(round))return false;
+                EmitRepeated("PERMIT_CONSUMED",view);return true;
+            }
+            return Control("REPLACE");
+        }catch(...){Refuse();throw;}
     }
     const char* FailureStatus()const {
         const auto sdk=owner.runtime->ObserveSocket();const auto value=Probe::ObserveConnection(*owner.runtime);
@@ -168,12 +268,14 @@ public:
         std::fflush(stdout);
     }
     bool Step(){
+        std::lock_guard<std::mutex> lock(round_gate);
         if(refused.load())return true;
         const auto now=std::chrono::steady_clock::now();if(now<next_poll)return true;next_poll=now+std::chrono::milliseconds(2);
         ExportNodeDiagnostics();
         CheckClock();
         auto sdk=owner.runtime->ObserveSocket();auto view=Probe::ObserveConnection(*owner.runtime);
         if(sdk.fake_sdk!=host_model)throw std::runtime_error("native/model source mismatch");
+        if(process_cycles==2)return RepeatedStep(sdk,view);
         const auto& lane=owner.side?view.adapter.accepted:view.adapter.binding;
         if(!armed&&Control("ARM")){
             if(!sdk.listener_socket||!sdk.outgoing_socket||!sdk.accepted_socket||lane.socket<0||!lane.owner_incarnation||view.adapter.accepted_phase!=dsoftbus::phase0::AcceptedPhase::Active)throw std::runtime_error("original connection anchor incomplete");

@@ -48,6 +48,9 @@ struct PublicSocketState {
 #endif
         if(config.bounded_reaccept_host&&(!observation.fake_sdk||!dual))valid=false;
         if(config.route_lifecycle&&(!dual||!(config.bounded_reaccept_host||config.bounded_native_reaccept_experiment)))valid=false;
+        if(config.bounded_native_reset_limit!=1 &&
+                (config.bounded_native_reset_limit!=2||!config.bounded_native_reaccept_experiment||
+                 config.bounded_reaccept_host||config.route_lifecycle||observation.fake_sdk))valid=false;
         if(config.bounded_native_reaccept_experiment){
 #ifdef FASTDDS_DSOFTBUS_BOUNDED_NATIVE_REACCEPT_EXPERIMENT
             valid=valid&&dual&&!observation.fake_sdk&&!config.bounded_reaccept_host;
@@ -370,7 +373,7 @@ BackendStatus PublicSocketBackend::ResetBoundedConnection(RecordRole role,const 
     if(!id||s.listener_closed||s.listener_observed||s.listener_failed||s.observation.stopped)return BackendStatus::ProviderStopped;
     if(role!=RecordRole::Client&&role!=RecordRole::Server)return BackendStatus::InvalidState;
     const auto lane=static_cast<std::size_t>(role);
-    if(s.config.bounded_native_reaccept_experiment&&s.native_resets[lane]>=1)return BackendStatus::Capacity;
+    if(s.config.bounded_native_reaccept_experiment&&s.native_resets[lane]>=s.config.bounded_native_reset_limit)return BackendStatus::Capacity;
     if(role==RecordRole::Client){
         if(facts.role!=NativeOwnerRole::Dial||s.socket!=*id||(!s.primary_observed&&!s.primary_closed)||s.primary_failed||s.close_status!=BackendStatus::None)return BackendStatus::InvalidIdentity;
         s.attempted=false;s.socket=-1;s.primary_observed=false;s.primary_closed=false;s.close_status=BackendStatus::None;

@@ -20,6 +20,9 @@ struct PublicSocketConfiguration {
     bool bounded_reaccept_host=false;
     // Separate real, default-off normal-close experiment. Never a Host/Fake label.
     bool bounded_native_reaccept_experiment=false;
+    // Separate finite process-restart experiment. Only 1 (default) or 2;
+    // never a reusable/unbounded SDK callback or owner-table allowance.
+    unsigned bounded_native_reset_limit=1;
 };
 enum class PublicSocketOperation {Socket,Listen,Bind,Send,Shutdown,Count};
 struct PublicSocketCall {

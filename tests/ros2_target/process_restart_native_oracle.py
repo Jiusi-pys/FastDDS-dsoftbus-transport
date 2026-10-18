@@ -7,9 +7,11 @@ import re
 from process_restart_oracle import fields as actionbag_fields
 
 
-def native_capture(texts, identities):
+def native_capture(texts, identities, *, instances=('A', 'B0', 'B1')):
+    if instances not in (('A', 'B0', 'B1'), ('A', 'B0', 'B1', 'B2')) or set(texts) != set(instances) or set(identities) != set(instances):
+        raise ValueError('Exact finite process set required')
     frames, result = {}, {}
-    for instance in ('A', 'B0', 'B1'):
+    for instance in instances:
         run, pid = identities[instance]['run'], identities[instance]['pid']
         side = instance[0]
         text = texts[instance]
@@ -67,14 +69,14 @@ def native_capture(texts, identities):
         if re.search(r'ROS_FAILURE|ACTION_EXCEPTION|INIT_FAILED|RUNTIME_CLOSE_FAILURE|DIAGNOSTIC_CAPTURE.*INCOMPLETE|failed to send response[^\r\n]*timeout', text, re.I):
             raise ValueError('Native/business failure diagnostic')
         result[instance] = {'native_records': len(data), 'send_enter': int(row['send_enter']), 'ingress': int(row['ingress'])}
-    for peer in ('B0', 'B1'):
+    for peer in instances[1:]:
         for source, destination in [('A', peer), (peer, 'A')]:
             matched = frames[source]['SDK_SEND'] & frames[destination]['SDK_INGRESS']
             if not matched:
                 raise ValueError('Each process needs bidirectional actual RTPS evidence')
             result[source]['matched_to_' + destination] = len(matched)
     guids = {}
-    for instance in ('A', 'B0', 'B1'):
+    for instance in instances:
         run, side = identities[instance]['run'], instance[0]
         entries = actionbag_fields(texts[instance], 'ROS_V1_SPDP')
         local = set()
@@ -88,7 +90,7 @@ def native_capture(texts, identities):
         if len(local) != 1:
             raise ValueError('One local Participant prefix required per process')
         guids[instance] = next(iter(local))
-    if len(set(guids.values())) != 3:
-        raise ValueError('B1 must create a distinct Participant')
+    if len(set(guids.values())) != len(instances):
+        raise ValueError('Every process must create a distinct Participant')
     return {'instances': result, 'participant_prefixes': guids, 'sdk_epoch': 'NOT_PROVEN',
             'payload_to_rtps_sequence': 'NOT_DIRECTLY_MAPPED'}

@@ -245,8 +245,14 @@ class RestartProcess(S.SustainedRunner):
         text, status = parts  # Keep original log bytes/line endings in command captures.
         require(not re.search(r'ROS_FAILURE|ROS_PYTHON_EXCEPTION|ROS_PYTHON_INITIALIZE_ERROR|INIT_FAILED|RUNTIME_CLOSE_FAILURE|NATIVE_REACCEPT_REFUSAL', text),
                 'Native process failure')
-        O.rows(text, self.scenario, self.instance, self.run, self.owned[side]['child']['pid'])
+        self.validate_poll(text, side)
         return text, status.strip()
+
+    def validate_poll(self, text, side):
+        O.rows(text, self.scenario, self.instance, self.run, self.owned[side]['child']['pid'])
+
+    def configuration_fields(self, side, fields):
+        return fields
 
     def extra_control(self, name):
         require(self.instance == 'A' and name in ('ARM', 'REPLACE', 'POST'), 'Only finite A control permitted')
@@ -339,6 +345,7 @@ class RestartProcess(S.SustainedRunner):
             fields.update(backend='OHOS_PUBLIC_SOCKET_BOUNDED_REACCEPT_EXPERIMENTAL',
                           native_reaccept_order='outgoing-first', native_reaccept_control=root + '/control.NATIVE_REACCEPT',
                           process_restart_observation='1')
+        fields = self.configuration_fields(side, fields)
         config = self.output / (side + '.private.conf')
         config.write_text(''.join(k + '=' + v + '\n' for k, v in fields.items()), encoding='utf-8', newline='\n')
         env = {'PATH': '/system/bin:/system/xbin', 'LD_LIBRARY_PATH': package + '/lib:' + ORDINARY.RUNTIME + '/lib',
