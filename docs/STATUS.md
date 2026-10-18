@@ -1,5 +1,28 @@
 # Project status
 
+## Current R30: finite coordinated Action replacement PASS (2026-10-18 19:28 UTC)
+
+[Actual evidence and compatibility entry](ROS2_ACTION_RESTART_ACCEPTANCE.md). Four-file implementation and
+reviewed host checks PASS; DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for one
+normal server replacement under explicit coordination. Native API23 ON/OFF
+artifacts/897 dependencies REUSED, not rebuilt. Tester gate PASS; documentation
+Ready for commit YES. R30 pending gate/publication/CI statements describe the 2026-10-18 19:28 UTC pre-commit documentation snapshot. Actual commit, remote and CI outcomes are recorded separately in root-relative `build/r30-action-restart/main-action-restart-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
+| Capability | Current qualification |
+| --- | --- |
+| Persistent A / fresh B1 Action server | Partial support, bounded PASS:26 stable endpoints including8 Action endpoints; PRE5feedback/SUCCEEDED, NEW7feedback/SUCCEEDED. |
+| OLD goal | Accepted/executing,1feedback, no result; independent GetResult Future locally cancelled only. Not recovered, not remotely cancelled. |
+| Natural cross-channel ordering | Not established: START_OLD and two COMPLETE permissions coordinate this experiment without carrying business payload. |
+| COMPAT_RCLPY_STATUS_BEFORE_GOAL_RESPONSE | **OPEN / UNCOORDINATED_NOT_FIXED** in selected rclpy local revision; status-before-response counterexample still leaves public status0. No project ActionClient patch. |
+| Lifecycle | Three child/interpreter exit0, identities restored, six PIDs absent, no forced signals; B0 absence precedes B1 launch. |
+| CDR / CancelGoal | Goal/Feedback/Result application CDR witnesses PASS; protocol-wrapper CDR and remote CancelGoal not qualified by capsule presence. |
+| General ROS2 | Default reconnect, SDK epoch/drain, broad QoS, soak/leak freedom and old-goal recovery remain unverified. Unique-flow NOT_PROVIDED/strict UNTESTED, dedicated SEDP NOT_QUALIFIED; no direct per-payload RTPS mapping. |
+
+R29 published `b5b8fbcfa7ab1de7dd6cb24297967e1181b8372b` / CI NOT_RUN. Previous native C++ Action cancellation,
+CLI Action, service and rosbag results retain their own scopes; none is upgraded
+by R30 coordination. Overall ROS2 NOT_VERIFIED; R22 STOPPED. Older action-recovery
+gaps below describe earlier stage snapshots, not an unrestricted current claim.
+
 ## EOF qualification addendum (2026-10-18 18:06 UTC pre-commit snapshot)
 
 Current host runner SHA-256 is
