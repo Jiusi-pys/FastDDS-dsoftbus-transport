@@ -361,6 +361,23 @@ state known at their time; they are superseded only within the scope above.
 
 ## Earlier R25 native Action evidence (2026-10-17 08:25 UTC)
 
+## Current R31 natural Action AB/BA (2026-10-18T22:06:34.620832+00:00)
+
+**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for the current R30 package and fixed single-goal fixture.** [Commands, exact build lineage, failures and seals](ROS2_NATURAL_ACTION_ACCEPTANCE.md). R30 coordinated replacement is published as `a8945d4520af23f476ac93f9c376668b4d397481` on the existing branch (2026-10-18 19:36:28 UTC exact-SHA CI NOT_RUN).
+
+| Capability | Current status and boundary |
+| --- | --- |
+| Natural stock Action send_goal | SUPPORTED within two finite directional windows: order=6, five exact feedback prefixes each, exact SUCCEEDED result; original five 0.2-second fixture steps, no START_OLD/COMPLETE business permissions. |
+| Backend/native path | PARTIAL qualification: physical A bounded/outgoing-first/process observation=1, B ordinary in both directions; current `9db2a35c` bridge, native peer writer sequences/V1 SPDP, eight Action endpoints per process. No direct UUID-to-RTPS or application/protocol CDR mapping; dedicated SEDP NOT_QUALIFIED. |
+| Client ordering compatibility | OPEN `COMPAT_RCLPY_STATUS_BEFORE_GOAL_RESPONSE` / UNCOORDINATED_NOT_FIXED. Selected client can accept/GetResult while local goal status stays UNKNOWN/stale; late feedback after result callback removal is not recovered by waiting. These fixed fixture passes do not guarantee all schedules/statuses/feedback. |
+| Replacement/recovery | Earlier R27/R28 pub/sub, R29 service and R30 coordinated Action remain qualified only in their dated scopes. R31 does not qualify natural restart, default automatic reconnect, old-goal recovery or remote CancelGoal. |
+| Native build / host | REUSED_HASH_VERIFIED_NOT_REBUILT: unchanged R30 payload, API23 ON/OFF build and 897 dependencies. Two new test-side files; initial fixes, independent repair review and final host PASS. No native or rclpy patch. |
+| Lifecycle/resources | Four normal child exits/finalizers, four token restorations, eight owned PID absences, zero signals across the two windows. SDK global drain/epoch, long duration, leak freedom, broader types/QoS/concurrency/large messages remain NOT_PROVEN/UNVERIFIED. |
+| Optional unique flow | NOT_PROVIDED; failed optional Reader attempt retained, original-QoS custom-Transport fallback; strict UNTESTED. Startup is not described as error-free. |
+| Overall | Full ROS 2 NOT_VERIFIED. R22 STOPPED and unchanged. |
+
+At this 2026-10-18T22:06:34.620832+00:00 pre-commit documentation snapshot, the R31 finite technical tester gate is PASS; Main graph/PRE_COMMIT/commit/push/CI are pending. Actual publication results are recorded separately in root-relative `build/r31-action-natural/main-current-action-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled. The dated sections below remain historical evidence, not expanded qualifications.
+
 **Bounded native C++ Action business/path PASS on both RK3588A boards, with
 a recorded optional unique-flow retry.** Run `484675d3f084d757` used fresh peer
 run `fe7c9c0cb93d52df`, the new dedicated normal/DATASYNC-only identity and

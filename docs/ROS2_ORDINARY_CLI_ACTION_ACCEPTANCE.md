@@ -1,5 +1,7 @@
 # R25 stock ordinary Action CLI on RK3588A
 
+> **R31 current-stack follow-up (2026-10-18T22:06:34.620832+00:00):** [Current natural Action AB/BA acceptance](ROS2_NATURAL_ACTION_ACCEPTANCE.md) now qualifies the unchanged R30 3,236-file package/`9db2a35c` bridge in two finite windows. The 2,811-file ordinary package/`6378aeae` bridge and prior runs below remain historical comparison evidence. Both runs have five order=6 feedbacks and success without business permission controls; physical A remains explicitly bounded/outgoing-first, B ordinary, with lifecycle infrastructure. Selected-rclpy compatibility stays OPEN; no natural-restart/default-reconnect/old-goal qualification follows. R30 coordinated replacement is published as `a8945d4520af23f476ac93f9c376668b4d397481` on the existing branch (2026-10-18 19:36:28 UTC exact-SHA CI NOT_RUN). At this 2026-10-18T22:06:34.620832+00:00 pre-commit documentation snapshot, the R31 finite technical tester gate is PASS; Main graph/PRE_COMMIT/commit/push/CI are pending. Actual publication results are recorded separately in root-relative `build/r31-action-natural/main-current-action-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
 At 2026-10-17 23:34 UTC, independent final testing supports **bounded ordinary
 Action CLI AB/BA PASS**: one stock `ros2 action send_goal` Fibonacci order=6
 request per direction, with accepted UUID, five ordered feedback prefixes,

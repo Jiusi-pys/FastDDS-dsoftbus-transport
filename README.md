@@ -1,5 +1,13 @@
 # Fast DDS OpenHarmony DSoftBus Transport
 
+## R31 current-stack natural Action (2026-10-18)
+
+**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS, finite AB/BA:** the unchanged current R30 3,236-file package/`9db2a35c` bridge ran stock Fibonacci order=6 once per direction, each with five ordered feedback prefixes and exact SUCCEEDED result. No START_OLD/COMPLETE business permissions were used; listener/fixture-finish/runtime-close infrastructure remains. Physical A retained the explicit bounded outgoing-first backend, B the ordinary backend. This is not a default-backend or restart qualification. [Commands, bridge lineage and limits](docs/ROS2_NATURAL_ACTION_ACCEPTANCE.md).
+
+R30 coordinated replacement is published as `a8945d4520af23f476ac93f9c376668b4d397481` on the existing branch (2026-10-18 19:36:28 UTC exact-SHA CI NOT_RUN). At this 2026-10-18T22:06:34.620832+00:00 pre-commit documentation snapshot, the R31 finite technical tester gate is PASS; Main graph/PRE_COMMIT/commit/push/CI are pending. Actual publication results are recorded separately in root-relative `build/r31-action-natural/main-current-action-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
+The selected rclpy early-status/late-feedback compatibility item remains **OPEN**. Natural restart, default automatic reconnect, old-goal recovery, SDK epoch/drain and full ROS 2 remain unverified. Unique-flow NOT_PROVIDED/strict UNTESTED; R22 STOPPED. [Current capability matrix](docs/STATUS.md). Earlier dated entries below retain their original evidence scope.
+
 > **Publication-state timestamp:** Any R28 Main gate/publication/CI pending statement in this document describes the **2026-10-18 16:41 UTC pre-commit documentation snapshot**, not a permanent current-state assertion. The finite scene evidence is PASS; Main records the actual commit, remote branch and CI outcome separately in root-relative `build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json` when publication completes. No future commit SHA or CI success is prefilled.
 
 ## Current progress and navigation (2026-10-18)
