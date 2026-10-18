@@ -1,5 +1,34 @@
 # Project status
 
+## Current R26 S1 sustained application roundtrips (2026-10-18 11:35 UTC)
+
+**DEVICE_TESTED / INTEGRATION_TESTED PASS for 200 fixed String pub/sub echo
+roundtrips.** Run `f31ef86f8ed07cf2`: 400 logical publications, 800 side-local
+payload records, each sequence's four 33-byte CDRs identical. This is not ROS
+service/action traffic. [Commands, environment, failures and evidence](ROS2_SUSTAINED_ROUNDTRIP_ACCEPTANCE.md).
+
+| Capability | Status and reason |
+| --- | --- |
+| S1 fixed sustained String echo | SUPPORTED within this bounded two-board case, RELIABLE/VOLATILE depth 10, one outstanding request, at most 10 Hz, no application retries. 200 exact ordered roundtrips PASS. |
+| Normal exit / identity | Both children exit 0, four owned PIDs absent, both identity tokens restored, zero signals. Query 40 and execution 404 commands passed; 388 zero remote markers. |
+| Timing/resource observations | Local spans A/B 21.267501/21.265880 s; five samples per side. RSS +28/+40 KiB, threads 24/23 and FDs 20 stable at samples. Leak freedom NOT_PROVEN. Business upper bound 28.438 s is not an exact BUSINESS duration; close releases 34.547/35.000 s are below 50 s. |
+| S2 surviving-A / B process restart | BLOCKED_CURRENT_DEFAULT_NO_REACCEPT. Default package does not enable the separately gated replacement experiment; independent architecture/experiment decision required. No claim of permanent impossibility. |
+| S3 both-process cold start | NOT_RUN; cannot substitute for surviving-peer recovery. |
+| Same-process Participant recreation | NOT_PROVEN; SDK callback epoch/quiescence contract remains missing. |
+| Native coverage limits | Unique flow NOT_PROVIDED / strict UNTESTED; dedicated SEDP NOT_QUALIFIED; no direct per-payload RTPS mapping. Both diagnostic pairs retained. |
+| Build / other capabilities | 3,235-file script derivative, zero native payload changes; no full native rebuild/ABI rerun. Prior bounded Action/CLI/rosbag PASS retained. General QoS/types, long-duration/concurrent/large-message/stress behavior UNVERIFIED; R22 STOPPED; overall ROS 2 NOT VERIFIED. |
+
+SR-01 initial FAIL and SR-02 review FAIL were fixed, independently reviewed and
+retested; originals remain. Original sandbox postquery command 0 also remains
+FAIL (WinError 5, exit 1). Main's explicit normal-user/elevated recovery ran the
+same four local commands with exit 0, preserving the original query anchor;
+there was no requery or security/network change. Full details are in the acceptance document.
+
+Prior record/play commit `6d025da0efd088be46fb59fdadfd18755f5cc31e` is published
+on existing `origin/codex/flow-encoding-published-20261014`; CI at 10:45:07.955187
+UTC was NOT_RUN. Current S1 tester gate PASS is limited to four sources; Main
+graph/PRE_COMMIT/publication remain pending. Earlier sections retain historical scope.
+
 ## Current bounded rosbag record/play (2026-10-18 10:33 UTC)
 
 **DEVICE_TESTED / INTEGRATION_TESTED PASS for one fixed ten-String chain.**

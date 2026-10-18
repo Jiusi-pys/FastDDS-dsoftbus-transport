@@ -1,5 +1,7 @@
 # ROS 2 bounded cross-board rosbag record/play acceptance
 
+> **Publication update (2026-10-18):** This bounded record/play stage was published as `6d025da0efd088be46fb59fdadfd18755f5cc31e` on existing `origin/codex/flow-encoding-published-20261014`; exact-SHA CI at 10:45:07.955187 UTC was NOT_RUN (zero runs/checks/status contexts). The original acceptance snapshot below is retained. Subsequent [R26 sustained application roundtrip evidence](ROS2_SUSTAINED_ROUNDTRIP_ACCEPTANCE.md) is a separate fixed String pub/sub case, not expanded rosbag or service/action qualification.
+
 Evidence snapshot: 2026-10-18 10:33 UTC. **DEVICE_TESTED and
 INTEGRATION_TESTED PASS for one ten-String record/play chain on two RK3588A
 boards. General rosbag and full ROS 2 support remain PARTIAL / NOT VERIFIED.**
