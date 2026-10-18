@@ -1,5 +1,13 @@
 # Fast DDS OpenHarmony DSoftBus Transport
 
+## R32 autonomous Action after one guarded server replacement (2026-10-18)
+
+**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS, finite:** one live A Node/Context/Participant/ActionClient autonomously sent PRE6, OLD7 and NEW8 after observing unavailable then ready across one normal B0-to-B1 replacement. PRE5 and NEW7 exact feedbacks/results passed; OLD6 feedbacks and SUCCEEDED occurred before disappearance, so OLD recovery is not claimed. No host Action business permissions or EXECUTING precondition; explicit native ARM/REPLACE lifecycle controls remain. [Commands, evidence and limits](docs/ROS2_NATURAL_ACTION_RESTART_ACCEPTANCE.md).
+
+R31 current-stack natural Action AB/BA is published as `f14e57c9e5e94558a66a0f028cf99801f37ccd84` on the existing branch (2026-10-18 22:16:35 UTC exact-SHA CI NOT_RUN). At this 2026-10-18T23:26:38.723843+00:00 pre-commit documentation snapshot, the R32 finite technical tester gate is PASS; Main graph/PRE_COMMIT/commit/push/CI are PENDING. Final publication outcomes are recorded separately in root-relative `build/r32-action-natural-restart/main-natural-restart-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
+Selected rclpy early-status/late-feedback compatibility remains **OPEN**; default automatic reconnect, SDK epoch/drain, old-goal recovery, soak/broad QoS and full ROS 2 remain unverified. Unique-flow NOT_PROVIDED/strict UNTESTED; R22 STOPPED. [Current matrix](docs/STATUS.md). Older sections below retain their dated scopes.
+
 ## R31 current-stack natural Action (2026-10-18)
 
 **DEVICE_TESTED / CROSS_DEVICE_TESTED PASS, finite AB/BA:** the unchanged current R30 3,236-file package/`9db2a35c` bridge ran stock Fibonacci order=6 once per direction, each with five ordered feedback prefixes and exact SUCCEEDED result. No START_OLD/COMPLETE business permissions were used; listener/fixture-finish/runtime-close infrastructure remains. Physical A retained the explicit bounded outgoing-first backend, B the ordinary backend. This is not a default-backend or restart qualification. [Commands, bridge lineage and limits](docs/ROS2_NATURAL_ACTION_ACCEPTANCE.md).

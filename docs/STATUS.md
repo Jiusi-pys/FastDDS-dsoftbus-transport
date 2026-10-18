@@ -361,6 +361,23 @@ state known at their time; they are superseded only within the scope above.
 
 ## Earlier R25 native Action evidence (2026-10-17 08:25 UTC)
 
+## Current R32: autonomous Action business, one guarded replacement (2026-10-18T23:26:38.723843+00:00)
+
+**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS, finite two-board scene.** [Exact commands, repaired failures and evidence](ROS2_NATURAL_ACTION_RESTART_ACCEPTANCE.md). R31 current-stack natural Action AB/BA is published as `f14e57c9e5e94558a66a0f028cf99801f37ccd84` on the existing branch (2026-10-18 22:16:35 UTC exact-SHA CI NOT_RUN).
+
+| Capability | Current qualification |
+| --- | --- |
+| Natural application business after replacement | SUPPORTED within one finite explicit experiment: same live A Node/Context/Participant/ActionClient, autonomous PRE6 then OLD7, observed readiness false-to-true then NEW8; PRE5/NEW7 exact feedbacks and SUCCEEDED peer CDR. No host Action permissions or required EXECUTING status. |
+| Native process replacement | PARTIAL: one normal B0 exit/identity restoration/absence before fresh B1, continuous A26 anchors (8 Action), existing bounded outgoing-first A and ARM/REPLACE once each. This is not default automatic reconnect or unrestricted natural lifecycle support. |
+| OLD / cancellation | OLD7 had six feedbacks and SUCCEEDED before disappearance: normal completion only. OLD recovery and remote CancelGoal NOT_VERIFIED; capsule/endpoint presence is not executed cancellation. |
+| Selected rclpy ordering | OPEN `COMPAT_RCLPY_STATUS_BEFORE_GOAL_RESPONSE` / UNCOORDINATED_NOT_FIXED. Intermediate client status is observation-only; early status and result-time late-feedback cleanup boundaries persist. Fixed-fixture PASS is not an arbitrary-scheduling guarantee. |
+| Build / host / package | Four new test-side files, independent review and final host PASS. 3,237-file package adds one probe and manifest delta to R30/R31 payload; native `9db2a35c` / API23 ON/OFF / 897 dependencies REUSED_HASH_VERIFIED_NOT_REBUILT. |
+| Exit / native transport | Three rc0/finalize0/token restorations, six PIDs absent, zero signals; native Socket/RTPS records and matched loaded providers. No direct per-application-payload RTPS mapping; dedicated SEDP NOT_QUALIFIED. SDK epoch/global drain and leak freedom NOT_PROVEN. |
+| Optional unique flow | NOT_PROVIDED; known failed optional attempt/original-QoS custom-Transport fallback retained; strict UNTESTED. |
+| Remaining scope | Repeated/soak/failure-injection/wide QoS/types/concurrency/large-message acceptance not added here. Existing native Action/service/rosbag qualifications retain their dated scopes. Full ROS 2 NOT_VERIFIED; R22 STOPPED. |
+
+At this 2026-10-18T23:26:38.723843+00:00 pre-commit documentation snapshot, the R32 finite technical tester gate is PASS; Main graph/PRE_COMMIT/commit/push/CI are PENDING. Final publication outcomes are recorded separately in root-relative `build/r32-action-natural-restart/main-natural-restart-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled. Historical sections below are not retroactively upgraded.
+
 ## Current R31 natural Action AB/BA (2026-10-18T22:06:34.620832+00:00)
 
 **DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for the current R30 package and fixed single-goal fixture.** [Commands, exact build lineage, failures and seals](ROS2_NATURAL_ACTION_ACCEPTANCE.md). R30 coordinated replacement is published as `a8945d4520af23f476ac93f9c376668b4d397481` on the existing branch (2026-10-18 19:36:28 UTC exact-SHA CI NOT_RUN).
