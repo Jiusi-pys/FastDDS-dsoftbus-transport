@@ -125,7 +125,11 @@ def _metadata(value, expected, filename, first, last):
     _require(value.get('compression_format') == '' and value.get('compression_mode') == '',
              'Unexpected compression')
     _require(value.get('ros_distro') == expected['ros_distro'], 'ROS distro mismatch')
-    _require(value.get('custom_data') == {}, 'Unexpected custom metadata')
+    # The selected rosbag2 YAML encoder emits Null for an empty unordered_map;
+    # its decoder also accepts an empty mapping. Neither permits hidden data.
+    _require('custom_data' in value and (value['custom_data'] is None or
+             (type(value['custom_data']) is dict and not value['custom_data'])),
+             'Unexpected custom metadata')
     _require(_typed_equal(value.get('starting_time'), {'nanoseconds_since_epoch': first}),
              'Start timestamp')
     _require(_typed_equal(value.get('duration'), {'nanoseconds': last - first}), 'Duration')

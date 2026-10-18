@@ -1,5 +1,7 @@
 # ROS 2 offline closed SQLite/CDR oracle
 
+> **Integration update (2026-10-18 10:33 UTC):** The original offline helper was published as `ee04d945b993b4e7b4cdc96f9773afa3a18817ff` (05:52:42 UTC CI NOT_RUN). The current reviewed correction accepts explicit null or an empty mapping for official empty `custom_data`, while rejecting absent/nonempty/wrong types. Both runner sites call the actual `verify_recorded_bag` API. New record5 supplies actual closed SQLite/metadata and ten original publisher CDRs; independent oracle checks passed, and play1 received the same ten payloads byte-for-byte in order on the other board. Record4 remains BLOCKED and refused as playback input. The oracle's own return still grants content-only evidence; device success comes from the separate execution/audits. [Record/play evidence](ROS2_ROSBAG_RECORDPLAY_ACCEPTANCE.md). Final tester Commit gate PASS is scoped to seven source files; Main graph/PRE_COMMIT/publication for this integration remain pending. Original host-only contract/results below remain historical snapshots.
+
 Evidence snapshot: 2026-10-18 05:45 UTC. **Implementation PRESENT; HOST_TESTED
 PASS; real record/play and native reader NOT_RUN; overall NOT VERIFIED.**
 This two-file helper has final tester Commit gate PASS. Main graph/PRE_COMMIT

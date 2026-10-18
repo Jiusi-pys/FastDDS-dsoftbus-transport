@@ -1,5 +1,30 @@
 # Project status
 
+## Current bounded rosbag record/play (2026-10-18 10:33 UTC)
+
+**DEVICE_TESTED / INTEGRATION_TESTED PASS for one fixed ten-String chain.**
+Record5 `1403cdfc8beb937b` recorded A-to-B; play1 `5ca772d545190a98`
+replayed B-to-A, with one actual Resume response and all ten original 36-byte
+CDR payloads received byte-for-byte in order. [Commands, failures and seals](ROS2_ROSBAG_RECORDPLAY_ACCEPTANCE.md).
+
+| Capability | Current status and reason |
+| --- | --- |
+| String pub/sub, stock SQLite record/play | SUPPORTED within this fixed two-board chain; 10 publications/acks, closed SQLite/metadata/CDR verification, then 10 exact received payloads. Actual native Socket-path evidence, not host stubs. |
+| Resume service and selected QoS/type support | PARTIAL: one real Resume call/response, selected QoS and String CDR passed. Arbitrary services/actions, types and QoS combinations remain unverified here. |
+| Lifecycle/resources | Bounded normal recorder SIGTERM (one), natural player return, both child exit codes 0, four owned PIDs absent and both tokens restored per window. Playback signals=0. SDK epoch/quiescence NOT_PROVEN. |
+| Discovery/native transport | Paired native path and provider bindings observed. Dedicated SEDP NOT_QUALIFIED; no direct per-payload/Resume-to-RTPS mapping. Unique flow NOT_PROVIDED; strict mode UNTESTED; diagnostics retained. |
+| Build / host verification | Existing native artifacts reused; combined package 3,234 files/220 ELF. Current source initial/review/final host gates passed. No fresh full native rebuild or ABI rerun; whole-build reproducibility is not claimed. |
+| Earlier Action/node/topic scopes | Prior native C++ Action and ordinary CLI PASS retain their existing bounded evidence, unchanged by this stage. |
+| General rosbag / full ROS 2 | PARTIAL / NOT VERIFIED: general types/QoS, reconnect, large/fragmented messages, concurrent/stress and other storage modes not covered. R22 STOPPED. |
+
+Record2/3 FAIL and record4 BLOCKED remain preserved; only record5 was admitted
+as playback source. Latest prior publication is `ee04d945b993b4e7b4cdc96f9773afa3a18817ff`
+on existing `origin/codex/flow-encoding-published-20261014`; CI at 05:52:42 UTC
+was NOT_RUN. ABI `06e5917abd8906a5d17066b87223d239109c5374` is also published.
+Final tester Commit gate PASS covers exactly seven new/changed source files.
+Main graph/PRE_COMMIT/publication remain pending for record/play. Historical
+sections below retain their original dates, NOT_RUN states and publication scope.
+
 ## Current offline rosbag SQLite/CDR helper (2026-10-18 05:45 UTC)
 
 **HOST_TESTED PASS for a standalone offline helper; real record/play NOT_RUN.**
