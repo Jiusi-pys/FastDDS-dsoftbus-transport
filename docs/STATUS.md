@@ -1,5 +1,61 @@
 # Project status
 
+## EOF qualification addendum (2026-10-18 18:06 UTC pre-commit snapshot)
+
+Current host runner SHA-256 is
+`508ab7ca158a2cff2f2bd95810a95897419ed3def45162f7a5125d790c385e5f`.
+The original real Q1 executed
+`8c6fea0114614c5d81e70c813bc9c44579ee388a8067511ce1e7c7ba43bf279f`.
+Only one terminal LF was removed after staged whitespace checking failed;
+the failure and original bytes remain preserved. **The new runner hash was not
+device-tested.** The original finite service facts remain bound to the old hash.
+
+Independent initial, review and final stages passed. AST including positions,
+all47 recursive code objects and compiled marshal bytes match. Post-review
+host execution passed43 repository methods,12 workflow deadline cases,9 runner
+methods including execute/self-hash controls, and4 constructor admissions.
+The old receipt correctly rejects the current source hash. A new immutable
+BUILD_RECEIPT was accepted by checked_bridge and real compose/checked_package;
+all3,236 newly derived payload files are byte-identical to the original deployed
+package. API23 ON/OFF artifacts and897 dependencies were reused, not rebuilt.
+These establish limited evidence inheritance, not a new device run. The original
+2,092 raw files and295-member device audit remain unchanged.
+
+Technical tester gate PASS now includes this EOF equivalence qualification.
+Documentation Ready for commit YES; Main restage/graph/PRE_COMMIT/publication
+remain pending **at this 18:06 UTC snapshot**. Actual final commit/remote/CI is
+recorded separately in root-relative
+`build/r29-service-restart/main-service-restart-publication/POST_PUBLISH.json`.
+Main's current four-source manifest is
+`build/r29-service-restart/main-service-restart-publication/IMPLEMENTATION_FILES_EOF.json`;
+the original IMPLEMENTATION_FILES.json and source hashes below describe the
+original real-device revision. No future manifest or publication result is
+assumed before Main writes it. Default reconnect, SDK epoch/drain, action
+recovery, soak/leak freedom and full ROS2 remain unqualified.
+
+[EOF evidence and exact hashes](ROS2_SERVICE_RESTART_ACCEPTANCE.md).
+
+## Current R29: finite real service recovery PASS (2026-10-18 17:51 UTC)
+
+[Acceptance evidence](ROS2_SERVICE_RESTART_ACCEPTANCE.md). IMPLEMENTED / HOST_TESTED / DEVICE_TESTED /
+CROSS_DEVICE_TESTED PASS for one normal B server replacement and three distinct
+AddTwoInts requests. API23 native ON/OFF build qualification reused by hash;
+no native rebuild in R29. Tester gate PASS, docs Ready for commit YES.
+R29 gate/publication/CI pending below means the 2026-10-18 17:51 UTC pre-commit documentation snapshot. Final commit, remote and CI results are recorded separately at root-relative `build/r29-service-restart/main-service-restart-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
+| Capability | Support / evidence / boundary |
+| --- | --- |
+| One explicit normal service-server replacement | Supported within this tested finite path: true rclpy/rmw_fastrtps service and native DSoftBus; PRE/NEW each complete with exact peer CDR. |
+| Persistent client and pending request | Same A client/Node/Runtime/Participant/request-writer/reply-reader; OLD no response, local remove_pending_request/cancel only. Remote cancellation unsupported by this evidence. |
+| General service recovery | Partial: one AddTwoInts server replacement, RELIABLE/VOLATILE depth10 only; arbitrary types/QoS/concurrent load/repeated failures not tested. |
+| Lifecycle | Three child/finalize rc0, identities restored, six PIDs absent, no signals. B0 absence precedes B1 launch. |
+| Action recovery / default automatic reconnect | Not tested / not enabled by R29. Earlier bounded native Action/CLI/rosbag qualifications retained without recovery generalization. |
+| SDK epoch/drain / soak / leak freedom | NOT_PROVEN / NOT_TESTED / NOT_PROVEN. Unique flow NOT_PROVIDED, strict UNTESTED; dedicated SEDP NOT_QUALIFIED; no direct payload-to-RTPS sequence mapping. |
+
+R28 is published as `65ec59cffdd0ad4b0d9991b713a0a2741522f5e3`; recorded CI NOT_RUN. R29 only adds four files and
+does not change RTPS/DDS/native safety behavior. Overall ROS 2 NOT VERIFIED;
+R22 STOPPED. Older service-recovery gaps below are historical stage snapshots.
+
 > **Publication-state timestamp:** Any R28 Main gate/publication/CI pending statement in this document describes the **2026-10-18 16:41 UTC pre-commit documentation snapshot**, not a permanent current-state assertion. The finite scene evidence is PASS; Main records the actual commit, remote branch and CI outcome separately in root-relative `build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json` when publication completes. No future commit SHA or CI success is prefilled.
 
 ## Current R28: two finite replacements PASS (2026-10-18 16:41 UTC)
