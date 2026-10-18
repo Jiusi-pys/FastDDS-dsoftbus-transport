@@ -1,5 +1,27 @@
 # Project status
 
+## Current offline rosbag SQLite/CDR helper (2026-10-18 05:45 UTC)
+
+**HOST_TESTED PASS for a standalone offline helper; real record/play NOT_RUN.**
+The no-Node ABI prerequisite was published as
+`06e5917abd8906a5d17066b87223d239109c5374` to existing
+`origin/codex/flow-encoding-published-20261014`. Exact-SHA CI at
+2026-10-18 05:23:02 UTC: NOT_RUN (zero runs/checks/status contexts).
+[Oracle contract, commands and evidence](ROS2_ROSBAG_SQLITE_ORACLE.md).
+
+| Capability | Current status and evidence boundary |
+| --- | --- |
+| Closed SQLite/CDR content oracle | SUPPORTED within the fixed ten-String offline contract; implementation PRESENT, HOST_TESTED PASS: 23 tests and 63 independent controls. Inputs are host-generated fixtures, not recorder-produced bags. |
+| Scalar metadata/QoS fidelity and resource release | HOST_TESTED PASS; 45 independent type-corruption controls rejected; all 63 controls preserve input files/expectations and release fixture roots normally. BSI-01/BSO-01 resolved with failed evidence retained. |
+| Native build and real no-Node ABI | Prior published bounded PASS retained; not rerun for this helper. Existing reproducibility and Transport-close limitations remain unchanged. |
+| Recorder close, device collection, native reader, replay and received payloads | UNVERIFIED, NOT_RUN; helper not connected to the record/play runner. Native compilation and device/integration tests are N/A for the standalone Python helper, not PASS for the system. |
+| Device availability | Read-only observation at 05:42:32 UTC: both registered RK3588A devices USB Connected. Sandbox empty listings did not establish offline status. No new communication evidence. |
+| Broader ROS 2 / QoS / reconnect | Overall NOT VERIFIED; R22 STOPPED. No DDS/RTPS/RMW/Transport semantic changes. |
+
+Independent final tester Commit gate PASS is restricted to the two-file helper.
+Main graph/PRE_COMMIT/publication remain pending for this stage. Historical ABI
+and earlier sections below retain their original dates and publication state.
+
 ## Current rosbag native ABI prerequisite (2026-10-18 02:06 UTC)
 
 **Build/composition and real no-Node ABI PASS on both RK3588A boards.**
