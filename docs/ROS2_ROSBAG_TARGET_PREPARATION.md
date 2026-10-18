@@ -1,5 +1,8 @@
 # ROS 2 target rosbag preparation
 
+> **Current prerequisite evidence (2026-10-18 02:06 UTC):** The new native rosbag build/composition and no-Node ABI stage has independent final tester Commit gate PASS. Eight rosbag2_py extensions, fixed String/Resume CDR, two native QoS conversions and genuine stock record/play parsers passed on both RK3588A boards in run `daf356bea873e640`. No Node/Recorder/Player was created; native cross-board recording, persisted SQLite payload/order verification and playback remain NOT_RUN. See [ABI acceptance](ROS2_ROSBAG_ABI_ACCEPTANCE.md) for the selected package, exact command and evidence hashes. Main graph/PRE_COMMIT/publication remain pending. R19/R20 local persistence and all older statements below remain dated snapshots; their storage success is not cross-board record/play proof.
+
+
 > **Current cross-reference (2026-10-17):** [R25 native C++ Action](ROS2_NATIVE_ACTION_ACCEPTANCE.md) has bounded native business/path PASS using the new dedicated identity, with a documented optional unique-flow retry. This supplies no rosbag record/play or rosbag2_py acceptance. R21 Host delivery and R24 no-Node Python have since been published; the R19/R20 local SQLite results and older permission/publication statements below remain dated snapshots. Ordinary native recording and cross-board replay remain UNVERIFIED.
 
 Current evidence: 2026-10-16 15:54 UTC. **R20's generated POSIX `bundle/run`

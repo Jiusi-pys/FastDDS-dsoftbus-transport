@@ -1,6 +1,6 @@
 # Fast DDS OpenHarmony DSoftBus Transport
 
-## Current progress and navigation (2026-10-17)
+## Current progress and navigation (2026-10-18)
 
 - **R25 native C++ Action business/path PASS, bounded:** one real RK3588A pair exercised goals, feedback, concurrent execution, cancellation, rejection, abort and normal completion over native DSoftBus with project DDS/RMW. [Results and limits](docs/ROS2_NATIVE_ACTION_ACCEPTANCE.md).
 - **Recorded limitation:** each board logged a failed optional unique-flow Reader attempt; independent review confirmed the existing RMW retries with original QoS on the same custom Transport. Unique flows were not provided, strict mode was not tested, and startup was not error-free.
@@ -8,7 +8,8 @@
 - **R25 ordinary Python/CLI node discovery PASS, bounded:** single public Node lifecycle and stock `ros2 node list --no-daemon --spin-time 3` passed on the real RK3588A pair in both directions. [Commands, evidence and limits](docs/ROS2_ORDINARY_CLI_NODE_DISCOVERY_ACCEPTANCE.md).
 - **Ordinary topic evidence:** topic graph/pub passed in both directions under the preceding runner; the current four-file Host readiness repair has independent review/post-review tests and fresh real AB/BA `topic echo` PASS. [Results and evidence boundaries](docs/ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md).
 - **Ordinary Action CLI PASS, bounded:** stock `ros2 action send_goal` accepted one Fibonacci order=6 goal in each direction, with five feedback prefixes and exact successful result on the real RK3588A pair. [Commands, evidence and limits](docs/ROS2_ORDINARY_CLI_ACTION_ACCEPTANCE.md).
-- **Publication / next boundaries:** echo repair was published as `cb9c54dc6564362b52dc652e55ae9f7b5559749e` (22:49:05 UTC CI NOT_RUN). This Action evidence documentation awaits Main graph/PRE_COMMIT/publication; ordinary CLI cancellation/rejection/abort/concurrency, rosbag and broader QoS/reconnect remain UNVERIFIED; R22 STOPPED. [Current matrix](docs/STATUS.md).
+- **Rosbag native ABI prerequisite PASS, no Node:** the SQLite rosbag overlay builds and composes; real imports, String/Resume CDR, native QoS conversions and stock parser checks passed on both RK3588A boards. Recording/playback and communication are NOT_RUN in this stage. [Evidence and limits](docs/ROS2_ROSBAG_ABI_ACCEPTANCE.md).
+- **Publication / next boundaries:** ordinary Action evidence was published as `a0a4fcdbe0b1e2ae7c4f32abbe0f5c08074f17c3` on the existing branch (2026-10-17 23:41:04.775 UTC CI NOT_RUN). The five-source rosbag ABI prerequisite has final tester Commit gate PASS; Main graph/PRE_COMMIT/publication remain pending. Real cross-board recording, persisted SQLite CDR/order verification and replay are next; broader QoS/reconnect and full ROS 2 parity remain UNVERIFIED; R22 STOPPED. [Current matrix](docs/STATUS.md).
 
 
 以下带日期摘要保留其历史范围，不能替代上述当前状态，也不构成新的设备测试授权。

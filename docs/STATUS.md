@@ -1,5 +1,38 @@
 # Project status
 
+## Current rosbag native ABI prerequisite (2026-10-18 02:06 UTC)
+
+**Build/composition and real no-Node ABI PASS on both RK3588A boards.**
+Run `daf356bea873e640` passed native imports, three fixed CDR checks, two native
+QoS conversions and actual stock record/play parser checks. It created no Node,
+Recorder or Player. `communication_verified=false`; record/play NOT_RUN.
+[Commands, provenance, failures and limits](ROS2_ROSBAG_ABI_ACCEPTANCE.md).
+
+| Capability | Current status and evidence boundary |
+| --- | --- |
+| Native rosbag build and combined package | SUPPORTED within the pinned SDK23/AArch64/CPython 3.12.7 package; BUILDS PASS. Existing 293-command native build and exact package were revalidated, not rebuilt during final aggregation; `whole_build_reproducible=false`, with earlier output/resource/DSO differences retained. |
+| rosbag2_py ABI / selected type support | SUPPORTED within this no-Node probe on A/B: eight native extensions, String and Resume request/response CDR, exact package origins/providers. DEVICE_TESTED PASS for ABI only. |
+| QoS conversion / CLI parsing | PARTIAL: two native conversion roundtrips and stock SQLite presets/options parse correctly. Network QoS interoperability and actual record/play behavior UNVERIFIED. |
+| Native cross-board record / persisted SQLite oracle / replay | UNVERIFIED, NOT_RUN; not executable cases in the current finite ABI runner. Earlier R19/R20 offline local persistence remains separate. |
+| Lifecycle / resources | Interpreter execution/finalize=0, identity restored=1, four owned processes absent, signals=0. `teardown_observed=0`, rc=-1; Transport close and SDK callback quiescence not established by ABI success. |
+| Node/topic/Action communication | Prior bounded published evidence retains its exact source/package/run scope. The combined rosbag package has no new ROS communication qualification. |
+| Larger/general types, concurrent record/play, cache/crash recovery, compression, MCAP, split bags | UNVERIFIED by this stage; the selected artifact scope is SQLite and does not establish these capabilities. |
+| Broader QoS/reconnect/load and full ROS 2 parity | UNVERIFIED; R22 STOPPED. No DDS/RTPS/RMW/Transport semantic changes. |
+
+Independent stage aggregation rehashed the 753-file target seal and the reviewed,
+post-review-tested source/package bytes, then replayed the canonical raw-log audit
+without HDC. Tester Commit gate PASS covers only five new files. Documentation is
+synchronized here; Main graph/PRE_COMMIT/publication remain pending. This is not
+full-project VERIFIED. Original UNKNOWN_START, entry-expired and local audit
+failures remain preserved, including the aggregation helper's failed first attempt.
+
+Last confirmed publication is ordinary Action evidence
+`a0a4fcdbe0b1e2ae7c4f32abbe0f5c08074f17c3` on existing
+`origin/codex/flow-encoding-published-20261014`; exact-SHA CI at
+2026-10-17 23:41:04.775 UTC was NOT_RUN (zero runs/checks/status contexts).
+Earlier sections below retain their historical publication and capability state.
+
+
 ## Current ordinary Action CLI evidence (2026-10-17 23:34 UTC)
 
 **Stock `ros2 action send_goal` AB/BA PASS for one positive Fibonacci order=6
