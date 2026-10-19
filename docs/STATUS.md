@@ -1,5 +1,26 @@
 # Project status
 
+## Current R34 stage1: diagnostic typed/serialized impact (2026-10-19T06:28:09.313739+00:00)
+
+[Canonical evidence and commands](ROS2_SERIALIZED_IMPACT_ACCEPTANCE.md) / [central capability matrix](ROS2_CAPABILITY_MATRIX.md). The four diagnostic candidates are PRESENT; independent final host81 repository tests plus constructor/workflow controls and one fresh paired RK3588A window PASS. Native3239-file package/220 ELF/897 dependencies are REUSED_HASH_VERIFIED_NOT_REBUILT. Documentation readiness applies only to this stage1 scope.
+
+| Capability / gate | Actual qualification |
+| --- | --- |
+| Fixed typed/bytes publication with typed+raw reception | Bounded DEVICE/CROSS_DEVICE PASS, A-to-B:4 topics,2 types,2 indexes,8 publications,16 callbacks,16 full buffers; all fields/native full-buffer decode agree. |
+| ParameterEvent diagnostic buffers | Local148/consumed140/suffix8; typed raw140/suffix0; bytes raw148/suffix8,full sent/receive equal. These are observed values, not required outcomes. |
+| String controls | Four cases,40-byte complete buffers/no suffix. |
+| Strong DDS payload/wire boundary | BLOCKED_PROVENANCE_GAP; accepted evidence is native raw callback only. |
+| General serialized APIs/publication/bag compatibility | OPEN / NOT_VERIFIED; stock RMW/native unchanged. R34 suffix nonzero0 does not supersede R33's22 suffix/11 nonzero samples. |
+| R34 bag follow-up | NOT_TESTED. Original third-Participant/recorder-internal-input goal BLOCKED; separate two-process staged candidate NOT_IMPLEMENTED/NOT_TESTED, with internal input unobservable. |
+| Normal lifecycle | Two child rc0,interpreter/finalize/native teardown0,four owned PIDs absent,tokens restored,zero forced signals. |
+| Independent review / final tester | PASS for this bounded stage1; final technical Commit gate PASS. Host stubs are not device serialization evidence. |
+| Retained failures | R34 query1 FAIL/zero business; constructor shadowing repaired as R34-D01. Initial auxiliary receipt overwrite PARTIAL/times UNKNOWN; canonical fresh final evidence does not repair it retroactively. |
+| General ROS2 | NOT_VERIFIED; QoS/concurrency/large messages/soak,default automatic reconnect and SDK epoch/drain remain unverified. Unique-flow NOT_PROVIDED/strict UNTESTED; R22 STOPPED. |
+
+R33 functional V2 is published as `bb007f39d3d5224d44ed5bcfa8294a68b337b32e` (2026-10-19 02:50:54.316289 UTC; exact-SHA CI NOT_RUN, zero runs/checks/statuses), confirmed by root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`. At this 2026-10-19T06:28:09.313739+00:00 pre-commit documentation snapshot, R34 Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual later outcomes belong in `build/r34-serialized-impact/main-publication/POST_PUBLISH.json`; no future SHA or PASS is prefilled.
+
+Earlier dated status sections below retain their historical scopes.
+
 ## Current R30: finite coordinated Action replacement PASS (2026-10-18 19:28 UTC)
 
 [Actual evidence and compatibility entry](ROS2_ACTION_RESTART_ACCEPTANCE.md). Four-file implementation and

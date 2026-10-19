@@ -1,5 +1,11 @@
 # R33 native parameters: functional V2 PASS, strict V1 failures retained
 
+## R34 diagnostic follow-up (2026-10-19T06:28:09.313739+00:00)
+
+[R34 stage1 acceptance](ROS2_SERIALIZED_IMPACT_ACCEPTANCE.md) independently observes fixed ParameterEvent fixtures on dedicated typed/bytes topics, rather than rerunning these parameter RPCs. Local buffers148/consumed140/suffix8 produced typed raw callbacks140 and serialized raw callbacks148; serialized sent/receive full bytes match and all fields/native full-buffer decodes agree. This run's suffixes have zero nonzero bytes. R33's historical40 samples/22 suffixes/11 nonzero samples and both V1 FAILs remain unchanged; these observations do not establish safe padding or repair standalone-length compatibility.
+
+Strong DDS serializedPayload/wire boundary remains BLOCKED_PROVENANCE_GAP; native raw callback observation is the accepted limit. General serialized compatibility remains OPEN, R34 bag NOT_TESTED and full ROS2 NOT_VERIFIED. R33 functional V2 publication is `bb007f39d3d5224d44ed5bcfa8294a68b337b32e` (2026-10-19 02:50:54.316289 UTC,CI NOT_RUN). The original R33 document below is retained as its dated pre-commit snapshot.
+
 Snapshot 2026-10-19T02:39:39.888997+00:00; baseline HEAD `5585ce7ffde6a1191b1a2b49dd5d2abdfb581484`. **Technical Commit gate PASS and DEVICE/CROSS_DEVICE PASS only for `R33_NATIVE_PARAMETER_FUNCTIONAL_V2_STOCK_RMW`. Overall ROS 2 NOT_VERIFIED.** R32 is published as `5585ce7ffde6a1191b1a2b49dd5d2abdfb581484` (2026-10-18 23:35:56 UTC exact-SHA CI NOT_RUN). At this 2026-10-19T02:39:39.888997+00:00 pre-commit documentation snapshot, the technical tester gate is PASS only for functional V2; Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual publication outcomes are recorded separately in root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
 
 ## Selected direction and meaning of V2

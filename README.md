@@ -1,5 +1,17 @@
 # Fast DDS OpenHarmony DSoftBus Transport
 
+## R34 stage1: bounded typed/serialized publish and raw callback observation (2026-10-19T06:28:09.313739+00:00)
+
+**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for `R34_SERIALIZED_IMPACT_TYPED_AND_RAW`, A-to-B only.** Four dedicated topics/two fixed types/two indexes produced 8 public publish calls,16 typed/raw callbacks and16 full buffers. ParameterEvent local buffers were148 bytes/140 consumed/8 suffix; typed publication yielded140-byte raw callbacks, while bytes publication yielded148-byte raw callbacks identical to the full sent buffers. Four String controls remained40 bytes without suffix. All fields and complete-buffer native deserialization agreed. [Acceptance, commands and retained failures](docs/ROS2_SERIALIZED_IMPACT_ACCEPTANCE.md) / [central matrix](docs/ROS2_CAPABILITY_MATRIX.md).
+
+This is a diagnostic experiment on unchanged stock RMW/native code. Raw callback observation is the accepted boundary; **strong DDS serializedPayload/wire-boundary proof is BLOCKED_PROVENANCE_GAP**. General serialized compatibility remains OPEN. This run's zero nonzero-suffix count does not erase R33's22 suffix samples/11 nonzero samples or establish safe padding. Original R34 query1 remains FAIL; initial auxiliary receipt history remains PARTIAL/times UNKNOWN.
+
+**R34 bag NOT_TESTED.** The current bridge supports two Participants with one peer; the proposed third observer/recorder arrangement and recorder-internal-input comparison remain BLOCKED. A two-process staged record/closed-SQLite/play study is a separately scoped NOT_IMPLEMENTED/NOT_TESTED candidate; its internal recorder input would remain unobserved. Historical ten-String bag PASS retains its original scope. Full ROS2 NOT_VERIFIED; QoS/concurrency/large-message/soak/default reconnect/SDK epoch gaps remain; R22 STOPPED.
+
+R33 functional V2 is published as `bb007f39d3d5224d44ed5bcfa8294a68b337b32e` (2026-10-19 02:50:54.316289 UTC; exact-SHA CI NOT_RUN, zero runs/checks/statuses), confirmed by root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`. At this 2026-10-19T06:28:09.313739+00:00 pre-commit documentation snapshot, R34 Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual later outcomes belong in `build/r34-serialized-impact/main-publication/POST_PUBLISH.json`; no future SHA or PASS is prefilled.
+
+Earlier dated sections below retain their original evidence and publication snapshots.
+
 ## R33 functional V2: bounded native parameters PASS (2026-10-19T02:39:39.888997+00:00)
 
 **DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for `R33_NATIVE_PARAMETER_FUNCTIONAL_V2_STOCK_RMW`.** Stock RMW is retained. One fresh two-board window passed six services/14 RPCs/nine value types,12 mutation events,3 atomic rejections/readback, whole-byte native local roundtrips and normal close: two rc0, four PIDs absent, tokens restored, no forced signals. [Evidence, original failures and limits](docs/ROS2_NATIVE_PARAMETER_ACCEPTANCE.md) and [capability matrix](docs/ROS2_CAPABILITY_MATRIX.md).

@@ -1,5 +1,13 @@
 # ROS 2 bounded cross-board rosbag record/play acceptance
 
+## R34 follow-up boundary (2026-10-19T06:28:09.313739+00:00)
+
+The historical ten-String record/play PASS below retains its exact scope. [R34 stage1](ROS2_SERIALIZED_IMPACT_ACCEPTANCE.md) tests typed/bytes publishing and native raw callbacks only; **R34 ParameterEvent/multi-topic bag record/play is NOT_TESTED**. Its raw callback buffers do not reveal recorder-internal take input or DDS serializedPayload/wire boundaries.
+
+The [bag feasibility review](../../../../build/r34-serialized-impact/bag-followup-review/REPORT.md) blocks the original simultaneous publisher/observer/recorder proposal: the current native bridge has one peer/two Participants, and a parallel observer would still be a different subscription from the recorder. Do not add a third observer or silently modify native topology. A separately named narrower candidate could use two-process record,independently audited closed SQLite bag,then two-process play with fresh admission. It is NOT_IMPLEMENTED/NOT_TESTED; internal recorder input remains unobservable,so it cannot be called completion of the original phase2 goal. Package/type-support presence does not prove ParameterEvent storage/replay execution. Stock runtime,old String oracle and safety bounds retain their original contracts.
+
+The following dated acceptance and its original failures remain historical evidence.
+
 > **Publication update (2026-10-18):** This bounded record/play stage was published as `6d025da0efd088be46fb59fdadfd18755f5cc31e` on existing `origin/codex/flow-encoding-published-20261014`; exact-SHA CI at 10:45:07.955187 UTC was NOT_RUN (zero runs/checks/status contexts). The original acceptance snapshot below is retained. Subsequent [R26 sustained application roundtrip evidence](ROS2_SUSTAINED_ROUNDTRIP_ACCEPTANCE.md) is a separate fixed String pub/sub case, not expanded rosbag or service/action qualification.
 
 Evidence snapshot: 2026-10-18 10:33 UTC. **DEVICE_TESTED and
