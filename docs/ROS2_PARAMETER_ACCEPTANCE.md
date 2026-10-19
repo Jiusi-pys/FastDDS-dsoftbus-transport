@@ -1,5 +1,7 @@
 # ROS 2 Windows Host parameter acceptance
 
+> **Current native follow-up (2026-10-19T02:39:39.888997+00:00):** [R33 functional V2](ROS2_NATIVE_PARAMETER_ACCEPTANCE.md) passed a fresh bounded RK3588A pair window using unchanged stock RMW, full original native local roundtrip samples and normal close. Both V1 device failures remain FAIL;22/40 samples in the new run still have standalone-length suffixes, so serialization/serialized publish/general bag compatibility remains OPEN. This does not convert the historical Windows fake_sdk=1 seam below into native evidence. [Matrix](ROS2_CAPABILITY_MATRIX.md). At this 2026-10-19T02:39:39.888997+00:00 pre-commit documentation snapshot, the technical tester gate is PASS only for functional V2; Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual publication outcomes are recorded separately in root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
 As of 2026-10-15 03:34:47 UTC, the additive
 `examples/ros2_parameter_acceptance` target and
 `tests/ros2_host/run_parameter_acceptance.py` have independent initial testing,

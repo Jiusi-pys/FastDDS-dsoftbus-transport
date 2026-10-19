@@ -361,6 +361,21 @@ state known at their time; they are superseded only within the scope above.
 
 ## Earlier R25 native Action evidence (2026-10-17 08:25 UTC)
 
+## Current R33 functional V2 on stock RMW (2026-10-19T02:39:39.888997+00:00)
+
+**IMPLEMENTED / HOST_TESTED / DEVICE_TESTED / CROSS_DEVICE_TESTED PASS within the finite V2 scope.** [Detailed acceptance](ROS2_NATIVE_PARAMETER_ACCEPTANCE.md) and [central capability matrix](ROS2_CAPABILITY_MATRIX.md). Stock RMW is selected; no RMW/native Transport patch was applied. The original two V1 device failures remain FAIL; their blocked/undecided documentation snapshot is superseded only for current direction and this new V2 qualification.
+
+| Account | Current qualification |
+| --- | --- |
+| Six parameter services/events | V2 bounded PASS:14 ordered RPCs,nine types,3 atomic refusals/unchanged readback,12 mutation events and dynamic deletion; no-extra-event observation250ms only. |
+| Local native serialization roundtrip |40 complete original samples deserialized natively and matched typed fields;18 exact-length samples,22 suffixes (11 nonzero,4..72 bytes). No trimming or normalization. |
+| Standalone serialization | OPEN `COMPAT_RMW_FASTRTPS_STANDALONE_LENGTH`; strict V1 still fails even on this new run. Canonical/minimal/deterministic serialization, general serialized publish/API and general rosbag compatibility unverified. |
+| Normal lifecycle/native path | Two child/finalizer rc0,4 PIDs absent,tokens restored,zero forced signals; package/endpoint/native Socket/RTPS proof. Local samples are not captured wire payloads or per-RPC-to-RTPS mapping. |
+| Providers | Actual80 mapped external objects are hash-matched members of89-object allowlist; every required provider present. Auditor equality/function-identity mistakes were corrected in audit helpers, not production. |
+| Remaining scope | Type-description endpoints only, not RPC; broad QoS/concurrency/large messages/soak/reconnect not added. Existing finite Action/service/bag scopes preserved; default automatic reconnect NOT_PROVIDED, SDK epoch/drain UNPROVEN, strict unique-flow unprovided/UNTESTED, rclpy ordering OPEN. Full ROS 2 NOT_VERIFIED; R22 STOPPED. |
+
+R32 is published as `5585ce7ffde6a1191b1a2b49dd5d2abdfb581484` (2026-10-18 23:35:56 UTC exact-SHA CI NOT_RUN). At this 2026-10-19T02:39:39.888997+00:00 pre-commit documentation snapshot, the technical tester gate is PASS only for functional V2; Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual publication outcomes are recorded separately in root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
 ## Current R32: autonomous Action business, one guarded replacement (2026-10-18T23:26:38.723843+00:00)
 
 **DEVICE_TESTED / CROSS_DEVICE_TESTED PASS, finite two-board scene.** [Exact commands, repaired failures and evidence](ROS2_NATURAL_ACTION_RESTART_ACCEPTANCE.md). R31 current-stack natural Action AB/BA is published as `f14e57c9e5e94558a66a0f028cf99801f37ccd84` on the existing branch (2026-10-18 22:16:35 UTC exact-SHA CI NOT_RUN).

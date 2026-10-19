@@ -1,5 +1,13 @@
 # Fast DDS OpenHarmony DSoftBus Transport
 
+## R33 functional V2: bounded native parameters PASS (2026-10-19T02:39:39.888997+00:00)
+
+**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for `R33_NATIVE_PARAMETER_FUNCTIONAL_V2_STOCK_RMW`.** Stock RMW is retained. One fresh two-board window passed six services/14 RPCs/nine value types,12 mutation events,3 atomic rejections/readback, whole-byte native local roundtrips and normal close: two rc0, four PIDs absent, tokens restored, no forced signals. [Evidence, original failures and limits](docs/ROS2_NATIVE_PARAMETER_ACCEPTANCE.md) and [capability matrix](docs/ROS2_CAPABILITY_MATRIX.md).
+
+All40 local serialization samples are preserved;22 retain suffixes. **COMPAT_RMW_FASTRTPS_STANDALONE_LENGTH remains OPEN** for canonical serialization/general serialized API, serialized publication and general rosbag compatibility. V2 is an explicitly reviewed functional evidence model, not an RMW/Transport fix, trimmed-CDR workaround, wire capture or retrospective V1 PASS. Both original V1 device failures remain FAIL; the unchanged strict V1 decoder also rejects this new run. Full ROS 2 NOT_VERIFIED; R22 STOPPED.
+
+R32 is published as `5585ce7ffde6a1191b1a2b49dd5d2abdfb581484` (2026-10-18 23:35:56 UTC exact-SHA CI NOT_RUN). At this 2026-10-19T02:39:39.888997+00:00 pre-commit documentation snapshot, the technical tester gate is PASS only for functional V2; Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual publication outcomes are recorded separately in root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled. Older dated scopes below remain unchanged.
+
 ## R32 autonomous Action after one guarded server replacement (2026-10-18)
 
 **DEVICE_TESTED / CROSS_DEVICE_TESTED PASS, finite:** one live A Node/Context/Participant/ActionClient autonomously sent PRE6, OLD7 and NEW8 after observing unavailable then ready across one normal B0-to-B1 replacement. PRE5 and NEW7 exact feedbacks/results passed; OLD6 feedbacks and SUCCEEDED occurred before disappearance, so OLD recovery is not claimed. No host Action business permissions or EXECUTING precondition; explicit native ARM/REPLACE lifecycle controls remain. [Commands, evidence and limits](docs/ROS2_NATURAL_ACTION_RESTART_ACCEPTANCE.md).
