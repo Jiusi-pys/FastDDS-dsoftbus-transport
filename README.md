@@ -1,3 +1,16 @@
+<!-- R35_CURRENT_STATUS_PREFIX; historical body below is byte-preserved. -->
+# R35 current bounded serialized bag evidence (2026-10-19T22:45:38.910915+00:00)
+
+**Implementation PRESENT; bounded DEVICE_TESTED / CROSS_DEVICE_TESTED PASS** for three fixed cases: RECORD `995d57d79617477a`, DEFAULT `f1037096c37e5b3b`, NO_LOAN `128ed56c0766fce3`. Four topics/two types/two indexes produced eight immutable SQLite CDR rows, then sixteen typed/raw callbacks and eight full-buffer matches in each playback. [R35 acceptance, original commands and limits](docs/ROS2_SERIALIZED_BAG_ACCEPTANCE.md) / [current matrix](docs/ROS2_CAPABILITY_MATRIX.md).
+
+Native package qualification is REUSED_HASH_VERIFIED_NOT_REBUILT. Final agentic-review has zero findings/source fixes; the final tester reports Commit gate: PASS for the finite R35 technical test scope. Existing device/host results were REUSED_NOT_RERUN with unchanged source hashes; only two readonly public-admission checks were newly executed by that final tester. This documentation sync makes no device or SDK call.
+
+**Full ROS2 NOT_VERIFIED.** General serialized compatibility remains OPEN; strong DDS payload/wire proof is BLOCKED_PROVENANCE_GAP. Recorder-internal take and effective can-loan are UNOBSERVABLE; SDK epoch/global drain are NOT_PROVEN. The accepted configuration has two Participants/one peer; its third-observer topology remains unsupported. Selected RELIABLE/VOLATILE only; broad QoS, large-message/concurrency/soak/leak freedom and default automatic reconnect are not newly qualified. R22 remains STOPPED/excluded.
+
+DEFAULT D01 expired before deployment and remains FAIL/no CONSUMED. Serialized ParameterEvent nonzero suffix bytes are retained, not normalized or treated as proven padding. Git publication outcomes are maintained separately by Main; this technical record does not invent a future commit/CI result. Earlier sections below are dated historical evidence, including their original failures and publication snapshots.
+
+---
+
 # Fast DDS OpenHarmony DSoftBus Transport
 
 ## R34 stage1: bounded typed/serialized publish and raw callback observation (2026-10-19T06:28:09.313739+00:00)
