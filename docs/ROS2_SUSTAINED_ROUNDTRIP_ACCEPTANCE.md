@@ -1,3 +1,40 @@
+<!-- R38_CURRENT_SCOPED_PASS_PREFIX; the complete prior body below remains byte-preserved historical evidence. -->
+# Current follow-up: R38 finite endurance and normal close PASS (2026-10-20)
+
+The new [R38 durable capture acceptance](ROS2_DURABLE_CAPTURE_ACCEPTANCE.md), run `940f4e9c10a29830`, has independent DEVICE / CROSS_DEVICE / INTEGRATION PASS for1801 String roundtrips/7204 complete33-byte CDR stage records, zero loss/duplicates/reordering/foreign payload, both original oracle modes PASS, and spans A1811.239383904/B1811.244691655sec. Both native RuntimeClose0/observation_complete1/public deletion0/interpreter0/device-child0, token restoration/four owned device PIDs absent/zero forces PASS. SDK receipts are696 host0/680 applicable remote0, plus a separate fresh40-SDK query and4 local steps.
+
+Host worker/child actual OS exit0 is observed through exact objects retained live at startup; runner/original CLI Popen and external short-helper exits0 agree. Observer own OS exit stays **UNOBSERVED_NONBUSINESS_AUXILIARY**, with final exact identity absence, complete bounded stable output and closed handles. No long business wrapper was created; old tool24208 exit UNKNOWN and old R38 `efa7336e7ca4b78b` BLOCKED remain unchanged.
+
+The R26 200-roundtrip business35s/probe40s/normal-close50s contract remains its own historical acceptance. D07's sealed68 Python/0skip and13 Host CTest PASS and the genuine D03 SDK23 native23TU/1037inputs/23objects build are revalidated by final tester D03, not newly rerun/recompiled there;4 post-review HOST controls are separate model-admission/runner evidence. Full ROS2, broad QoS/sizes/concurrency/hours soak, strong per-payload wire lineage, SDK epoch/drain/global leak freedom and R38 restart/recreation remain unverified. Tester Commit gate:PASS is technical scope only; docs synced, Main PRE_COMMIT/all+staged graph/commit/push PENDING, CI NOT_RUN_NO_NEW_COMMIT.
+
+The entire R26 sustained roundtrip record and all earlier prefixes below remain byte-preserved historical evidence, including their original failures and dated “current” statements. [Current capability matrix](ROS2_CAPABILITY_MATRIX.md).
+
+---
+
+<!-- R37_BLOCKED_CURRENT_PREFIX; complete original R36/R26 body below is byte-preserved. -->
+# Navigation update: R37 failed native close (2026-10-20T03:08:59.634827+00:00)
+
+The [R37 source-bound native observation/close attempt](ROS2_NATIVE_CLOSE_ACCEPTANCE.md) is **FAIL / BLOCKED, NOT_VERIFIED; Commit gate: BLOCKED; Ready for commit: NO**. Native SDK23 build23 TU/1037 inputs/23 objects is revalidated D01 reuse at final testing; HOST46 Python methods/0 SKIP and fresh13 C++ CTest cases PASS separately. Actual run5f28247d2fc3258a has independent payload observations of1801/7204 full33-byte matches, but both unchanged original oracle modes reject the full probe-deadline FAIL streams. Both RuntimeClose2/observation_complete1/public deletion1/child71; host exit and capture-loss cause UNKNOWN. Zero observer capacity faults in this attempt do not qualify complete normal close.
+
+R37 retains the1801/at-most1Hz/minimum1800s contract and1900/1910/1950/20s business/probe/absolute-close/exit bounds. **The historical R26 200-roundtrip business35s/probe40s/normal-close50s contract below is unchanged.** R36 original FAIL is preserved; earlier bounded PASS cases retain their own original library and scope. R37 does not newly qualify service/Action/parameter/bag/restart or Participant recreation.
+
+Full ROS2 NOT_VERIFIED; strong DDS provenance gap, wide QoS/large messages/concurrency/longer soak and SDK epoch/global drain/leak freedom remain open. Default automatic reconnect NOT_PROVIDED, loan/recorder-internal take UNOBSERVABLE, R22 STOPPED/excluded. Documentation synchronized only for blocked handoff; no new commit/push; CI NOT_RUN_NO_NEW_COMMIT. [Current matrix](ROS2_CAPABILITY_MATRIX.md). Everything below is dated historical evidence, including older “current” and publication text.
+
+---
+
+<!-- R36_BLOCKED_CURRENT_PREFIX; original R26 body below is byte-preserved. -->
+# Navigation update: R36 failed finite endurance (2026-10-20T00:34:50.480663+00:00)
+
+The separate [R36 1801-roundtrip/1Hz acceptance](ROS2_FINITE_ENDURANCE_ACCEPTANCE.md) was executed on the real RK3588A pair and is **FAIL / BLOCKED**: content-only1801 exchanges PASS, but both native close paths fail and both children exit71. Implementation PRESENT; HOST52 methods PASS; DEVICE_EXECUTED_FAIL; INTEGRATION_NOT_QUALIFIED; Overall NOT_VERIFIED. Final tester Commit gate:BLOCKED; Ready for commit:NO.
+
+R36 is an independent fixed timing contract (listener60s/business1900s/probe1910s/absolute close1950s/exit20s, minimum send span1800s). **The R26 business35s/probe40s/normal-close50s limits and200-roundtrip acceptance below are unchanged.** R36 reused accepted native ELFs and did not rebuild C++; its current-source observation-capacity hypothesis is not a confirmed sole root cause. Content, cleanup absence and restored tokens do not qualify failed normal close.
+
+Full ROS2 NOT_VERIFIED; leak freedom/SDK epoch/global drain NOT_PROVEN; strong DDS BLOCKED_PROVENANCE_GAP; loan UNOBSERVABLE. The next required work is a separate source-bound native observation/close review and new build followed by the original full two-board acceptance. No R36 new commit/push; CI NOT_RUN_NO_NEW_COMMIT. R22 STOPPED/excluded. [Current capability matrix](ROS2_CAPABILITY_MATRIX.md).
+
+The complete original body below is retained verbatim as historical R26/S1/S2 evidence, including its own dated publication snapshots and bounded PASS. Historical R35 serialized-bag PASS also retains its original scope.
+
+---
+
 # R26 bounded sustained String roundtrip acceptance
 
 > **Current S1/S2 navigation (2026-10-18 13:52 UTC):** S1 remains published as `9cdbc84ed1371d53f4ee53b88dad5b3e5f1612ab`, CI NOT_RUN at its recorded exact-SHA check. The newly authorized [R27 S2 experiment](ROS2_PROCESS_RESTART_ACCEPTANCE.md) now has independent DEVICE/INTEGRATION PASS for one explicit ON normal B process replacement with A remaining alive (PRE5/POST5). Tester gate PASS; Main PRE_COMMIT and R27 publication pending. Default automatic reconnect, repeated/long-duration recovery and SDK epoch/drain remain unqualified. Earlier blocked snapshots below remain historical evidence, not the current S2 verdict.

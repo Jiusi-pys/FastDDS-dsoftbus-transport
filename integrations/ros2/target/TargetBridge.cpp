@@ -210,15 +210,19 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusClose(void* value)
     // The normal final summary remains separate from pre-delete value prefixes.
     auto* owner = static_cast<Owner*>(value); if (!owner) return 1;
     const auto result = owner->CloseLocal();
-    if (result == 1) { std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr); return 1; }
+    if (result == 1) {
+        std::fprintf(stdout,"ROS_CLOSE_COMPONENTS schema=1 run=%s side=%c runtime_result=1 observation_complete=NOT_RUN\n",owner->run.c_str(),owner->side?'B':'A');std::fflush(stdout);
+        std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr); return 1;
+    }
     const auto native = owner->runtime->ObserveSocket();
     const bool observation_complete = fastdds_dsoftbus::ros2_target_observation::Flush();
+    const bool close_reported=std::fprintf(stdout,"ROS_CLOSE_COMPONENTS schema=1 run=%s side=%c runtime_result=%d observation_complete=%u\n",owner->run.c_str(),owner->side?'B':'A',result,unsigned(observation_complete))>=0&&std::fflush(stdout)==0;
     std::fprintf(stderr,"FDDST_REAL_SOCKET run=%s side=%u fake_sdk=%d rejected_callbacks=%llu\n",owner->run.c_str(),owner->side,
         int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));
     owner->descriptor.reset(); owner->runtime.reset();
     std::fprintf(stderr,"FDDST_ROS_CLOSED run=%s side=%u pump_joined=1 runtime_closed=1 local_only=1\n",owner->run.c_str(),owner->side);
-    if(result==0&&observation_complete&&owner->public_delete_completed){std::fprintf(stdout,"ROS_STAGE run=%s side=%c pid=%ld stage=DDS_DELETED\n",owner->run.c_str(),owner->side?'B':'A',static_cast<long>(getpid()));std::fflush(stdout);}
-    std::fflush(stderr); delete owner; return observation_complete ? result : 2;
+    if(result==0&&observation_complete&&close_reported&&owner->public_delete_completed){std::fprintf(stdout,"ROS_STAGE run=%s side=%c pid=%ld stage=DDS_DELETED\n",owner->run.c_str(),owner->side?'B':'A',static_cast<long>(getpid()));std::fflush(stdout);}
+    std::fflush(stderr); delete owner; return observation_complete&&close_reported ? result : 2;
 }
 extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCaptureNativePrefix(
         fastdds_dsoftbus::ros2_diagnostics::NativePrefix* output) noexcept {

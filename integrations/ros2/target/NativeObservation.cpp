@@ -101,10 +101,11 @@ void TraceText(const char* key,const char* borrowed) noexcept {
             std::lock_guard<std::mutex> lock(state->mutex);
             auto& output=state->v1_locators;
             std::size_t length=0;if(borrowed)while(length<51&&borrowed[length])++length;
-            if(length!=50||!borrowed||borrowed[8]!=':'||borrowed[17]!=':'||output.selected_count==output.selected.size()){++output.faults;return;}
+            if(length!=50||!borrowed||borrowed[8]!=':'||borrowed[17]!=':'){output.RecordFault(ros2_target_observation::V1LocatorSnapshot::Fault::InvalidSelection);return;}
+            if(output.selected_count==output.selected.size()){output.RecordFault(ros2_target_observation::V1LocatorSnapshot::Fault::SelectionCapacity);return;}
             auto nibble=[](char ch)->int {return ch>='0'&&ch<='9'?ch-'0':ch>='a'&&ch<='f'?ch-'a'+10:-1;};
             ros2_target_observation::V1LocatorSnapshot::Selected value;
-            for(unsigned i=0;i<50;++i)if(i!=8&&i!=17&&nibble(borrowed[i])<0){++output.faults;return;}
+            for(unsigned i=0;i<50;++i)if(i!=8&&i!=17&&nibble(borrowed[i])<0){output.RecordFault(ros2_target_observation::V1LocatorSnapshot::Fault::InvalidSelection);return;}
             for(unsigned i=0;i<8;++i){value.kind=(value.kind<<4)|unsigned(nibble(borrowed[i]));value.port=(value.port<<4)|unsigned(nibble(borrowed[9+i]));}
             for(unsigned i=0;i<16;++i)value.address[i]=std::uint8_t((nibble(borrowed[18+2*i])<<4)|nibble(borrowed[19+2*i]));
             output.selected[output.selected_count++]=value;return;
@@ -141,12 +142,7 @@ std::uint64_t SocketFrame(const char* event,std::int32_t socket,const std::uint8
         }
     }
     const auto locators=fastdds_dsoftbus::experiment::ObserveSpdpLocators(data,size);
-    if(!locators.valid||locators.unsupported||locators.overflow)++state->v1_locators.faults;
-    else for(std::size_t i=0;i<locators.count;++i) {
-        auto& output=state->v1_locators;
-        if(output.advert_count==output.adverts.size()){++output.faults;break;}
-        output.adverts[output.advert_count++]={observation,sending,socket,locators.values[i]};
-    }
+    state->v1_locators.RecordAdverts(observation,sending,socket,locators);
     for(const auto& item:decoded.data) {
         if(state->count==capacity){++state->overflow;continue;}
         state->frames[state->count++]={observation,sending,socket,item.writer_guid,item.sequence_hi,item.sequence_lo};
@@ -238,13 +234,18 @@ bool Flush() {
     for(std::size_t i=0;i<locators.advert_count;++i) {
         const auto& frame=locators.adverts[i];char writer[33]{},address[33]{};
         for(unsigned j=0;j<16;++j){std::snprintf(writer+2*j,3,"%02x",frame.value.writer[j]);std::snprintf(address+2*j,3,"%02x",frame.value.address[j]);}
-        std::fprintf(stdout,"ROS_V1_SPDP run=%s side=%c observation=%llu direction=%s socket=%d writer=%s sequence_high=%u sequence_low=%u data_offset=%zu pid=%04x bytes=%u kind=%08x address=%s port=%08x\n",state->run.c_str(),state->side?'B':'A',static_cast<unsigned long long>(frame.observation),frame.sending?"SDK_SEND":"SDK_INGRESS",frame.socket,writer,frame.value.sequence_high,frame.value.sequence_low,frame.value.data_submessage_offset,unsigned(frame.value.pid),unsigned(frame.value.serialized_bytes),frame.value.kind,address,frame.value.port);
+        std::fprintf(stdout,"ROS_V1_SPDP run=%s side=%c observation=%llu direction=%s socket=%d writer=%s sequence_high=%u sequence_low=%u data_offset=%zu pid=%04x bytes=%u kind=%08x address=%s port=%08x occurrences=%llu last_observation=%llu last_sequence_high=%u last_sequence_low=%u batch_size=%zu\n",state->run.c_str(),state->side?'B':'A',static_cast<unsigned long long>(frame.observation),frame.sending?"SDK_SEND":"SDK_INGRESS",frame.socket,writer,frame.value.sequence_high,frame.value.sequence_low,frame.value.data_submessage_offset,unsigned(frame.value.pid),unsigned(frame.value.serialized_bytes),frame.value.kind,address,frame.value.port,static_cast<unsigned long long>(frame.occurrences),static_cast<unsigned long long>(frame.last_observation),frame.last_sequence_high,frame.last_sequence_low,frame.batch_size);
     }
     for(std::size_t i=0;i<locators.selected_count;++i) {
         const auto& value=locators.selected[i];char address[33]{};for(unsigned j=0;j<16;++j)std::snprintf(address+2*j,3,"%02x",value.address[j]);
         std::fprintf(stdout,"ROS_V1_SELECTED run=%s side=%c kind=%08x address=%s port=%08x scope=ACTUAL_SELECTOR_VALUES\n",state->run.c_str(),state->side?'B':'A',value.kind,address,value.port);
     }
     std::fprintf(stdout,"ROS_V1_OBSERVATION run=%s side=%c captured=%u adverts=%zu selected=%zu faults=%llu sdk_epoch=NOT_PROVEN\n",state->run.c_str(),state->side?'B':'A',unsigned(locator_capture),locators.advert_count,locators.selected_count,static_cast<unsigned long long>(locators.faults));
+    std::fprintf(stdout,"ROS_V1_AGGREGATION schema=1 run=%s side=%c mode=EXACT_ORDERED_BATCH_IDENTITY slots=%zu observed=%llu repeated=%llu repeated_batches=%llu invalid_frame=%llu unsupported_frame=%llu parser_capacity=%llu advert_capacity=%llu invalid_selection=%llu selection_capacity=%llu counter_capacity=%llu\n",
+        state->run.c_str(),state->side?'B':'A',locators.adverts.size(),
+        static_cast<unsigned long long>(locators.adverts_observed),static_cast<unsigned long long>(locators.adverts_repeated),static_cast<unsigned long long>(locators.batches_repeated),
+        static_cast<unsigned long long>(locators.fault_counts[0]),static_cast<unsigned long long>(locators.fault_counts[1]),static_cast<unsigned long long>(locators.fault_counts[2]),
+        static_cast<unsigned long long>(locators.fault_counts[3]),static_cast<unsigned long long>(locators.fault_counts[4]),static_cast<unsigned long long>(locators.fault_counts[5]),static_cast<unsigned long long>(locators.fault_counts[6]));
     for(std::size_t i=0;i<stored;++i) {
         char guid[33]{};for(std::size_t j=0;j<16;++j)std::snprintf(guid+2*j,3,"%02x",snapshot[i].writer[j]);
         std::fprintf(stdout,"ROS_NATIVE_DATA run=%s side=%c observation=%llu direction=%s socket=%d writer=%s sequence_hi=%d sequence_lo=%u scope=STRUCTURAL_APP_OBSERVER\n",
@@ -252,9 +253,9 @@ bool Flush() {
     }
     std::fprintf(stdout,"ROS_NATIVE_SUMMARY run=%s side=%c send_enter=%llu send_return=%llu send_error=%llu ingress=%llu detailed_stored=%zu metadata_limit=%zu overflow=%llu malformed=%llu sdk_epoch=NOT_PROVEN\n",
         state->run.c_str(),state->side?'B':'A',static_cast<unsigned long long>(state->send_enter.load()),static_cast<unsigned long long>(state->send_return.load()),static_cast<unsigned long long>(state->send_error.load()),static_cast<unsigned long long>(state->ingress.load()),stored,capacity,static_cast<unsigned long long>(state->overflow.load()),static_cast<unsigned long long>(state->malformed.load()));
-    std::fflush(stdout);
+    const bool native_output_ok=std::fflush(stdout)==0&&std::ferror(stdout)==0;
     ros2_diagnostics::Snapshot startup_copy;
     const bool startup_ok=Capture(startup_copy)&&ros2_diagnostics::Write(startup_copy,ros2_diagnostics::Stdout,nullptr);
-    return locator_capture&&!locators.faults&&startup_ok&&!startup_copy.overflow&&!startup_copy.output_errors&&state->overflow.load()==0&&state->malformed.load()==0&&state->send_error.load()==0&&state->send_enter.load()==state->send_return.load();
+    return locator_capture&&!locators.faults&&startup_ok&&native_output_ok&&!startup_copy.overflow&&!startup_copy.output_errors&&state->overflow.load()==0&&state->malformed.load()==0&&state->send_error.load()==0&&state->send_enter.load()==state->send_return.load();
 }
 }
