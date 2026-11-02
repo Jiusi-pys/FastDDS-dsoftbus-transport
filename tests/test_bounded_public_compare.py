@@ -20,6 +20,31 @@ m=load_module()
 IDENTITY=m.Identity(7,8,193,123456789,32,1)
 FAKE_PATH='E:/SYNTHETIC_IN_MEMORY_ONLY.bin'
 
+# Independent public-print-chain fixture; no private output or imported
+# implementation catalogue. EchoClient adds [Fail] and CRLF, then the host's
+# conditional text-mode LF translation adds one CR before each LF.
+PUBLIC_PENDING=b'[E000004]:The communication channel is being established.\r\nPlease wait for several seconds and try again.'
+PUBLIC_SELECTION=b'ExecuteCommand need connect-key? please confirm a device by help info'
+
+def public_echo_fail(message):
+    rendered=b'[Fail]'+message
+    return rendered if rendered.endswith(b'\n') else rendered+b'\r\n'
+
+def public_windows_stream():
+    return (public_echo_fail(PUBLIC_PENDING)+public_echo_fail(PUBLIC_SELECTION)).replace(b'\n',b'\r\n')
+
+def prepare_fixture_folder(folder):
+    # Inspect each ancestor before looking below it or creating one child.
+    # A concurrent namespace replacement is not claimed to be prevented.
+    for path in (*reversed(folder.parents),folder):
+        try:info=os.lstat(path)
+        except FileNotFoundError:
+            path.mkdir()
+            info=os.lstat(path)
+        if not stat.S_ISDIR(info.st_mode) or info.st_file_attributes&1024:
+            raise AssertionError('UNSAFE_SYNTHETIC_ANCESTOR')
+    return folder
+
 class SecretError(Exception):
     def __str__(self):raise AssertionError('STR_FORBIDDEN')
     def __repr__(self):raise AssertionError('REPR_FORBIDDEN')
@@ -74,11 +99,44 @@ class CompareTests(unittest.TestCase):
             (b'[Fail][E000003]:The device unauthorized.','E000003','PUBLIC_DENIAL_HEAD'),
             (b'[Fail][E000004]:The communication channel is being established.','E000004','PUBLIC_CHANNEL_PENDING'),
             (b'response auth signture success','OTHER_OR_UNMATCHED','PUBLIC_AUTH_DIAGNOSTIC')):
-            for ending in (b'',b'\r'):
-                value=m.classify_record(data+ending);self.assertEqual(value['code'],code)
+            for ending in (b'',b'\r',b'\r\r'):
+                value=m.classify_record(data+ending,framing=m.LF_EXCLUDED);self.assertEqual(value['code'],code)
                 self.assertEqual(value['template'],kind)
-        self.assertEqual(m.classify_record(b'Please check for a confirmation dialog on your device.')['template'],'PUBLIC_REQUEST_INSTRUCTION')
-        self.assertEqual(m.classify_record(b'The user denied the access for the device.')['template'],'PUBLIC_DENIAL_SENTENCE')
+        self.assertEqual(m.classify_record(b'Please check for a confirmation dialog on your device.\r\n')['template'],'PUBLIC_REQUEST_INSTRUCTION')
+        self.assertEqual(m.classify_record(b'The user denied the access for the device.\r\n')['template'],'PUBLIC_DENIAL_SENTENCE')
+    def test_public_print_chain_complete_records_have_natural_65_and_77_byte_lengths(self):
+        pending=public_echo_fail(PUBLIC_PENDING).splitlines(keepends=True)[0]
+        selection=public_echo_fail(PUBLIC_SELECTION)
+        self.assertEqual((len(pending),len(selection)),(65,77))
+        for record,kind in ((pending,'PUBLIC_CHANNEL_PENDING'),(selection,'PUBLIC_DEVICE_SELECTION_FAILURE')):
+            self.assertEqual(m.classify_record(record)['template'],kind)
+    def test_public_windows_print_chain_fixed_windows_require_explicit_LF_excluded_contract(self):
+        data=public_windows_stream();self.assertEqual(len(data),193)
+        lines=data.split(b'\n');self.assertEqual([len(x) for x in lines],[65,48,77,0])
+        self.assertEqual(data[0:65],lines[0]);self.assertEqual(data[115:192],lines[2])
+        o=FakeOps();o.data=data
+        value=m.compare_once(m.ReadSpec(FAKE_PATH,IDENTITY,framing=m.LF_EXCLUDED),o)
+        self.assertEqual(value['interpretation'],'PUBLIC_TEMPLATE_MATCHES_ONLY')
+        self.assertEqual([x['template'] for x in value['records']],['PUBLIC_CHANNEL_PENDING','PUBLIC_DEVICE_SELECTION_FAILURE'])
+        self.assertEqual(o.reads,[(0,65),(115,77)]);self.assertEqual(value['requested_bytes'],142)
+        self.assertEqual(o.closes,1);self.clean_output(value)
+        o=FakeOps();o.data=data
+        self.assertEqual(m.compare_once(self.spec(),o)['interpretation'],'UNKNOWN')
+    def test_record_boundaries_reject_truncation_extra_characters_and_unsupported_records(self):
+        body=public_echo_fail(PUBLIC_PENDING).split(b'\r\n')[0]
+        for ending in (b'\n',b'\r\n',b'\r\r\n'):
+            self.assertEqual(m.classify_record(body+ending)['template'],'PUBLIC_CHANNEL_PENDING')
+        for data in (body,body+b'\r',body+b'\r\r',body[:-1]+b'\r\n',body+b'X\r\n',
+                     body+b' \r\n',b' '+body+b'\r\n',body+b'\r\r\r\n',
+                     body+b'\n\n',body+b'\nX\n',body+b'\x00\n',b'not a supported record\r\n'):
+            with self.subTest(case=data):self.assertEqual(m.classify_record(data)['state'],'UNKNOWN')
+        for data in (body+b'\n',body+b'\r\n',body+b'\r\r\r',body+b'X',body+b'\x00'):
+            self.assertEqual(m.classify_record(data,framing=m.LF_EXCLUDED)['state'],'UNKNOWN')
+        for framing in ('UNKNOWN',None,True):
+            with self.assertRaises(m.ControlledFailure):m.classify_record(body,framing=framing)
+            o=FakeOps();value=m.compare_once(m.ReadSpec(FAKE_PATH,IDENTITY,framing=framing),o)
+            self.assertEqual(value['error'],'PRECHECK_FAILED');self.assertFalse(o.used)
+            self.assertEqual(o.reads,[]);self.assertEqual(o.closes,0)
     def test_unknown_mixed_codes_and_sensitive_markers_never_leak(self):
         for data in (b'[E000002] [E000004] INSIDE_CANARY',b'auth INSIDE_CANARY',b'\xffINSIDE_CANARY'):
             value=m.classify_record(data);self.assertEqual(value['state'],'UNKNOWN')
@@ -149,11 +207,12 @@ class CompareTests(unittest.TestCase):
         self.assertFalse(any('ignored' in q for q in calls))
         self.assertEqual(calls[-1],ops.allowed)
     def test_real_Win32_single_owned_synthetic_file_two_ReadFile_calls_only(self):
-        # No environment/actual-path fallback. This is the only disk fixture.
-        folder=Path('E:/Codex-FastDDS-bounded-public-compare-20261102-d01/fixtures')
-        for parent in (folder,*folder.parents):self.assertFalse(os.lstat(parent).st_file_attributes&1024)
+        # No environment/actual-path fallback; only a new self-owned public
+        # synthetic fixture below the repository's ignored build directory.
+        folder=ROOT/'build/public-record-contract-fix-20261102-d01/fixtures'
+        prepare_fixture_folder(folder)
         own=folder/('owned_'+uuid.uuid4().hex);own.mkdir();path=own/'synthetic.bin'
-        data=bytes(FakeOps().data)
+        data=public_windows_stream()
         with path.open('xb') as stream:stream.write(data)
         class Spy(m.Win32ReadOps):
             def __init__(self,p):super().__init__(p);self.requests=[];self.last_seek=None
@@ -164,11 +223,33 @@ class CompareTests(unittest.TestCase):
                 self.api[2].ReadFile=counted
             def seek(self,offset):super().seek(offset);self.last_seek=offset
         ops=Spy(str(path));expected=ops.path_identity(str(path))
-        value=m.compare_once(m.ReadSpec(str(path),expected),ops)
+        value=m.compare_once(m.ReadSpec(str(path),expected,framing=m.LF_EXCLUDED),ops)
         self.assertEqual(value['outcome'],'COMPARED_METADATA_ONLY')
         self.assertEqual(ops.requests,[(0,65),(115,77)]);self.assertEqual(value['requested_bytes'],142)
         self.assertTrue(value['closed']);self.assertTrue(value['opened'])
-        self.assertEqual(value['records'][0]['code'],'E000004');self.assertEqual(value['interpretation'],'UNKNOWN');self.clean_output(value)
+        self.assertEqual(value['records'][0]['code'],'E000004')
+        self.assertEqual(value['interpretation'],'PUBLIC_TEMPLATE_MATCHES_ONLY');self.clean_output(value)
         # Keep this unique193B fixture; no cleanup of user/old data.
+    def test_fixture_creation_stops_before_any_access_below_reparse_ancestor(self):
+        folder=ROOT/'build/SYNTHETIC_ONLY/sub/fixtures';blocked=ROOT/'build';seen=[]
+        def meta(path):
+            seen.append(path)
+            return SimpleNamespace(st_mode=stat.S_IFDIR,st_file_attributes=1024 if path==blocked else 16)
+        with patch('os.lstat',side_effect=meta),patch.object(Path,'mkdir') as create:
+            with self.assertRaises(AssertionError):prepare_fixture_folder(folder)
+            create.assert_not_called()
+        self.assertEqual(seen,[*reversed(blocked.parents),blocked])
+    def test_fixture_creation_checks_each_new_child_before_descending(self):
+        folder=ROOT/'build/SYNTHETIC_ONLY/fixtures';missing=folder.parent;seen=[];created=set()
+        def meta(path):
+            seen.append(('stat',path))
+            if path in (missing,folder) and path not in created:raise FileNotFoundError
+            return SimpleNamespace(st_mode=stat.S_IFDIR,st_file_attributes=16)
+        def create(path):
+            seen.append(('mkdir',path));created.add(path)
+        with patch('os.lstat',side_effect=meta),patch.object(Path,'mkdir',autospec=True,side_effect=create):
+            self.assertEqual(prepare_fixture_folder(folder),folder)
+        self.assertEqual(seen[-6:],[('stat',missing),('mkdir',missing),('stat',missing),
+                                   ('stat',folder),('mkdir',folder),('stat',folder)])
 
 if __name__=='__main__':unittest.main(verbosity=2)

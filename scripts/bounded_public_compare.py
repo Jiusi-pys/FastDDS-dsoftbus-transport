@@ -12,8 +12,11 @@ import threading
 
 RANGES=((0,65),(115,77))
 CODES=frozenset(('E000002','E000003','E000004','OTHER_OR_UNMATCHED'))
+LF_TERMINATED='LF_TERMINATED'
+LF_EXCLUDED='LF_EXCLUDED'
+FRAMINGS=frozenset((LF_TERMINATED,LF_EXCLUDED))
 # Public comparison-source 8efffcf2fa2f5d4f997f2de8eb287432959417c8:
-# daemon.cpp618/643, server_for_client.cpp1398, server.cpp630.
+# daemon.cpp618/643, server_for_client.cpp421-442/982/1398, server.cpp630.
 TEMPLATES={
  b'[E000002]:The device unauthorized.':'PUBLIC_REQUEST_HEAD',
  b'[Fail][E000002]:The device unauthorized.':'PUBLIC_REQUEST_HEAD',
@@ -23,6 +26,7 @@ TEMPLATES={
  b'The user denied the access for the device.':'PUBLIC_DENIAL_SENTENCE',
  b'[E000004]:The communication channel is being established.':'PUBLIC_CHANNEL_PENDING',
  b'[Fail][E000004]:The communication channel is being established.':'PUBLIC_CHANNEL_PENDING',
+ b'[Fail]ExecuteCommand need connect-key? please confirm a device by help info':'PUBLIC_DEVICE_SELECTION_FAILURE',
  b'response auth signture success':'PUBLIC_AUTH_DIAGNOSTIC',
 }
 
@@ -48,20 +52,41 @@ class Identity:
 class ReadSpec:
     path:str
     identity:Identity
+    # Format metadata, not data-access authority. LF_EXCLUDED requires the
+    # caller to establish complete record boundaries independently of a match.
+    framing:str=LF_TERMINATED
     def validate(self):
         canonical_path(self.path);require(type(self.identity) is Identity,'IDENTITY_TYPE')
         self.identity.validate()
+        require(type(self.framing) is str and self.framing in FRAMINGS,'RECORD_FRAMING')
 
 
-def classify_record(data):
+def record_body(data,framing):
+    """Accept exact LF/CRLF or conditional Windows-text CRCRLF framing.
+
+    LF_EXCLUDED represents a complete record with only its final LF removed
+    upstream. It must not be inferred from a matching prefix or window length.
+    """
+    if framing==LF_TERMINATED:
+        if not data.endswith(b'\n'):return None
+        data=data[:-1]
+    if data.endswith(b'\r\r'):data=data[:-2]
+    elif data.endswith(b'\r'):data=data[:-1]
+    if any(c in data for c in (b'\r',b'\n',b'\x00')):return None
+    return data
+
+
+def classify_record(data,*,framing=LF_TERMINATED):
     require(type(data) is bytes and len(data)<=77,'RECORD_TYPE_OR_CAP')
+    require(type(framing) is str and framing in FRAMINGS,'RECORD_FRAMING')
     # Strict decode only detects malformed encoding. The text is never returned.
     try:data.decode('utf-8','strict')
     except UnicodeError:return {'code':'OTHER_OR_UNMATCHED','template':'UNMATCHED','state':'UNKNOWN'}
     tokens={x[1:-1].decode('ascii').upper() for x in re.findall(rb'\[E00000[234]\]',data,re.IGNORECASE)}
     code=next(iter(tokens)) if len(tokens)==1 else 'OTHER_OR_UNMATCHED'
     require(code in CODES,'CODE_ENUM')
-    template=TEMPLATES.get(data.removesuffix(b'\r'),'UNMATCHED') if len(tokens)<=1 else 'UNMATCHED'
+    body=record_body(data,framing)
+    template=TEMPLATES.get(body,'UNMATCHED') if len(tokens)<=1 else 'UNMATCHED'
     return {'code':code,'template':template,'state':'PUBLIC_TEMPLATE_MATCH' if template!='UNMATCHED' else 'UNKNOWN'}
 
 
@@ -86,7 +111,7 @@ def compare_once(spec,ops):
             phase='SHORT_OR_INVALID_READ';require(type(data) is bytes and len(data)==length,'SHORT_READ')
             result['full_reads']+=1
             phase='HANDLE_IDENTITY_CHANGED';require(ops.handle_identity()==spec.identity,'HANDLE_IDENTITY')
-            phase='CLASSIFICATION_FAILED';records.append(classify_record(data))
+            phase='CLASSIFICATION_FAILED';records.append(classify_record(data,framing=spec.framing))
         phase='PATH_IDENTITY_CHANGED';require(ops.path_identity(spec.path)==spec.identity,'PATH_IDENTITY')
         result.update(outcome='COMPARED_METADATA_ONLY',error='NONE',records=records,
                       interpretation='PUBLIC_TEMPLATE_MATCHES_ONLY' if all(x['state']=='PUBLIC_TEMPLATE_MATCH' for x in records) else 'UNKNOWN')
