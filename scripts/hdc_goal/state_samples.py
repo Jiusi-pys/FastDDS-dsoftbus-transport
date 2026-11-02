@@ -94,7 +94,9 @@ def make_types(driver_module,backend_module,terminal_qualified):
             super().__init__(grant);self.init_state()
 
         def init_state(self,clock=time.monotonic):
-            self.state_clock=clock;self.t0=None;self.parsers={};self.samples={};self.sample_started={}
+            # The base owns numeric samples/epochs resource counters. State
+            # projections have separate storage and must not shadow them.
+            self.state_clock=clock;self.t0=None;self.parsers={};self.state_records={};self.sample_started={}
             self.grant.sample_windows={}
 
         def register(self,step):
@@ -151,7 +153,7 @@ def make_types(driver_module,backend_module,terminal_qualified):
             root.receipt.update(accepted_evidence=accepted,state_sample=row)
             self.w.put(root.dest/'RESULT.json',root.receipt)
             need(accepted and not self.journal.failed,'STATE_CLOSE_OR_RECORD_UNKNOWN')
-            self.grant.accept(step.id,root.receipt);self.samples[step.id]=row
+            self.grant.accept(step.id,root.receipt);self.state_records[step.id]=row
             return {'step':step.id,'accepted':True,'terminal':True,'state_sample':row}
 
         def cleanup(self,root,deadline):
@@ -207,7 +209,7 @@ def make_types(driver_module,backend_module,terminal_qualified):
             return self.summary()
 
         def summary(self):
-            samples=[self.backend.samples[k] for k in OFFSETS if k in self.backend.samples]
+            samples=[self.backend.state_records[k] for k in OFFSETS if k in self.backend.state_records]
             return {'state_samples':samples,'missed_slots':list(self.skipped.values()),
                     'comparison':'TWO_SAMPLE_WINDOWS' if len(samples)==2 else 'INSUFFICIENT_SAMPLES',
                     'handshake':'NOT_OBSERVED','continuous_state':'NOT_PROVED','DDS':'NOT_RUN'}
@@ -231,14 +233,14 @@ def observation_complete(driver,cleanup):
     try:
         b=driver.backend;b.notice_gate()
         if driver.skipped or set(driver.accepted)!=set(CASES) or set(driver.used)!=set(CASES):return False
-        if set(b.samples)!=set(OFFSETS) or len(b.roots)!=3 or {r.case for r in b.roots}!=set(CASES):return False
+        if set(b.state_records)!=set(OFFSETS) or len(b.roots)!=3 or {r.case for r in b.roots}!=set(CASES):return False
         if cleanup['failure'] is not None or cleanup['finalization']!={'state':'COMPLETE',
               'business_blocked':False,'cleanup_errors':[],'remote_UI_trust_restoration':'UNKNOWN'}:return False
         rows=cleanup['cleanup']
         if (len(rows)!=1 or rows[0].get('step')!='server' or rows[0].get('state')!='TERMINAL'
                 or rows[0].get('EOF') is not True or rows[0].get('business_blocked') is not False
                 or rows[0].get('cleanup_errors')):return False
-        for identifier,row in b.samples.items():
+        for identifier,row in b.state_records.items():
             start,end=b.grant.sample_windows[identifier]
             if not start<=row['started_monotonic']<=end or row['ended_monotonic']<row['started_monotonic']:return False
         for root in b.roots:

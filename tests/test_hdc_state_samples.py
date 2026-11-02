@@ -145,9 +145,9 @@ class StateTests(unittest.TestCase):
             self.assertTrue(m.state_samples.observation_complete(d,closed))
             self.assertEqual([r['device_state'] for r in result['state_samples']],['DEVICE_STATE_UNKNOWN','CONNECTED'])
             self.assertEqual([r['planned_offset_s'] for r in result['state_samples']],[0,10])
-            for k,row in b.samples.items():
+            for k,row in b.state_records.items():
                 lo,hi=b.grant.sample_windows[k];self.assertLessEqual(lo,row['started_monotonic']);self.assertLessEqual(row['started_monotonic'],hi)
-            self.assertGreaterEqual(b.samples['state.S2']['started_monotonic']-b.t0,10)
+            self.assertGreaterEqual(b.state_records['state.S2']['started_monotonic']-b.t0,10)
             self.assertNotIn('CANARY_NAME',json.dumps(b.records));self.assertNotIn('CANARY_NAME',json.dumps(b.journal.rows))
 
     def test_absent_at_both_points_is_valid_not_continuity_proof(self):
@@ -266,6 +266,25 @@ class StateTests(unittest.TestCase):
                 with self.assertRaises(c.ContractError):m.goal_windows_backend.GoalWindowsBackend(g)
             finally:a._grants.discard(g)
             self.assertNotIn('goal_win32_owned',sys.modules)
+
+    def test_real_base_pre_resume_observe_keeps_numeric_resource_counter(self):
+        with runtime() as m:
+            b,d,clock=fixture(m);b.samples=7;b.epochs=0
+            b.init_state(clock) # initialization may not reset/shadow the base counter
+            self.assertEqual(b.samples,7)
+            root=b.register(d.registry['server']);calls=[]
+            system={'commit_available_bytes':16*1024**3,'physical_available_bytes':8*1024**3,
+                    'commit_total_bytes':1024**3}
+            def observe(*args):
+                calls.append(args)
+                return {'jobs':{'caller_visible_layer':{}},'system':system,
+                        'process':{'private_bytes':0,'working_set_bytes':0}}
+            b.trace=types.SimpleNamespace(observe=observe);b.w.fingerprint=lambda value:'SYNTHETIC_JOB'
+            result=m.goal_windows_backend.GoalWindowsBackend.observe(b,root,'PRE_RESUME')
+            self.assertEqual(result['system'],system);self.assertEqual(len(calls),1)
+            self.assertEqual(b.samples,8);self.assertEqual(b.epochs,1)
+            self.assertEqual(b.state_records,{})
+            self.assertTrue(any('resource' in r for r in b.journal.rows))
 
     def test_actual_generated_native_read_never_archives_or_keeps_list(self):
         with runtime() as m:
