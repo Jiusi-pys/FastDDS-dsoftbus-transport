@@ -33,6 +33,28 @@ def marker_state(lines, name):
     return 'ZERO' if values[0]=='0' else 'NONZERO'
 
 
+def _display_mount_path(path):
+    """Bound a display-only path, not a device path or a realpath attestation.
+
+    Toybox df selects a mount-table entry by st_dev. Another bind-mount name
+    may therefore be printed for the fixed file argument. Target association
+    comes from that bound argument and the separate path/status evidence.
+    Whitespace/escaped paths remain unsupported instead of being decoded.
+    """
+    return (path.startswith('/') and len(path.encode('utf-8'))<=4095
+            and not any(ch.isspace() or ch=='\\' or ord(ch)<32 or 127<=ord(ch)<=159 for ch in path)
+            and (path=='/' or all(part not in ('','.','..') for part in path[1:].split('/'))))
+
+
+def _df_record(line):
+    # Fixed -k, one unwrapped record: unsigned ASCII counts in 1024-byte
+    # blocks. Do not strip a record or normalize its filesystem/mount fields.
+    # OpenHarmony Toybox c4fa066c df.c:130,159-168 prints the selected mt->dir;
+    # it is not constrained to the query spelling or its ancestor mount names.
+    match=re.fullmatch(r'\S+[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+[0-9]+%[ \t]+(\S+)',line)
+    return match if match is not None and _display_mount_path(match[4]) else None
+
+
 def parse_resource(stdout, stderr, native_exit, root, limits, need):
     need(native_exit==0,'CLIENT_NATIVE_NONZERO')
     text=receipt_text(stdout,need);error=receipt_text(stderr,need)
@@ -67,7 +89,7 @@ def parse_resource(stdout, stderr, native_exit, root, limits, need):
          and 0<int(total[1])>=int(available[1]),'UNIQUE_ORDERED_MEMORY_FIELDS')
     need(int(total[1])>=limits['board_total_kib'] and int(available[1])>=limits['board_available_kib'],'BOARD_MEMORY_MARGIN')
     need(re.fullmatch(r'Filesystem\s+1K-blocks\s+Used\s+Available\s+Use%\s+Mounted on',lines[2]) is not None,'DF_HEADER_UNKNOWN')
-    disk=re.fullmatch(r'\S+\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+%\s+/data(?:/local/tmp)?',lines[3])
+    disk=_df_record(lines[3])
     need(disk is not None,'DF_RECORD_UNKNOWN')
     need(int(disk[3])>=limits['board_disk_kib'],'BOARD_DISK_MARGIN')
     need(lines[4]=='/data/local/tmp','RESOLVED_ROOT_UNKNOWN')

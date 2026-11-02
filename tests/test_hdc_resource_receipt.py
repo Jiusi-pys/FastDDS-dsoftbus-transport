@@ -106,5 +106,64 @@ class ResourceTests(unittest.TestCase):
         with self.assertRaisesRegex(Rejected,'CLIENT_NATIVE_NONZERO'):
             p.parse_resource(wire(ROWS),wire((ERROR,)),1,DEVICE,LIMITS,need)
 
+    def test_df_display_mount_is_not_the_queried_path(self):
+        # Public Toybox df(file) selects by st_dev; a bind mount of the same
+        # filesystem can have a different printed directory. No actual output.
+        for mount in ('/','/data','/data/local','/data/local/tmp','/storage/bind_alias','/mnt/shared-volume'):
+            rows=list(ROWS);rows[3]='/dev/synthetic 1000000 1000 999000 1% '+mount
+            self.assertEqual(parse(rows)['data_available_KiB'],999000)
+
+    def test_df_long_device_single_line_and_horizontal_separators(self):
+        for device in ('none','overlay','/dev/block/by-name/'+('x'*400)):
+            for gap in (' ','   ','\t'):
+                rows=list(ROWS);rows[3]=gap.join((device,'1000000','1000','999000','1%','/storage/bind_alias'))
+                self.assertEqual(parse(rows)['data_available_KiB'],999000)
+
+    def test_df_available_boundary_and_unsigned_decimal_contract(self):
+        for free,accepted in (('65536',True),('65535',False),('0',False),('-1',False),
+                              ('+65536',False),('65536.0',False),('65,536',False),
+                              ('65536k',False),('\u0666\u0665\u0665\u0663\u0666',False)):
+            rows=list(ROWS);rows[3]='/dev/synthetic 1000000 1000 '+free+' 1% /storage/bind_alias'
+            if accepted:self.assertEqual(parse(rows)['data_available_KiB'],65536)
+            else:
+                with self.subTest(free=free),self.assertRaises(Rejected):parse(rows)
+
+    def test_df_mount_requires_bounded_lexical_absolute_path(self):
+        invalid=('data','//','/data/','/data//tmp','/data/./tmp','/data/../tmp',
+                 '/data/space here','/data/back\\040space','/data/\tvalue',
+                 '/data/\u00a0value','/'+('x'*4095),'/data/\x01value')
+        for mount in invalid:
+            rows=list(ROWS);rows[3]='/dev/synthetic 1000000 1000 999000 1% '+mount
+            with self.subTest(mount=mount),self.assertRaises(Rejected):parse(rows)
+        rows=list(ROWS);rows[3]='/dev/synthetic 1000000 1000 999000 1% /'+('x'*4094)
+        self.assertEqual(parse(rows)['data_available_KiB'],999000)
+
+    def test_df_no_strip_or_invented_missing_fields(self):
+        for line in (' /dev/test 1000000 1000 999000 1% /data',
+                     '/dev/test 1000000 1000 999000 1% /data ',
+                     '/dev/test 1000000 1000 999000 /data',
+                     '/dev/test 1000000 1000 999000 1 /data',
+                     '/dev/test 1000000 1000 999000 1 % /data',
+                     '/dev/test 1000000 1000 999000 1% /data extra'):
+            rows=list(ROWS);rows[3]=line
+            with self.subTest(line=line),self.assertRaises(Rejected):parse(rows)
+
+    def test_df_wrapped_duplicate_or_truncated_records_remain_rejected(self):
+        wrapped=ROWS[:3]+['/dev/very-long-name',' 1000000 1000 999000 1% /data']+ROWS[4:]
+        for rows in (wrapped,ROWS[:4]+[ROWS[3]]+ROWS[4:],ROWS[:3]+ROWS[4:]):
+            with self.assertRaises(Rejected):parse(rows)
+        with self.assertRaises(Rejected):p.parse_resource(wire(ROWS)[:-1],wire((ERROR,)),0,DEVICE,LIMITS,need)
+
+    def test_df_k_units_and_original_path_proofs_are_still_fixed(self):
+        for header in ('Filesystem 1024-blocks Used Available Capacity Mounted on',
+                       'Filesystem 512-blocks Used Available Capacity Mounted on',
+                       'Filesystem Size Used Avail Use% Mounted on'):
+            rows=list(ROWS);rows[2]=header
+            with self.assertRaisesRegex(Rejected,'DF_HEADER_UNKNOWN'):parse(rows)
+        for index,value in ((4,'/storage/bind_alias'),(5,'regular file|755|1|1'),
+                            (8,'__RO_BASE_RC=1'),(9,'__RO_ROOT_STAT_RC=0')):
+            rows=list(ROWS);rows[3]='/dev/test 1000000 1000 999000 1% /storage/bind_alias';rows[index]=value
+            with self.assertRaises(Rejected):parse(rows)
+
 
 if __name__=='__main__':unittest.main(verbosity=2)

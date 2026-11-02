@@ -6,7 +6,24 @@ composition changes in `scripts/hdc_goal/resource_receipt.py` and
 local classification and fresh AWK-free candidate are distinguished below;
 neither establishes a successful DDS/device run.
 
-## Actual attempt remains failed
+## Latest actual attempt and local df repair
+
+The later [AWK-free actual result](../build/directdds-builtin-package-20261103-d01/prepare/ACTUAL_TEST_RESULT_D01.json)
+and [outcome](../build/directdds-builtin-package-20261103-d01/prepare/MAIN_ACTUAL_OUTCOME_D01.json)
+for commit `61bec0b` retain FAIL_OR_HOLD, entry exit1: server, targets and provider `readonly.1`
+passed; resource `readonly.2` failed with `DF_RECORD_UNKNOWN`. Deployment,
+identity selection/restore, probes and all real/cross-device DDS were NOT_RUN.
+The once is consumed. Its device evidence covers only the HDC/read-only prefix,
+not DDS integration; the actual405-byte body has not been read or hashed and its
+cause remains unconfirmed. The subsequent
+[local df display-path repair](HDC_DF_RECEIPT_CONTRACT.md) is HOST_TESTED: final47
+PASS, zero skips, with zero open blocking review findings. It preserves the fixed
+`df -k` query, strict receipts and resource thresholds; DEVICE_TESTED=false for
+this repair and overall Stage1 NOT_VERIFIED. A separate local405-byte enum read
+still needs a new specific approval; neither repair nor classification grants
+a DDS retry. The sections below retain the earlier evidence snapshots.
+
+## Earlier actual attempt remains failed
 
 The [actual tester result](../build/directdds-observation-package-20261103-d01/prepare/ACTUAL_TEST_RESULT_D01.json)
 and [recorded outcome](../build/directdds-observation-package-20261103-d01/prepare/MAIN_ACTUAL_OUTCOME_D01.json)
@@ -119,7 +136,7 @@ only. Repository-wide graph/pre-commit and Git transitions remain Main's gates;
 the inherited all-working-tree graph risk is HIGH and is not cleared by this
 scoped result. No workflow result grants execution permission.
 
-## Current candidate and authorization boundary
+## Historical AWK-free preparation and authorization boundary
 
 The [fresh AWK-free full DDS candidate](DIRECT_DDS_BUILTIN_EXECUTION.md) replaces
 only the two meminfo AWK scans with `IFS= read -r`, `case` and `printf`; strict
