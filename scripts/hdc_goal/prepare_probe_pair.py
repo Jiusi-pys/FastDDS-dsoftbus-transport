@@ -18,6 +18,8 @@ ACTIVE=PACKAGE/'active'
 RUN=REPO/'build/hdc-a-pair-once-20261102_a8d3f641'
 SCOPE='ONE_NEW_SAME_SERVER_A_PAIR_60S_D01'
 NONCE='A8D3F641_A_PAIR_60S_D01'
+CARD_PATH='docs/HDC_A_PAIR_DIAGNOSTIC.md'
+PACKAGE_FORMAT='FIXED_A_PAIR_PACKAGE1'
 ORIGINAL=('goal_contract.py','goal_policy.py','goal_authorization.py','goal_driver.py',
  'goal_windows_backend.py','goal_win32_owned.py','goal_handle_lifecycle.py','goal_memory_trace.py',
  'goal_notice.py','goal_storage.py','goal_evidence.py','goal_workflow.py','goal_entry.py','preflight.py','verify_offline.py')
@@ -226,14 +228,14 @@ def freeze(commit):
     helper=load_buffer(read_safe(REPO/'scripts/hdc_goal/prepare_readiness.py'),'_pair_budget_only',REPO/'scripts/hdc_goal/prepare_readiness.py')
     budget=helper.checked_budget(sum(p.stat().st_size for p in owned_files),sum(r['bytes'] for r in rows if r['role'].startswith('tool.')),
         sum(len(read_safe(REPO/p)) for p in CODE_PATHS),len(owned_files),2+len(CODE_PATHS))
-    m={'format':'FIXED_A_PAIR_PACKAGE1','scope':SCOPE,'nonce':NONCE,'limits':c.LIMITS,'registry_sha256':source['registry_sha256'],
+    m={'format':PACKAGE_FORMAT,'scope':SCOPE,'nonce':NONCE,'limits':c.LIMITS,'registry_sha256':source['registry_sha256'],
        'active_pins':rows,'actual_execution_authorized':False,'published_source_commit':commit,'preparation_budget':budget}
     mr=encoded(m);write_new(ACTIVE/'PACKAGE_FINAL_D01.json',mr)
     b={'scope':SCOPE,'nonce':NONCE,'manifest_sha256':sha(mr),'registry_sha256':source['registry_sha256'],
        'run_root':str(RUN),'active_closure_bytes':total,'actual_execution_authorized':False,'full_executor_final':True,
        'published_source_commit':commit,'qualification':'OFFLINE_FAKE_NOT_DEVICE'}
     br=encoded(b);write_new(ACTIVE/'FINAL_EXECUTION_BINDING_D01.json',br)
-    card=read_safe(REPO/'docs/HDC_A_PAIR_DIAGNOSTIC.md').decode('utf-8')
+    card=read_safe(REPO/CARD_PATH).decode('utf-8')
     card+='\n## Fixed private binding\n\nManifest SHA256: '+sha(mr)+'\n\nBinding SHA256: '+sha(br)+'\n\nScope: '+SCOPE+'\n\nNonce: '+NONCE+'\n\nPackage: '+str(PACKAGE)+'\n\nRun: '+str(RUN)+'\n\n'
     card+='Target is the existing fixed A only. No authorization, admission, fresh record or once is generated.\n'
     write_new(PACKAGE/'EXECUTION_CARD_D01.md',card.encode('utf-8'))
