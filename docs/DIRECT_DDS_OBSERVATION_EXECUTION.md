@@ -4,15 +4,28 @@ Current status (2026-11-02): the one authorized actual attempt ran HDC and
 predeployment queries, then failed at `readonly.2` with
 `REMOTE_BASE_RC_MISSING_OR_NONZERO`. Deployment, Native identity/probe and DDS
 traffic were NOT_RUN; the once opportunity is consumed. The resource-receipt
-compatibility repair is now PRESENT and HOST_TESTED (56 PASS, zero skips), with
-zero open blocking review findings; DEVICE_TESTED=false and Stage1 NOT_VERIFIED.
-See [the current compatibility and evidence note](HDC_RESOURCE_RECEIPT_COMPATIBILITY.md).
+compatibility repair is PRESENT and HOST_TESTED (56 PASS, zero skips). The
+separately approved local read of the existing 59-byte receipt was consumed once:
+AWK LOOKUP_OR_INACCESSIBLE, base NONZERO, root MISSING, no unclassified remainder;
+it cannot distinguish installation, PATH or permission causes. A fresh
+[AWK-free full DDS candidate](DIRECT_DDS_BUILTIN_EXECUTION.md) now has initial
+64 PASS and zero blocking review findings. Following a test-only cleanup
+containment change, its canonical final coverage is 64 unique PASS: eight fresh
+post-review D03 executions plus 56 unchanged tests retaining D02 final evidence,
+zero skips; D03 did not rerun all 64.
+It retains strict receipts, thresholds and the full procedure, with no connection
+sampling. Freeze is pending at this documentation/test snapshot; Root's later
+appended final hashes and private binding establish freeze, not actual execution
+authorization. Actual new DDS remains NOT_RUN and needs a new specific grant.
+DEVICE_TESTED=false and Stage1 NOT_VERIFIED. See
+[the compatibility and classification note](HDC_RESOURCE_RECEIPT_COMPATIBILITY.md).
 
 The remaining sections preserve the historical preparation specification and
 its offline test snapshots. Their statements that actual HDC/queries were
 NOT_RUN, controls/run were absent, or freeze/first execution was still next apply
-to those preparation snapshots, not the current run state. They do not authorize
-a retry or supersede the actual FAIL. The frozen private card, active package,
+to those preparation snapshots, not the current run state. Their approval text
+is historical and does not authorize a retry or supersede the actual FAIL.
+The old frozen private card, active package,
 consumed controls and original once record remain unchanged.
 
 ## Fixed inputs and objective

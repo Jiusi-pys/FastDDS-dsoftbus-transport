@@ -77,7 +77,7 @@ class CompositionTests(unittest.TestCase):
         with runtime() as m:
             base=b.BASE/'active'
             for name in ('goal_records.py','goal_evidence.py','goal_win32_owned.py','goal_handle_lifecycle.py'):
-                old=b.h.read_safe(base/name).replace(b'9a72c6e431d0aa60',b'4f81c2a931d0aa60').replace(b'9a72c6e431d0aa61',b'4f81c2a931d0aa61')
+                old=b.h.read_safe(base/name).replace(b'9a72c6e431d0aa60',b.PROBE_RUN.encode()).replace(b'9a72c6e431d0aa61',b.DATA_RUN.encode())
                 if name!='goal_evidence.py':self.assertEqual(m.buffers[name],old)
                 else:
                     # Only the receipt framing/resource adapter changes here;
@@ -90,6 +90,8 @@ class CompositionTests(unittest.TestCase):
             expected=json.loads(b.h.read_safe(base/'GOAL_INPUTS_D01.json'))
             for row in expected['readonly_commands']:
                 row['argv']=[arg.replace('/data/local/tmp/mdds_direct_20261031_9a72c6e4',b.DEVICE) for arg in row['argv']]
+                if row['argv'][-1].startswith(b.resource_query.MEMINFO_AWK):
+                    row['argv'][-1]=b.resource_query.replace_meminfo_query(row['argv'][-1])
             self.assertEqual(m.inputs,expected)
             self.assertEqual(len(b.verify_external(m.manifest)),14)
             for row in m.inputs['readonly_commands']:
@@ -199,11 +201,14 @@ class CompositionTests(unittest.TestCase):
             with self.assertRaises(c.ContractError):a.validate_approval_shape(approval,'a'*64,'b'*64)
 
     def test_assemble_cannot_reuse_existing_package_or_refund_a_consumed_run(self):
-        # This package is now historical/consumed. Unit tests must neither erase
-        # its controls nor pretend the pre-execution snapshot remains current.
-        paths=[b.RUN,*[b.ACTIVE/name for name in b.CONTROLS]]
+        # Always target the old consumed snapshot, even when the builder moves
+        # to a fresh candidate. Never assemble a real package from a unit test.
+        old=ROOT/'build/directdds-observation-package-20261103-d01'
+        run=Path('E:/Codex-FastDDS-directdds-once-20261103_4f81c2a9')
+        paths=[run,*[old/'active'/name for name in b.CONTROLS]]
         before={str(p):(p.exists(),p.stat().st_mtime_ns if p.exists() else None) for p in paths}
-        with self.assertRaises(ValueError):b.assemble()
+        with patch.object(b,'PACKAGE',old),patch.object(b,'RUN',run):
+            with self.assertRaises(ValueError):b.assemble()
         self.assertEqual(before,{str(p):(p.exists(),p.stat().st_mtime_ns if p.exists() else None) for p in paths})
 
     def test_full_workflow_real_driver_backend_and_record_oracles(self):
@@ -254,9 +259,9 @@ class CompositionTests(unittest.TestCase):
                     body+='OWN_QUERY name='+c.OWN+' bridge_cpp=__h raw_rc=0 info_rc=0 query_rc=0 type=1 native_type=1 apl=1 normal_apl=1 query_count=1 granted=1 called=31 caller_before=8 caller_bridge=8 caller_after=8 no_identity_setter=1 lookup=9\n'
                 elif identifier.endswith('.boot'):body=record(boot(side))
                 elif identifier.endswith('.node'):
-                    body=record(dict(format='S1GOALNODE1',run=int('4f81c2a931d0aa61',16),side=side,pid=101 if side=='A' else 102,parent=50,target=9,network='SYNTHETIC_'+side,udid='SYNTHETIC_'+side,image_sha=artifacts['app']['sha256']))
+                    body=record(dict(format='S1GOALNODE1',run=int(b.DATA_RUN,16),side=side,pid=101 if side=='A' else 102,parent=50,target=9,network='SYNTHETIC_'+side,udid='SYNTHETIC_'+side,image_sha=artifacts['app']['sha256']))
                 elif identifier.endswith('.result'):
-                    window=identifier.split('.')[0];run=int('4f81c2a931d0aa60' if window=='probe' else '4f81c2a931d0aa61',16)
+                    window=identifier.split('.')[0];run=int(b.PROBE_RUN if window=='probe' else b.DATA_RUN,16)
                     pid=101 if side=='A' else 102
                     if window=='probe':body=record(dict(format='S1GOALPROBE1',run=run,pid=pid,entry_selected=1,one_owned_worker_selected=1,all_SDK_workers='UNKNOWN',project_business_calls=0))
                     else:body=record(dict(format='S1GOALRESULT1',status=0,result_status=0,phase=4,writes=3,takes=3,local_control_drained=1,owners_retained=0,SDK_quiescence_unproven=1,destroy_rc=0,primary_phase=0,native_rc_valid=1,native_rc=0))
@@ -343,7 +348,7 @@ class CompositionTests(unittest.TestCase):
                         directory=path/'control/data'
                         for side in ('A','B'):
                             for seq in range(1,5):(directory/('release.'+side+'.'+str(seq))).write_bytes(('SYNTHETIC_RELEASE_'+str(seq)+'_'+side).encode())
-                        (directory/'controller-result').write_bytes(b'S1CONTROLLER1\nfixture=0\nrun=4f81c2a931d0aa61\nROOT_MATCH_GUID_SN_PAYLOAD_ACK_DONE_TEARDOWN=1\nNative_attestation=0\nentry_restore_and_exit_checked_separately=1\n')
+                        (directory/'controller-result').write_bytes(('S1CONTROLLER1\nfixture=0\nrun='+b.DATA_RUN+'\nROOT_MATCH_GUID_SN_PAYLOAD_ACK_DONE_TEARDOWN=1\nNative_attestation=0\nentry_restore_and_exit_checked_separately=1\n').encode())
                     return root
             backend=Backend();driver=m.goal_driver.GoalDriver(registry,backend,clock=clock)
             procedure=m.goal_workflow.FixedGoalWorkflow(driver,artifacts,'a'*64).run()

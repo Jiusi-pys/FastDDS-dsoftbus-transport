@@ -2,8 +2,9 @@
 
 Status as of 2026-11-02. This note covers the pure host parser and future source
 composition changes in `scripts/hdc_goal/resource_receipt.py` and
-`prepare_directdds.py`, with their two test modules. It does not establish the
-cause of the failed board query or a successful DDS/device run.
+`prepare_directdds.py`, with their two test modules. The subsequent authorized
+local classification and fresh AWK-free candidate are distinguished below;
+neither establishes a successful DDS/device run.
 
 ## Actual attempt remains failed
 
@@ -19,9 +20,13 @@ does not identify the failing subcommand.
 Deployment/staging, Native identity selection/restore, probes and all DDS traffic
 were NOT_RUN. Overall actual attempt/integration result remains FAIL;
 DEVICE_TESTED=false and Stage1 NOT_VERIFIED. The once opportunity was consumed;
-no retry has occurred. The 59-byte unaccepted stdout body was neither read nor
-hashed in this repair. Its contents and actual root cause remain UNKNOWN. Its
-length does not establish missing awk, a permission failure or a DDS defect.
+no retry has occurred. A separately approved local classification subsequently
+read the existing 59-byte body exactly once, with no content logging or hashing.
+Its [structured result](../build/resource-receipt-analysis-20261102-d01/LOCAL59_ACTUAL_TEST_RESULT_D01.json)
+reports AWK LOOKUP_OR_INACCESSIBLE, base marker NONZERO, root marker MISSING and
+no unclassified remainder. This cannot distinguish missing installation, PATH
+or permissions, establish wider board state or identify a DDS defect. The local
+read permit is also consumed; it grants no additional read or device action.
 
 ## Established compatibility defects and narrow repair
 
@@ -54,8 +59,11 @@ reports fixed marker states without accepting failed resource evidence.
 
 The generator applies shared complete-record framing to resource/provider/step
 receipts and early BEGIN handling, including rejecting incomplete BEGIN records.
-Its future candidate contains 17 source buffers plus the input schema (18 inputs)
-in memory. This is not an assembled, frozen or authorized new package. DDS,
+Its parser-repair snapshot contained 17 source buffers plus the input schema
+(18 inputs) in memory. A subsequent separately assembled AWK-free offline
+candidate is recorded in [the current execution note](DIRECT_DDS_BUILTIN_EXECUTION.md);
+freeze is pending at this documentation/test snapshot and execution remains
+unauthorized. DDS,
 restore and transfer evaluators retain exact AST reuse checks. No Fast DDS
 Transport, RTPS, discovery, QoS or Writer/Reader behavior changes in this scope.
 
@@ -99,7 +107,7 @@ remain the historical consumed package, not an upgraded execution candidate.
 | Actual predeployment query attempt | FAIL, unchanged |
 | Live DDS / Native identity / deployment | NOT_RUN |
 | DDS device / cross-device verification | NOT VERIFIED; DEVICE_TESTED=false |
-| Actual 59-byte receipt cause | UNKNOWN |
+| Actual 59-byte local classification | AWK LOOKUP_OR_INACCESSIBLE; base NONZERO; root MISSING; no unclassified remainder |
 | Overall DDS functionality / Stage1 | NOT VERIFIED |
 
 Fast DDS/DSoftBus integration and device success are not claimed by these host
@@ -111,16 +119,26 @@ only. Repository-wide graph/pre-commit and Git transitions remain Main's gates;
 the inherited all-working-tree graph risk is HIGH and is not cleared by this
 scoped result. No workflow result grants execution permission.
 
-## Remaining diagnosis and authorization boundary
+## Current candidate and authorization boundary
 
-A proposal for one local classification of the existing 59-byte body is retained
-only in ignored local analysis records. It is not an implemented or executed
-reader and needs new, specific body-read authorization. Proposed classification
-keeps independent framing, exact-marker, public shell-diagnostic family and
-unknown-remainder axes; it must not infer a board inventory from a single error
-template. No precise file identity, device identifier, existing Native name or
-raw path is published here. No further HDC action is part of that proposal.
+The [fresh AWK-free full DDS candidate](DIRECT_DDS_BUILTIN_EXECUTION.md) replaces
+only the two meminfo AWK scans with `IFS= read -r`, `case` and `printf`; strict
+receipts and resource thresholds remain unchanged. Its original initial and
+post-review final host suites each passed 64 tests, zero skips. A later test-only
+cleanup containment change passed an independent initial8, zero-blocker review
+and fresh final8. Current final coverage is 64 unique tests: eight current D03
+executions plus 56 unchanged tests retaining D02 final evidence, not a D03 full
+64-test rerun. Those newer results cover local query/composition
+preparation; the 56-test results above remain evidence for the earlier parser
+repair. Host Git sh/Bash is not target OpenHarmony mksh verification.
+No connection-sampling detour or actual new HDC, deployment, identity or DDS run
+was performed. DEVICE_TESTED=false and overall Stage1 remains NOT_VERIFIED.
 
 The actual FAIL is preserved. A new package, bindings, authorization and explicit
 execution opportunity would be required before any later real run; the consumed
-opportunity is not refunded by the parser fix or documentation update.
+opportunities are not refunded by either repair or this documentation update.
+At this documentation/test snapshot, publication/freeze is pending. Root's later
+appended final hashes and private binding establish freeze, not actual execution
+authorization; a new specific single-run approval is required. No precise file
+identity, device identifier, existing Native name or
+raw path is published here.

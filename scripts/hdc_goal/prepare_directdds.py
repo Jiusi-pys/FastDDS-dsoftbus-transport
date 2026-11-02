@@ -17,12 +17,18 @@ spec.loader.exec_module(h)
 REPO = h.REPO
 BASE = Path('E:/Codex-FastDDS-stage1-directdds-reasons-package-20261031-d01')
 BASE_SHA = 'f989dfac19d45f13e2c6388f06ea8e8866e0562848c7815dc46077c7a897be4a'
-PACKAGE = REPO/'build/directdds-observation-package-20261103-d01'
+PACKAGE = REPO/'build/directdds-builtin-package-20261103-d01'
 ACTIVE = PACKAGE/'active'
-RUN = Path('E:/Codex-FastDDS-directdds-once-20261103_4f81c2a9')
-DEVICE = '/data/local/tmp/mdds_direct_20261103_4f81c2a9'
-SCOPE = 'ONE_NEW_CURRENT_STOCK_DDS_AB_NARROW_OBSERVATION_240S_D01'
-NONCE = '4F81C2A9_DIRECT_DDS_240S_D01'
+RUN = Path('E:/Codex-FastDDS-directdds-once-20261103_b07e91ca')
+DEVICE = '/data/local/tmp/mdds_direct_20261103_b07e91ca'
+SCOPE = 'ONE_NEW_CURRENT_STOCK_DDS_AB_BUILTIN_MEMINFO_240S_D02'
+NONCE = 'B07E91CA_DIRECT_DDS_240S_D02'
+PROBE_RUN = 'b07e91ca31d0aa60'
+DATA_RUN = 'b07e91ca31d0aa61'
+CARD_PATH = 'docs/DIRECT_DDS_BUILTIN_EXECUTION.md'
+spec = importlib.util.spec_from_file_location('_dds_resource_query', HERE/'resource_query.py')
+resource_query = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(resource_query)
 SOURCES = ('goal_contract.py', 'goal_authorization.py', 'goal_driver.py',
            'goal_windows_backend.py', 'goal_win32_owned.py', 'goal_handle_lifecycle.py',
            'goal_memory_trace.py', 'goal_notice.py', 'goal_storage.py', 'goal_evidence.py',
@@ -32,7 +38,8 @@ CODE_PATHS = ('scripts/hdc_goal/prepare_directdds.py', 'scripts/hdc_goal/dds_obs
               'scripts/hdc_goal/goal_windows_backend.py', 'scripts/hdc_goal/prepare_probe_pair.py',
               'tests/test_hdc_directdds_composition.py', 'docs/DIRECT_DDS_OBSERVATION_EXECUTION.md')
 CODE_PATHS=(*CODE_PATHS,'scripts/hdc_goal/resource_receipt.py','tests/test_hdc_resource_receipt.py',
-            'docs/HDC_RESOURCE_RECEIPT_COMPATIBILITY.md')
+            'docs/HDC_RESOURCE_RECEIPT_COMPATIBILITY.md','scripts/hdc_goal/resource_query.py',
+            'tests/test_hdc_resource_query.py',CARD_PATH)
 CONTROLS = h.CONTROLS
 
 
@@ -71,13 +78,17 @@ def source_buffers():
     # source paths and bytes remain exact historical binary references.
     for row in inputs['readonly_commands']:
         row['argv'] = [arg.replace(old_contract.DEVICE_ROOT, DEVICE) for arg in row['argv']]
+        if row['argv'][-1].startswith(resource_query.MEMINFO_AWK):
+            row['argv'][-1] = resource_query.replace_meminfo_query(row['argv'][-1])
+    h.need(sum(row['argv'][-1].startswith(resource_query.meminfo_records())
+               for row in inputs['readonly_commands']) == 2, 'TWO_FIXED_RESOURCE_QUERIES')
     for name in buffers:
         text = buffers[name].decode('utf-8-sig')
         for old, new in ((str(BASE/'active').replace('\\', '/'), str(ACTIVE).replace('\\', '/')),
                          (str(old_contract.RUN_ROOT).replace('\\', '/'), str(RUN).replace('\\', '/')),
                          (old_contract.DEVICE_ROOT, DEVICE), (old_contract.SCOPE, SCOPE),
-                         (old_contract.NONCE, NONCE), ('9a72c6e431d0aa60', '4f81c2a931d0aa60'),
-                         ('9a72c6e431d0aa61', '4f81c2a931d0aa61')):
+                         (old_contract.NONCE, NONCE), ('9a72c6e431d0aa60', PROBE_RUN),
+                         ('9a72c6e431d0aa61', DATA_RUN)):
             text = text.replace(old, new)
         buffers[name] = text.encode('utf-8')
     contract = buffers['goal_contract.py'].decode()
@@ -300,10 +311,11 @@ def freeze(commit):
                'active_closure_bytes':total,'required_roles':sorted(r['role'] for r in rows),
                'published_source_commit':commit}
     br = h.encoded(binding);h.write_new(ACTIVE/'FINAL_EXECUTION_BINDING_D01.json',br)
-    card = h.read_safe(REPO/'docs/DIRECT_DDS_OBSERVATION_EXECUTION.md')
+    card = h.read_safe(REPO/CARD_PATH)
     c=h.load_buffer(buffers['goal_contract.py'],'_dds_private_card_contract',ACTIVE/'goal_contract.py')
     private={'fixed_targets':c.TARGETS,'existing_project_identity':c.OWN,
-             'entry_argv':['C:/Users/17715/anaconda3/python.exe','-I','-B',str(ACTIVE/'goal_entry.py'),
+             'entry_argv':['C:/Users/17715/anaconda3/python.exe','-I','-B','-c',
+                           "import runpy,sys;sys.path.insert(0,"+repr(str(ACTIVE))+");runpy.run_path("+repr(str(ACTIVE/'goal_entry.py'))+",run_name='__main__')",
                            '--actual-once','--manifest-sha256',h.sha(raw),'--binding-sha256',h.sha(br)],
              'requires_new_auth_admission_fresh_then_once':True}
     card += ('\n## Private fixed binding (not for Git publication)\n\nManifest SHA256: '+h.sha(raw)+'\nBinding SHA256: '+h.sha(br)+'\n\n'+json.dumps(private,indent=2)+'\n').encode()
