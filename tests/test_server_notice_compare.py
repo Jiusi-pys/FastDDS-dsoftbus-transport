@@ -71,7 +71,7 @@ class ServerNoticeTests(unittest.TestCase):
                 result = m.classify_server_record(data+ending)
                 self.assertEqual(result['category'], category)
                 self.assertEqual(result['state'], 'PUBLIC_TEMPLATE_MATCH')
-                self.assertEqual(set(result), {'code','template','category','state','dynamic_fields_discarded'})
+                self.assertEqual(set(result), {'code','template','category','state','dynamic_fields_discarded','reason'})
         for bad in [b'daemonauthstatus = SECRET_VALUE\n', b'handshake.buf = SECRET_VALUE\n',
                     b'Auth failed response auth signture success\n', b'\xffauth\n',
                     b'response auth signture success\nAuth failed\n',
@@ -79,6 +79,37 @@ class ServerNoticeTests(unittest.TestCase):
                     FIRST.replace(b'123******789(L:10)', b'PRIVATE_SESSION'),
                     FIRST.replace(b'123******789(L:10)', b'0**5')]:
             self.assertEqual(m.classify_server_record(bad)['state'], 'UNKNOWN')
+
+    def test_official_300b_function_and_severity_variants(self):
+        # 443234c10deea8ba553437cf7365ce5e20970f0d server.cpp417-471.
+        for level,fn,line,body,category in [
+            ('I','HandServerAuth',444,b'response auth signture success','PROGRESS_NOT_DEVICE_ACCEPTANCE'),
+            ('I','HandServerAuth',422,b'recive get publickey cmd','PROGRESS_NOT_DEVICE_ACCEPTANCE'),
+            ('I','HandServerAuth',435,b'recive auth signture cmd','PROGRESS_NOT_DEVICE_ACCEPTANCE'),
+            ('D','ServerSessionHandshake',471,b'Auth failed','AUTH_PROTOCOL_FAILURE_NOT_USER_DENIAL'),
+            ('F','HandServerAuth',437,b'sign failed','AUTH_PROTOCOL_FAILURE_NOT_USER_DENIAL'),
+        ]:
+            row=f'[{level}][2024-04-19 00:00:00.000][abc][{fn}:{line}] '.encode()+body+b'\r\r\n'
+            with self.subTest(line=line):
+                value=m.classify_server_record(row)
+                self.assertEqual(value['state'],'PUBLIC_TEMPLATE_MATCH')
+                self.assertEqual(value['category'],category)
+                self.assertEqual(value['reason'],'FULL_PUBLIC_TEMPLATE')
+
+    def test_unknown_reason_enums_do_not_accept_dynamic_payload(self):
+        prefix=b'[I][2026-11-02 00:00:00.000][abc][UpdateHdiInfo:654] '
+        cases=[(b'Auth failed','FRAME_OR_ENCODING_UNSUPPORTED'),
+               (prefix+b'handshake.buf = SYNTHETIC_SECRET_AUTH\n','PUBLIC_DYNAMIC_FIELD_FORMAT_ONLY'),
+               (prefix+b'daemonauthstatus = SYNTHETIC_SECRET_AUTH\n','PUBLIC_DYNAMIC_FIELD_FORMAT_ONLY'),
+               (prefix+b'handshake info is : SYNTHETIC_SECRET_AUTH\n','PUBLIC_DYNAMIC_FIELD_FORMAT_ONLY'),
+               (prefix+b'SYNTHETIC_BODY\n','BODY_UNSUPPORTED'),
+               (prefix+b'Auth failed\n','BODY_KNOWN_WRAPPER_CONFLICT'),
+               (prefix.replace(b'UpdateHdiInfo',b'UnknownFunction')+b'Auth failed\n','WRAPPER_OR_BODY_UNSUPPORTED')]
+        for row,reason in cases:
+            with self.subTest(reason=reason):
+                result=m.classify_server_record(row)
+                self.assertEqual(result['state'],'UNKNOWN');self.assertEqual(result['reason'],reason)
+                self.assertNotIn('SYNTHETIC_SECRET_AUTH',str(result))
 
     def test_adapter_keeps_original_bytes_and_default_refusal(self):
         before = (ROOT/'scripts/bounded_public_compare.py').read_bytes()
