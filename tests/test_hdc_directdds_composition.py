@@ -24,7 +24,7 @@ def runtime():
     names = [name[:-3] for name in b.SOURCES]
     saved = {name:sys.modules.get(name) for name in names}
     modules = {}
-    order = ('goal_contract','goal_policy','goal_handle_lifecycle','goal_records','goal_evidence',
+    order = ('goal_contract','goal_policy','goal_handle_lifecycle','goal_records','resource_receipt','goal_evidence',
              'goal_authorization','goal_driver','goal_notice','dds_observation','dds_notice','goal_windows_backend',
              'goal_storage','goal_workflow','goal_entry')
     try:
@@ -78,7 +78,15 @@ class CompositionTests(unittest.TestCase):
             base=b.BASE/'active'
             for name in ('goal_records.py','goal_evidence.py','goal_win32_owned.py','goal_handle_lifecycle.py'):
                 old=b.h.read_safe(base/name).replace(b'9a72c6e431d0aa60',b'4f81c2a931d0aa60').replace(b'9a72c6e431d0aa61',b'4f81c2a931d0aa61')
-                self.assertEqual(m.buffers[name],old)
+                if name!='goal_evidence.py':self.assertEqual(m.buffers[name],old)
+                else:
+                    # Only the receipt framing/resource adapter changes here;
+                    # full DDS/restore/transfer evaluators remain exact AST reuse.
+                    def definitions(data):return {x.name:ast.dump(x,include_attributes=False) for x in ast.parse(data).body if isinstance(x,ast.FunctionDef)}
+                    before,after=definitions(old),definitions(m.buffers[name])
+                    self.assertEqual(set(before),set(after))
+                    for symbol in before:
+                        if symbol not in ('parse_client','step_stdout'):self.assertEqual(before[symbol],after[symbol])
             expected=json.loads(b.h.read_safe(base/'GOAL_INPUTS_D01.json'))
             for row in expected['readonly_commands']:
                 row['argv']=[arg.replace('/data/local/tmp/mdds_direct_20261031_9a72c6e4',b.DEVICE) for arg in row['argv']]
@@ -125,6 +133,26 @@ class CompositionTests(unittest.TestCase):
             self.assertEqual(backend.observe(root,'PRE_RESUME'),sample)
             self.assertEqual((backend.samples,backend.epochs,len(calls)),(1,1,1))
 
+    def test_generated_resource_and_supervision_use_supported_receipt_framing(self):
+        with runtime() as m:
+            c=m.goal_contract;e=m.goal_evidence
+            rows=['MemTotal: 8000000 kB','MemAvailable: 4000000 kB',
+                  'Filesystem 1K-blocks Used Available Use% Mounted on','/dev/test 1000000 1000 999000 1% /data',
+                  '/data/local/tmp','directory|755|1|1','directory|755|1|1','directory|755|1|1',
+                  '__RO_BASE_RC=0','stat: '+c.DEVICE_ROOT+': No such file or directory','__RO_ROOT_STAT_RC=1']
+            for ending in (b'\n',b'\r\n',b'\r\r\n'):
+                for case in ('RO-A-resource-path','RO-B-resource-path'):
+                    data=ending.join(row.encode() for row in rows)+ending
+                    self.assertEqual(e.parse_client(case,data,b'',0)['root_absence'],'ENOENT_WITH_BASE_ACCESS')
+                registry=c.validate_registry(c.build_registry(m.inputs['payloads'],m.inputs['readonly_commands'],m.inputs['controller']))
+                step=registry['stage.a.mkdir']
+                self.assertIn('S1_GOAL_STEP:'+step.id+':0',e.step_stdout(step,('S1_GOAL_STEP:'+step.id+':0').encode()+ending))
+                line=b'DIRECT_SUP_BEGIN parent=50 child=101 birth=700 scope=DIRECT_CHILD_ONLY descendants=UNKNOWN'+ending
+                root=types.SimpleNamespace(output=[line,b''])
+                driver=types.SimpleNamespace(live={'probe.a.launch':root},pump=lambda:None)
+                workflow=m.goal_workflow.FixedGoalWorkflow(driver,{},'a'*64)
+                self.assertEqual(workflow.created('probe','A')['created_child'],101)
+
     def test_narrow_unknown_requires_new_effect(self):
         with runtime() as m:
             p=m.dds_observation
@@ -170,9 +198,13 @@ class CompositionTests(unittest.TestCase):
             approval['effects']['server_auth_context_unknown_continue']=True
             with self.assertRaises(c.ContractError):a.validate_approval_shape(approval,'a'*64,'b'*64)
 
-    def test_no_actual_controls_or_run(self):
-        self.assertFalse(b.RUN.exists())
-        for name in b.CONTROLS:self.assertFalse((b.ACTIVE/name).exists())
+    def test_assemble_cannot_reuse_existing_package_or_refund_a_consumed_run(self):
+        # This package is now historical/consumed. Unit tests must neither erase
+        # its controls nor pretend the pre-execution snapshot remains current.
+        paths=[b.RUN,*[b.ACTIVE/name for name in b.CONTROLS]]
+        before={str(p):(p.exists(),p.stat().st_mtime_ns if p.exists() else None) for p in paths}
+        with self.assertRaises(ValueError):b.assemble()
+        self.assertEqual(before,{str(p):(p.exists(),p.stat().st_mtime_ns if p.exists() else None) for p in paths})
 
     def test_full_workflow_real_driver_backend_and_record_oracles(self):
         # Only the OS/remote producers are synthetic. Execute the actual composed

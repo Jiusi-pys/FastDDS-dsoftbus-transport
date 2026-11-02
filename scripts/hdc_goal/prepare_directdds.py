@@ -26,11 +26,13 @@ NONCE = '4F81C2A9_DIRECT_DDS_240S_D01'
 SOURCES = ('goal_contract.py', 'goal_authorization.py', 'goal_driver.py',
            'goal_windows_backend.py', 'goal_win32_owned.py', 'goal_handle_lifecycle.py',
            'goal_memory_trace.py', 'goal_notice.py', 'goal_storage.py', 'goal_evidence.py',
-           'goal_policy.py', 'goal_records.py', 'goal_workflow.py', 'goal_entry.py', 'dds_observation.py', 'dds_notice.py')
+           'goal_policy.py', 'goal_records.py', 'goal_workflow.py', 'goal_entry.py', 'dds_observation.py', 'dds_notice.py', 'resource_receipt.py')
 CODE_PATHS = ('scripts/hdc_goal/prepare_directdds.py', 'scripts/hdc_goal/dds_observation.py',
               'scripts/hdc_goal/dds_notice.py', 'scripts/hdc_goal/goal_driver.py', 'scripts/hdc_goal/goal_notice.py',
               'scripts/hdc_goal/goal_windows_backend.py', 'scripts/hdc_goal/prepare_probe_pair.py',
               'tests/test_hdc_directdds_composition.py', 'docs/DIRECT_DDS_OBSERVATION_EXECUTION.md')
+CODE_PATHS=(*CODE_PATHS,'scripts/hdc_goal/resource_receipt.py','tests/test_hdc_resource_receipt.py',
+            'docs/HDC_RESOURCE_RECEIPT_COMPATIBILITY.md')
 CONTROLS = h.CONTROLS
 
 
@@ -57,7 +59,7 @@ def source_buffers():
     buffers = {}
     # Read only the explicit public source/schema closure, never old controls,
     # run output, private streams, cache, keys or historical reference bodies.
-    for name in SOURCES[:-2]:
+    for name in SOURCES[:-3]:
         data = h.read_safe(BASE/'active'/name)
         h.need(h.sha(data) == pins['source.'+name]['sha256'], 'HISTORICAL_SOURCE_DRIFT')
         buffers[name] = data
@@ -85,6 +87,13 @@ def source_buffers():
     buffers['goal_notice.py'] = h.read_safe(HERE/'goal_notice.py')
     buffers['dds_observation.py'] = h.read_safe(HERE/'dds_observation.py')
     buffers['dds_notice.py'] = h.read_safe(HERE/'dds_notice.py')
+    buffers['resource_receipt.py'] = h.read_safe(HERE/'resource_receipt.py')
+    evidence=buffers['goal_evidence.py'].decode().replace('\r\n','\n')
+    evidence=h.replace_once(evidence,"text=data.decode('utf-8','strict').replace('\\r\\n','\\n')",
+                            "from resource_receipt import receipt_text\n    text=receipt_text(data,need)")
+    evidence=h.replace_once(evidence,"text = stdout.decode('utf-8', errors='strict').replace('\\r\\n', '\\n')\n    err = stderr.decode('utf-8', errors='strict')",
+                            "from resource_receipt import receipt_text,parse_resource\n    if case in ('RO-A-resource-path','RO-B-resource-path'):\n        return parse_resource(stdout,stderr,native_exit,DEVICE_ROOT,LIMITS,need)\n    text = receipt_text(stdout,need)\n    err = receipt_text(stderr,need)")
+    buffers['goal_evidence.py']=evidence.encode()
     storage=buffers['goal_storage.py'].decode()
     storage=h.replace_once(storage,"('evidence','RESULT.json')]", "('evidence','RESULT.json'),('evidence','RESULT.pending.json')]")
     buffers['goal_storage.py']=storage.encode()
@@ -118,6 +127,8 @@ def source_buffers():
     auth = h.replace_once(auth, '_grants.add(grant);return grant', "grant.scoped_server_keyword_observation=approval['effects']['server_stdout_auth_word_only_unknown_observation']\n    _grants.add(grant);return grant")
     buffers['goal_authorization.py'] = auth.encode()
     workflow=buffers['goal_workflow.py'].decode()
+    workflow=h.replace_once(workflow,"text=bytes(root.output[0]).decode('utf-8','strict').replace('\\r\\n','\\n')",
+                             "from resource_receipt import receipt_text\n        text=receipt_text(bytes(root.output[0]),need)")
     workflow=h.replace_once(workflow,"    def run(self):\n        self.driver.start('server');self.driver.wait_accepted('server');self.step('targets')",'''    def observe_fixed_window(self):
         # Experimental timing, not a readiness claim or a retry. The same
         # resource/notice/deadline checks remain active throughout this window.

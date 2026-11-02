@@ -1,11 +1,19 @@
-# Current stock DDS dual-board observation — proposed single execution
+# Stock DDS dual-board observation: historical preparation and current status
 
-Status: implementation PRESENT; offline HOST_TESTED with final D02 40 PASS and
-independent review findings closed. Actual HDC, WinDLL, Native traffic and board
-execution NOT_RUN; DEVICE_TESTED=false, Stage1 NOT_VERIFIED. Actual deployment,
-identity operations and DDS traffic require a new direct scoped approval. No
-approval or once record is created by the builder. Prior consumed runs remain
-unchanged.
+Current status (2026-11-02): the one authorized actual attempt ran HDC and
+predeployment queries, then failed at `readonly.2` with
+`REMOTE_BASE_RC_MISSING_OR_NONZERO`. Deployment, Native identity/probe and DDS
+traffic were NOT_RUN; the once opportunity is consumed. The resource-receipt
+compatibility repair is now PRESENT and HOST_TESTED (56 PASS, zero skips), with
+zero open blocking review findings; DEVICE_TESTED=false and Stage1 NOT_VERIFIED.
+See [the current compatibility and evidence note](HDC_RESOURCE_RECEIPT_COMPATIBILITY.md).
+
+The remaining sections preserve the historical preparation specification and
+its offline test snapshots. Their statements that actual HDC/queries were
+NOT_RUN, controls/run were absent, or freeze/first execution was still next apply
+to those preparation snapshots, not the current run state. They do not authorize
+a retry or supersede the actual FAIL. The frozen private card, active package,
+consumed controls and original once record remain unchanged.
 
 ## Fixed inputs and objective
 
