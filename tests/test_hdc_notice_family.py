@@ -20,6 +20,47 @@ harness=load('pure_cleanup_harness',ROOT/'tests/test_hdc_goal_cleanup.py')
 class FamilyTests(unittest.TestCase):
     def marker(self,**kw):return notice.Marker(clock=lambda:10**15,**kw)
     def feed(self,m,data):m.feed('ready.A','stdout',data,'MONITOR',1,2)
+    def test_overlong_fragment_tail_is_not_a_new_record(self):
+        for prefix in (b'x'*513, b'x'*1025, b'x'*4096):
+            with self.subTest(prefix_bytes=len(prefix)):
+                m=self.marker();self.feed(m,prefix)
+                self.feed(m,b'auth_result=0\n')
+                report=m.report()
+                self.assertEqual(report['classification'],'UNKNOWN')
+                self.assertEqual([e['rule_id'] for e in report['events']],['RECORD_TOO_LONG'])
+                self.assertFalse(any(e['complete_record'] for e in report['events']))
+                body=b'[E000003] denied'
+                self.feed(m,body+b'\n')
+                denial=[e for e in m.report()['events'] if e['rule_id']=='CODE_E000003']
+                self.assertEqual(len(denial),1)
+                start=len(prefix)+len(b'auth_result=0\n')
+                self.assertEqual((denial[0]['offset_start'],denial[0]['offset_end']),(start,start+len(body)))
+                self.assertTrue(denial[0]['complete_record'])
+    def test_overlong_unterminated_record_remains_partial_at_boundaries(self):
+        for boundary in ('advance','eof','close'):
+            with self.subTest(boundary=boundary):
+                m=self.marker();self.feed(m,b'x'*513)
+                getattr(m,boundary)(*('ready.A','stdout') if boundary=='eof' else ())
+                events=m.report()['events']
+                self.assertTrue(any(e['rule_id']=='PARTIAL_RECORD' for e in events))
+                self.assertFalse(any(e['complete_record'] for e in events))
+                self.assertEqual(m.report()['classification'],'UNKNOWN')
+    def test_overlong_discard_is_stream_local(self):
+        m=self.marker();self.feed(m,b'x'*513)
+        m.feed('ready.A','stderr',b'please authorize this device\n','MONITOR',1,2)
+        self.feed(m,b'auth_result=0\n')
+        events=m.report()['events']
+        self.assertTrue(any(e['rule_id']=='REQUEST_SENTENCE' and e['stream']=='stderr' for e in events))
+        self.assertFalse(any(e['rule_id']=='DIAG_FIELD' for e in events))
+        self.assertEqual(m.report()['classification'],'UNKNOWN')
+    def test_complete_overlong_row_resynchronizes_at_its_newline(self):
+        for first in (b'x'*512,b'x'*513):
+            m=self.marker();self.feed(m,first+b'\n[E000002] request\n')
+            events=m.report()['events']
+            self.assertEqual(any(e['rule_id']=='RECORD_TOO_LONG' for e in events),len(first)>notice.MAX_LINE)
+            request=[e for e in events if e['rule_id']=='CODE_E000002']
+            self.assertEqual(len(request),1);self.assertTrue(request[0]['complete_record'])
+            self.assertEqual(request[0]['offset_start'],len(first)+1)
     def test_three_families_at_actual_fallback_and_every_fragment_boundary(self):
         samples=((b'auth synthetic CANARY\n','AUTH_WORD_ONLY'),
                  (b'[E000099] synthetic CANARY\n','ECODE_PREFIX_ONLY'),

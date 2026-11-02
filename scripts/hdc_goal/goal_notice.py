@@ -226,7 +226,7 @@ class Marker:
             if not self._binding(case, stream, phase):
                 return
             state = self.streams.setdefault((case, stream),
-                                           dict(pending=b'', offset=0, eof=False))
+                                           dict(pending=b'', offset=0, eof=False, discarding=False))
             if state['eof']:
                 self._unknown(case, stream, phase, 'AFTER_EOF', state)
                 return
@@ -245,13 +245,22 @@ class Marker:
             try:
                 parts = data.split(b'\n')
                 for i, part in enumerate(parts):
-                    state['pending'] += part
                     state['offset'] += len(part)
                     complete = i < len(parts)-1
+                    # An oversized physical record remains invalid until LF.
+                    # Clearing a bounded buffer must not turn its next chunk
+                    # into a new complete record or an allowed diagnostic.
+                    if state['discarding']:
+                        if complete:
+                            state['discarding'] = False
+                            state['offset'] += 1
+                        continue
+                    state['pending'] += part
                     if len(state['pending']) > MAX_LINE:
                         self._unknown(case, stream, phase, 'RECORD_TOO_LONG', state,
                                       before, after)
                         state['pending'] = b''
+                        state['discarding'] = not complete
                     elif state['pending']:
                         self._record(case, stream, phase, state, state['pending'],
                                      complete, before, after)
@@ -266,27 +275,30 @@ class Marker:
         with self.lock:
             if not self._binding(case, stream, phase):
                 return
-            state = self.streams.setdefault((case, stream), dict(pending=b'', offset=0, eof=False))
+            state = self.streams.setdefault((case, stream),
+                                           dict(pending=b'', offset=0, eof=False, discarding=False))
             if state['eof']:
                 return
-            if state['pending']:
+            if state['pending'] or state['discarding']:
                 self._unknown(case, stream, phase, 'PARTIAL_RECORD', state)
                 state['pending'] = b''
+                state['discarding'] = False
             state['eof'] = True
 
     def advance(self):
         with self.lock:
             for (case, stream), state in self.streams.items():
-                if state['pending']:
+                if state['pending'] or state['discarding']:
                     self._unknown(case, stream, 'ADVANCE', 'PARTIAL_RECORD', state)
             return self.reason()
 
     def close(self):
         with self.lock:
             for (case, stream), state in self.streams.items():
-                if state['pending']:
+                if state['pending'] or state['discarding']:
                     self._unknown(case, stream, 'CLOSE', 'PARTIAL_RECORD', state)
                     state['pending'] = b''
+                    state['discarding'] = False
             self.closed = True
 
     def report(self):

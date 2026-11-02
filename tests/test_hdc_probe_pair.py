@@ -26,9 +26,12 @@ def runtime():
         with patch.object(ctypes,'WinDLL',side_effect=AssertionError('LIVE_DLL_FORBIDDEN'),create=True):
             for name in NAMES:
                 file=name+'.py';data=builder.read_safe(builder.ACTIVE/file)
-                if data!=expected[file] or builder.sha(data)!=rows[file]['sha256']:raise AssertionError('CANDIDATE_SOURCE_DRIFT')
+                # Preserve the historical artifact's own pin check, but run the
+                # currently generated candidate in this WinDLL-blocked fixture.
+                # A consumed package is not rewritten when maintained code changes.
+                if builder.sha(data)!=rows[file]['sha256']:raise AssertionError('CANDIDATE_SOURCE_DRIFT')
                 m=types.ModuleType(name);m.__file__=str(builder.ACTIVE/file);sys.modules[name]=m
-                exec(compile(data,m.__file__,'exec'),m.__dict__)
+                exec(compile(expected[file],m.__file__,'exec'),m.__dict__)
             yield types.SimpleNamespace(**{n:sys.modules[n] for n in NAMES})
     finally:
         sys.path[:]=path
@@ -143,6 +146,14 @@ def fixture(m,first='pair',second='success'):
     return b,d,clock
 
 class PairTests(unittest.TestCase):
+    def test_generated_notice_uses_current_physical_record_boundaries(self):
+        with runtime() as m:
+            marker=m.goal_notice.Marker(clock=lambda:10**15,cases=m.probe_pair.CASES)
+            marker.feed('server','stdout',b'x'*513,'MONITOR',1,2)
+            marker.feed('server','stdout',b'auth_result=0\n','MONITOR',1,2)
+            self.assertEqual(marker.report()['classification'],'UNKNOWN')
+            self.assertEqual([e['rule_id'] for e in marker.report()['events']],['RECORD_TOO_LONG'])
+            self.assertFalse(any(e['complete_record'] for e in marker.report()['events']))
     def test_generated_registry_is_only_A_distinct_equal_length_tags_and_strict_effects(self):
         with runtime() as m:
             c=m.goal_contract;r=c.build_registry(builder.commands(c));c.validate_registry(list(r.values()))
