@@ -128,7 +128,8 @@ class GoalWindowsBackend:
         # Driver-specific policy is explicit in the new effects/approval. It
         # never erases the original UNKNOWN or upgrades it to a false diagnostic.
         if not self.marker.notice:return
-        need(report.get('classification')!='COMMAND_FAILURE','HDC_CHANNEL_ESTABLISHING_FAILURE')
+        if report.get('classification')=='COMMAND_FAILURE':
+            need(False,self.marker.reason())
         permitted=self.grant.server_unknown_continue is True and events and all(e.get('case')=='server' and e.get('rule_id')=='AUTH_CONTEXT_UNKNOWN' for e in events)
         need(permitted and not report.get('record_failed') and not report.get('overflow'),'NOTICE_REQUEST_DENIED_OR_UNKNOWN')
     def observe_chunk(self,root,stream,data,before,after,phase):
@@ -226,6 +227,7 @@ class GoalWindowsBackend:
                 ('REQUEST_TEXT','CODE_E000002'),('REQUEST_TEXT','REQUEST_SENTENCE'),
                 ('DENIED_TEXT','CODE_E000003'),
                 ('COMMAND_FAILURE','CODE_E000004_CHANNEL_ESTABLISHING'),
+                ('COMMAND_FAILURE','CODE_DEVICE_SELECTION_FAILURE'),
                 ('DIAGNOSTIC','DIAG_FIELD'),('DIAGNOSTIC','DIAG_PATH')}
             events=report.get('events')
             reliable=(type(events) is list and (not self.marker.notice or bool(events))

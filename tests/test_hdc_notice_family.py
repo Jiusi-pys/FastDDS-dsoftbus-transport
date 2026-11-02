@@ -43,6 +43,76 @@ class FamilyTests(unittest.TestCase):
             self.assertTrue(all(x['trigger_family']=='NOT_APPLICABLE' for x in result['events']))
         m=self.marker();self.feed(m,b'[Fail][E000004]:The communication channel is being established.\nMDDS_READY_A_FAKE\n__MDDS_READY_RC=0\n')
         self.assertEqual(m.report()['classification'],'COMMAND_FAILURE');self.assertTrue(m.notice)
+    def test_public_failure_print_chain_endings_and_every_fragment_boundary(self):
+        # Official comparison source 8efffcf2 server_for_client.cpp421-442,
+        # 982/1398. Public print-chain inputs, not copied private captures.
+        messages=((b'[E000004]:The communication channel is being established.',
+                   'CODE_E000004_CHANNEL_ESTABLISHING','HDC_CHANNEL_ESTABLISHING_FAILURE'),
+                  (b'ExecuteCommand need connect-key? please confirm a device by help info',
+                   'CODE_DEVICE_SELECTION_FAILURE','HDC_DEVICE_SELECTION_FAILURE'))
+        for body,rule,reason in messages:
+            wire=b'[Fail]'+body+b'\r\n'
+            for data in (wire,wire.replace(b'\n',b'\r\n'),b'[Fail]'+body+b'\n'):
+                for split in range(len(data)+1):
+                    m=self.marker()
+                    if data[:split]:
+                        self.feed(m,data[:split])
+                        if not data[:split].endswith(b'\n'):
+                            self.assertEqual(m.report()['classification'],'NONE')
+                    if data[split:]:self.feed(m,data[split:])
+                    report=m.report();self.assertEqual(report['classification'],'COMMAND_FAILURE')
+                    self.assertTrue(m.notice);self.assertEqual(m.reason(),reason)
+                    self.assertEqual([(e['rule_id'],e['complete_record'],e['offset_end']) for e in report['events']],[(rule,True,len(data)-1)])
+                    self.assertTrue(all(e['trigger_family']=='NOT_APPLICABLE' for e in report['events']))
+    def test_known_failure_pair_keeps_later_request_denial_and_unknown_priority(self):
+        pair=(b'[Fail][E000004]:The communication channel is being established.\r\r\n'
+              b'Please wait for several seconds and try again.\r\r\n'
+              b'[Fail]ExecuteCommand need connect-key? please confirm a device by help info\r\r\n')
+        m=self.marker();self.feed(m,pair)
+        self.assertEqual(m.report()['classification'],'COMMAND_FAILURE')
+        self.assertEqual(m.reason(),'HDC_CHANNEL_ESTABLISHING_FAILURE')
+        self.assertEqual([e['rule_id'] for e in m.report()['events']],['CODE_E000004_CHANNEL_ESTABLISHING','CODE_DEVICE_SELECTION_FAILURE'])
+        for suffix,kind,reason in ((b'[E000002] request\n','REQUEST_TEXT','AUTH_REQUEST_TEXT'),
+                                   (b'[E000003] denied\n','DENIED_TEXT','AUTH_DENIED_TEXT'),
+                                   (b'auth CANARY\n','UNKNOWN','NOTICE_AMBIGUOUS')):
+            m=self.marker();self.feed(m,pair+suffix)
+            self.assertEqual(m.report()['classification'],kind);self.assertEqual(m.reason(),reason)
+            self.assertTrue(m.notice);self.assertNotIn('CANARY',json.dumps(m.report()))
+    def test_known_failure_grammar_rejects_extra_characters_controls_and_partial_records(self):
+        for body in (b'[Fail][E000004]:The communication channel is being established.',
+                     b'[Fail]ExecuteCommand need connect-key? please confirm a device by help info'):
+            for data in (body+b'\r\r\r\n',body+b'X\r\n',body+b' \n',b' '+body+b'\n',
+                         body+b'\x00\n',body[:-2]+b'\r'+body[-2:]+b'\n'):
+                m=self.marker();self.feed(m,data)
+                self.assertEqual(m.report()['classification'],'UNKNOWN');self.assertTrue(m.notice)
+                self.assertFalse(any(e['event_type']=='COMMAND_FAILURE' for e in m.report()['events']))
+            m=self.marker();self.feed(m,body+b'\r\r');m.close()
+            self.assertEqual(m.report()['classification'],'UNKNOWN')
+            self.assertFalse(any(e['event_type']=='COMMAND_FAILURE' for e in m.report()['events']))
+        # Keep the original failing vector. Cutting the only ECODE cue does
+        # not create a global notice: NONE is no notice, never business PASS.
+        for body,kind in ((b'[Fail][E000004]:The communication channel is being established.','NONE'),
+                          (b'[Fail]ExecuteCommand need connect-key? please confirm a device by help info','UNKNOWN')):
+            m=self.marker();self.feed(m,body[:10]+b'\r'+body[10:]+b'\n')
+            self.assertEqual(m.report()['classification'],kind)
+            self.assertFalse(any(e['event_type']=='COMMAND_FAILURE' for e in m.report()['events']))
+            if kind=='NONE':self.assertFalse(m.notice);self.assertEqual(m.report()['events'],[])
+    def test_known_failure_backend_still_blocks_B_and_preserves_cleanup_facts(self):
+        for data,reason in ((b'[Fail][E000004]:The communication channel is being established.\r\r\n','HDC_CHANNEL_ESTABLISHING_FAILURE'),
+                            (b'[Fail]ExecuteCommand need connect-key? please confirm a device by help info\r\r\n','HDC_DEVICE_SELECTION_FAILURE')):
+            with harness.load_pair() as (driver,backend):
+                fixture=harness.CleanupTests(methodName='runTest');fixture.driver_mod=driver;fixture.backend_mod=backend
+                b,d,c=fixture.make();b.raw_notice=[];b.marker=self.marker(sink=b.notice_event)
+                def read(cap,observer):
+                    observer('stdout',data,1,2);return [('stdout',data)]
+                b.roots[1].read=read
+                with self.assertRaisesRegex(harness.ContractError,reason):d.pump()
+                with self.assertRaises(harness.ContractError):d.start('ready.B')
+                result=d.finish();self.assertEqual(d.accepted,{'server'})
+                self.assertTrue(all(x['state']=='TERMINAL' and x['business_blocked'] for x in result['cleanup']))
+                self.assertEqual(result['finalization']['state'],'COMPLETE')
+                self.assertNotIn('NOTICE_OBSERVATION_UNRELIABLE',json.dumps(result))
+                self.assertEqual([r.stop_calls for r in b.roots],[1,1])
     def test_clock_record_failure_and_truncation_never_gain_a_family_attestation(self):
         m=notice.Marker(clock=lambda:0);self.feed(m,b'auth CANARY\n')
         event=m.report()['events'][0]

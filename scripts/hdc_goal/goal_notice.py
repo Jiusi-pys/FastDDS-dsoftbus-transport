@@ -18,6 +18,7 @@ RULES = {
     'TOTAL_CAP', 'THREAD_INVALID', 'AFTER_EOF', 'AFTER_CLOSE',
     'CLASSIFIER_ERROR', 'SINK_FAILURE', 'EVENT_CAP',
     'CODE_E000004_CHANNEL_ESTABLISHING',
+    'CODE_DEVICE_SELECTION_FAILURE',
 }
 
 
@@ -48,9 +49,14 @@ class Marker:
     def reason(self):
         if self.record_failed:
             return 'NOTICE_RECORD_FAILURE'
+        if self.level == 'COMMAND_FAILURE':
+            # Preserve final-classification precedence: an earlier E4 must
+            # never override a later request, denial or UNKNOWN observation.
+            if any(e['rule_id']=='CODE_E000004_CHANNEL_ESTABLISHING' for e in self.events):
+                return 'HDC_CHANNEL_ESTABLISHING_FAILURE'
+            return 'HDC_DEVICE_SELECTION_FAILURE'
         return {'UNKNOWN': 'NOTICE_AMBIGUOUS', 'REQUEST_TEXT': 'AUTH_REQUEST_TEXT',
-                'DENIED_TEXT': 'AUTH_DENIED_TEXT',
-                'COMMAND_FAILURE': 'HDC_CHANNEL_ESTABLISHING_FAILURE'}.get(self.level)
+                'DENIED_TEXT': 'AUTH_DENIED_TEXT'}.get(self.level)
 
     def _decision_time(self):
         try:
@@ -167,10 +173,19 @@ class Marker:
             return
         # Exact complete-record diagnosis only. Same-code variants stay unknown;
         # this is a blocking command failure, never successful ordinary output.
-        if text.removesuffix('\r') == ('[Fail][E000004]:The communication channel '
-                                      'is being established.'):
+        # EchoClient's CRLF can become CRCRLF on Windows text stdout. feed()
+        # removes only LF; accept exactly 0/1/2 trailing CR, never strip().
+        command_text = text[:-2] if text.endswith('\r\r') else text.removesuffix('\r')
+        failures = {
+            '[Fail][E000004]:The communication channel is being established.':
+                'CODE_E000004_CHANNEL_ESTABLISHING',
+            '[Fail]ExecuteCommand need connect-key? please confirm a device by help info':
+                'CODE_DEVICE_SELECTION_FAILURE',
+        }
+        rule = failures.get(command_text)
+        if rule is not None:
             self._emit(case, stream, phase, 'COMMAND_FAILURE',
-                       'CODE_E000004_CHANNEL_ESTABLISHING', start,
+                       rule, start,
                        state['offset'], before, after, True)
             return
         # Local full-record grammar only, not a claimed vendor log format.
