@@ -6,7 +6,7 @@ Status: **DEVICE_TESTED (bounded scope below) / NOT_PRODUCTION_QUALIFIED**.
 | --- | --- |
 | Fresh-process A↔B DDS, 3 samples each way, GUID/SN/payload matched by controller | PASS (run m2) |
 | Participant delete, runtime destroy, process exit, entry identity restore | PASS (run m2) |
-| Fragmented sample (> 65500 bytes) | NOT_RUN: runner payloads are fixed 32-byte values |
+| Fragmented sample: 150000 bytes per direction, transport max 65536, byte-verified and acked | PASS (run m3) |
 | Reconnect / re-accept (`NO_REACCEPT`), same-name Participant hot rebuild | NOT_RUN |
 | ROS 2 over this build | NOT_RUN |
 | SDK quiet, worker/descendant restoration | UNKNOWN |
@@ -76,3 +76,25 @@ and full logs are on the operator host:
 Evidence-handling note: the D05 data-window board records were deleted before they were
 archived, because of a Git Bash path-conversion error. Their contents had been read
 before deletion, and no cause record existed among them. Records from m1 onward are archived.
+
+## Device run m3 (fragmented sample)
+
+The runner now also exchanges one 150000-byte sample per direction on a separate
+RELIABLE topic, `native_run_<run>_<side>_frag`. The type is in `tests/stage1_native_successor/frag_sample.hpp`.
+Each side writes its sample, takes the peer's, checks every byte against a deterministic
+pattern, and waits for acknowledgment. Any failure fails the run. This exchange is not
+reported through the 32-byte event protocol, so the controller and its record formats are unchanged.
+
+- Runner: SHA256 `fe7d048d11e127052b7b0e40f2c6bb8974809ef96ca0d9a8bd9fbcc7ec4c9c94`, 337464 bytes.
+- Launcher: SHA256 `c84d4108c9ba2618443317040c23720b0a052751a74f91de49d103d3c43b4108`, 91928 bytes.
+- Both were built from the diagnostics overlay plus the same two changes that are committed here.
+
+| Board | data-result | fragmented sample | exit |
+| --- | --- | --- | --- |
+| A | status 0, phase 4, writes 3, takes 3, destroy 0 | `FRAG_SAMPLE bytes=150000 max_message=65536 written=1 taken=1 verified=1 acked=1` | status 0, restored_entry 1 |
+| B | status 0, phase 4, writes 3, takes 3, destroy 0 | same | status 0, restored_entry 1 |
+
+The controller exited 0 with `ROOT_MATCH_GUID_SN_PAYLOAD_ACK_DONE_TEARDOWN=1`, and no
+processes remained on either board. Fragmentation follows from the sample size, which
+exceeds the maximum message size. RTPS DATA_FRAG counts were not captured.
+Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m3-20261104/` (`RESULT.md`, `driver.log`, scripts, overlay source).

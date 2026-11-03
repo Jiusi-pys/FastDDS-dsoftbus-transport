@@ -1,5 +1,7 @@
 #include "run_protocol.hpp"
 #include "../../examples/dds214_layer_baseline/LayerSample.hpp"
+#include "frag_sample.hpp"
+#include <cstdio>
 #include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
@@ -148,6 +150,26 @@ static void run_session(Session& s,NS_RunResult& out){
             for(unsigned i=0;i<out.takes;++i)need(sequences[i]!=e.sequence);sequences[out.takes]=e.sequence;taken[v.ordinal-1]=true;std::memcpy(e.payload,v.payload.data(),32);h.emit(e);++out.takes;
         }
         if(out.takes==3)break;need(h.progress.wait(seen,end_at(q.deadline_ns)),NS_CANCELLED);
+    }
+    {   // Fragmented sample: one 150000-byte sample per direction on a separate topic.
+        // Not reported through the 32-byte event protocol; any failure fails the run.
+        fd::TypeSupport frag_type{new stage1_frag::Type};need(frag_type.register_type(s.participant)==RC::RETCODE_OK);
+        auto ftopic=[&](unsigned side){return s.participant->create_topic("native_run_"+std::to_string(local.run)+"_"+std::to_string(side)+"_frag",frag_type.get_type_name(),fd::TOPIC_QOS_DEFAULT);};
+        auto* ftx=ftopic(local.side);auto* frx=ftopic(1-local.side);need(ftx&&frx);
+        fd::DataWriterQos fwq=wq;fd::DataReaderQos frq=rq;fwq.history().depth=1;frq.history().depth=1;
+        auto* fw=pub->create_datawriter(ftx,fwq,&s.signals);auto* fr=sub->create_datareader(frx,frq,&s.signals);need(fw&&fr);
+        for(;;){const auto seen=h.progress.snapshot();need(h.live()&&!s.pump_failed,NS_CANCELLED);fd::PublicationMatchedStatus w;fd::SubscriptionMatchedStatus r;
+            need(fw->get_publication_matched_status(w)==RC::RETCODE_OK&&fr->get_subscription_matched_status(r)==RC::RETCODE_OK);
+            if(w.current_count==1&&r.current_count==1)break;need(h.progress.wait(seen,end_at(q.deadline_ns)),NS_CANCELLED);}
+        auto mine=stage1_frag::make(local.run,local.side);need(fw->write(&mine));
+        bool got=false;
+        for(;;){const auto seen=h.progress.snapshot();need(h.live()&&!s.pump_failed,NS_CANCELLED);
+            for(;;){stage1_frag::Sample v;fd::SampleInfo info;const auto rc=fr->take_next_sample(&v,&info);if(rc==RC::RETCODE_NO_DATA)break;need(rc==RC::RETCODE_OK&&info.valid_data&&!got);
+                need(stage1_frag::valid(v,local.run,1-local.side));got=true;}
+            if(got)break;need(h.progress.wait(seen,end_at(q.deadline_ns)),NS_CANCELLED);}
+        const auto fleft=q.deadline_ns-ticks();need(h.live(),NS_CANCELLED);need(fleft<=uint64_t(INT32_MAX)*1000000000u,NS_CONTEXT);
+        need(fw->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(static_cast<int32_t>(fleft/1000000000u),static_cast<uint32_t>(fleft%1000000000u)))==RC::RETCODE_OK);
+        std::printf("FRAG_SAMPLE side=%u bytes=%u max_message=%u written=1 taken=1 verified=1 acked=1\n",static_cast<unsigned>(local.side),stage1_frag::kBytes,static_cast<unsigned>(config.maxMessageSize));std::fflush(stdout);
     }
     const auto left=q.deadline_ns-ticks();need(h.live(),NS_CANCELLED);need(left<=uint64_t(INT32_MAX)*1000000000u,NS_CONTEXT);
     need(s.writer->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(static_cast<int32_t>(left/1000000000u),static_cast<uint32_t>(left%1000000000u)))==RC::RETCODE_OK);
