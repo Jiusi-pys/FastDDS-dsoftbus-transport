@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/InputChannels.hpp>
+#include <fastdds_dsoftbus/dsoftbus/InputChannels.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -45,12 +45,12 @@ void operator delete[](void* pointer) noexcept { std::free(pointer); }
 void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
 void operator delete[](void* pointer, std::size_t) noexcept { std::free(pointer); }
 
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 using namespace std::chrono_literals;
 #define CHECK(condition) do { if (!(condition)) throw std::runtime_error( \
     std::string("line ") + std::to_string(__LINE__) + ": " #condition); } while (false)
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class InputChannelsTestAccess
 {
 public:

@@ -1,9 +1,9 @@
-#ifndef MDDS_NATIVE_RECEIVE_INTERNAL_HPP
-#define MDDS_NATIVE_RECEIVE_INTERNAL_HPP
-#include <mdds/dsoftbus/NativeOwnerTable.hpp>
+#ifndef FASTDDS_DSOFTBUS_NATIVE_RECEIVE_INTERNAL_HPP
+#define FASTDDS_DSOFTBUS_NATIVE_RECEIVE_INTERNAL_HPP
+#include <fastdds_dsoftbus/dsoftbus/NativeOwnerTable.hpp>
 #include <mutex>
 
-namespace mdds::dsoftbus::detail {
+namespace fastdds_dsoftbus::dsoftbus::detail {
 class ProcessReceiveBridge;
 
 // Final execution accounting only. Never retained by a queued receive record.
@@ -50,7 +50,7 @@ private:
 class NativeReceiveBridge final
 {
     friend class ProcessReceiveBridge;
-    friend class ::mdds::dsoftbus::NativeOwnerTableTestAccess;
+friend class ::fastdds_dsoftbus::dsoftbus::NativeOwnerTableTestAccess;
     static NativeReceiveGuard Acquire(const NativeOwnerTable&, const NativeIdentityConstraint&) noexcept;
     static NativeReceiveLease Enter(NativeReceiveGuard&) noexcept;
 };

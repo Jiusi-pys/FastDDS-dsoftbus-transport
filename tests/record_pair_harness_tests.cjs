@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const {EventEmitter} = require('node:events');
 const {runRecordPair} = require('../scripts/RecordPairHarness.cjs');
 
-function scenario(mode) {
+function scenario(mode, timeoutMs = 100) {
   const children = {}, events = [], raw = [];
   let aLiveAtB = false;
   const spawn = (_exe, args, options) => {
@@ -51,11 +51,24 @@ function scenario(mode) {
   };
   return runRecordPair({spawn, targets: {A:'board-a', B:'board-b'},
     commands: {A:'SIMULATED-A', B:'SIMULATED-B'}, env: {Path:'one', PATH:'two'},
-    timeoutMs: 100, drainGraceMs: 20, onOutput: (r,s,b) => raw.push([r,s,b.toString()]),
+    timeoutMs, drainGraceMs: 20, onOutput: (r,s,b) => raw.push([r,s,b.toString()]),
     onTransition: e => events.push(e)}).then(result => ({result, children, aLiveAtB, events, raw}));
 }
 
 (async () => {
+  if (!process.argv[2] || process.argv[2] === 'functional_cycle_budget') {
+    // A long functional scenario may need more than a minute; its successful
+    // collectors still finish immediately here. This is not an SDK deadline.
+    assert.equal((await scenario('success', 14400000)).result.pass, true);
+    let spawned = false;
+    for (const timeoutMs of [0, -1, 14400001, Infinity, 1.5]) {
+      await assert.rejects(runRecordPair({spawn: () => {spawned = true;},
+        targets: {A:'board-a', B:'board-b'}, commands: {A:'A', B:'B'}, timeoutMs}),
+        /invalid explicit record run configuration/);
+    }
+    assert.equal(spawned, false, 'invalid budgets must fail before a subprocess');
+    console.log('functional_cycle_budget PASS scope=HOST_HARNESS_ONLY');
+  }
   for (const mode of ['success','a_fail','bind_fail','missing_rc','duplicate_rc','false_ready','spawn_error','hang','late_ready','unkillable']) {
     if (process.argv[2] && process.argv[2] !== mode) continue;
     let watchdog;

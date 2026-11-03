@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 namespace {
 constexpr std::uint64_t target = 671793191;
 constexpr std::uint64_t original = 0x100000001ULL; // Restoration must not truncate to AccessTokenID.

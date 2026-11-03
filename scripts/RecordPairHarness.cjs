@@ -6,7 +6,7 @@ function runRecordPair({spawn = require('node:child_process').spawn, targets, co
   env = process.env, timeoutMs = 15000, drainGraceMs = 250,
   onOutput = () => {}, onTransition = () => {}}) {
   if (!targets?.A || !targets?.B || !commands?.A || !commands?.B ||
-      !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000 ||
+      !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 14400000 ||
       !Number.isSafeInteger(drainGraceMs) || drainGraceMs < 1 || drainGraceMs > 1000) {
     return Promise.reject(new Error('invalid explicit record run configuration'));
   }
@@ -78,6 +78,8 @@ function runRecordPair({spawn = require('node:child_process').spawn, targets, co
         complete();
       });
     }
+    // Explicit whole-run collection safety limit, including functional
+    // multi-cycle experiments. Never evidence of a native cancellation bound.
     timer=setTimeout(() => {
       timedOut=true;
       onTransition({event:'HOST_COLLECTION_TIMEOUT'});

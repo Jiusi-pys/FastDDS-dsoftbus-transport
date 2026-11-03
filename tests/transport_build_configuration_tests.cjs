@@ -22,11 +22,11 @@ for (const [key, value] of Object.entries(process.env)) {
 env.Path = paths.join(path.delimiter);
 const base = ['-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=OFF',
     '-DBUILD_INTERFACE_PROBE=OFF', '-DBUILD_SOFTBUS_CAPABILITY_PROBE=OFF',
-    '-DBUILD_DSOFTBUS_TRANSPORT_FACADE=ON', '-DMDDS_FASTDDS_MODE=CONFIG',
+    '-DBUILD_DSOFTBUS_TRANSPORT_FACADE=ON', '-DFASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG',
     `-Dfastdds_DIR=${prefix}/share/fastdds/cmake`, `-DCMAKE_PREFIX_PATH=${prefix}`];
 const cases = [
-    ['source-probe-forbidden', ['-DMDDS_FASTDDS_MODE=SOURCE_PROBE'],
-        /BUILD_DSOFTBUS_TRANSPORT_FACADE requires MDDS_FASTDDS_MODE=CONFIG/],
+    ['source-probe-forbidden', ['-DFASTDDS_DSOFTBUS_FASTDDS_MODE=SOURCE_PROBE'],
+        /BUILD_DSOFTBUS_TRANSPORT_FACADE requires FASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG/],
     ['input-required', ['-DBUILD_DSOFTBUS_INPUT_CHANNELS=OFF'],
         /BUILD_DSOFTBUS_TRANSPORT_FACADE requires BUILD_DSOFTBUS_INPUT_CHANNELS/],
     ['runtime-required', ['-DBUILD_DSOFTBUS_RUNTIME_SEND_PATH=OFF'],

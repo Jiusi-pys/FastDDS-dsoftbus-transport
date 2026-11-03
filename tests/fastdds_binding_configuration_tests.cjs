@@ -37,10 +37,10 @@ for (const [key, value] of Object.entries(process.env)) {
 }
 env.Path = paths.join(path.delimiter);
 const base = ['-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=OFF',
-  '-DBUILD_SOFTBUS_CAPABILITY_PROBE=OFF', '-DMDDS_FASTDDS_MODE=CONFIG',
+  '-DBUILD_SOFTBUS_CAPABILITY_PROBE=OFF', '-DFASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG',
   `-Dfastdds_DIR=${prefix}/share/fastdds/cmake`, `-DCMAKE_PREFIX_PATH=${prefix}`];
 const cases = [
-  ['mode', ['-DMDDS_FASTDDS_MODE=typo'], /MDDS_FASTDDS_MODE must be SOURCE_PROBE or CONFIG/],
+  ['mode', ['-DFASTDDS_DSOFTBUS_FASTDDS_MODE=typo'], /FASTDDS_DSOFTBUS_FASTDDS_MODE must be SOURCE_PROBE or CONFIG/],
   ['absent', ['-Dfastdds_DIR='], /explicit absolute fastdds_DIR/],
   ['relative', ['-Dfastdds_DIR=relative/path'], /explicit absolute fastdds_DIR/],
   ['nonexistent', [`-Dfastdds_DIR=${output}/does-not-exist`], /explicit absolute fastdds_DIR/],

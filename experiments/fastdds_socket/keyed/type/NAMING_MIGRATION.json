@@ -1,0 +1,67 @@
+{
+  "kind": "DERIVED_IDENTIFIER_RENAME_NOT_REGENERATION_RECEIPT",
+  "baseline": "ff62d20073695b5aea364334ffeedbe064f1d1e5",
+  "original_receipt_sha256": "55b76fc7763aea9cb4f542b947f2f108bf6086736d5fe8a8c16b3f204f4bf87d",
+  "fields_keys_cdr_layout": "IDENTIFIER_ONLY_AND_EOL_NORMALIZED_REVIEW_VERIFIED",
+  "old_binary_interoperability": "NOT_CLAIMED",
+  "files": [
+    {
+      "original_path": "experiments/fastdds_socket/keyed/type/MddsKeyedSample.hpp",
+      "current_path": "experiments/fastdds_socket/keyed/type/DSoftBusKeyedSample.hpp",
+      "current_sha256": "c3dd65c101b5a0f15ccde2397db3df35e308a9841fefd401bebf682a98e12e9c",
+      "original_filesystem_sha256": "25f944668904b2f59136e720b67ba3b1f622aa233e653051bf182726501d7e94",
+      "baseline_git_blob_sha256": "e69720497c8c947fe4aa50a18dbc55e07f83d256c96aee9ae46d5599b795dbdc"
+    },
+    {
+      "original_path": "experiments/fastdds_socket/keyed/type/MddsKeyedSample.idl",
+      "current_path": "experiments/fastdds_socket/keyed/type/DSoftBusKeyedSample.idl",
+      "current_sha256": "c2a4795f5215233dfd48f41ee14afb684d15e2663f07919ee7cfc3176de655da",
+      "original_filesystem_sha256": "0df260a0df130419b31a5778242340fe31bc3e3c1769a70c28dbf2f05c9f2a4e",
+      "baseline_git_blob_sha256": "0df260a0df130419b31a5778242340fe31bc3e3c1769a70c28dbf2f05c9f2a4e"
+    },
+    {
+      "original_path": "experiments/fastdds_socket/keyed/type/MddsKeyedSampleCdrAux.hpp",
+      "current_path": "experiments/fastdds_socket/keyed/type/DSoftBusKeyedSampleCdrAux.hpp",
+      "current_sha256": "80fbeb6565a3459a188f770b86dff840e7a5f7ba74c965a9e3f2481bded9bd86",
+      "original_filesystem_sha256": "464ffeb6ebd72d8d025419d116c3b8d09a4dacf1a61dfd5f75f64f17b8be678f",
+      "baseline_git_blob_sha256": "bee7092782ff55a37d64d9a6b6d0bf9bbf604b39f38be39a2789869273e4c303"
+    },
+    {
+      "original_path": "experiments/fastdds_socket/keyed/type/MddsKeyedSampleCdrAux.ipp",
+      "current_path": "experiments/fastdds_socket/keyed/type/DSoftBusKeyedSampleCdrAux.ipp",
+      "current_sha256": "73ecb2bc743cfb419939425364c2867c72fb73647034683965ce19f3d947b048",
+      "original_filesystem_sha256": "b857fef4871c5ae3b8a20e7ff0b774041812ce3924e2bc332353edc996f27359",
+      "baseline_git_blob_sha256": "334e6594823e2fddf3fb5c9413c46a531d4deca7fab5daf9c62fde9aba029cda"
+    },
+    {
+      "original_path": "experiments/fastdds_socket/keyed/type/MddsKeyedSamplePubSubTypes.cxx",
+      "current_path": "experiments/fastdds_socket/keyed/type/DSoftBusKeyedSamplePubSubTypes.cxx",
+      "current_sha256": "2a8e35a041762c62e42d330c5399948a5c533aff8faaa09bba3c5f85a6702ccd",
+      "original_filesystem_sha256": "dca3f1afae32bcf888592362e5ffda66c783f2e100abdfd67222f18dbb9008e0",
+      "baseline_git_blob_sha256": "700fcfb3c5376c2781dd0081360237a6c4930f366f862d297f10e061d7ad199f"
+    },
+    {
+      "original_path": "experiments/fastdds_socket/keyed/type/MddsKeyedSamplePubSubTypes.hpp",
+      "current_path": "experiments/fastdds_socket/keyed/type/DSoftBusKeyedSamplePubSubTypes.hpp",
+      "current_sha256": "fe4711ee3f23abc90b7c70bf4d5198b264a54775dbaa47f0eac4bbc66eeb7237",
+      "original_filesystem_sha256": "ee25279f38c7cee9b06abc1924fc16da3328df1c132dfd798346786f722c7eee",
+      "baseline_git_blob_sha256": "ee83ef6a6fb64b3050d58c70f82d4400f234027fd99682a2f7f1846d6149e4a7"
+    },
+    {
+      "original_path": "experiments/fastdds_socket/keyed/type/MddsKeyedSampleTypeObjectSupport.cxx",
+      "current_path": "experiments/fastdds_socket/keyed/type/DSoftBusKeyedSampleTypeObjectSupport.cxx",
+      "current_sha256": "856672eb5b09efc2bb4d3a03b5b824e80253b714d2c91b1040923407a8ab6b67",
+      "original_filesystem_sha256": "8b9298b4d9610281097b5180e82d188954a3f96436dcdf4aad5a569f1070a591",
+      "baseline_git_blob_sha256": "4d946854c4b4c1642c0bdbe8a291c2d908ea3c536e5e2c64e22bad595ea21aea"
+    },
+    {
+      "original_path": "experiments/fastdds_socket/keyed/type/MddsKeyedSampleTypeObjectSupport.hpp",
+      "current_path": "experiments/fastdds_socket/keyed/type/DSoftBusKeyedSampleTypeObjectSupport.hpp",
+      "current_sha256": "1a834c8a445d693d989ef41128642fe3e0ba403bebdb56fbf67010a95f9f085a",
+      "original_filesystem_sha256": "4be85e31ddba2241925783054f9b4d827e49d35d43282366c3c9b4965dfb00c8",
+      "baseline_git_blob_sha256": "34723fe80c1294e960615b6470b89f297571897ee1edc318c829fe8c5e05b2fa"
+    }
+  ],
+  "original_hash_note": "Original file hashes are from the preserved generation receipt; Git blobs may differ by line-ending normalization.",
+  "review_scope": "Static eight-file comparison to baseline; no old type interoperability or new SDK runtime guarantee"
+}

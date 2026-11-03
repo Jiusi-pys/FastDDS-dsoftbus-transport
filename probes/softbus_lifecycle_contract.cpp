@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cstring>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 const char* LifecycleEventName(LifecycleEventKind kind) noexcept {
     switch(kind) {
 #define LC_EVENT(name) case LifecycleEventKind::name: return #name
@@ -163,4 +163,4 @@ bool ManagedLifecycleWorker::JoinUntil(std::chrono::steady_clock::time_point dea
     std::unique_lock<std::mutex> lock(mutex_);if(!cv_.wait_until(lock,deadline,[&]{return finished_.load();}))return false;
     lock.unlock();worker_.join();return true;
 }
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

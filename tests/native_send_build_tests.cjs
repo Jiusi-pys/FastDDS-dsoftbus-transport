@@ -28,21 +28,21 @@ if(NOT option_type STREQUAL "BOOL")
     message(FATAL_ERROR "N3_WIRING: missing BOOL option")
 endif()
 if(EXPECT_SEND)
-    if(NOT BUILD_DSOFTBUS_NATIVE_SEND_EXECUTION OR NOT TARGET mdds_dsoftbus_native_send_execution)
+    if(NOT BUILD_DSOFTBUS_NATIVE_SEND_EXECUTION OR NOT TARGET fastdds_dsoftbus_native_send_execution)
         message(FATAL_ERROR "N3_WIRING: missing production target")
     endif()
-    get_target_property(kind mdds_dsoftbus_native_send_execution TYPE)
-    get_target_property(links mdds_dsoftbus_native_send_execution INTERFACE_LINK_LIBRARIES)
-    get_target_property(features mdds_dsoftbus_native_send_execution INTERFACE_COMPILE_FEATURES)
-    get_target_property(sources mdds_dsoftbus_native_send_execution SOURCES)
+    get_target_property(kind fastdds_dsoftbus_native_send_execution TYPE)
+    get_target_property(links fastdds_dsoftbus_native_send_execution INTERFACE_LINK_LIBRARIES)
+    get_target_property(features fastdds_dsoftbus_native_send_execution INTERFACE_COMPILE_FEATURES)
+    get_target_property(sources fastdds_dsoftbus_native_send_execution SOURCES)
     if(NOT kind STREQUAL "STATIC_LIBRARY" OR
-       NOT "mdds_dsoftbus_native_owner" IN_LIST links OR
-       NOT "mdds_dsoftbus_runtime_send_path" IN_LIST links OR
+       NOT "fastdds_dsoftbus_native_owner" IN_LIST links OR
+       NOT "fastdds_dsoftbus_runtime_send_path" IN_LIST links OR
        NOT "cxx_std_17" IN_LIST features OR
        NOT sources STREQUAL "src/NativeSendExecution.cpp")
         message(FATAL_ERROR "N3_WIRING: incorrect production source/dependencies")
     endif()
-elseif(BUILD_DSOFTBUS_NATIVE_SEND_EXECUTION OR TARGET mdds_dsoftbus_native_send_execution)
+elseif(BUILD_DSOFTBUS_NATIVE_SEND_EXECUTION OR TARGET fastdds_dsoftbus_native_send_execution)
     message(FATAL_ERROR "N3_WIRING: disabled target exists")
 endif()
 get_property(tests DIRECTORY "\${MDDS_SOURCE_ROOT}" PROPERTY TESTS)
@@ -53,7 +53,7 @@ if(EXPECT_TEST)
     get_target_property(test_sources native_send_execution_tests SOURCES)
     get_target_property(test_links native_send_execution_tests LINK_LIBRARIES)
     if(NOT test_sources STREQUAL "tests/native_send_execution_tests.cpp" OR
-       NOT "mdds_dsoftbus_native_send_execution" IN_LIST test_links)
+       NOT "fastdds_dsoftbus_native_send_execution" IN_LIST test_links)
         message(FATAL_ERROR "N3_WIRING: shadow test implementation")
     endif()
     get_property(timeout TEST dsoftbus.native_send_execution DIRECTORY "\${MDDS_SOURCE_ROOT}" PROPERTY TIMEOUT)
@@ -63,18 +63,18 @@ if(EXPECT_TEST)
 elseif(TARGET native_send_execution_tests OR "dsoftbus.native_send_execution" IN_LIST tests)
     message(FATAL_ERROR "N3_WIRING: disabled test exists")
 endif()
-if(EXPECT_NO_BINDING AND (TARGET fastdds OR TARGET mdds_fastdds_binding))
+if(EXPECT_NO_BINDING AND (TARGET fastdds OR TARGET fastdds_dsoftbus_fastdds_binding))
     message(FATAL_ERROR "N3_WIRING: tools-only loaded Fast DDS")
 endif()
 if(BUILD_CONSUMER)
     add_executable(n2_consumer main.cpp)
-    target_link_libraries(n2_consumer PRIVATE mdds_dsoftbus_native_send_execution)
+    target_link_libraries(n2_consumer PRIVATE fastdds_dsoftbus_native_send_execution)
 endif()
 message(STATUS "N3_WIRING: observed expected targets")
 `;
 const consumer = `#include <mdds/dsoftbus/NativeSendExecution.hpp>
 int main() {
-    using namespace mdds::dsoftbus;
+    using namespace fastdds_dsoftbus::dsoftbus;
     NativeTableConfiguration c;
     c.service_pkg_name = "com.kaihong.mdds";
     EndpointId id{}; id[15] = 2; Locator local;
@@ -93,9 +93,9 @@ const base = ['-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=OFF'
     '-DBUILD_DSOFTBUS_DIRECTORY=ON', '-DBUILD_DSOFTBUS_NATIVE_OWNER=ON',
     '-DBUILD_DSOFTBUS_SEND_QUEUE=ON', '-DBUILD_DSOFTBUS_RUNTIME_SEND_PATH=ON',
     '-DBUILD_DSOFTBUS_INPUT_CHANNELS=OFF', '-DBUILD_DSOFTBUS_APPLICATION_ATTACHMENTS=OFF',
-    '-DBUILD_DSOFTBUS_TRANSPORT_FACADE=OFF', '-DMDDS_FASTDDS_MODE=CONFIG',
+    '-DBUILD_DSOFTBUS_TRANSPORT_FACADE=OFF', '-DFASTDDS_DSOFTBUS_FASTDDS_MODE=CONFIG',
     `-Dfastdds_DIR=${prefix}/share/fastdds/cmake`, `-DCMAKE_PREFIX_PATH=${prefix}`,
-    `-DMDDS_SOURCE_ROOT=${root}`];
+    `-DFASTDDS_DSOFTBUS_SOURCE_ROOT=${root}`];
 const cases = [
     {name: 'default-on', send: true, tests: true, extra: ['-DBUILD_TESTING=ON']},
     {name: 'library-only', send: true, extra: []},
@@ -111,7 +111,7 @@ const cases = [
         '-DBUILD_DSOFTBUS_RUNTIME_SEND_PATH=OFF', '-Dfastdds_DIR=', '-DCMAKE_PREFIX_PATH=',
         '-DCMAKE_DISABLE_FIND_PACKAGE_fastdds=TRUE']},
     {name: 'source-consumer', send: true, consumer: true,
-        extra: ['-DMDDS_FASTDDS_MODE=SOURCE_PROBE', '-Dfastdds_DIR=', '-DCMAKE_PREFIX_PATH=']},
+        extra: ['-DFASTDDS_DSOFTBUS_FASTDDS_MODE=SOURCE_PROBE', '-Dfastdds_DIR=', '-DCMAKE_PREFIX_PATH=']},
     {name: 'config-consumer', send: true, consumer: true, extra: []},
 ];
 function run(label, command, args) {

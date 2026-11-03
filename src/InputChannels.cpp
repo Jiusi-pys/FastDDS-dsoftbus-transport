@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/InputChannels.hpp>
+#include <fastdds_dsoftbus/dsoftbus/InputChannels.hpp>
 
 #include <algorithm>
 #include <condition_variable>
@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace detail {
 struct InputCoreIdentity final {};
 
@@ -270,4 +270,4 @@ InputChannelUsage InputChannels::SnapshotUsage() const
     result.drained = state.drained;
     return result;
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

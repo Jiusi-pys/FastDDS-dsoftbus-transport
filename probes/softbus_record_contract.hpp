@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 inline constexpr std::array<std::size_t, 5> record_probe_lengths{{32, 255, 4096, 16384, 60000}};
 inline constexpr std::size_t record_queue_count = 32;
 inline constexpr std::size_t record_queue_bytes = 256 * 1024;
@@ -132,4 +132,4 @@ private:
     std::size_t owned_count_ = 0;
     std::deque<RecordEvent> events_;
 };
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

@@ -11,7 +11,7 @@
 #include <mutex>
 #include <thread>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 
 enum class LifecycleAdmission { Owner, Alias, Invalid, Conflict, Full };
 enum class LifecycleEventKind {
@@ -116,4 +116,4 @@ private:
     std::condition_variable cv_;
 };
 
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

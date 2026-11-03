@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "capability": "production",
+  "profile": "BYTES_NATIVE",
+  "platform": {
+    "system": "OHOS",
+    "architecture": "aarch64",
+    "sdk_api": "23",
+    "stl": "c++_shared",
+    "firmware": "NEEDS_EXTERNAL_PLATFORM_INPUT"
+  },
+  "namespace": "example",
+  "domain": 0,
+  "service_slot": 0,
+  "initial_peer_slots": [1],
+  "identity": {
+    "package": "example.app",
+    "service_name_prefix": "example.app.dds",
+    "process_name": "NEEDS_LEGAL_PLATFORM_IDENTITY",
+    "token_id": "NEEDS_EXTERNAL_IDENTITY_INPUT",
+    "permissions": [],
+    "library": "NEEDS_EXTERNAL_LEGAL_IDENTITY_LIBRARY"
+  },
+  "socket_library": "NEEDS_EXTERNAL_LEGAL_PLATFORM_LIBRARY"
+}

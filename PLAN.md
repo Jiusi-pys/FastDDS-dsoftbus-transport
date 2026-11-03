@@ -1,5 +1,9 @@
 # Fast DDS / OpenHarmony DSoftBus Transport 实施计划
 
+> **历史计划归档说明（实验基线整理）**：下列带日期的状态均为当时快照，包括旧的 INVESTIGATING 和 PRE_COMMIT 记录；不作为当前提交许可。当前限定实验范围、外部依赖和证据边界以 [EXPERIMENT_BASELINE](docs/EXPERIMENT_BASELINE.md) 为准。P0/PF 仍 BLOCKED，生产默认 NativeUnavailable；准备候选不等于授权提交。
+
+> **当前状态更正（2026-09-21）**：工程任务恢复为 `INVESTIGATING / BREAKTHROUGH_ANALYSIS`，平台资格仍为 P0 `BLOCKED / NOT QUALIFIED`，生产 Transport 仍为 `NativeUnavailable`。当前 Host Debug/Release CTest 各 35/35；BYTES 1 秒候选预算 FAIL，RAW/RAW_ENCRYPTED native 压力已观测但各仅 1/64 接收且取消未触发；六项 RAW 边界逐字节通过但不形成生产容量资格。P1 纯逻辑和必要 P2/P3 主机诊断可继续，P4 native backend 未进入，三板测试 `DEFERRED`，PRE_COMMIT `FAIL`。详见 [docs/P0_IMPLEMENTATION_20260920.md](docs/P0_IMPLEMENTATION_20260920.md)；其余内容保留为历史计划，不能当作完成证据。
+
 > 当前规划裁量（2026-09-15）：N3 范围和七条硬契约已由用户冻结，见 §17。N2 已提交为 `def10ea376cb3bf9921c1c7ea74c92b1da9e04e8`；下文 N2 “未提交”等文字保留为原提交前快照。N3 仍为 PLANNED，不包含本项目 install/export package，也没有新增真实 backend、DDS 或同名 Participant 热重建通过证据。
 
 > LC pure-validator 当前证据（2026-09-14）：实现已存在；独立 final host tester、code review 与 review 后复测均 PASS。已记录的那次实验结束时两板权限已撤销，但身份记录保留；这不等于设备启动或 Transport 验证。LC observation runner 四文件的独立 final tester 已通过 harness 80/80、runner 42/42 及相关 validator/diagnostic；full log overlap、SDK quiescence 和设备 Transport 仍未验证，整体仍 NOT VERIFIED。N1 tester 的 scoped gate 已 PASS；Main 必须在提交前独立完成文档、最终图与 Git 门槛。
@@ -625,3 +629,443 @@ N3 之后仍不得宣称：生产 Transport、真实 SendBytes、SDK callback �
 真实 backend 准入紧接 N3：实际 provider、callback 归属、固定线程、service 关闭及实际 DDS 热重建另取证。公开 callback 的 Socket ID 没有项目 generation；不能查当前 owner 后给迟到旧事件补新身份。必须以可验证 callback 收尾/无歧义复用或经批准的公开机制解决，不能把模型注入正确 generation 当解决方案。
 
 首版真实热重建硬门槛不变：同一测试进程持续存活，复用同一 Participant 名称与 Transport local 配置，真实创建/销毁 Participant/Writer/Reader，新代分别完成 SPDP、SEDP 和校验样本；正常释放时资源不按轮次无界增长，无需杀进程、重启板卡/服务或换名。禁止将已固定到 P0 的内部记录投给 P1，但不把 DDS 合法的可靠性/持久性历史交付误判为内部串代。
+
+## 18. SRT-1 共享 service-record 表管理冻结契约（2026-09-24 CST；IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED，限定范围）
+
+本节冻结 `docs/FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md` 中已批准设计（DESIGN_APPROVED / NOT_IMPLEMENTED）的**有界实现**范围与验收合同。该计划文件是历史设计合同的重命名；本节不重写其历史事实。它不发布生产 backend，不改变 `NativeUnavailable`、P0 `BLOCKED / NOT QUALIFIED`、无 QualificationProfile 与设备未验证边界。
+
+### 18.1 设计单位与责任边界
+
+归属单位是**客户端 SDK 进程中的实际 service record 实例 + client/server role**，不是一个 numeric socket、也不是单独的 service-name 字符串（依据 `.artifacts/closure-20260921/incarnation/NOTES.md`）。本切片实现该单位的有界模型：
+
+- 一个 record 含两个 role 字段（`Client` = Bind/拨号侧注册的字段，`Server` = Listen 注册并服务 accepted socket 的字段）。它们**不是一个 Participant 两个 listener**；"一活动 Participant 一 listener"不变。
+- 每个存活 `(record, role)` 只有一个**固定 callback entrance**（进程内固定函数指针），该 role 下所有 socket 的注册都用同一指针；分派在 entrance 内按 socket 归属进行。
+- 每个 socket 仍保有独立 native owner、独立关闭责任与既有连接/内存/线程预算；本组件只做**表归属**，不复制 owner 生命周期。owner 调用生命周期仍属 `NativeOwnerTable`（本切片不修改它）。
+
+不新增 registry/mock 框架以外的机制：本组件自身即是必要的有界实现，`probes/softbus_ingress_contract.cpp` 的 11 个单 owner 用例保持不变，不被本切片替换或提升。
+
+### 18.2 交付物与构建范围
+
+- `include/mdds/dsoftbus/ServiceRecordTable.hpp`、`src/ServiceRecordTable.cpp`：SDK-free 有界模型，target 只依赖 Threads，不依赖 Fast DDS、不调用 SDK；测试目标为校对 callback 形状额外编译 pin 住的 DSoftBus 公共头文件（与既有 ingress 契约测试同做法）。
+- `tests/service_record_table_tests.cpp`：按 case 分进程执行的 host 契约测试；根 `CMakeLists.txt` 增加独立 option/target/test 接线，默认跟随 `BUILD_DSOFTBUS_DIRECTORY`。
+- 不交付安装包、QualificationProfile、设备包或权限操作。
+
+### 18.3 不可豁免的合同
+
+| 合同 | 固定行为 |
+| --- | --- |
+| slot 状态机 | `FREE → RESERVED_UNEXPOSED → EXPOSED → TOMBSTONED`；`UNANCHORED` 是 EXPOSED 内"零 anchor"子状态，仍不可回收、入口不可复用。首次可能把入口交给 SDK 前置 EXPOSED；注册失败也不回收该 slot。只有从未暴露的 reservation 可回到 FREE。 |
+| 同活表重复注册 | 同一存活 `(record, role)` 上的重复注册不消耗新 slot、不改变 incarnation、不更换固定入口；入口不得二次派生。 |
+| 多 owner 退出 | 释放一个 owner 不退休仍在服务其他 owner 的活表；已释放 socket 的**旧归属**不再重新归属：已捕获记录只以旧归属完成，释放后、重新注册前该 id 的迟到回调是终态丢弃。同一个 numeric id 之后可以由一个新 socket 重新注册为**新 membership**（新 incarnation），旧捕获永不改投它；numeric id 复用导致迟到旧事件被归属到新 membership 属已知平台前提（PF-02），不在 adapter 可修正范围内。 |
+| 跨 role 保活 | 一个 role 归零而另一 role 仍有 anchor 时，record 与两 role 的固定入口都保留；该 role 之后的新注册仍用原入口。全部 anchor 消失后进入 `UNANCHORED`。 |
+| 连续性未知 | `UNANCHORED` 下：同名 `ReserveRecord` 拒绝（`ContinuityUnproven`），新 owner 注册拒绝，该表的入口回调为终态丢弃。不得按名字、numeric id 或"通知已发送"补出连续性；其它 service name 不受影响。 |
+| 真实销毁与同名新实例 | `ConfirmDestroyed` 只能从 `UNANCHORED` 进入；它结束两 role incarnation、永久 tombstone 入口并解除同名封印。同名新 record 必须取得**新 slot、新 incarnation、新入口**，绝不重新绑定旧 slot。 |
+| slot 耗尽 | 只在需要新 incarnation 时、且在暴露前拒绝（`SlotExhausted`）；既有活表新增 owner 不受 slot 耗尽影响，仍受原 owner 容量约束。tombstone 永不回收。 |
+| 句柄所有权 | reservation 与 membership 句柄为 RAII：一个从未暴露的 reservation 被析构或被覆盖时其 slot 回到 FREE；membership 被析构或被覆盖时释放该 owner。已失效句柄不释放任何东西，也不改变任何已捕获归属。调用者因此为每个已注册 socket 保留一个 membership 句柄，且不得在持有表门时销毁句柄。 |
+| 归属线性化点 | 归属在归属门内一次性取得 `(record incarnation, role, membership incarnation, socket)`；已捕获旧归属只以旧归属完成，永不重新查表改投新 owner/role/record。无 anchor 记录当场终态丢弃。 |
+| 关闭安全 | adapter 内部门不得包围 sink 调用；sink 可在回调内重入表操作；回调异常与无效输入被边界吸收并计数，不写入 SDK 调用、不重试、不迟到改投。 |
+
+### 18.4 必测矩阵
+
+`unexposed`、`shared-role`、`sibling-release`、`cross-role`、`unanchored`、`destroy-replace`、`still-anchored`、`exhaustion`、`failed-registration`、`capacity`、`handles`、`reentrant`、`concurrent`、`identity-boundary`、`allocation-failure` 共 15 个 case，每 case 独立进程（进程生命周期入口池不可重置）。并发 case 只断言不变量（归属计数恒等式、归属身份不越界、无错投、异常被吸收、in-flight 归零、释放后为终态丢弃、无死锁），不以 sleep、轮次或"确实交错"断言代替交错证明；该 case 因此不断言也不声称释放与回调确实重叠（在合法调度下可能完全不重叠，此时它仍是有效的计数与状态不变量测试）。两个边界 case 通过仓库既有做法触发有界计数与分配失败（header 内声明的 test-only 计数注入、测试进程内分配拒绝），并断言拒绝后没有部分状态。
+
+### 18.5 声明边界
+
+本切片完成后只能声明 `IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）`。真实 SDK service record 创建/销毁观察、target 版本入口指针等价、SDK 内 ingress 前事件身份、callback 排空/静默、设备与双板、DDS SPDP/SEDP/样本、同名 Participant 热重建与 RMW 仍为 `NOT_RUN`；生产 `init()` 继续 `NativeBackendUnavailable`。PF-01/PF-02 不被本切片闭合。
+
+### 18.6 执行状态（2026-09-24 CST）
+
+上述合同已在有界模型内实现并通过限定 host 验证：`include/mdds/dsoftbus/ServiceRecordTable.hpp`、`src/ServiceRecordTable.cpp`、`tests/service_record_table_tests.cpp`，根 `CMakeLists.txt` 以 `BUILD_DSOFTBUS_SERVICE_RECORD_TABLE`（默认 ON、只链接 `Threads::Threads`）接线 15 个测试。
+
+| 检查 | 结果 |
+| --- | --- |
+| RED（stub，与 GREEN 同一 test/header 字节） | `0% tests passed, 15 tests failed out of 15`（行为失败；同轮的链接失败尝试作废、不计为 RED） |
+| GREEN Release / Debug | `15/15`、`15/15` |
+| standalone 全量（全部目标已构建） | `43/43` |
+| 仓库标准 CONFIG host Release 全量 | `258/258`（需 `.artifacts/install/host/bin` 在 PATH） |
+| `/W4` 构建与 header 自包含编译 | 无告警（`CMAKE_CXX_FLAGS:STRING=/W4` 已在 cache 核对；此前一次经 POSIX shell 传参被 MSYS 路径转换，未真正生效） |
+| 重复运行 | 多轮 2–7 个 case × 20–25 次（含并发 case），无失败；具体配置以收据记录的执行为准，不作为固定矩阵声明 |
+| 变异被杀 | 删除 reservation 暴露守卫 → `unexposed` 失败；reentrant 释放状态预期写错 → `reentrant` 失败；异常路径漏减 in-flight → `reentrant` 失败（三者在对应修复前均存活） |
+| 产品字节与复核绑定 | 第 3 轮验证的 header/impl 哈希（`c8c6d696…` / `9c7bfd57…`）与提交字节一致；该轮之后仅测试文件改动 |
+| 句柄所有权边界 | 新增断言覆盖 reservation 的两条方向（从未暴露→归还、已暴露→不回收）与覆盖赋值；删除 RAII 暴露守卫的变异会使 `unexposed` 失败 |
+
+收据、文件哈希、三处测试预期更正（`Expose` 检查顺序、`capacity` 未认领 exposure 仍是 anchor、`handles` 释放后为 `UNANCHORED`）与各状态可达性核对见 `.artifacts/srt1/README.md`。每个 `RecordStatus` 值都由已实现规则产出并被某个 case 断言，唯一例外是作为"未设置默认值"的 `NotImplemented`。§18.5 的声明边界不变：真实 SDK service record 生命周期、target 入口等价、ingress 前身份、callback 排空、设备/双板、DDS、热重建与 RMW 仍为 `NOT_RUN`。
+
+## 19. SRT-C 共享表与 native owner 的组合（2026-09-25 CST；IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED，限定范围）
+
+本节是工作包 `SERVICE_RECORD_AND_NATIVE_OWNER_COMPOSITION_HOST` 的冻结契约与执行状态。起始提交 `145d0ee97de5e8728a985550da82f169c640d89e`；本轮**未提交**，状态为 `CHECKPOINT_READY / NOT_COMMITTED`。
+
+### 19.1 交付物
+
+- `include/mdds/dsoftbus/ServiceRecordBinding.hpp`、`src/ServiceRecordBinding.cpp`：最薄的组合层，组合三个既有组件，不新增第四个状态真相、不新增通用 registry。记录级的分发控制对象（record 的 sink 与 `(role, socket)` 路由）与 `(application, local)` 共享注册都按 **record 槽位** 存放在进程生命周期的有界存储里，binding 只登记/撤销**自己**的那一份。
+- `ServiceRecordTable`：新增 `ReleaseSink(entrance, sink)`，在记录已 `UNANCHORED` 时解除该 record 的 sink 登记；`RecordReservation`/`RecordEntrance` 对组合层开放槽位，作为记录级键。
+- `tests/service_record_binding_tests.cpp`：21 个组合 case（原 14 + 寿命/并发/上下文三个回归 + 独立复核确认的三个回归 + `accepted` 拓扑一个），每 case 独立进程；根 `CMakeLists.txt` 新增 `BUILD_DSOFTBUS_SERVICE_RECORD_BINDING`（默认跟随 `BUILD_DSOFTBUS_DIRECTORY`，并要求 `BUILD_DSOFTBUS_SERVICE_RECORD_TABLE` 与 `BUILD_DSOFTBUS_PROCESS`）与一对投递句柄封装的编译正/负控制（`tests/delivery_context_legal.cpp`、`tests/delivery_context_bypass.cpp`，configure 期 compile-only 检查）。
+- `src/ProcessReceiveInternal.hpp`、`src/ProcessReceivePath.cpp`：投递上下文挂在**执行对象**上（`ProcessReceiveExecution` 的 enter/exit 钩子），因此任何入口（含直接 `Run()`）都会进入上下文，而不是只在组合层的 `RunAdmitted` 里标记。
+
+### 19.2 身份与作用域（谁拥有什么）
+
+| 身份 | 拥有者 | 作用域 |
+| --- | --- | --- |
+| record 实例、client/server role、固定 callback entrance | `ServiceRecordTable` | 进程 |
+| 该 record 下的 socket membership | `ServiceRecordTable` | 进程 |
+| **该 record 的 ingress 分发控制**（record 自己的 sink + 每条 `(role, socket)` 路由） | `ServiceRecordBinding` 的组合层，但对象本身归 **record**：按 record 槽位存放在进程生命周期、永不析构的有界存储中 | record |
+| native owner / generation / 调用票据 / native 身份 pin | `NativeOwnerTable` | 表实例 |
+| application claim / receiver registration / 有界 payload 队列 | `ApplicationAttachments` | 表实例，per (application, local) |
+| **该 record 每个 local 的共享 `(application, local)` 注册**（claim + receiver registration 的生命周期与结算责任） | 记录级的 `ApplicationGroup`，由使用它的 binding 共同持有；**最后一个**使用者结算 | record × local |
+| (record, role, entrance) ↔ (native plan) ↔ 该 local 的共享注册 | `ServiceRecordBinding` | binding |
+
+**一次成功准入固定的四类身份**：表在自身门内固定 `(record incarnation, role, membership incarnation, socket)`；sink 在表门已释放后取 `AdmitCallback(socket)` → `CaptureIdentity()` 固定 native owner/generation；再在同一个 `ProcessReceiveBridge::Admit` 调用内用该 pin 捕获 application/receiver lease。之后交付只对**原始**身份复核（`TryEnter`），永不重新查表改投。
+
+**准入的寿命**：分发控制对目标 binding 只持一个 `weak_ptr` pin；拿到 pin 的那次准入在整个准入期间持有它，所以目标 binding 即使并发释放也不会被读到已释放状态——它会在自己的相位门上拒绝。控制对象本身在进程生命周期存储里，永远不会悬垂。
+
+### 19.3 不可豁免的合同
+
+| 合同 | 固定行为 |
+| --- | --- |
+| 单一入口 | 一个 record 一个 sink；按 `(role, socket)` 路由到拥有该 socket 的 binding，路由容量 = record owner 容量。 |
+| 三拓扑 | create（reserve + 暴露两个 role）、join（复用已发出入口，不占 slot）、accepted（`ObserveInbound` 采纳 accepted socket）。 |
+| 共享粒度 | application/receiver 注册 per (application, local)，且**归 record**：同 local 的 joiner 采用同一份注册，创建者释放只是交还自己的那一份引用，最后一个使用者负责关闭并 detach。任何 release 都不写另一个 binding 的字段。 |
+| 记录级分发 | 一个 record 一个 sink 与一张路由表，属 record 而非创建者：创建者被释放并销毁后，joiner 仍由该 record 继续服务。binding 释放只撤自己的路由。 |
+| sink 寿命 | record 的 sink 登记在记录**无 anchor** 时解除（`ReleaseSink` 只接受 `UNANCHORED`，此前提与 retirement 同源，且不可逆：unanchored 的 record 不再接纳新 owner）。解除后新回调不再进入该 sink；已捕获的回调不回收。承载 sink 的控制对象是进程生命周期的有界存储，永不释放，因此登记解除前后都不会悬垂。 |
+| 入口寿命 | 固定 entrance 属于 record，不随 binding 释放失效；释放后 `Entrance()` 仍返回该指针（SDK 可能仍持有），retirement 也用它。 |
+| 关闭分层 | `BeginClose` 只关闭**本 binding 的逻辑准入**（新 ingress 拒绝）并保留已准入工作；native owner 的关闭由释放路径 claim 一次；`DrainComplete` 由表的 `callbacks_in_flight`、native owner 的 in-flight 与 attachments 的队列/复制/投递计数判定。 |
+| 四个前提分开 | logical admission closed / adapter in-flight drained / native operation completion premise（仅票据结算）/ record destruction premise（仅显式模型边界，`RetireRecord` 要求已关闭且已排空）。Host 不声称 SDK 销毁回执。 |
+| 失败回滚 | 暴露前失败回收 slot；暴露后失败保留 slot 且不重绑入口（两个 role 的 pending 暴露一并放弃）；发布失败释放 membership/共享注册（claim 由该共享注册 detach，绝不丢句柄）；已取得的 socket 关闭责任恰好 claim 一次。 |
+| 回调边界 | 从 ingress 或投递回调内调用控制操作被**明确拒绝**（`WrongState`），不在回调内等待或死锁。投递上下文挂在**执行对象**上由组合层在发出时装载，所以任何入口都进入同一上下文；组合层只交出 `BindingDelivery`，它没有自己的执行入口，且只被发出它的 binding 接受。观察接口只报告状态，不交出可调用入口。 |
+| fail-closed | 组件不调用 SDK、不建线程；provider 由调用者实现（Host 测试 / 未来 backend），返回值是模型输入。`DSoftBusTransport::init` 仍 `NativeBackendUnavailable`。 |
+| 回调内销毁（HUMAN_REQUIRED） | 从 ingress 或投递回调内**销毁** binding 是头文件已声明的合同禁止误用，且无法像 `BeginClose`/`Abandon` 那样拒绝：析构必须结算它持有的注册，而结算会等待**本线程自己**持有的在途许可（`InputChannels` 的 in-flight permit），因此会挂起（stderr 有报告行）。本轮**保持**这一行为而不是改成拒绝或静默跳过：拒绝/跳过会永久搁置 claim 与 local（违反 §19.6「必须归零」并让该 local 不可再 claim），而「延后回收器」是需要独立设计与独立复核的新机制，超出本轮最小修复范围。因此这是一项需要人类决定的范围问题（HUMAN_REQUIRED），方案与证据见 `.artifacts/srtc-repair/README.md` §7。 |
+
+### 19.4 必测矩阵
+
+| 指令条目 | case | 覆盖 |
+| --- | --- | --- |
+| C1 双 owner 同 record | `two-owners` | 一个 slot、一个 incarnation、一个入口；A 关闭后 B 继续准入与投递；A 的迟到指针为终态丢弃 |
+| C2 跨 role | `cross-role` | 空 role 保留 incarnation 与入口；另一 role 继续存活；retirement 只在显式边界且另一 role 仍活时被拒 |
+| C3 部分准备失败 | `partial-failure` | 同名 create 拒于 record reserve；未知 route 拒于 owner reserve 且 slot 不回收、名字仍封印；同 local 第二 claim 被拒；无 receiver 时发布被拒并完整回滚 |
+| C4 关闭与捕获 | `close-vs-capture` | 关闭后新 ingress 在组合边界被拒（表仍归属）；关闭前已准入工作仍以原 owner/receiver 完成 |
+| C5 已准入未运行 | `admitted-not-run` | `queued>0` 且 `delivering==0` 时 drain 未完成；retirement 拒绝未关闭的 binding；关闭后排队工作仍可运行 |
+| C6 关闭与运行中 receiver | `running-receiver` | 关闭与投递重叠（屏障为 receiver 自身）。**复核已修**：判定改用**独立于 receiver 本体**的事件计数，并在两次读数之间用真实入口做一次晚到 ingress；“不进入失效 receiver”因此可以失败。关闭后、释放前的真实 ingress 会被组合层拒绝（准入相位门），运行中的投递不被丢弃 |
+| C7 关闭责任唯一 | `unique-close` | 两个 owner 两线程关闭：各自 socket 关闭恰好一次、重复释放为 settled |
+| C8 回调边界重入 | `reentrant-boundary` | 投递回调内合法查询可用；控制调用被拒；拒绝后 binding 仍正常 |
+| C9 异常准入 | `exceptional-admission` | 分配失败时不留下 in-flight、payload 或投递；**复核已修**：在真实路径的 attachments 上观测 `high_copying≥1`（证明确实发起过 copy 占用），失败后 `copying/bytes/taken/delivering` 全部回到基线；恢复后的准入按阶段断言 `queued/records/bytes/copying/delivering`；随后恢复正常 |
+| C10 旧入口与新 incarnation | `old-entry-new-incarnation` | 显式退休后同名新 record 取新 slot/incarnation/入口；旧入口终态丢弃；新入口工作（排除“全拒绝”假保护）；释放后该实例无 active/detaching application 与 payload；后继使用新的 per-Participant 实例（native 表 + attachments），与 C11 同形 |
+| C11 同进程重复生命周期 | `repeated-lifecycles` | 一个进程内 4 轮 acquire/expose/use/release/retire；**复核已修**：预算探针接在**该轮自己的** attachments 上（不再读未使用的 fixture 成员），每轮断言 charge（`queued=1/bytes=64`）与释放后归零；只有 slot 按设计递增 |
+| C12 slot 耗尽 | `slot-exhaustion` | 需要新 incarnation 的创建在暴露前被拒且不触达 provider；活 record 的 role 复用不耗 slot |
+| C13 sink/receiver/payload 释放 | `resource-release` | 释放后 membership/claim/receiver 均释放、payload 归零、attachments 不再持有 receiver；**新增**：最后一个 binding 释放后该 record 的 sink 登记已解除 |
+| C14 fail-closed 默认路径 | `fail-closed` | provider 调用次数精确匹配；被拒部署不调用任何 provider；失败的 socket 不产生 shutdown |
+
+**矩阵未覆盖（如实记录，不作为通过依据）**：`accepted` 拓扑已由 `accepted-topology` 覆盖（成功路径：`ObserveInbound` 采纳、`Connect` 短路、准入与投递、释放路径的 accepted socket shutdown，并断言该拓扑不产生 Socket/Listen 调用；三条拒绝分支：client role、负 socket id、未知 peer，各自断言失败状态与「未注册 membership」）；仍未覆盖的是`ingress_seen`/`correlation` 等诊断计数与 `refused_no_route` 同样无断言；没有用例让「某 binding 正在准入」与「同一 binding 的释放」重叠（`ReleaseLocal` 撤路由与释放 membership 之间的窗口）。这些是覆盖边界，不是已证缺陷。
+| R-D 结算窗口内的 join | `join-during-settle` | 最后一个使用者已决定结算、尚未应用时，新来的 joiner 不得采用该注册（否则它会以 Published/`receiver_open` 报告一个正在关闭的 receiver，且同一 local 会出现第二份 application）；本地在结算完成后可再次 claim |
+| R-E joiner 失败不得动创建者的暴露 | `joiner-failure-keeps-creator` | 只有**暴露过**该 role 的 binding 才可报告「该入口的注册尝试未产生 owner」；两个 role 上各有一个 joiner 在暴露后、发布前失败，record 必须仍是 `EXPOSED`、sink 仍在、两个 pending 仍在，创建者仍能 `Publish` |
+| R-F 注册对象构造失败 | `registration-allocation-failure` | 已安装的 claim 与 receiver 已挂到 state 上，故构造共享注册对象时的分配失败由释放路径结算（在门之外）：`active/retained` 归零、同一 local 可再次 claim；重试句柄本身也被结算 |
+| R-A 创建者先退出 | `creator-exits-joiner-lives` | 创建者按合法契约 close/release/销毁后，joiner 仍通过 record 自己的入口被准入与投递；创建者的 socket 已不是成员（迟到调用为终态丢弃）；最后一个 binding 释放后 record 无 sink 登记且为 `UNANCHORED` |
+| R-B 共享注册并发释放 | `shared-group-release-race` | 同 record 同 local 的两个 binding 由两个线程释放，交错由 `before_group_settle` 调度点固定为“先释放者已决定、后释放者已整段完成”；断言共享 claim/receiver 恰好结算一次、local 可再次 claim。两个 binding 在断言时都仍存活，所以断言的是释放路径留下什么，不是析构偶然清掉什么 |
+| R-C 投递句柄与上下文 | `delivery-context-bypass` | 组合层只交出 `BindingDelivery`（无自己的执行入口）；同一记录的另一 binding 拒绝运行它、moved-from 句柄被拒、同一 delivery 只运行一次；合法投递内控制调用被拒、查询可用；编译期负控制（`tests/delivery_context_bypass.cpp`）与同环境合法正控制（`tests/delivery_context_legal.cpp`）在 configure 期以 compile-only 检查，失败必须是缺成员（MSVC C2039）而非缺头文件或链接错误 |
+
+### 19.5 执行状态（2026-09-25 CST，SRT-MEM 修复轮后）
+
+本节记录**当前**状态。上一轮（SRT-C 组合轮）的执行状态与当时未闭合的 10 项发现原样保留在 [.artifacts/srtc/README.md](.artifacts/srtc/README.md)、[.artifacts/srtc/ISSUE_TABLE.md](.artifacts/srtc/ISSUE_TABLE.md) 与三份只读复核原件；本轮对每一项的关闭依据见 [.artifacts/srtc-repair/](.artifacts/srtc-repair/)。
+
+| 检查 | 结果 |
+| --- | --- |
+| 组合 case（`SOURCE_PROBE` Release `/W4`，每 case 独立进程） | **21/21 PASS**（原 14 + `creator-exits-joiner-lives`、`shared-group-release-race`、`delivery-context-bypass`，加独立复核确认后新增的 `join-during-settle`、`joiner-failure-keeps-creator`、`registration-allocation-failure`，以及 `accepted-topology`） |
+| 本配置全量（`srtc` Release，含既有全部模型与探针） | **75/75 PASS** |
+| 仓库标准 CONFIG host Release 全量 | **279/279 PASS** |
+| 组合/表 case（Debug `/W4`） | **21/21**、**15/15 PASS** |
+| 组合/表 case（AddressSanitizer，`RelWithDebInfo`） | **21/21**、**15/15 PASS**，无 sanitizer 报告；未修复树在同一 case 上被 ASan 报为 heap-use-after-free |
+| 告警 | `/W4` 已在各 cache 核对；本轮改动的目标（binding/table 库与两个测试目标）**0 告警**；全树强制重建下另有 **7 条**（31 行编译器输出）告警，全部落在五个**既有的、与本轮无关**的测试目标中，如实记录 |
+| 编译期封装检查 | 四个构建目录 configure 均通过：合法调用点可编译、绕过调用点因**缺成员**失败；人为给投递句柄加 `Run()` 时该检查会失败 |
+| 变异验证 | 16 个变异体：**15 个被对应用例杀死**（“恢复创建者裸 sink 寿命”“共享注册从不被最后一个使用者结算”“不装载投递上下文”“漏减 copying/bytes”“错误 binding 运行他人的 delivery”“删除 drain”“已安装 claim 未挂到 state”“删除准入相位门”“record 仍有 anchor 就解绑 sink”“结算窗口内仍可被采用”“joiner 替创建者放弃暴露”“孤立已安装 claim 被丢弃”“accepted 请求按普通 plan 部署”，以及编译期的“投递句柄暴露执行入口”）；1 个（M8b：把 C11 探针换回**未使用**的 fixture 成员）按设计**存活**，这正是“失效判据曾经看不见该泄漏”的证据。运行器对每个变异体校验替换是否真的改动了文件，未改动记为 `NOT_APPLIED` 而不是伪造一行结果 |
+| 投递上下文 | 组合层不再交出可执行对象；`Run()` 的绕过路径在类型层面不存在，且上下文挂在被准入的执行对象上。封装性由**每次构建都编译**的静态断言（`tests/delivery_context_legal.cpp`）以及 configure 期的编译正/负控制共同保证，后者还要求失败原因是缺成员而非缺头文件或链接错误 |
+| sanitizer 范围 | ASan 可用且有正/负控制；TSan 与本仓库支持的 Host 工具链（Windows/MSVC）不兼容，记 `TOOL_UNAVAILABLE` —— 数据竞争自由由锁纪律与逐字段复核承担，**不由 TSan 报告证明** |
+
+**范围边界（明确未断言）**：真实 SDK provider、目标入口指针等价、adapter 之前的原生事件身份、callback 排空与静默、设备与跨设备、DDS SPDP/SEDP/sample、同名 Participant 热重建、RMW 全部 `NOT_RUN`。`DSoftBusTransport::init` 仍 `NativeBackendUnavailable`；P0、PF-01/PF-02、P4 与 QualificationProfile 状态不变。
+
+### 19.6 资源预算与保留责任
+
+| 资源 | 容量 | 归属/释放 | 耗尽行为 |
+| --- | --- | --- | --- |
+| record slot | 进程 8 个，暴露后永久 tombstone | 只有从未暴露的 reservation 归还 FREE；显式退休不回收 | `ReserveRecord` → `SlotExhausted`（暴露前） |
+| record 元数据 | 每 slot：name ≤255 B + 12 个 owner 单元 + 固定计数（<1 KiB） | 进程生命周期，无动态业务对象 | — |
+| ingress 路由 | 每 record 12 条（= owner 容量） | binding 发布时加、释放时移除 | `Publish` → `AdmissionSaturated` 并回滚 |
+| native owner | 每表 ≤12（`total_owners`） | 外部创建后不复用；关闭责任经 shutdown 票据 claim 一次 | `Reserve*` → `AdmissionSaturated` |
+| payload 队列 | ≤64 records / 512 KiB / copying ≤8 / 单条 ≤60000 B | attachments 预算；工作被取走或释放即归还 | 准入 → `Capacity`/`TooLarge` |
+| application claim / receiver 注册 | per **(record, local)**，同 record 同 local 只有一份，≤ record owner 容量 | **必须归零**：最后一个使用者关闭 receiver 并 detach（C13/C11 断言） | 第二 claim → `ExistingPending` |
+| in-flight 计数 | 表 `callbacks_in_flight`、owner in-flight、attachments copying/delivering | **必须归零**（C9/C13 断言） | — |
+| sink 与 ingress 路由 | 每 record 一份**固定**分发控制（sink + ≤12 条路由），按 record 槽位存放在进程生命周期、永不析构的存储里。它不含 payload、claim、receiver 或任何动态业务对象，容量与 record 槽位同阶（≤8） | 路由由 binding 发布时加、释放时撤；sink **登记**在 record 无 anchor 时由 `ReleaseSink` 解除。对象本身不释放——record 表在 record 暴露期间一直持有该地址，地址必须永不悬垂 | 路由满 → `Publish` → `AdmissionSaturated` 并回滚 |
+
+故意保留：tombstoned slot、进程生命周期状态（不析构）、暴露后的 slot。必须归零：payload、application/receiver 注册、各 in-flight 计数、binding 的 membership/路由。重复失败是否消耗 slot：**失败于暴露前不消耗，暴露后永久消耗**（fail-closed，按冻结合同）。
+
+### 19.7 SRT-MEM 修复轮的合同修订（2026-09-25 CST；工作包 `SRT_MEMORY_SAFETY_AND_TEST_ORACLE_REPAIR`）
+
+本轮只修复复核已确认的寿命、并发、投递上下文与测试判据缺陷，并**先让每个实际问题进入可重复回归**。对 §19.2/19.3/19.6 的修订仅限内存安全范围，且不降低任何核心保证（创建者退出/joiner 存活、old lease 不重新归属、no-app 终结都只被加强）：
+
+| 修订 | 原 | 现 |
+| --- | --- | --- |
+| sink 与 ingress 路由的归属 | 创建该 record 的 binding 的 `State`，且该 binding「必须活过暴露期」 | **record 自己**：按 record 槽位存放在进程生命周期的有界存储里，binding 只登记/撤销自己那一份 |
+| 同 local 的共享注册 | 创建者持有，释放时把字段写进另一个 binding 移交给它 | **引用计数**：每个使用者各持一份引用，最后一个使用者结算；任何 release 都不写别人的字段 |
+| joiner 的前置条件 | 创建者「必须活过每个 joiner」 | `record_owner` 只是 joiner 的**非空声明**（不读它的任何状态）；路由与共享注册都从 record 自身的槽位取得，创建者被释放并销毁后 joiner 仍被服务 |
+| 投递 API | `NextAdmitted()` 交出公开的 `ProcessReceiveInvocation`（其 `Run()` 可绕过上下文） | 交出 `BindingDelivery`：没有自己的执行入口，且只被发出它的 binding 接受 |
+| 投递上下文 | 只在组合层 `RunAdmitted` 内标记 | 挂在被准入的**执行对象**上，任何入口（含直接 `Run()`）都进入同一上下文 |
+| record 表的 sink 登记 | 只能由 `ConfirmDestroyed` 清空 | 新增 `ReleaseSink(entrance, sink)`：只在 record 无 anchor（`UNANCHORED`）时解除，与 retirement 同源、不可逆 |
+
+**本轮可复核的不变量**（逐条对应上面的实现与回归）：
+
+| 不变量 | 内容 | 复核入口 |
+| --- | --- | --- |
+| I1 | record 的 sink 地址在 record 暴露期间恒定，且永不悬垂（进程生命周期的有界存储，永不析构） | `creator-exits-joiner-lives`（AddressSanitizer 下无 UAF）、`resource-release`、`repeated-lifecycles` 的 `sink_attached` 断言 |
+| I2 | record 的每条路由只持有目标 binding `State` 的 **weak pin**；一次准入持有该 pin 直到返回，所以并发释放不会让准入读到已释放状态 | `creator-exits-joiner-lives`、`unique-close`、ASan 下的并发压力。**未覆盖**：`refused_no_route`（表已归属但控制无该 `(role, socket)` 路由）只可能出现在「路由已撤、membership 未撤」的瞬时窗口，没有用例能确定性地到达它，因此它只是诊断计数，不作为断言依据 |
+| I3 | 一个 binding 的可变字段只在其 `State::gate` 下读写；锁序为 `State::gate` → {record 表 / native 表 / attachments / record control}，没有任何路径反向取锁 | 逐字段清单见本轮收据；`unique-close` / `shared-group-release-race` 覆盖并发释放 |
+| I4 | 可能在 attachments 上等待的步骤（`CloseReceiver`、`AwaitDetached`）与 provider shutdown 都在 `State::gate` 之外执行 | `running-receiver`（释放与运行中 receiver 重叠）、`partial-failure` |
+| I5 | 投递上下文由被准入的执行对象在 `Run()` 内进入/退出，与调用者走哪个入口无关 | `delivery-context-bypass` + compile-only 正/负控制 |
+| I6 | record 的 sink 登记只在 `UNANCHORED` 时解除，此后不会重新登记（unanchored 的 record 不再接纳 owner）；且只有**暴露过**该 role 的 binding 才能报告暴露放弃，所以 joiner 的失败不会替创建者解除 sink | 变异 M10/M12；`two-owners`/`cross-role`/`slot-exhaustion`/`joiner-failure-keeps-creator` |
+| I7 | 一个 `(record, local)` 注册的「最后一个成员决定结算」与「新成员加入」在**同一临界区内**定序：一旦决定结算，任何 join 都不能再成功 | 变异 M11；`join-during-settle` |
+| I8 | 已安装但尚未成为共享注册的 claim/receiver 由 state 持有，因此该窗口内的任何失败（含分配失败）都由释放路径在门之外结算 | 变异 M13；`registration-allocation-failure` |
+| I9 | 组合层的记录级键是 record 槽位，而「暴露过的槽位永不回收」是 record 表的不变量（`ReclaimReservation` 只回收从未暴露的预留）；`Prepare` 校验槽位范围，越界即失败而不是别名到别的 control | 变异（越界槽位）不可构造；`old-entry-new-incarnation`/`repeated-lifecycles` 断言新 record 取新槽位 |
+
+**本节之外的已知边界（如实记录，不报为已闭合）**：① 回调内销毁会挂起（上一行，HUMAN_REQUIRED）；② `accepted` 拓扑的三条拒绝分支现已覆盖，但其成功路径只有一条夹具形状；**新记录**：joiner 依赖**采纳方**的 `ApplicationAttachments` 实例仍然存活（`ApplicationGroup::attachments` 是裸指针）——若该实例被销毁而采纳它的 binding 仍在服务，行为未定义；本组合的契约要求该实例在所有采纳者之前保持存活（见 §19.6 的 per-Participant 设计单位），Host 用例（含 `creator-exits-joiner-lives`）都只用同一个实例，因此没有覆盖这条前提；③ `Observe()` 读取 attachments 用量时**不在** `State::gate` 内（报告指针本身已在门内捕获）；诊断视图允许瞬时不一致，`State` 自己的字段仍在门内读取；④ `RecordControl::RegisterGroup` 在数组满时静默丢弃（当前不可达：两张有界表的键空间同阶）；⑤ `ReleaseSink` 的返回值在调用处被丢弃（结果不可行动，仅诊断损失）。
+
+**本轮的检测工具范围**：AddressSanitizer（MSVC `/fsanitize=address`）可用，并有同环境、同开关的正/负控制；ThreadSanitizer 与本仓库支持的 Host 工具链（Windows/MSVC）不兼容，记为 `TOOL_UNAVAILABLE`，因此**数据竞争自由由锁纪律与逐字段复核保证，不由 TSan 报告证明**。Sanitizer 无报告不等于全部时序安全。
+
+## 20. CALLBACK_CONTEXT_DESTROY_CONTRACT（2026-09-25 CST；IMPLEMENTED / BUILDS / HOST_TESTED，限定 Host 范围）
+
+本节是工作包 `CALLBACK_CONTEXT_DESTROY_CONTRACT` 的合同与执行状态，关闭 §19.7 记录的那一项 HUMAN_REQUIRED：**在回调执行上下文内销毁 binding 会自等待**（释放必须等待本帧持有的 receiver in-flight 许可）。本轮采用**方案 A：禁止回调内同步销毁，并提供不等候的关闭请求**；不新增 GC/reclaimer、不改 provider/SDK、不加设备测试、不加新的 Runtime 单例。起始提交 `145d0ee`；本轮**未提交**。
+
+### 20.1 回调上下文的关闭/销毁合同
+
+| 入口 | 合法上下文 | 行为 | 拒绝/重复时 |
+| --- | --- | --- | --- |
+| `CloseRequest()` | **任意上下文，含 ingress/投递回调** | 记录关闭意图（`phase = Closing`）后立即返回；不 drain、不释放、不等待 | 已有意图 → `ServiceClosing`；未发布 → `WrongState` |
+| `DeferredClose()` | 仅控制上下文 | 完成进行中的关闭：与 `Abandon()` 同一条 drain+释放路径，然后标记 `Closed` | 回调内或无进行中的关闭 → `WrongState`；二次完成 → `AlreadySettled` |
+| `BeginClose()` / `Abandon()` | 仅控制上下文 | 语义不变 | 回调内 → `WrongState`（明确拒绝，绝不等候） |
+| `~ServiceRecordBinding()` | 仅控制上下文 | 释放语义不变 | 在本组合的回调栈上被调用时 **fail-fast**（带指向 `CloseRequest()` 的诊断后 abort），不再自等待 |
+
+**为什么是 fail-fast**：析构无法“拒绝”，而另外两条路各有代价——拒绝并搁置注册会让 claim 与 local 永久不可用（违反 §19.6「必须归零」）；延后回收器是需要独立设计与评审的新机制，超出本轮授权。诊断文本直接点名合法路径，因此触发者能就地改正。
+
+**不变的四条寿命前提**：§19.7 的 I1（sink 登记只在 `UNANCHORED` 解除）、native owner lease、receiver lease 的 drain-before-free、以及 claim 恰好 detach 一次；关闭请求路径与同步路径走同一个 `ReleaseLocalLocked()`，未跳过任何一步。
+
+### 20.2 必测矩阵（新增 8 个 case，全部已注册）
+
+| 指令条目 | case | 覆盖 |
+| --- | --- | --- |
+| CLOSE-C1 回调内请求关闭 | `close-request-from-callback` | 请求返回 `None`、二次请求 `ServiceClosing`、相位转 `Closing`、无遗留 in-flight、新 ingress 被拒且不入队 |
+| CLOSE-C2 回调内同步关闭 | `close-sync-refused-in-callback` | `BeginClose`/`Abandon`/`DeferredClose` 均 `WrongState` 且不阻塞；binding 仍 Published 且仍准入；随后控制上下文仍可正常关闭 |
+| CLOSE-C3 外部关闭 | `close-completes-outside-callback` | 所有者完成请求：`Closed`、membership/claim/receiver 释放、无 in-flight、provider 关闭恰好一次、二次完成 `AlreadySettled` 且不重复关闭 |
+| CLOSE-C4 回调异常后关闭 | `close-after-callback-exception` | 抛异常的 receiver 回调被报为 `CallbackFailure`（不外传）、意图在异常前已记录、关闭仍能完成且不留残留 |
+| CLOSE-C5 多回调并发请求 | `many-close-requests-one-close` | 一个来自投递回调 + 四个来自控制线程：恰好一次 `None`、四次 `ServiceClosing`；请求本身不产生关闭；最终恰好一次关闭 |
+| CLOSE-C6 请求后新准入 | `no-admission-after-close-request` | 请求前已准入的两个投递仍全部运行并到达 receiver；新 ingress 被拒且不入队 |
+| CLOSE-C7 关闭后资源 | `close-request-releases-resources` | sink 登记释放、receiver 注册与 claim 释放（local 可再次 claim）、owner lease 释放且关闭恰好一次 |
+| 禁止形状 | `callback-destroy-fails-fast`（子 case `callback-destroy-child` 故意不注册进 CTest） | 子进程**停止**而不是死锁；同一意图的合法形状（回调内请求、所有者销毁）完成且只产生一次关闭 |
+
+### 20.3 执行状态（2026-09-25 CST）
+
+| 检查 | 结果 |
+| --- | --- |
+| RED（改动前，见 `.artifacts/srtc-close/RED-EVIDENCE.md`） | ① 回调内请求关闭：`status=19 expected=0`（今天回调无任何入口可记录关闭意图，binding 仍 Published 并继续准入）；② 回调内销毁：打印诊断后**挂起**，20s 有界超时 rc=124 |
+| 组合 case（Release `/W4`，每 case 独立进程） | **32/32 PASS**（§19.4 的 21 个 + 本轮 11 个） |
+| 本配置全量（`srtc` Release） | **86/86 PASS** |
+| 仓库标准 CONFIG host Release 全量 | **290/290 PASS** |
+| Debug / AddressSanitizer | **32/32**、**32/32 PASS**，无 sanitizer 报告 |
+| 变异验证 | 本轮 11 个变异体（M16 请求执行同步关闭、M17 回调内拒绝请求、M18 请求不关闭准入、M19 完成不释放、M20 取消 fail-fast、M21 析构改为 return、M22 完成路径丢守卫、M23 守卫退回线程全局、M24 同步关闭/释放丢回调守卫、M25 完成拷贝不计 queued、M26 守卫忽略“本次释放是否真的结算”）**全部被对应用例杀死**；累计 27 个变异体中 26 个被杀死、1 个（M8b）按设计存活 |
+
+### 20.4 边界
+
+真实 SDK provider、目标 ABI 等价、callback 排空、设备与 DDS、热重建与 RMW 仍 `NOT_RUN`；`DSoftBusTransport::init` 仍 `NativeBackendUnavailable`；P0/PF/P4/QualificationProfile 不变；组合层仍无生产调用方。本轮记录的边界：① fail-fast 只能跨进程观测（由子进程 case 固定，父进程同时要求退出码、契约诊断与“销毁回调未返回”标记），其等待由每 case 的 CTest 超时与运行器上下界约束；② 守卫的身份由**被投递工作自身的执行**给出（拥有它的 attachments 实例 + 该投递的 application 身份），因此在结构上覆盖了“同一 attachments 队列上另一个注册的工作被本帧取走”这一形状，但该形状**没有**独立用例：要在 Host 里驱动它需要一个第二 local 及其 dial 路由进入共享夹具的目录，而组件的方向校验会拒绝该配置。若要固定它，可选 **B**（把结算延后到之后某个非回调入口——本轮工作包禁止的新机制）或 **C**（在 attachments 上开放注册身份访问器，使用例无需改共享夹具即可构造该形状）；③ 部署阶段内的关闭请求、以及请求与另一线程释放的竞争未覆盖；④ 已请求但无人完成的关闭会让 binding 停在 closing 相位并持有注册——这是所有者的义务（头文件、本节与收据均已声明，`Observe()` 报告相位），但没有强制。
+
+## 21. SHARED_LIFECYCLE_R8_CLOSEOUT_AND_CHECKPOINT（2026-09-28 CST；IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED / REVIEWED，限定实验范围；COMMITTED_LOCAL_NOT_PUSHED）
+
+### 21.1 目标与交付物
+
+在一个进程内让两个真实 Fast DDS DomainParticipant 共享同一套 DSoftBus runtime，并验证两种创建者顺序下的单轮热重建。交付物：`include/mdds/dsoftbus/{ApplicationAttachments,HostProviderLoop,ProviderAdapter,ServiceRecordBinding}.hpp`、`src/` 同名的四个实现、`cmake/PublicSocketDdsExperiment.cmake`、`CMakeLists.txt` 的接线，以及新增的 `probes/PublicSocketSharedDds.inc`、`tests/{PublicSocketDdsTestSupport.hpp,host_shared_channel_tests.cpp,public_socket_shared_dds_tests.cpp,public_socket_shared_analysis_tests.py}`、`scripts/public_socket/analyze_shared.py`。累计相对 `400e4ff` 为 16 修改 + 6 新增，共 22 个路径，无 gitlink。
+
+所有权：`HostProviderLoop::State` 持有 backend、native owner table、ApplicationAttachments、NativeSendExecution 与唯一的 ProviderAdapter；每个 façade 是一个 `View`，只持有自己的 egress registration、`BindingInput`、receiver 指针与 `ReceiverIdentity`。创建者本身也是一个 View，不是 native 寿命的所有者；新 façade 只能通过活 runtime 上的 `Join()` 取得，因此合法共享不能来自同名服务查找。
+
+### 21.2 不可豁免的合同
+
+1. **准入时固定接收集合**：`State::Admit` 在 record 自身 gate 下把当时合格的注册固定成只含弱句柄的 `CandidateSet`；之后新建的注册无法加入该集合，执行期也不做 current-application 回查。
+2. **逐目标准入 pin**：只为该目标自己取 pin，紧邻它自己的 `AdmitOne`，由不可拷贝、只可移动的 `ApplicationGroup::Pin` 释放恰好一次。任一目标的关闭都不得等待本记录尚未到达的另一目标的工作。
+3. **逐 View egress**：每个 View 持有自己的注册；关闭一个 View 只强撤销（`BeginRevoke` + `Progress`，即 `FreezeAdmissions` + 队列关闭 + barrier）它自己的注册，另一个 View 的注册保持可用。
+4. **claim 互斥**：同一 local 上 shared claim 与 exclusive claim 不得并存，方向对称；拒绝不得改动持有者的身份、预算或寿命。
+5. **关闭与回滚**：被拒绝的关闭要发布确定状态并唤醒等待者，保留 receiver/claim/成员资格；不得伪装 Closed，不得释放仍在使用的资源。
+6. **pump 权限单一规则**：`Start` 从未成功的 View 不得驱动共享 runtime；已启动的 View 关闭后仍保留该权限，因此存活 Participant 与最终 drain 不会失去唯一推进者。
+7. **失败要响亮**：在无法关闭输入的上下文中释放成员 View 时快速失败，并命名合法替代做法；共享输入释放同理。
+
+### 21.3 必测矩阵
+
+| 条目 | case | 覆盖 |
+| --- | --- | --- |
+| 两个真实 façade 共享一个 runtime | `shared`、`reattach`、`concurrent-first` | 一个 native owner、各自 receiver、重复 open 身份不变、新建 P 的全新 application/receiver/token 世代 |
+| creator 退出、Q 存活 | `creator`、`controller-released`、`queued`、`running`、`sending` | creator 销毁不关 Q 的 owner，Q 的收发继续，P 的在途/排队工作按原对象结算 |
+| joiner 退出、Q 仍工作 | `foreign`、`foreign-peer-records`、`foreign-peer-bytes`、`foreign-global-records`、`foreign-global-bytes`、`foreign-record-bound-legal` | 六个比较字段逐个单字段负例 + 记录边界本身合法的正控制 |
+| 捕获粒度与寿命 | `pinned-close`、`own-lease`、`candidate-order`、`capture-accounting` | 较早目标暂停时 joiner 关闭**必须完成**；关闭者**自己的**关闭在自己的拷贝计费时**不得返回**；无首目标特权；200 轮含关闭重开的精确计数 |
+| 逐 View egress | `egress-settled`、`egress-queued`、`egress-old-resource` | 强撤销与 barrier 可观察、queue 关闭且为空、旧 sender resource 被拒且不新建 ticket、反复关闭不重复结算 |
+| pump 权限 | `pump-authority` | `Start` 失败的 View 两个方向泵都被拒；已启动并关闭的 View 仍保留权限 |
+| 预算分层 | `budget-two-views`、`budget-ceiling` | 两个注册各自驱动；第二个注册被 native ceiling 在暴露前拒绝且不留成员与 claim |
+| shared/exclusive | `AA-09-mixed-shared-exclusive-claims` | 双向拒绝、拒绝不改身份与预算、真实模型接收正控制、合法释放后可再 claim、不同 local 不过度拒绝、多共享成员下仍拒独占 |
+| 分析器 text 入口 | `public_socket_shared_analysis_tests.py` 的 9 个真实文本用例 | 用真实日志的独立副本驱动 `analyze(case, texts)`；正例仍通过，删/重复/错 run/writer/life/phase/缺字段/结构非法目标行必须失败 |
+
+### 21.4 执行状态（2026-09-28 CST）
+
+| 检查 | 结果 |
+| --- | --- |
+| 完整 CONFIG Host（最终候选） | **484/484 PASS**，0 fail / 0 err / 0 skip，224.4 s，exit 0 |
+| 受影响集 ASan | **121/121 PASS**（预构建 Fast DDS 未插桩，TSan 未执行） |
+| 独立变异 | **13 个全部被杀死，0 存活**；含 `g1-no-strong-revoke`（逐 View egress）、`exclusive-ignores-shared`（组合层）、`f1-bulk-pin`、`f1-pin-released-early`、`f4-*`、`f6-stale-identity`、`f7-ceiling-ignored` 及五个回归变异 |
+| 分析器 | **36/36 PASS**，含 9 个真实文本边界用例；round-5 与 round-8 共四份设备日志 observed == expected == 30 |
+| 设备 SHARED_W1（P 先建） | `256cce1c37aabcac` PASS；删除顺序 B→A；runner/controller/analyzer 全 PASS |
+| 设备 SHARED_W2（Q 先建） | `372d9a20c0db57e9` PASS；删除顺序 A→B；同上 |
+| 设备 F1M 回归 | `cb0a993d921f9c8b` PASS |
+| 只读路由查询 | `query-r8` PASS，对端真实 local 精确匹配一次 |
+| 两板 guard | 每个窗口：`final-guard Passed`、`byte_match`、`metadata_match`、`process_absent`、`service_permission=DENIED`、`first_failure=null`、`cleanup_failures=[]`，且每板 PID 全程不变 |
+| Native 连续性 | P 删除与同名重建全程 `socket/listen/bind=2/1/1`、`shutdown=0`、entry 与 record/owner 世代不变；`FINAL` 时 `views=0` 且 `shutdown` 恰好 1 |
+| 目标包静态审计 | AArch64、`$ORIGIN`、shared-reattach define 存在、DDS-testing define 不存在、六个禁用符号均不存在、五个公共 Socket 导入齐全、必需链接符号齐全、无未声明工程编译源、六个包成员且不含系统 DSoftBus DSO、授权 `trans_type.h` 哈希匹配 |
+| 提交 | `7f40798`，parent `400e4ff`，tree `6948c5e`；恰好一个新 commit；分支不变；22 路径；无 gitlink；`git diff --cached --check` 通过；未 push/merge/amend；无 upstream |
+
+独立 review 覆盖冻结修订 r7（回归、两道 review 视角与一个单问题 reviewer 均返回结论），其报出的两个真实缺陷与三个次要项已修复；修复 diff 另有一次定向复审，五个修复全部判为 correct，并报出 `R8-R1`/`R8-R2`。设备窗口在 review 完成并修复重测之后运行，但早于修复 diff 复审的返回，该时序偏差记为 `PROCEDURE_DEVIATION`，未回填为设备前批准。
+
+### 21.5 边界与未验证项
+
+- `R8-R1`、`R8-R2`：已知非阻塞限制，按各自可达性记录，未改运行时代码，也未扩大为「同一 guard 覆盖所有析构与错误路径」。
+- 准入 pin 的**双重逻辑释放**无直接用例；RAII 使其只能靠改 pin 代码表达，本轮未运行对应隔离变异。
+- `capture-accounting` 的阻塞关闭调用无自身 watchdog，挂起仅由 CTest 的 20 s 超时兜底；不能仅凭 ASan 无报告证明逻辑计数正确。
+- 三个未跟踪文件（`tests/host_shared_channel_tests.cpp`、`scripts/public_socket/analyze_shared.py`、`tests/public_socket_shared_analysis_tests.py`）没有 freeze-r4 逐字节原件，其 r4→r8 谱系为 `NOT_ESTABLISHED`（其中测试文件有 PARTIAL 快照）；五个跟踪文件的 r4 原件可从 `freeze-r4/SOURCE.diff` 或 HEAD 复得，为 `ESTABLISHED`。
+- `src/service_record_binding_tests.cpp` 是未跟踪的过期重复源文件，保留原样；已核实无任何 target 引用它，且 `CMakeLists.txt` 与 `cmake/*.cmake` 无 `file(GLOB)`/`GLOB_RECURSE`/`aux_source_directory`。
+- Graph：`HostProviderLoop` 47 个上游依赖 risk `CRITICAL`、`ApplicationAttachments` 43 个 `HIGH`；`Affected processes: 0` 是建模缺口（准入经 `RecordIngressSink::OnAttributedBytes` 虚接口与 `weak_ptr::lock()` 到达扇出），不是无影响。
+- 平台边界不变：SDK 物理记录 epoch 连续性 `UNPROVEN`；PF-02、P0/PF `BLOCKED`；P4 未放行；默认 `NativeBackendUnavailable`；`QualificationProfile` `NOT_GENERATED`；SDK drain/cancellation/original-event identity、完整 firmware ABI 未验证。
+
+### 21.6 证据入口
+
+工作包根 `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/`：`claude-r8/FINAL_REPORT.md`、`claude-r8/CLOSEOUT.md`、`claude-r8/POST_COMMIT_VERIFICATION.json`、`claude-r8/FINAL_EVIDENCE_INDEX.json`、`claude-r8/{host-r1,asan-r1,mutations-r8,review}/`、`claude-r6/{ISSUE_CLOSURE.md,F7_BUDGET_LAYERING.md,GRAPH_COVERAGE.md,review/FINDINGS_VERBATIM.md,RETRY_EVIDENCE_R6.json}`、`DEVICE_CONTRACT-r8.json`、`CASE_MATRIX_R6.md`、`target-audit-r8/`、`freeze-r6|r7|r8/`、`windows/{query,w1,w2,f1m}-r8/`。round-5 的窗口、包与 receipt 保留为其自身历史身份，未被作废或复用。
+## 22. NEW_PATH_EXACT_ONCE_AND_BOUNDED_REBUILD_REPETITION — FINAL BLOCKED STATE (2026-09-28 CST)
+
+本节是当前工作包的 post-validation 文档 delta，发生在 r5 验证与设备运行结束之后。
+它不改变 r4 C++/ASan、r5 两文件 Python-only 分析器/测试 delta 或既有 r8/r9 历史证据
+的归属。r5 SOURCE390 SHA 是冻结快照；“其余 388 SOURCE 与 EXECUTOR25 无漂移”仅
+表示 r4→r5 冻结比较，不宣称当前整树仍为 390/390 零漂移，也不把计划状态改写成执行结果。
+
+| Gate | 当前证据状态 |
+| --- | --- |
+| `EXACT_ONCE_PIN_VALIDATION_CLOSED` | **PASS**；原 r9 exact-once pin guard 与定向 T-A 历史收据保留，最终 r5 host/target review 已覆盖 |
+| `HOST_100_CYCLE_VERIFIED` | **PASS**；实际 Host100 formal CLI/replay 通过，3000 writes/takes；自然窗口无 cancellation，不替代 cancellation 专项用例 |
+| r4 C++/Host full CONFIG | **PASS**；507/507，exit 0；首次 missing-target 与宽泛日志 extraction 失败原件保留 |
+| r4 ASan | **PASS**；唯一并集 220（130+90，smoke 5 为重复子集）；预编译第三方 Fast DDS DLL 未完整插桩 |
+| `r5 Python-only delta` | **PASS**；冻结 SOURCE390 SHA `09ba0a53238890acff824d597f5ad60ed03e0d771502eb5ceabf4384ed59ef1f`，仅两 Python 路径变化，其余 388 SOURCE 与 EXECUTOR25 无漂移（仅 r4→r5 比较） |
+| r5 review | **PASS**；`review-fix-r5-host/REPORT.md` 与 `review-fix-r5-target/REPORT.md` 均闭合 R4-C1，无未解决代码 review blocker |
+| Device N10 repair | **FAIL**；唯一尝试 `c1ed9706ef5b794f`，formal cycle analysis rc=1/pass=false |
+| `NEW_PATH_100_CYCLE_FUNCTIONAL_REGRESSION_PASS` | **NOT_RUN**；N10 repair 失败，原 N100 限定授权的前置 gate 未满足，当前不执行 |
+| `CHECKPOINT_READY` | **NO / BLOCKED**；设备 gate 未通过 |
+| `NOT_COMMITTED` | **YES**；工作树未提交 |
+
+| `NEW_PATH_10_CYCLE_FUNCTIONAL_REGRESSION_PASS` | **FAIL**；唯一获准 repair N10 真实设备尝试失败 |
+
+N10 的失败边界须按原始收据表述：整窗 `timedOut=false`；A 为
+`SHARED_READER_MISSING`（84 writes/81 takes），B 在 `C6_P_OLD_DELETED` 收到
+collector `SIGTERM`（`control-92.json`：`code=null`、`collector_closed=true`、空
+stdout/stderr），不能归因远程 SDK。B 的 `q_deleted=0` 与已有 `SHARED_DELETE Q FINAL`
+收据并存，且 egress 已 closed/drained；不宣称十轮完成或完整生命周期账本 PASS。A 的
+null-input load collection 失败、B 完整收集、两端 grant/revoke、JSON/byte/metadata/
+ownership/DENIED/process_absent guards、`cleanup_failures=[]` 与 collector closed 均保留。
+
+继续取得新数据前，必须先离线定位 C6 控制 collector 终止与 load collection 错误，并
+取得新的限定 attempt 授权。本轮停止新数据；原 N100 限定授权的前置 gate 未满足，当前不执行；SDK 内部 drain/epoch 仍
+`UNPROVEN`，P0/PF/P4、默认 `NativeBackendUnavailable` 与 `QualificationProfile`
+状态不变。
+
+证据入口：
+
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/tester-n10-repair-initial/TEST_RESULT.json`
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/tester-r4-asan/TEST_RESULT.json`
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/tester-final-r5/TEST_RESULT.json`
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/windows/n10-codex-repair-r1/N10_REPAIR_TEST_RESULT.json` (SHA `594ac61796983c94f12b408174b6de435d1b35f369df4f52490b98b3232cd26f`)
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/review-fix-r5-host/REPORT.md`
+- `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/review-fix-r5-target/REPORT.md`
+
+## 24. N10_OBSERVED_RETRY_AND_CONDITIONAL_N100 — STOPPED PRE-DISPATCH (2026-09-28 CST)
+
+停止后的文档增量：新 N10 为 `INCOMPLETE / PRE-DISPATCH STOP`，不是完成的 data FAIL
+或 PASS。唯一 query `5ca407e7845f0484` 在本地 post-query `route_query.py` 因
+`Supplemental quota already claimed` 停止；query pair 使用 1、剩余 0，data dispatch
+为 0、data quota 剩余 1，详见 `windows/query-observed-n10/BUDGET_CLARIFICATION.json`
+（SHA `19c0460634c52c840fa5b7f30b409c4863663db7cfa4ce6ac0a0a21c3cd77f70`）。两端
+query/restore guards PASS，但无 P/Q data、删除、live-load、postrun data 或 DDS 样本证据。
+
+新包身份仅记录 stopped r12 scope：SOURCE390 SHA `8628e57951767cf235b00d6ca836050bfca35eeeb3547e768452d50b6c7c2641`、EXECUTOR27 SHA `3332d6a067631c13ad7c084aae3d6592288597e2116c0a234cecbd91bbbd1fb3`、main SHA `590bfc9ecbb04c6c0ebfb2c95a6fdd397326a30e2ef67cc2a2348b89cfff2bc3`、r12 contract SHA `1243a809208348a9837e91523b5f7843a6dd211cafc580c259f78d14046ca737`。这是停止后的文档增量，不改写 r12 报告、selection、manifest、历史窗口或原件，也不声称当前全树仍匹配该 source390。
+
+27/27 tester 与 review-stop 只覆盖其声明的本地/预设备范围；两板只读预检/目录 query
+已执行且 local/remote rc0/0，但未进入 data runner/collector。新静态构建只证明
+BUILDS + static audit；旧 r4 507/507、ASan220、r5 结果保留各自版本归属，未在本轮重跑。
+README/PLAN 此处是停止后的文档增量，不宣称当前全树仍匹配运行的 source390；旧 r12
+与运行包身份不改写。前置 review 漏掉
+prepare→claim→postrun 整路径，必须在未来修复中补充同一 consumed query receipt 的
+完整回放、10.0/100.0 非整数拒绝、query/data quota 分离、route binding/result receipt、
+claim replay/耗尽、27 execution-file drift 与新的独立 review。历史 N10 FAIL、N100 NOT_RUN、
+CHECKPOINT_READY NO、repair0 保持；N100 条件额度未准入，不自动继续。完整记录见
+[observed-retry/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/observed-retry/FINAL_REPORT.md)。
+
+## 25. QUERY_CLAIM_POSTRUN_REPAIR_AND_EVIDENCE_REPLAY (2026-09-28 CST)
+
+运行后的文档增量：`QUERY_CLAIM_PHASE_REPAIR_VERIFIED`、`POSTRUN_QUERY_REPLAY_VERIFIED`
+与 `NEW_PATH_10_CYCLE_FUNCTIONAL_REGRESSION_PASS` 均 **PASS**；N10 run
+`df9319fdf22ab3d9` 已由独立证据复核接受。每端 P11/Q1、150 writes/takes，合计
+300/300；166 control 全部成功，339 条 host HDC 收据已独立复核；本轮新目录 query=0。
+N10 data 用1剩0，query 用1剩0，repair0。N100 **NOT_RUN**：原 query10 不能作为
+purpose100，缺 query100 且新 query 许可为0；条件额度1不构成准入。`CHECKPOINT_READY_FOR_ORIGINAL_PACKAGE=NO`、
+`NOT_COMMITTED=YES`、SDK drain/epoch `UNPROVEN`，不能宣称 P4/生产资格。
+
+本段是运行后的文档增量，不宣称当前整树仍等于冻结 source390；r12、r13、manifest、
+replay 与历史原件身份不改写。无 C++ 新构建；新静态包仅 `BUILDS + static audit`，旧
+r4 507/507、ASan220、r5 结果保留原版本归属且未重跑。完整记录见
+[query-replay/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/query-replay/FINAL_REPORT.md)。
+
+## 26. QUERY100_AND_FINAL_N100_EXECUTION (2026-09-28 CST)
+
+运行后的文档增量：query100 `12ceebf2b741302e` PASS，Q-first N100
+`eab10c4b776d792c` PASS，独立 review 接受 2894 evidence hashes。每端 P101/101、Q1/1，
+1500 writes/takes；全局3000/3000，1606 control 完整正常关闭；host receipt recount
+1861。既有 P-first N10 `df9319fdf22ab3d9` 保持 PASS，本轮不重跑，不把两顺序各100写成已验证。
+
+query100 与 N100 quota 各用1剩0，N10本轮0，repair0。`CHECKPOINT_READY` 仅表示有限
+证据记录，`NOT_COMMITTED=YES`；SDK drain/epoch/cancellation、长期资源上限、生产/P4、
+QualificationProfile 仍未证明。新静态包仅 `BUILDS + static audit`；旧 r4 507/507、ASan220、
+r5 结果保留原版本归属且未重跑。此处是运行后 documentation delta，不宣称当前全树仍等于
+source390；r14/manifest/claim/replay/验收原件不改写。完整记录见
+[final-n100/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/final-n100/FINAL_REPORT.md)
+与 [EVIDENCE_INDEX.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/final-n100/EVIDENCE_INDEX.md)。
+
+## 23. OFFLINE_DIAGNOSIS_AND_BOUNDED_REPAIR_ONLY (2026-09-28 CST)
+
+离线包 `offline-c6` 的结论为：`OFFLINE_CAUSALITY_GAP_BOUNDED / HISTORICAL_N10_CAUSE_PARTIALLY_UNRESOLVED / INDEPENDENT_REVIEW_CLOSED / DEVICE_RETRY_AUTHORIZATION_REQUIRED`。
+本包只做本地诊断与有界证据修复；tester-2 的 18/18 命令为本地 Node/PowerShell/Python
+子进程和合成控制文本，未执行 C++/ASan/HostDDS100、HDC、SDK、目标程序、设备或真实
+window。freeze-2 SOURCE427、EXECUTOR25、817 历史窗口与六个 r5 包成员的哈希比较均通过，
+但 README/PLAN 后改属于 post-validation documentation delta，不宣称当前整树仍与
+SOURCE427 完全一致。纠正后的 FACTS SHA 为 `f33bb84bca9166a8075e2066c4d2c728cd3e6ce9116d86151c143bb631bd005a`。
+
+F05/F32 的错误 C6 归属已按实际 `C5_SHARED_DATA_DONE` stage 修正并经
+`review-final/REPORT.md`、`review-causality/REPORT.md` 复核关闭。历史
+`TERMINATION_INITIATOR_UNOBSERVED` / `TERMINATION_REASON_UNOBSERVED` 保持不变：
+control-92 的 SIGTERM、空输出和 `timedOut=false` 不能归因 timer、远程 shell 或 SDK。
+150 个前五轮跨侧样本严格匹配；C6 A84/81、B81/81 的未观察项不证明丢包。Q FINAL
+public delete 返回与 B `q_deleted=0` 的差异保留为未满足后置条件未知，不改写为正常完成。
+
+离线修复包括 typed incomplete receipts、structured load failure、确认 close 的 UTF-8/
+CRLF/tail 处理、依赖 release 停止、command-scoped termination/requester/reason/deadline/
+PID/exit/close/bytes 收据、显式 executable 与有界 exit-close drain；原 7s/5s/250ms
+预算和容量未扩大。真实 Windows held-pipe gap 未直接复现，注入 close-delivery 的
+RED/GREEN 保留其限定。`NEXT_N10_REQUEST_DRAFT.md` 仍是草案，不创建 window/contract，
+不恢复授权。历史 N10 FAIL、N100 NOT_RUN、CHECKPOINT_READY NO、retry=0 及原六项 gate
+保持不变。完整记录见 [.artifacts/.../offline-c6/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/offline-c6/FINAL_REPORT.md)。
+
+## 27. CHECKPOINT_LOCAL_R6_FINAL_CLOSURE (2026-09-28 CST)
+
+本地文档 checkpoint：标准 CONFIG `523/523 PASS`、Host100 replay `25 PASS`、target-core
+W2 replay `5 PASS`；tester final closure `11/11` 命令与 Flow21 PASS，HDC/device=0。
+17+2 task/external execution-member closure 是本地 promotion path，不是历史 device
+execution path。内部9项历史 RealText 保持 SKIP，DLL allocator injection 未触发，初次无效
+环境日志保留；ASan220 仅复用原证据，未新跑。r6 review closure PASS，CP-1/CP-2/CP-3
+及 external analyzer dependency 已闭合。
+
+N10/N100 有限范围与历史失败边界不改写；默认 `NativeBackendUnavailable`、P0/PF/P4、
+生产限制和 SDK drain/epoch 边界不变。README/PLAN 为运行后文档增量，不宣称当前全树
+等于候选快照。完整文档收据见
+[checkpoint-local/docs-final/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/checkpoint-local/docs-final/FINAL_REPORT.md)。

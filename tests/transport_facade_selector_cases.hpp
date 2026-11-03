@@ -1,7 +1,7 @@
-#ifndef MDDS_TESTS_TRANSPORT_FACADE_SELECTOR_CASES_HPP
-#define MDDS_TESTS_TRANSPORT_FACADE_SELECTOR_CASES_HPP
+#ifndef FASTDDS_DSOFTBUS_TESTS_TRANSPORT_FACADE_SELECTOR_CASES_HPP
+#define FASTDDS_DSOFTBUS_TESTS_TRANSPORT_FACADE_SELECTOR_CASES_HPP
 
-#include <mdds/dsoftbus/DSoftBusTransport.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 
 #include <fastdds/rtps/common/LocatorSelector.hpp>
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
@@ -15,11 +15,11 @@
 // The caller supplies an explicitly initialized HostModel with these two routes.
 // No native connection, generation, queue pump, or participant is created here.
 inline void RunFacadeSelectorCases(
-        mdds::dsoftbus::DSoftBusTransport& facade,
-        const mdds::dsoftbus::Locator& remote10,
-        const mdds::dsoftbus::Locator& remote11)
+fastdds_dsoftbus::dsoftbus::DSoftBusTransport& facade,
+const fastdds_dsoftbus::dsoftbus::Locator& remote10,
+const fastdds_dsoftbus::dsoftbus::Locator& remote11)
 {
-    using mdds::dsoftbus::Locator;
+using fastdds_dsoftbus::dsoftbus::Locator;
     using eprosima::fastdds::ResourceLimitedContainerConfig;
     using eprosima::fastdds::rtps::LocatorSelector;
     using eprosima::fastdds::rtps::LocatorSelectorEntry;
@@ -201,4 +201,4 @@ inline void RunFacadeSelectorCases(
     }
 }
 
-#endif // MDDS_TESTS_TRANSPORT_FACADE_SELECTOR_CASES_HPP
+#endif // FASTDDS_DSOFTBUS_TESTS_TRANSPORT_FACADE_SELECTOR_CASES_HPP

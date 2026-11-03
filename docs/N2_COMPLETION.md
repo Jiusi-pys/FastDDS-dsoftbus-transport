@@ -1,5 +1,9 @@
 # N2 completion record
 
+本文件是历史 N2 收据汇总；其中的旧 MDDS 选项、target 名称和命令行保留以
+绑定原始运行，不是当前 `FastDDSDSoftBusTransport` 的新构建配方。当前命名见
+[NAMING](NAMING.md) 和 [安装说明](INSTALL.md)。
+
 Date: 2026-09-14 UTC. This record synchronizes the repository with the final
 N2 evidence. It does not authorize a commit.
 

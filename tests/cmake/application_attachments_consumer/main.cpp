@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/ApplicationAttachments.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ApplicationAttachments.hpp>
 #include <fastdds/utils/IPLocator.hpp>
 
 #include <array>
@@ -14,7 +14,7 @@
 #endif
 
 namespace {
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 namespace rtps = eprosima::fastdds::rtps;
 #define ATTACHMENT_CHECK(test) do { if (!(test)) throw std::runtime_error(#test); } while (false)
 

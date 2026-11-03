@@ -1,0 +1,65 @@
+{
+  "scope": "Local external historical evidence; clone does not include artifacts",
+  "packages": [
+    {
+      "package": "shim",
+      "local_artifact_root": ".artifacts/public-socket-shim/run-20260926T160850Z",
+      "receipt_sha256": {
+        "FINAL_REPORT.md": "dd590f29edbc688cca7bc8eee1bde838953469a375564ffa995a2f90d0888771",
+        "FINAL_GATE.json": "79f061c142c3edb2713eb122d556738b8f816afebf65f654dffe69468f647be3",
+        "ARTIFACT_INDEX.json": "aaf225644ff6ca67aa1dafbdd1c8dd4dda0008e3ae8e567e4b6f9a691b6e843b",
+        "freeze-r3/SOURCE.json": "3e35e4bfa71d0603af29e0239a1293e456ecd89a4556fb3cd290ef26bd484be6"
+      },
+      "source_freeze": "freeze-r3/SOURCE.json"
+    },
+    {
+      "package": "accepted",
+      "local_artifact_root": ".artifacts/public-socket-accepted/run-20260926T174047Z",
+      "receipt_sha256": {
+        "FINAL_REPORT.md": "00d4f8bc01926a68e7da2070815d988a668df7f356e294d2f3798bcf1fc7435d",
+        "FINAL_GATE.json": "b4019fbe7e47f78fdd8ff012dfa1ea1bbdc865a5214cb17941b6a6448319c46a",
+        "ARTIFACT_INDEX.json": "bdbb3fc288ea24a11c33c4befbe4497b3da0ae3b7fdd1d6278a304404dd22fd9",
+        "freeze-r2/SOURCE.json": "827316816cdf7473f1655b70869650fe49d3d77bd7a3150170d1a1b2a8b29161"
+      },
+      "source_freeze": "freeze-r2/SOURCE.json"
+    },
+    {
+      "package": "runtime",
+      "local_artifact_root": ".artifacts/public-socket-runtime/run-20260926T200859Z",
+      "receipt_sha256": {
+        "FINAL_REPORT.md": "6519096977ffc1f13d9fcfcfe9b75082b8ad1fcaed0fcee0adc35d4478355f0d",
+        "FINAL_GATE.json": "58c58f00af30ba54022a0d75639e9d8685f8ba089a3c1061a4c3e53a2321050c",
+        "ARTIFACT_INDEX.json": "4044d587b2dc4fffe6afdfac75447575cd5b082872e812146afc002624ff485e",
+        "freeze-r4/SOURCE.json": "fea51bc8b18123fd3a515d1c082e99427993abeb9b7d9a98608b4b711316be6a"
+      },
+      "source_freeze": "freeze-r4/SOURCE.json"
+    },
+    {
+      "package": "dds",
+      "local_artifact_root": ".artifacts/real-dds-public-socket/run-20260926T225417Z",
+      "receipt_sha256": {
+        "FINAL_REPORT.md": "50b96026066059b0dc01ab6be0afd363654bf18eb1472f3a16906a4009dba90b",
+        "FINAL_GATE.json": "e75deaff8dd169e046c03da864fbb37e0622f61be1968e20df5c1784e007664d",
+        "ARTIFACT_INDEX.json": "fead368a24d811b553048fd0ef6d6784d57be5ca80873d764a63fd340fea834d",
+        "freeze-r3/SOURCE.json": "fb44005d9059c06af10270eb264f5c0864afe1ec03b1a0ca685dbd2786827c00"
+      },
+      "source_freeze": "freeze-r3/SOURCE.json"
+    }
+  ],
+  "dds_runs": {
+    "D1": "e6e553762d29ceb2",
+    "D2": "c4af736f2b0d35c6"
+  },
+  "dds_executable_sha256": "2c42f3fc67921cd426b9a045142780c69895cbf543437cd4c4929c1cb6f357b3",
+  "headers": {
+    "communication_dsoftbus\\interfaces\\kits\\transport\\socket.h": "c6feffeaf60419b2788da32b4a9b4611062017854c2d9306b5a0bfd2bbb5c9de",
+    "communication_dsoftbus\\interfaces\\kits\\transport\\trans_type.h": "763247518fc2c5ec7ea704bdc8a86874ee38d41721259e82ea55fecaafa0f39d"
+  },
+  "limits": [
+    "PF01/PF02/P0 not qualified",
+    "Default NativeBackendUnavailable",
+    "SDK physical settlement unproven",
+    "B one SPDP gap per DDS window causeUNOBSERVED",
+    "No production qualification"
+  ]
+}

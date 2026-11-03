@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/DSoftBusTransport.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <fastdds/utils/IPLocator.hpp>
 
 #include <iostream>
@@ -18,7 +18,7 @@
 int main()
 try
 {
-    using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
     namespace rtps = eprosima::fastdds::rtps;
     const auto check = [](bool condition, const char* reason) {
         if (!condition) throw std::runtime_error(reason);
@@ -51,22 +51,9 @@ try
     std::cout << "FACADE_CONSUMER_LOADED_FASTDDS=" << loaded.dli_fname << '\n';
 #endif
 
-    EndpointId local_id{}, remote_id{};
-    local_id.back() = 2;
-    remote_id.back() = 10;
-    Locator local, remote;
-    check(LocatorCodec::Encode(local_id, local) && LocatorCodec::Encode(remote_id, remote),
-            "canonical fixture locators");
     DSoftBusTransportDescriptor descriptor(4096);
-    descriptor.directory.locals.push_back({local, "facade.consumer.namespace", "facade.consumer.listen"});
-    Route route;
-    route.key = {local, remote};
-    route.route_version = 1;
-    route.fields = {"facade-consumer-network", "facade.remote.listen", "facade.consumer.dial",
-            {"facade.remote.dial"}, RecordDataType::Bytes};
-    descriptor.directory.routes.push_back(route);
-    descriptor.default_metatraffic_unicast.push_back(local);
-    descriptor.default_user_unicast.push_back(local);
+    check(descriptor.ConfigureV1([&]{V1Deployment input{{"consumer",0,"synthetic-local"},17,v1::Profile::BytesNative,"consumer.namespace",
+        {{{"consumer",0,"synthetic-remote"},29,"consumer.network","consumer.dial",{"consumer.remote.dial"}}}}; input.native_name_scope={v1::NativeNameContract::PackageScopedV1,"example.package","example.package.v1"};for(auto& peer:input.peers)peer.native_name_scope=input.native_name_scope;return input;}()).code==DirectoryError::None,"V1 deployment configuration");
     const rtps::TransportDescriptorInterface& base_descriptor = descriptor;
     check(base_descriptor.min_send_buffer_size() == 4096, "descriptor bound");
     {

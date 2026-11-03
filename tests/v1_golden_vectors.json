@@ -1,0 +1,41 @@
+{
+  "derivation": "Python stdlib hashlib.sha256 over literal independent preimage bytes; synthetic identities only",
+  "vectors": [
+    {
+      "namespace": "alpha",
+      "domain": 16909060,
+      "udid": "udid-1",
+      "synthetic": true,
+      "preimage_hex": "4d4444532d56312d444556494345000005616c706861010203040006756469642d31",
+      "sha256": "c3797784976ed68cef55b2f0f22e8cc41bb8d06deca8811339cf9dd65ea23b23",
+      "address_hex": "c3797784976ed68cef55b2f0f22e8cc4"
+    },
+    {
+      "namespace": "alpha",
+      "domain": 16909060,
+      "udid": "udid-2",
+      "synthetic": true,
+      "preimage_hex": "4d4444532d56312d444556494345000005616c706861010203040006756469642d32",
+      "sha256": "38b2c66402f6e6c3e7a1d841eee6a565432aca2f00243e5da1897f6fb48e5680",
+      "address_hex": "38b2c66402f6e6c3e7a1d841eee6a565"
+    },
+    {
+      "namespace": "a",
+      "domain": 0,
+      "udid": "bc",
+      "synthetic": true,
+      "preimage_hex": "4d4444532d56312d444556494345000001610000000000026263",
+      "sha256": "d1e87ba5a9287196fa18a50eb3f61158000af7648449ffb9673f28c8cd84d8b5",
+      "address_hex": "d1e87ba5a9287196fa18a50eb3f61158"
+    },
+    {
+      "namespace": "ab",
+      "domain": 0,
+      "udid": "c",
+      "synthetic": true,
+      "preimage_hex": "4d4444532d56312d444556494345000002616200000000000163",
+      "sha256": "56b70cba22b4235bff9123470a1cf7df30fc76988bdcc6d5e65a1dba6771d909",
+      "address_hex": "56b70cba22b4235bff9123470a1cf7df"
+    }
+  ]
+}

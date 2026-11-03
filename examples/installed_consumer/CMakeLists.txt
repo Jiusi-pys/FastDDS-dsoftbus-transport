@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.22)
+project(fastdds_dsoftbus_installed_consumer LANGUAGES CXX)
+find_package(FastDDSDSoftBusTransport CONFIG REQUIRED)
+add_executable(fastdds_dsoftbus_consumer main.cpp)
+target_link_libraries(fastdds_dsoftbus_consumer PRIVATE FastDDSDSoftBusTransport::fastdds_dsoftbus_transport_facade FastDDSDSoftBusTransport::fastdds_dsoftbus_example_types)
+target_compile_features(fastdds_dsoftbus_consumer PRIVATE cxx_std_17)
+enable_testing()
+add_test(NAME installed_consumer COMMAND fastdds_dsoftbus_consumer)

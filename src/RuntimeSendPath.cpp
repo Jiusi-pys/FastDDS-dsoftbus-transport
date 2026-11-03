@@ -1,11 +1,11 @@
-#include <mdds/dsoftbus/RuntimeSendPath.hpp>
+#include <fastdds_dsoftbus/dsoftbus/RuntimeSendPath.hpp>
 
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <utility>
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 namespace detail { struct RuntimeIdentity {}; }
 
 EgressPlan::EgressPlan(EndpointDirectory::Snapshot directory, const std::vector<Route>& routes,
@@ -142,14 +142,17 @@ RuntimeSendReport RuntimeSendPath::Submit(const std::vector<NetworkBuffer>& buff
             if (Now() >= original_deadline) { report.status = RuntimeSendStatus::DeadlineExpired; return report; }
             SendConnectionSnapshot snapshot;
             if (!generations_->TryResolve(*target.route, snapshot)) {
+                if(snapshot.route_state_known)report.unresolved_route=snapshot;
                 report.status = RuntimeSendStatus::UnresolvedConnection; return report;
             }
-            if (snapshot.generation == 0 || snapshot.route_version != target.route->route_version ||
+            if (snapshot.generation == 0 || snapshot.route_version == 0 ||
+                    (!generations_->CurrentRouteVersions()&&snapshot.route_version!=target.route->route_version) ||
                     snapshot.key.local_locator != target.route->key.local_locator ||
                     snapshot.key.remote_locator != target.route->key.remote_locator) {
                 report.status = RuntimeSendStatus::InvalidConnectionSnapshot; return report;
             }
             target.generation = snapshot.generation;
+            target.route_version = snapshot.route_version;
         }
         std::vector<SendBufferView> views(std::size_t{0});
         // Only used, nonempty prefix pieces need metadata. Each accounts for
@@ -190,4 +193,4 @@ void RuntimeSendPath::Close() noexcept
     if (hooks_.after_close_request) hooks_.after_close_request();
     queue_->Close();
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

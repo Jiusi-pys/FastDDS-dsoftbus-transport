@@ -1,0 +1,182 @@
+{
+  "schema": 1,
+  "baseline_HEAD": "f6997da898d759b71a89421e4dd5e2cd471ac59c",
+  "scope": "LOCAL_HISTORICAL_EXPERIMENT_EVIDENCE_INDEX_NOT_PRODUCTION_QUALIFICATION",
+  "packages": [
+    {
+      "package": "HOT",
+      "local_evidence_root": ".artifacts/hot-rebuild-production-integration-20260921/run-20260921T152404Z",
+      "availability": "EXTERNAL_LOCAL_EVIDENCE_NOT_IN_GIT",
+      "identity_anchors": [
+        {
+          "path": ".artifacts/hot-rebuild-production-integration-20260921/run-20260921T152404Z/FINAL_REPORT.md",
+          "sha256": "96e1aff0317dae0257c10eb572e9f776b3b963451b3682f598f44cf301e9bdb0"
+        },
+        {
+          "path": ".artifacts/hot-rebuild-production-integration-20260921/run-20260921T152404Z/FINAL_GATE.json",
+          "sha256": "514b09b6576531e70acf1391edbcacac111938e5d442bbf5f72874a1d312f74b"
+        }
+      ],
+      "inheritance": "Original run/source/package bindings remain authoritative; not new candidate or commit execution."
+    },
+    {
+      "package": "RX",
+      "local_evidence_root": ".artifacts/hot-rebuild-closeout-rx-20260922/run-20260922T012640Z",
+      "availability": "EXTERNAL_LOCAL_EVIDENCE_NOT_IN_GIT",
+      "identity_anchors": [
+        {
+          "path": ".artifacts/hot-rebuild-closeout-rx-20260922/run-20260922T012640Z/FINAL_REPORT.md",
+          "sha256": "1b96f2f23a2727cc79e0ed0d68cb73269fb140b537e065573c4148c21bcb01b1"
+        },
+        {
+          "path": ".artifacts/hot-rebuild-closeout-rx-20260922/run-20260922T012640Z/FINAL_GATE.json",
+          "sha256": "4a503ec47ed29987d6df603886e8610b97ba4d0ff5d00518925b7b8da00334d8"
+        },
+        {
+          "path": ".artifacts/hot-rebuild-closeout-rx-20260922/run-20260922T012640Z/FINAL_SOURCE_FREEZE_V2.json",
+          "sha256": "74e846bd66fe94d3c4195ac1bc389b376e50a20a8bff00c59d01a70e40de9e41"
+        },
+        {
+          "path": ".artifacts/hot-rebuild-closeout-rx-20260922/run-20260922T012640Z/CLOSURE_INDEX.json",
+          "sha256": "9f2b8af9b073f27834923b90bc784fb289743cfa4360b6d6b2556b42c2245927"
+        }
+      ],
+      "inheritance": "Original run/source/package bindings remain authoritative; not new candidate or commit execution."
+    },
+    {
+      "package": "RESTORE_BUILD",
+      "local_evidence_root": ".artifacts/checkpoint-restored-build/run-20260923T040844Z",
+      "availability": "EXTERNAL_LOCAL_EVIDENCE_NOT_IN_GIT",
+      "identity_anchors": [
+        {
+          "path": ".artifacts/checkpoint-restored-build/run-20260923T040844Z/FINAL_REPORT.md",
+          "sha256": "5701dd9175cfd79d38d51d734e6427868e9fdb2451c4d9dc476a502272b59f56"
+        },
+        {
+          "path": ".artifacts/checkpoint-restored-build/run-20260923T040844Z/FINAL_GATE.json",
+          "sha256": "d1bc38d2de50b7f7a5cf3ff536a904c53d9288bc12063f878733181497e41273"
+        },
+        {
+          "path": ".artifacts/checkpoint-restored-build/run-20260923T040844Z/ARTIFACT_INDEX.json",
+          "sha256": "1859916f4be9ca6427dfc89f87a831671ddd8b3480b5ec95ade34d31f19a65d5"
+        }
+      ],
+      "inheritance": "Original run/source/package bindings remain authoritative; not new candidate or commit execution."
+    },
+    {
+      "package": "RESTORE_DEVICE",
+      "local_evidence_root": ".artifacts/restored-package-device/run-20260923T075212Z",
+      "availability": "EXTERNAL_LOCAL_EVIDENCE_NOT_IN_GIT",
+      "identity_anchors": [
+        {
+          "path": ".artifacts/restored-package-device/run-20260923T075212Z/FINAL_REPORT.md",
+          "sha256": "cb67a8e4219b77cfedddedd6c1b83cb0dbaadfb669dc02a6c70cfc4baf20cdb6"
+        },
+        {
+          "path": ".artifacts/restored-package-device/run-20260923T075212Z/FINAL_GATE.json",
+          "sha256": "67b01c4b7b66661d838415b0a3315a31ed00937e48963ef91da07f9f6401a5fc"
+        },
+        {
+          "path": ".artifacts/restored-package-device/run-20260923T075212Z/CLOSURE_INDEX.json",
+          "sha256": "f702a77f7a90e19c7ed17987242d18e0c6ff26c6f5948b48925a802a9558f8de"
+        },
+        {
+          "path": ".artifacts/restored-package-device/run-20260923T075212Z/ARTIFACT_INDEX.json",
+          "sha256": "616329ffa95cd8b858086db91b359574a951300f0d3c36a9d0013d9e50d71954"
+        }
+      ],
+      "inheritance": "Original run/source/package bindings remain authoritative; not new candidate or commit execution."
+    },
+    {
+      "package": "MATRIX",
+      "local_evidence_root": ".artifacts/dds-functional-matrix-20260923/run-20260923T094900Z",
+      "availability": "EXTERNAL_LOCAL_EVIDENCE_NOT_IN_GIT",
+      "identity_anchors": [
+        {
+          "path": ".artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/FINAL_REPORT.md",
+          "sha256": "1e5ca7a875417f570efc62be5dbdaadfb0989f50c9af4627b463cff807f1bc66"
+        },
+        {
+          "path": ".artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/FINAL_GATE.json",
+          "sha256": "85a3feb896b3ad80670f5ed48a5a673da9eb129861a34f0e8ae283df89359db0"
+        },
+        {
+          "path": ".artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/CLOSURE_INDEX.json",
+          "sha256": "72591b469eb7b54f35b0ac8a5e93fc5cd1f11c475a38e070d39bf74fa34f5294"
+        },
+        {
+          "path": ".artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/ARTIFACT_INDEX.json",
+          "sha256": "f89b55a02e6ca07ff0e1d555a78f60360ad20c2519e90860a97868ebf7f1f951"
+        }
+      ],
+      "inheritance": "Original run/source/package bindings remain authoritative; not new candidate or commit execution."
+    },
+    {
+      "package": "KEYED",
+      "local_evidence_root": ".artifacts/dds-keyed-history-20260923/run-20260923T140748Z",
+      "availability": "EXTERNAL_LOCAL_EVIDENCE_NOT_IN_GIT",
+      "identity_anchors": [
+        {
+          "path": ".artifacts/dds-keyed-history-20260923/run-20260923T140748Z/FINAL_REPORT.md",
+          "sha256": "78ee729f800b28fec8c0ad3d070cfc51390936205176c9f4628777694200fc4a"
+        },
+        {
+          "path": ".artifacts/dds-keyed-history-20260923/run-20260923T140748Z/FINAL_GATE.json",
+          "sha256": "5a8f676f0146b42ddadb43190f1269454c5ed7c44f629ff85bfa06c285b8327f"
+        },
+        {
+          "path": ".artifacts/dds-keyed-history-20260923/run-20260923T140748Z/FINAL_SOURCE_IDENTITY.json",
+          "sha256": "476486343f478aa2a6eaadd7d42e2718e4bd09c955b1e5e2ff960ae3163ec631"
+        },
+        {
+          "path": ".artifacts/dds-keyed-history-20260923/run-20260923T140748Z/CLOSURE_INDEX.json",
+          "sha256": "6b6c493e512b01a938d58271e0901fc0a705238a731131c1007215f6d60e85e3"
+        },
+        {
+          "path": ".artifacts/dds-keyed-history-20260923/run-20260923T140748Z/ARTIFACT_INDEX.json",
+          "sha256": "93a52fe4522c0951dc4b8920d88a8ecbe61a4d770ca4f739867a11145cea8686"
+        }
+      ],
+      "inheritance": "Original run/source/package bindings remain authoritative; not new candidate or commit execution."
+    },
+    {
+      "package": "PERFORMANCE",
+      "local_evidence_root": ".artifacts/dds-bounded-performance-20260924/run-20260923T183702Z",
+      "availability": "EXTERNAL_LOCAL_EVIDENCE_NOT_IN_GIT",
+      "identity_anchors": [
+        {
+          "path": ".artifacts/dds-bounded-performance-20260924/run-20260923T183702Z/FINAL_REPORT.md",
+          "sha256": "ee1de4fb5c455b448e8c6e619a3fb8dc6698f9febce5454b337f41feb89705e1"
+        },
+        {
+          "path": ".artifacts/dds-bounded-performance-20260924/run-20260923T183702Z/FINAL_GATE.json",
+          "sha256": "93f09fc5cd1b7bedefff3aedb0e1015b47053d021b4a724e6b63f755f97de953"
+        },
+        {
+          "path": ".artifacts/dds-bounded-performance-20260924/run-20260923T183702Z/FINAL_SOURCE_IDENTITY.json",
+          "sha256": "f4f9dd7c6cb2a6265d6de73337df27d658c0263e5a09f1f528dac26cd370ca93"
+        },
+        {
+          "path": ".artifacts/dds-bounded-performance-20260924/run-20260923T183702Z/ARTIFACT_INDEX.json",
+          "sha256": "7584cb403f154e7962743812a3184ba40bb18bab2db6912ed74da77578cd8805"
+        }
+      ],
+      "inheritance": "Original run/source/package bindings remain authoritative; not new candidate or commit execution."
+    }
+  ],
+  "latest_native_package": {
+    "local_manifest": ".artifacts/pf24of1/build-manifest.json",
+    "manifest_sha256": "d461137a6b844e1b3d82a735d404f30e49cc2ca17214b182af3d1bc66f1af292",
+    "executable_sha256": "5f98207268441debefcfaa57f0396a7be0d1cc2ed9d40e98e49f11211b30a440",
+    "inputs": 1737,
+    "artifacts": 6
+  },
+  "no_self_commit_hash": "Commit mapping belongs in a later external receipt, if ever authorized.",
+  "boundaries": {
+    "P0_PF01_PF02": "BLOCKED / NOT QUALIFIED",
+    "production_default": "NativeUnavailable",
+    "P4": "NOT_RELEASED",
+    "SDK_internal_settlement": "UNOBSERVED",
+    "QualificationProfile": "NOT_GENERATED"
+  }
+}

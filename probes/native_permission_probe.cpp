@@ -16,13 +16,13 @@
 #include <vector>
 
 namespace {
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 using namespace OHOS::Security::AccessToken;
 
 void PermissionUsage()
 {
     std::cerr << "Usage: native_permission_probe --inspect (read-only ABI/manager query)\n"
-              << "       native_permission_probe (--grant|--socket-check|--revoke)"
+              << "       native_permission_probe (--grant|--socket-check|--revoke|--verify-denied)"
               << " --expected-token <decimal-id> --preflight-confirmed [--confirmed-absent|--recover-unregistered]\n"
               << "First grant requires expected-token 0 and confirmed-absent."
               << " All other operations require the owned nonzero token.\n"
@@ -214,11 +214,12 @@ int main(int argc, char** argv)
     for (int i = 1; i < argc; ++i)
     {
         const std::string arg(argv[i]);
-        if ((arg == "--grant" || arg == "--socket-check" || arg == "--revoke") && !mode_seen)
+        if ((arg == "--grant" || arg == "--socket-check" || arg == "--revoke" || arg == "--verify-denied") && !mode_seen)
         {
             mode_seen = true;
             options.mode = arg == "--grant" ? NativePermissionMode::Grant :
-                    arg == "--revoke" ? NativePermissionMode::Revoke : NativePermissionMode::SocketCheck;
+                    arg == "--revoke" ? NativePermissionMode::Revoke :
+                    arg == "--verify-denied" ? NativePermissionMode::VerifyDenied : NativePermissionMode::SocketCheck;
         }
         else if (arg == "--expected-token" && !token_seen && i + 1 < argc)
         {

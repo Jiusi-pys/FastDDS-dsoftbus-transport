@@ -1,9 +1,15 @@
-#include <mdds/dsoftbus/DSoftBusTransport.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <algorithm>
 #include <cstdio>
 #include <utility>
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+#include "../probes/PublicSocketRuntimeTrace.hpp"
+#define FACADE_STARTUP(event,code) runtime_probe::TraceEvent(event,UINT64_MAX,-1,-1,int(code),0)
+#else
+#define FACADE_STARTUP(event,code) ((void)0)
+#endif
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 DSoftBusTransport::DSoftBusTransport(const DSoftBusTransportDescriptor& descriptor)
     : TransportInterface(LocatorCodec::kind), frozen_(descriptor), report_(descriptor),
       mode_(FacadeMode::NativeUnavailable) {}
@@ -12,18 +18,29 @@ DSoftBusTransport::DSoftBusTransport(const DSoftBusTransportDescriptor& descript
     : TransportInterface(LocatorCodec::kind), frozen_(descriptor), report_(descriptor),
       mode_(FacadeMode::HostModel), generations_(std::move(source)) {}
 DSoftBusTransport::~DSoftBusTransport() { shutdown(); }
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+DSoftBusTransport::DSoftBusTransport(const DSoftBusTransportDescriptor& descriptor, HostBackendTag,
+        std::shared_ptr<HostFacadeBackend> backend)
+    : TransportInterface(LocatorCodec::kind), frozen_(descriptor), report_(descriptor),
+#ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
+      mode_(FacadeMode::IsolatedExperiment), host_backend_(std::move(backend)) {}
+#else
+      mode_(FacadeMode::HostModel), host_backend_(std::move(backend)) {}
+#endif
+#endif
 FacadeMode DSoftBusTransport::mode() const noexcept { return mode_; }
 FacadeState DSoftBusTransport::state() const { std::lock_guard<std::mutex> lock(lifecycle_); return state_; }
 FacadeDiagnostic DSoftBusTransport::last_error() const { std::lock_guard<std::mutex> lock(lifecycle_); return diagnostic_; }
 void DSoftBusTransport::Diagnose(FacadeDiagnostic value) const
-{ std::lock_guard<std::mutex> lock(lifecycle_); diagnostic_ = value; }
+{ {std::lock_guard<std::mutex> lock(lifecycle_); diagnostic_ = value;} FACADE_STARTUP("FacadeDecision_FacadeError_result",value.error); }
 bool DSoftBusTransport::InitFailure(FacadeDiagnostic value)
 {
+    FACADE_STARTUP("FacadeInit_FacadeError_result",value.error);
     {
         std::lock_guard<std::mutex> lock(lifecycle_); diagnostic_ = value;
         if (state_ == FacadeState::Initializing) state_ = FacadeState::Failed;
     }
-    std::fprintf(stderr, "MDDS DSoftBus init: error=%u operation=%s\n", static_cast<unsigned>(value.error), value.operation);
+    std::fprintf(stderr, "Fast DDS DSoftBus init: error=%u operation=%s\n", static_cast<unsigned>(value.error), value.operation);
     std::fflush(stderr); return false;
 }
 DSoftBusTransport::Ready::Ready(EgressPlan::Snapshot selected, const DSoftBusTransportDescriptor& config,
@@ -40,7 +57,17 @@ DSoftBusTransport::LocalSlot* DSoftBusTransport::Ready::FindLocal(const Locator&
     for (const auto& slot : slots) if (slot->local == local) return slot.get();
     return nullptr;
 }
-bool DSoftBusTransport::init(const eprosima::fastdds::rtps::PropertyPolicy*, const std::uint32_t& no_frag)
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+DSoftBusTransport::Ready::Ready(EgressPlan::Snapshot selected, const DSoftBusTransportDescriptor& config,
+        std::shared_ptr<HostFacadeBackend> backend)
+    : host_backend(std::move(backend)), plan(std::move(selected))
+{
+    for (const auto& local : config.directory.locals)
+        slots.push_back(std::make_unique<LocalSlot>(local.local_locator));
+}
+DSoftBusTransport::Ready::~Ready() { if (host_backend && host_shutdown_owned) host_backend->Shutdown(); }
+#endif
+bool DSoftBusTransport::init(const fastdds_dsoftbus::binding::PropertyPolicy*, const std::uint32_t& no_frag)
 {
     {
         std::lock_guard<std::mutex> lock(lifecycle_);
@@ -58,8 +85,18 @@ bool DSoftBusTransport::init(const eprosima::fastdds::rtps::PropertyPolicy*, con
                 !limits.global_records || !limits.global_bytes || limits.max_record_bytes > limits.peer_bytes ||
                 limits.max_record_bytes > limits.global_bytes)
             return InitFailure({FacadeError::InvalidLimits, "limits"});
-        if (no_frag > frozen_.maxMessageSize)
+        // Same rule as the built-in UDP/TCP init() in both pinned Fast DDS variants (3.6.2.0 and
+        // 2.14.5): `no_frag` is the optional maximum message size that lifts the default limit; 0
+        // selects the default s_maximumMessageSize (65500). The transport's own maximum must not
+        // exceed the effective limit.
+        const std::uint32_t effective_limit = no_frag == 0 ? eprosima::fastdds::rtps::s_maximumMessageSize : no_frag;
+        if (frozen_.maxMessageSize > effective_limit)
             return InitFailure({FacadeError::UnsupportedNoFragmentRequest, "no_fragment_limit"});
+        if (mode_ != FacadeMode::HostModel || !frozen_.directory.identities.empty()) {
+            const auto issue = frozen_.ValidateV1();
+            if (issue.code != DirectoryError::None)
+                return InitFailure({FacadeError::DirectoryRejected, "v1_identity", issue.entry, issue});
+        }
         const auto built = EgressPlan::Build(frozen_.directory, frozen_.egress_selections);
         if (!built.value) {
             auto error = built.issue.code == EgressError::AllocationFailure ? FacadeError::AllocationFailure :
@@ -78,8 +115,19 @@ bool DSoftBusTransport::init(const eprosima::fastdds::rtps::PropertyPolicy*, con
         }
         if (mode_ == FacadeMode::NativeUnavailable)
             return InitFailure({FacadeError::NativeBackendUnavailable, "NativeBackendUnavailable"});
-        if (!generations_) return InitFailure({FacadeError::InvalidState, "host_model_source"});
-        auto prepared = std::make_shared<Ready>(built.value, frozen_, generations_);
+        std::shared_ptr<Ready> prepared;
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+        if (host_backend_) {
+            prepared = std::make_shared<Ready>(built.value, frozen_, host_backend_);
+            if (!host_backend_->Start(frozen_))
+                return InitFailure({FacadeError::NativeBackendUnavailable, "host_backend_start"});
+            prepared->host_shutdown_owned = true;
+        } else
+#endif
+        {
+            if (!generations_) return InitFailure({FacadeError::InvalidState, "host_model_source"});
+            prepared = std::make_shared<Ready>(built.value, frozen_, generations_);
+        }
         if (hooks_.before_ready_publish) hooks_.before_ready_publish();
         {
             std::lock_guard<std::mutex> lock(lifecycle_);
@@ -96,7 +144,7 @@ std::shared_ptr<DSoftBusTransport::Ready> DSoftBusTransport::ReadyLease() const
 { std::lock_guard<std::mutex> lock(lifecycle_); return state_ == FacadeState::ModelReady ? ready_ : nullptr; }
 bool DSoftBusTransport::IsInputChannelOpen(const Locator& local) const
 { auto ready = ReadyLease(); auto* slot = ready ? ready->FindLocal(local) : nullptr; return slot && slot->committed_open.load(); }
-bool DSoftBusTransport::IsLocatorSupported(const Locator& l) const { return LocatorCodec::IsValid(l); }
+bool DSoftBusTransport::IsLocatorSupported(const Locator& l) const { return v1::AddressCodec::Supports(l, frozen_.profile); }
 bool DSoftBusTransport::is_locator_allowed(const Locator& locator) const
 { auto r = ReadyLease(); return r && LocatorCodec::IsValid(locator) && (r->FindLocal(locator) || r->plan->Find(locator)); }
 bool DSoftBusTransport::is_locator_reachable(const Locator& locator)
@@ -107,12 +155,19 @@ bool DSoftBusTransport::transform_remote_locator(const Locator& remote, Locator&
 { auto r = ReadyLease(); if (!r || !LocatorCodec::IsValid(remote) || !r->plan->Find(remote)) return false; out = remote; return true; }
 bool DSoftBusTransport::OpenOutputChannel(SendResourceList& list, const Locator& hint)
 {
+    // A locator of another transport's kind is not this transport's failure; recording
+    // it would overwrite the diagnostic of a real earlier error such as a failed init.
+    if (hint.kind != LocatorCodec::kind) return false;
     auto r = ReadyLease();
     if (!r) { Diagnose({FacadeError::InvalidState, "open_output"}); return false; }
     if (!LocatorCodec::IsValid(hint) || (!r->FindLocal(hint) && !r->plan->Find(hint))) {
         Diagnose({FacadeError::InvalidLocator, "open_output"}); return false;
     }
-    const auto attached = DSoftBusSenderResource::Attach(list, r->runtime);
+    const auto attached =
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+        r->host_backend ? r->host_backend->Attach(list) :
+#endif
+        DSoftBusSenderResource::Attach(list, r->runtime);
     if (!attached.ok()) Diagnose({FacadeError::SenderAttachRejected, "open_output"});
     return attached.ok();
 }
@@ -131,7 +186,11 @@ bool DSoftBusTransport::OpenOutputChannels(SendResourceList& list, const Selecto
         if (r->plan->Find(local)) owned = true;
     }
     if (!owned) return false;
-    const auto result = DSoftBusSenderResource::Attach(list, r->runtime);
+    const auto result =
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+        r->host_backend ? r->host_backend->Attach(list) :
+#endif
+        DSoftBusSenderResource::Attach(list, r->runtime);
     if (!result.ok()) Diagnose({FacadeError::SenderAttachRejected, "open_outputs"});
     return result.ok();
 }
@@ -145,7 +204,11 @@ bool DSoftBusTransport::OpenInputChannel(const Locator& local, Receiver* receive
     if (capacity < frozen_.maxMessageSize) { Diagnose({FacadeError::InsufficientReceiverCapacity, "open_input"}); return false; }
     std::lock_guard<std::mutex> control(slot->control);
     if (!ReadyLease()) { Diagnose({FacadeError::InvalidState, "open_input"}); return false; }
-    const auto result = r->inputs->Open(local, receiver);
+    const auto result =
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+        r->host_backend ? r->host_backend->Open(local, receiver) :
+#endif
+        r->inputs->Open(local, receiver);
     if (result != InputOpenResult::Opened && result != InputOpenResult::AlreadyOpen) {
         Diagnose({result == InputOpenResult::AllocationFailure ? FacadeError::AllocationFailure :
             result == InputOpenResult::Closing || result == InputOpenResult::Disabled ? FacadeError::InputClosing : FacadeError::InputConflict,
@@ -157,15 +220,31 @@ bool DSoftBusTransport::OpenInputChannel(const Locator& local, Receiver* receive
         if (state_ == FacadeState::ModelReady) { slot->committed_open.store(true); return true; }
     }
     slot->committed_open.store(false);
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+    if (r->host_backend) r->host_backend->Shutdown(); else
+#endif
     r->inputs->Close(local); // Roll back before reporting false: caller may destroy receiver.
     Diagnose({FacadeError::InputClosing, "open_input_rollback"}); return false;
 }
 bool DSoftBusTransport::CloseInputChannel(const Locator& local)
 {
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+    // Refuse before any outer lock: an external close may be draining this callback.
+    if (host_backend_ && !host_backend_->InputCloseAllowedOnThisThread()) return false;
+#endif
     std::shared_ptr<Ready> r;
     { std::lock_guard<std::mutex> lock(lifecycle_); r = ready_; }
     auto* slot = r ? r->FindLocal(local) : nullptr;
     if (!slot) { Diagnose({FacadeError::InvalidLocator, "close_input"}); return false; }
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+    if (r->host_backend) {
+        std::lock_guard<std::mutex> control(slot->control);
+        const bool was_open=slot->committed_open.exchange(false);
+        const bool closed=r->host_backend->CloseInput(local);
+        if(!closed) {slot->committed_open.store(was_open);Diagnose({FacadeError::InputClosing,"host_input_close_failed"});}
+        return closed;
+    }
+#endif
     std::lock_guard<std::mutex> control(slot->control);
     slot->committed_open.store(false);
     if (hooks_.after_close_mark) hooks_.after_close_mark();
@@ -179,17 +258,42 @@ void DSoftBusTransport::select_locators(Selector& selector) const
 {
     auto& entries = selector.transport_starts(); auto r = ReadyLease(); if (!r) return;
     for (std::size_t i = 0; i < entries.size(); ++i) {
-        auto* entry = entries[i]; if (!entry->transport_should_process || !entry->allowed_to_send) continue;
+        auto* entry = entries[i]; if (!entry->transport_should_process) continue;
+#if !defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+        if (!entry->allowed_to_send) continue;
+#else
+        // The actual 2.14 selector seeds transport_should_process from enabled.
+        // It has no later allowed_to_send field; admission still uses the same
+        // frozen egress plan and per-target core gates below and in Send.
+        if (!entry->enabled) continue;
+#endif
         bool added = false;
         for (std::size_t index = 0; index < entry->unicast.size(); ++index) {
             const auto& remote = entry->unicast[index];
-            if (!LocatorCodec::IsValid(remote) || !r->plan->Find(remote) || selector.is_selected(remote)) continue;
+            if (!IsLocatorSupported(remote) || !r->plan->Find(remote)) continue;
+            // Generic is_selected classifies FF private addresses as IPv6
+            // multicast. Traverse selected values and compare the full locator.
+            bool selected = false;
+            selector.for_each([&](const Locator& value) { if (value == remote) selected = true; });
+            if (selected) continue;
             const bool duplicate = std::any_of(entry->state.unicast.begin(), entry->state.unicast.end(), [&](std::size_t prior) {
                 return prior < entry->unicast.size() && entry->unicast[prior] == remote;
             });
             if (!duplicate && entry->state.unicast.push_back(index)) added = true;
         }
-        if (added) selector.select(i);
+        if (added) {
+            selector.select(i);
+#ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
+            // Capture actual selected values only after entry selection; this
+            // leaf diagnostic retains no locator pointer or routing authority.
+            selector.for_each([&](const Locator& value) {
+                if(!LocatorCodec::IsValid(value)||!r->plan->Find(value))return;
+                char text[51]{};std::snprintf(text,sizeof(text),"%08x:%08x:",unsigned(value.kind),value.port);
+                for(unsigned j=0;j<16;++j)std::snprintf(text+18+2*j,3,"%02x",value.address[j]);
+                runtime_probe::TraceText("V1_SELECTED_LOCATOR",text);
+            });
+#endif
+        }
     }
 }
 bool DSoftBusTransport::is_local_locator(const Locator& locator) const
@@ -211,7 +315,7 @@ bool DSoftBusTransport::getDefaultUnicastLocators(LocatorList& out, std::uint32_
 { return AppendDefaults(out, frozen_.default_user_unicast); }
 bool DSoftBusTransport::fillMetatrafficMulticastLocator(Locator&, std::uint32_t) const { return false; }
 bool DSoftBusTransport::fillMetatrafficUnicastLocator(Locator& local, std::uint32_t) const { return is_local_locator(local); }
-bool DSoftBusTransport::configureInitialPeerLocator(Locator& remote, const eprosima::fastdds::rtps::PortParameters&,
+bool DSoftBusTransport::configureInitialPeerLocator(Locator& remote, const fastdds_dsoftbus::binding::PortParameters&,
         std::uint32_t, LocatorList& out) const
 {
     auto r = ReadyLease(); if (!r || !LocatorCodec::IsValid(remote) || !r->plan->Find(remote)) return false;
@@ -227,10 +331,18 @@ void DSoftBusTransport::shutdown()
     { std::lock_guard<std::mutex> lock(lifecycle_); state_ = FacadeState::Closing; r = ready_; }
     if (hooks_.after_shutdown_request) hooks_.after_shutdown_request();
     if (r) {
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+        if (r->host_backend) {
+            if (!r->host_backend->Shutdown()) Diagnose({FacadeError::InvalidState, "host_shutdown_failed"});
+            for (const auto& slot : r->slots) slot->committed_open.store(false);
+        } else
+#endif
+        {
         r->runtime->Close();
         for (const auto& slot : r->slots) slot->committed_open.store(false);
         r->inputs->DisableAll();
+        }
     }
     { std::lock_guard<std::mutex> lock(lifecycle_); state_ = FacadeState::Closed; }
 }
-} // namespace mdds::dsoftbus
+} // namespace fastdds_dsoftbus::dsoftbus

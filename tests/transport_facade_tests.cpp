@@ -1,4 +1,5 @@
-#include <mdds/dsoftbus/DSoftBusTransport.hpp>
+#include "V1NativeNameTestSupport.hpp"
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <atomic>
 #include <condition_variable>
 #include <cstdio>
@@ -29,7 +30,7 @@
 #error Facade tests require the real shared Fast DDS CONFIG binding.
 #endif
 
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 namespace rtps = eprosima::fastdds::rtps;
 using namespace std::chrono_literals;
 #define FCHECK(condition) do { if (!(condition)) throw std::runtime_error(std::string("line ") + \
@@ -47,7 +48,7 @@ void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
 
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class DSoftBusTransportTestAccess {
 public:
     static std::unique_ptr<DSoftBusTransport> CreateHostModel(const DSoftBusTransportDescriptor& d,
@@ -149,7 +150,7 @@ bool FSend(rtps::SenderResource& sender, const std::vector<Locator>& targets, st
 int RunTransportFacadeTests(int argc, char** argv) {
     std::vector<std::pair<std::string, std::function<void()>>> cases;
     cases.emplace_back("FCD-01-production-factory", [] {
-        auto d = FD(); std::unique_ptr<rtps::TransportInterface> a(d.create_transport()), b(d.create_transport());
+        auto d = FD(); FCHECK(d.ConfigureV1(ScopedHostDeployment({{"factory-test",0,"synthetic-factory"},0,v1::Profile::BytesNative,"factory.ns",{}})).code == DirectoryError::None); std::unique_ptr<rtps::TransportInterface> a(d.create_transport()), b(d.create_transport());
         FCHECK(a && b && a.get() != b.get() && d.min_send_buffer_size() == 64 && d.maxInitialPeersRange == 1);
         auto* typed = dynamic_cast<DSoftBusTransport*>(a.get()); FCHECK(typed && typed->mode() == FacadeMode::NativeUnavailable);
         FCHECK(!a->init() && typed->last_error().error == FacadeError::NativeBackendUnavailable && typed->state() == FacadeState::Failed);
@@ -192,8 +193,40 @@ int RunTransportFacadeTests(int argc, char** argv) {
             auto t = FM(d); FCHECK(!t->init() && t->state() == FacadeState::Failed && t->last_error().error == expected);
             rtps::SendResourceList senders; FCHECK(!t->OpenOutputChannel(senders, FL(10)) && senders.empty());
         }
-        auto t = FM(); FCHECK(!t->init(nullptr, 65) && t->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
+        // Contract of init(properties, max_msg_size_no_frag) in the pinned Fast DDS (3.6.2.0 and
+        // 2.14.5: UDPTransportInterface/TCPTransportInterface::init): a non-zero value replaces
+        // the default s_maximumMessageSize (65500) as the limit; 0 means the default. The
+        // transport's maxMessageSize (64 here) must not exceed the effective limit. The earlier
+        // expectation in this test (refuse when no_frag > maxMessageSize) was an incorrect
+        // contract assumption, not a product behavior to preserve.
+        auto t = FM(); FCHECK(!t->init(nullptr, 63) && t->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
         auto permitted = FM(); FCHECK(permitted->init(nullptr, 64));
+        auto larger = FM(); FCHECK(larger->init(nullptr, 65));
+        auto unlimited = FM(); FCHECK(unlimited->init(nullptr, 0));
+        {   // 0 selects the default 65500, not "no limit": a larger maximum is refused at the default.
+            const auto sized = [](std::uint32_t n) {
+                auto base = FD(); DSoftBusTransportDescriptor d(n);
+                d.directory = base.directory; d.egress_selections = base.egress_selections;
+                d.default_metatraffic_unicast = base.default_metatraffic_unicast; d.default_user_unicast = base.default_user_unicast;
+                return d; };
+            const std::uint32_t limit = eprosima::fastdds::rtps::s_maximumMessageSize;
+            auto refused = FM(sized(limit + 1)); FCHECK(!refused->init(nullptr, 0) && refused->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
+            auto just_below = FM(sized(limit + 1)); FCHECK(!just_below->init(nullptr, limit));
+            auto lifted = FM(sized(limit + 1)); FCHECK(lifted->init(nullptr, limit + 1));
+            auto at_default = FM(sized(limit)); FCHECK(at_default->init(nullptr, 0));
+            // The ROS2 bridges (integrations/ros2/Bridge.cpp, target/TargetBridge.cpp) issue a 65535-byte
+            // descriptor with the built-in transports off: 65535 is the largest value a participant with DDS
+            // Security will offer as a receiver buffer. Under this contract it is still accepted only when the
+            // participant states the larger limit, so both bridges set qos.transport().max_msg_size_no_frag.
+            auto ros2_default = FM(sized(65535)); FCHECK(!ros2_default->init(nullptr, 0) && ros2_default->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
+            auto ros2_stated = FM(sized(65535)); FCHECK(ros2_stated->init(nullptr, 65535));
+        }
+        {   // AUDIT-A3: another transport's locator must not overwrite the init diagnostic.
+            auto udp = FL(2); udp.kind = 1;
+            rtps::SendResourceList foreign;
+            FCHECK(!t->OpenOutputChannel(foreign, udp) && foreign.empty());
+            FCHECK(t->last_error().error == FacadeError::UnsupportedNoFragmentRequest);
+        }
         auto receive_only = FD(); receive_only.directory.routes.clear(); auto r = FM(receive_only); FCHECK(r->init());
         rtps::SendResourceList empty; FCHECK(!r->OpenOutputChannel(empty, FL(2)) && empty.empty());
     });
@@ -273,7 +306,7 @@ int RunTransportFacadeTests(int argc, char** argv) {
             if (item == 7) l.address[15] = 1;
             if (item == 8) l.address[0] = 0xff;
             if (item == 9) l.address[15] = 10;
-            const bool supported = item <= 2 || item == 9, allowed = item < 2 || item == 9, remote = item == 1 || item == 9;
+            const bool supported = item <= 2 || item >= 6, allowed = item < 2 || item == 9, remote = item == 1 || item == 9;
             FCHECK(t->IsLocatorSupported(l) == supported && t->is_locator_allowed(l) == allowed);
             FCHECK(t->is_local_locator(l) == (item == 0) && t->is_locator_reachable(l) == remote);
             FCHECK(t->DoInputLocatorsMatch(l, l) == (item == 0));
@@ -331,6 +364,41 @@ int RunTransportFacadeTests(int argc, char** argv) {
         FCHECK(DSoftBusTransportTestAccess::Deliver(*t, ticket, FL(10), bytes.data(), 65) == InputDeliveryResult::TooLarge);
         FCHECK(DSoftBusTransportTestAccess::Deliver(*t, ticket, FL(12), bytes.data(), 1) == InputDeliveryResult::InvalidRoute);
         FCHECK(receiver.calls == 1); t->CloseInputChannel(FL(2));
+    });
+    cases.emplace_back("FCD-08-secure-size-capacity-boundaries", [] {
+        for (const auto pair : {std::pair<std::uint32_t,std::uint32_t>{65535,65534},
+                               {65535,65535}, {65535,65536}, {65536,65535}, {65536,65536}}) {
+            auto base = FD(); DSoftBusTransportDescriptor d(pair.first);
+            d.directory = base.directory;
+            d.default_metatraffic_unicast = base.default_metatraffic_unicast;
+            d.default_user_unicast = base.default_user_unicast;
+            auto t = FM(d);
+            FCHECK(t->init(nullptr, pair.first)); // Legal backend, limits and no-fragment input first.
+            FacadeReceiver existing, candidate;
+            FCHECK(t->OpenInputChannel(FL(2), &existing, pair.first));
+            const auto ticket = DSoftBusTransportTestAccess::Capture(*t, FL(2));
+            const auto before = DSoftBusTransportTestAccess::Usage(*t);
+            const bool expected = pair.second >= pair.first;
+            FCHECK(t->OpenInputChannel(FL(3), &candidate, pair.second) == expected);
+            if (!expected) {
+                FCHECK(t->last_error().error == FacadeError::InsufficientReceiverCapacity);
+                FCHECK(!t->IsInputChannelOpen(FL(3)) && t->IsInputChannelOpen(FL(2)));
+                FCHECK(DSoftBusTransportTestAccess::Usage(*t).open_channels == before.open_channels);
+                FCHECK(!t->OpenInputChannel(FL(2), &candidate, pair.second));
+                FCHECK(t->last_error().error == FacadeError::InsufficientReceiverCapacity);
+            } else {
+                FCHECK(t->IsInputChannelOpen(FL(3)));
+                FCHECK(t->CloseInputChannel(FL(3)));
+            }
+            const auto same_ticket = DSoftBusTransportTestAccess::Capture(*t, FL(2));
+            std::vector<std::uint8_t> bytes(pair.first, 0x6a);
+            FCHECK(DSoftBusTransportTestAccess::Deliver(*t, ticket, FL(10), bytes.data(), bytes.size()) == InputDeliveryResult::Delivered);
+            FCHECK(DSoftBusTransportTestAccess::Deliver(*t, same_ticket, FL(10), bytes.data(), bytes.size()) == InputDeliveryResult::Delivered);
+            FCHECK(existing.calls == 2 && existing.bytes == bytes && candidate.calls == 0);
+            FCHECK(t->CloseInputChannel(FL(2))); t->shutdown();
+            std::cout << "CAPACITY M=" << pair.first << " C=" << pair.second
+                      << " accepted=" << expected << " existing_receiver_intact=1 exact_bytes=" << bytes.size() << std::endl;
+        }
     });
     cases.emplace_back("FCD-09-input-identity-and-idempotence", [] {
         auto t = FM(), other = FM(); FCHECK(t->init() && other->init()); FacadeReceiver one, two;
@@ -435,7 +503,7 @@ int RunTransportFacadeTests(int argc, char** argv) {
         FILE* capture = std::tmpfile(); FCHECK(capture); std::fflush(stderr);
         const int saved = F_DUP(F_FILENO(stderr)); FCHECK(saved >= 0 && F_DUP2(F_FILENO(capture), F_FILENO(stderr)) >= 0);
         bool failed = false;
-        { auto d = FD(); std::unique_ptr<rtps::TransportInterface> t(d.create_transport()); failed = t && !t->init(); }
+        { auto d = FD(); FCHECK(d.ConfigureV1(ScopedHostDeployment({{"factory-test",0,"synthetic-factory"},0,v1::Profile::BytesNative,"factory.ns",{}})).code == DirectoryError::None); std::unique_ptr<rtps::TransportInterface> t(d.create_transport()); failed = t && !t->init(); }
         std::fflush(stderr); F_DUP2(saved, F_FILENO(stderr)); F_CLOSE(saved);
         std::rewind(capture); char buffer[512]{}; const auto n = std::fread(buffer, 1, sizeof(buffer) - 1, capture); std::fclose(capture);
         FCHECK(failed && n > 0 && std::string(buffer).find("NativeBackendUnavailable") != std::string::npos);

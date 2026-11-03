@@ -1,8 +1,8 @@
-#include <mdds/dsoftbus/EndpointDirectory.hpp>
-#include <mdds/dsoftbus/SendQueue.hpp>
-#include <mdds/dsoftbus/RuntimeSendPath.hpp>
-#include <mdds/dsoftbus/DSoftBusSenderResource.hpp>
-#include <mdds/dsoftbus/InputChannels.hpp>
+#include <fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp>
+#include <fastdds_dsoftbus/dsoftbus/SendQueue.hpp>
+#include <fastdds_dsoftbus/dsoftbus/RuntimeSendPath.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusSenderResource.hpp>
+#include <fastdds_dsoftbus/dsoftbus/InputChannels.hpp>
 #include <fastdds/utils/IPLocator.hpp>
 
 #include <algorithm>
@@ -19,7 +19,7 @@
 #endif
 
 namespace {
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 namespace rtps = eprosima::fastdds::rtps;
 #define BINDING_CHECK(test) do { if (!(test)) throw std::runtime_error(#test); } while (false)
 

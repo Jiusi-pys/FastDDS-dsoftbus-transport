@@ -3,7 +3,7 @@
 #include <charconv>
 #include <limits>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 
 bool ParseTokenArgument(std::string_view text, std::uint64_t& token) noexcept
 {
@@ -104,4 +104,4 @@ bool TokenFirstEntry::Run(const TokenAdmission& admission) noexcept
     return succeeded && closed && restored;
 }
 
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

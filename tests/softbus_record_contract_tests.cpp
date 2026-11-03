@@ -6,7 +6,7 @@
 #include <thread>
 #include <type_traits>
 
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 namespace {
 const std::string network(64, 'a');
 void Require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }

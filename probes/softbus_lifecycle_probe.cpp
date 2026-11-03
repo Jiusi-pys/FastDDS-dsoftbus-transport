@@ -10,7 +10,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
 #define NOMINMAX
 #include <windows.h>
 #else
@@ -24,14 +24,14 @@
 #endif
 
 namespace {
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 using Clock=std::chrono::steady_clock;
 constexpr auto run_budget=std::chrono::seconds(7), close_budget=std::chrono::seconds(3);
 constexpr auto send_budget=std::chrono::seconds(1);
 constexpr auto quiet_budget=std::chrono::milliseconds(200), hold_budget=std::chrono::milliseconds(500);
 constexpr char package_name[]="com.kaihong.mdds", process_name[]="fastdds_dsoftbus_probe";
 constexpr char permission_name[]="ohos.permission.DISTRIBUTED_DATASYNC";
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
 constexpr int bytes_type=2; // Explicit host boundary value, not SDK capability evidence.
 #else
 constexpr int bytes_type=static_cast<int>(DATA_TYPE_BYTES);
@@ -43,19 +43,19 @@ struct Options {
     bool server=false,single=false;
     std::uint64_t token=0;
     std::string run_id,local_name,remote_listen,peer_network,expected_name,expected_network;
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
     std::string fixture;
 #endif
 };
 std::uint64_t ProcessId() noexcept {
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
     return GetCurrentProcessId();
 #else
     return static_cast<std::uint64_t>(getpid());
 #endif
 }
 std::uint64_t ThreadId() noexcept {
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
     return GetCurrentThreadId();
 #else
     return static_cast<std::uint64_t>(syscall(SYS_gettid));
@@ -93,7 +93,7 @@ bool ParseOptions(int argc,char** argv,Options& options) {
                 key=="--remote-listen-name"?&options.remote_listen:key=="--peer-network-id"?&options.peer_network:
                 key=="--expected-remote-initiator-name"?&options.expected_name:
                 key=="--expected-peer-network-id"?&options.expected_network:nullptr;
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
             if(key=="--host-fixture")field=&options.fixture;
 #endif
             if(!field||!field->empty()||i+1==argc)return false;
@@ -109,7 +109,7 @@ bool ParseOptions(int argc,char** argv,Options& options) {
         if(!options.expected_name.empty()||!ValidSocketName(options.remote_listen)||
             !ValidNetwork(options.peer_network)||options.peer_network!=options.expected_network)return false;
     }
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
     const std::array<const char*,9> fixtures{{"normal","different-id","worker-token","blocked-close","thread-failure","callback-copy","unknown-callback","close-thread-failure","event-full"}};
     if(std::none_of(fixtures.begin(),fixtures.end(),[&](const char* name){return options.fixture==name;}))return false;
 #endif
@@ -150,7 +150,7 @@ public:
             const auto admission=contract.RegisterSocket(socket);
             if(admission==LifecycleAdmission::Full||admission==LifecycleAdmission::Conflict||admission==LifecycleAdmission::Invalid)return;
             if(contract.Accept(socket,CopyRecordPeer(name,network,package,type)))contract.SetReady(socket);
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
             if(options.fixture=="event-full")for(std::size_t i=0;i<=LifecycleContract::event_limit;++i)
                 contract.Report(LifecycleEventKind::CallbackEnter,socket,0,0,ThreadId());
 #endif
@@ -159,7 +159,7 @@ public:
     void Bytes(int socket,const void* bytes,std::uint32_t length) noexcept override {
         LifecycleCallbackLease lease(contract,socket,ThreadId());
         try {
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
             if(options.fixture=="callback-copy")throw std::bad_alloc();
 #endif
             contract.Receive(socket,bytes,length);
@@ -295,7 +295,7 @@ private:
     std::size_t logged=0;
 };
 
-#ifndef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifndef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
 std::atomic<ProbeCallbacks*> callbacks{nullptr};
 void NativeBound(int socket,PeerSocketInfo info) noexcept {if(auto* cb=callbacks.load())cb->Bound(socket,info.name,info.networkId,info.pkgName,info.dataType);}
 void NativeBytes(int socket,const void* data,std::uint32_t length) noexcept {if(auto* cb=callbacks.load())cb->Bytes(socket,data,length);}
@@ -400,28 +400,28 @@ class LifecycleTokenOperations final : public TokenEntryOperations {
 public:
     explicit LifecycleTokenOperations(Options value):options(std::move(value)){}
     TaskCheckpoint ObserveTasks() override {
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
         return {true,true,ProcessId(),ProcessId(),1,ProcessId()};
 #else
         return ::ObserveTasks();
 #endif
     }
     std::uint64_t GetSelf() override {
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
         return fixture_token.load();
 #else
         return GetSelfTokenID();
 #endif
     }
     int SetSelf(std::uint64_t token) override {
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
         fixture_token=token;return 0;
 #else
         return SetSelfTokenID(token);
 #endif
     }
     OwnedTokenObservation VerifyOwned(std::uint64_t token,const char* phase) override {
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
         (void)phase;return {token,1,1,0,process_name,0,0,0,{0},0};
 #else
         return ::VerifyOwned(token,phase);
@@ -434,7 +434,7 @@ public:
     bool EnterProvider() override {
         // All of these objects are process-lifetime, including unjoined failure
         // workers. Normal close joins application workers; no callback sees stack state.
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
         auto* boundary=new FixtureBoundary(options);auto* factory=new FixtureFactory(options.fixture);
 #else
         auto* boundary=new NativeBoundary;auto* factory=new LifecycleThreadFactory;
@@ -451,7 +451,7 @@ int RunLifecycleProbe(int argc,char** argv) {
             "--local-name <project-name> --expected-peer-network-id <64hex> --expected-token <owned-id> --preflight-confirmed "
             "[--remote-listen-name <name> --peer-network-id <64hex> | --expected-remote-initiator-name <name>]\n";return 64;
     }
-#ifdef MDDS_LIFECYCLE_HOST_FIXTURE
+#ifdef FASTDDS_DSOFTBUS_LIFECYCLE_HOST_FIXTURE
     std::cout<<"scope=HOST_FIXTURE_NOT_DEVICE\n";
 #else
     std::cout<<"scope=NATIVE_SOCKET_LIFECYCLE\n";

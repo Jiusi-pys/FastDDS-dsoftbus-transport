@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/EndpointDirectory.hpp>
+#include <fastdds_dsoftbus/dsoftbus/EndpointDirectory.hpp>
 
 #include <algorithm>
 #include <array>
@@ -19,9 +19,9 @@
 
 namespace rtps = eprosima::fastdds::rtps;
 namespace dds = eprosima::fastdds::dds;
-using mdds::dsoftbus::EndpointId;
-using mdds::dsoftbus::Locator;
-using mdds::dsoftbus::LocatorCodec;
+using fastdds_dsoftbus::dsoftbus::EndpointId;
+using fastdds_dsoftbus::dsoftbus::Locator;
+using fastdds_dsoftbus::dsoftbus::LocatorCodec;
 
 #define WIRE_CHECK(condition) do { if (!(condition)) throw std::runtime_error( \
     std::string("line ") + std::to_string(__LINE__) + ": " #condition); } while (false)

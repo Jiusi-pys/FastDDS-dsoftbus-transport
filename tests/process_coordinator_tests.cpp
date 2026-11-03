@@ -1,4 +1,4 @@
-#include <mdds/dsoftbus/ProcessCoordinator.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ProcessCoordinator.hpp>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -23,16 +23,16 @@ void operator delete(void* p) noexcept {std::free(p);}
 void operator delete[](void* p) noexcept {std::free(p);}
 void operator delete(void* p,std::size_t) noexcept {std::free(p);}
 void operator delete[](void* p,std::size_t) noexcept {std::free(p);}
-using namespace mdds::dsoftbus;
+using namespace fastdds_dsoftbus::dsoftbus;
 using namespace std::chrono_literals;
 #define CHECK(x) do {if(!(x)) throw std::runtime_error(std::string("line ")+std::to_string(__LINE__)+": " #x);} while(false)
-namespace mdds::dsoftbus {
+namespace fastdds_dsoftbus::dsoftbus {
 class ProcessCoordinatorTestAccess
 {
 public:
     using Hooks=ProcessCoordinator::TestHooks;
-    static auto Build(const NativeTableConfiguration& config,Hooks hooks={})
-    {return ProcessCoordinator::BuildWithHooks(config,{},ProcessClock{},1s,std::move(hooks));}
+    static auto Build(const NativeTableConfiguration& config,Hooks hooks={},std::shared_ptr<ProcessReceiveObserver> observer={})
+    {return ProcessCoordinator::BuildWithHooks(config,{},ProcessClock{},1s,std::move(hooks),std::move(observer));}
 };
 }
 namespace {
@@ -67,9 +67,10 @@ struct Fixture
     std::unique_ptr<ProcessCoordinator> process;
     NamespaceLease space;
     NativeOwnerLease owner;
-    explicit Fixture(const NativeTableConfiguration& c=Config(),ProcessCoordinatorTestAccess::Hooks hooks={}) :config(c)
+    explicit Fixture(const NativeTableConfiguration& c=Config(),ProcessCoordinatorTestAccess::Hooks hooks={},
+            std::shared_ptr<ProcessReceiveObserver> observer={}) :config(c)
     {
-        auto built=ProcessCoordinatorTestAccess::Build(config,std::move(hooks));CHECK(built);process=std::move(*built.value);
+        auto built=ProcessCoordinatorTestAccess::Build(config,std::move(hooks),std::move(observer));CHECK(built);process=std::move(*built.value);
         auto& native=process->ModelNative();auto ns=native.AcquireNamespace(L(2),config);CHECK(ns);space=*ns.value;
         auto dial=native.ReserveDial(space,{L(2),L(10)});CHECK(dial);owner=dial.value->owner;
         CHECK(dial.value->socket_call->CallEntered()==NativeStatus::None);
@@ -386,9 +387,113 @@ void ReturnedProviderStillSettling()
     auto next=p.AttachApplication({L(2)},{},Limits());CHECK(next);Detach(p,*next.value);f.Finish();
 }
 }
+void ReceiveObservationBarriers()
+{
+    for(const auto stage:{ReceiveStage::Captured,ReceiveStage::OwnedCopy,ReceiveStage::Admitted,ReceiveStage::Running}) {
+        struct Observer final:ProcessReceiveObserver {
+            ReceiveStage pause;Event entered,resume;std::atomic<unsigned> released{0},settled{0},bad{0};
+            ReceiverIdentity original;const std::uint8_t* sdk=nullptr;
+            void OnReceive(ReceiveStage s,const ReceiveDiagnostic& d,const std::uint8_t* b,std::size_t n) noexcept override {
+                if(!(d.identity==original)||d.correlation!=89) ++bad;
+                if(s==ReceiveStage::OwnedCopy&&(b==sdk||n!=3||b[0]!=1||b[2]!=3)) ++bad;
+                if(s==ReceiveStage::Settled) ++settled;
+                if(s==ReceiveStage::RecordReleased) ++released;
+                if(s==pause) {entered.Signal();resume.Wait();}
+            }
+        };
+        auto observer=std::make_shared<Observer>();observer->pause=stage;observer->sdk=bytes;
+        Fixture f(TwoLocals(),{},observer);auto& p=*f.process;Receiver old,fresh;
+        auto app=p.AttachApplication({L(2)},{},Limits());CHECK(app);
+        auto binding=p.OpenReceiver(*app.value,L(2),&old);CHECK(binding.result==ReceiverOpenResult::Opened);
+        observer->original=p.ObserveReceiver(binding.binding);
+        const bool before_queue=stage==ReceiveStage::Captured||stage==ReceiveStage::OwnedCopy;
+        if(!before_queue) CHECK(p.Receive(f.Pin(),bytes,sizeof(bytes),ProcessClock::Clock::time_point::max(),89)==ReceiveAdmissionResult::Accepted);
+        auto activity=std::async(std::launch::async,[&]{
+            if(before_queue) return p.Receive(f.Pin(),bytes,sizeof(bytes),ProcessClock::Clock::time_point::max(),89)==ReceiveAdmissionResult::Revoked;
+            auto invocation=p.NextReceive();CHECK(invocation);return invocation.value->Run()==InputDeliveryResult::Delivered;
+        });
+        observer->entered.Wait();CHECK(p.BeginDetach(*app.value)==NativeStatus::None);
+        const auto pending=p.ProgressDetach(*app.value);CHECK(pending.phase==ProcessApplicationPhase::Detaching);
+        CHECK(before_queue?pending.copying==1:pending.dispatching==1);
+        auto q=p.AttachApplication({L(3)},{},Limits());CHECK(q);Detach(p,*q.value);
+        observer->resume.Signal();CHECK(Finish(activity));
+        CHECK(p.ProgressDetach(*app.value).phase==ProcessApplicationPhase::Detached);
+        CHECK(observer->released==1&&observer->bad==0&&observer->settled==(before_queue?0u:1u));
+        auto replacement=p.AttachApplication({L(2)},{},Limits());CHECK(replacement);
+        CHECK(p.OpenReceiver(*replacement.value,L(2),&fresh).result==ReceiverOpenResult::Opened);
+        CHECK(!p.NextReceive()&&fresh.calls==0&&old.calls==(before_queue?0:1));
+        Detach(p,*replacement.value);f.Finish();
+    }
+}
+
+void BidirectionalSendKeepsOriginalOwner()
+{
+    auto config=Config();config.directions[0]=RouteDirection::Both;
+    auto built=ProcessCoordinator::Build(config);CHECK(built);auto& p=**built.value;auto& native=p.Native();
+    auto ns=native.AcquireNamespace(L(2),config);CHECK(ns);
+    auto inbound=native.ObserveInbound(*ns.value,702,{"same-namespace","peer-network","peer-dial",RecordDataType::Bytes});
+    CHECK(inbound.accepted&&inbound.owner);
+    auto app=p.AttachApplication({L(2)},{},Limits());CHECK(app);rtps::SendResourceList senders;
+    CHECK(p.AttachSender(*app.value,senders).ok());const auto deadline=SendQueue::Clock::now()+10s;
+    CHECK(Send(*senders.front(),deadline));auto original=p.TakeSend(*app.value);CHECK(original);
+    auto dial=native.ReserveDial(*ns.value,{L(2),L(10)});CHECK(dial);
+    CHECK(dial.value->socket_call->CallEntered()==NativeStatus::None);
+    CHECK(dial.value->socket_call->Complete(NativeSocketResult::Id(703)).status==NativeStatus::None);
+    auto bind=native.BeginBind(dial.value->owner);CHECK(bind);CHECK(bind.value->CallEntered()==NativeStatus::None);
+    CHECK(bind.value->Complete(SyncBindResult::Success()).status==NativeStatus::None);
+    struct RecordingProvider final:NativeSendProvider {
+        int calls=0;NativeSocketId id=-1;
+        std::int32_t Send(NativeSocketId socket,const Route&,const std::uint8_t*,std::size_t,
+                SendQueue::Clock::time_point,std::int32_t) override {++calls;id=socket;return 0;}
+    };
+    auto provider=std::make_shared<RecordingProvider>();
+    auto invocation=p.TryAdmitSend(*original.value,provider);CHECK(invocation);
+    CHECK(invocation.value->Run().status==NativeStatus::None&&provider->calls==1&&provider->id==702);
+    CHECK(Send(*senders.front(),deadline));auto next=p.TakeSend(*app.value);CHECK(next);
+    CHECK(dial.value->owner.RequestClose()==NativeStatus::None);
+    auto stale=p.TryAdmitSend(*next.value,provider);CHECK(!stale&&provider->calls==1);
+    CHECK(Send(*senders.front(),deadline));auto fallback=p.TakeSend(*app.value);CHECK(fallback);
+    auto fallback_call=p.TryAdmitSend(*fallback.value,provider);CHECK(fallback_call);
+    CHECK(fallback_call.value->Run().status==NativeStatus::None&&provider->calls==2&&provider->id==702);
+    Detach(p,*app.value);p.BeginShutdown();CHECK(p.PollShutdown().phase==ProcessShutdownPhase::ApplicationsDrained);
+}
+
+void ObservableLifecycleIdentities()
+{
+    Fixture f(TwoLocals());auto& p=*f.process;Receiver old,fresh,q;
+    auto a=p.AttachApplication({L(2)},{},Limits());auto peer=p.AttachApplication({L(3)},{},Limits());CHECK(a&&peer);
+    auto r1=p.OpenReceiver(*a.value,L(2),&old);auto qr=p.OpenReceiver(*peer.value,L(3),&q);
+    CHECK(r1.result==ReceiverOpenResult::Opened&&qr.result==ReceiverOpenResult::Opened);
+    const auto old_id=p.ObserveReceiver(r1.binding),q_id=p.ObserveReceiver(qr.binding);
+    CHECK(old_id.application_incarnation&&old_id.receiver_incarnation&&old_id.logical_token);
+    CHECK(old_id.application_incarnation!=q_id.application_incarnation);
+    CHECK(old_id.receiver_incarnation!=q_id.receiver_incarnation&&old_id.logical_token!=q_id.logical_token);
+    CHECK(&p.Native()==&p.ModelNative());
+    CHECK(p.Receive(f.Pin(),bytes,sizeof(bytes),ProcessClock::Clock::time_point::max(),73)==ReceiveAdmissionResult::Accepted);
+    auto invocation=p.NextReceive();CHECK(invocation);
+    const auto record=invocation.value->Observation();CHECK(record.correlation==73&&record.identity==old_id);
+    CHECK(p.BeginDetach(*a.value)==NativeStatus::None);
+    CHECK(p.ProgressDetach(*a.value).phase==ProcessApplicationPhase::Detaching);
+    CHECK(invocation.value->Observation().identity==old_id);
+    CHECK(invocation.value->Run()==InputDeliveryResult::Delivered);
+    CHECK(p.ProgressDetach(*a.value).phase==ProcessApplicationPhase::Detached);
+    CHECK(p.Receive(f.Pin(),bytes,sizeof(bytes),ProcessClock::Clock::time_point::max(),74)==ReceiveAdmissionResult::NoReceiver);
+    auto b=p.AttachApplication({L(2)},{},Limits());CHECK(b);
+    auto r2=p.OpenReceiver(*b.value,L(2),&fresh);CHECK(r2.result==ReceiverOpenResult::Opened);
+    const auto new_id=p.ObserveReceiver(r2.binding);
+    CHECK(new_id.application_incarnation>old_id.application_incarnation);
+    CHECK(new_id.receiver_incarnation>old_id.receiver_incarnation&&new_id.logical_token>old_id.logical_token);
+    CHECK(p.ObserveReceiver(qr.binding)==q_id&&p.ObserveReceiver(r1.binding)==old_id);
+    CHECK(!p.NextReceive()&&fresh.calls==0&&old.calls==1);
+    Detach(p,*b.value);Detach(p,*peer.value);f.Finish();
+}
+
 int main()
 {
     try {
+        BidirectionalSendKeepsOriginalOwner();std::cout<<"PASS N4-BIDIRECTIONAL-ORIGINAL-SEND\n";
+        ReceiveObservationBarriers();std::cout<<"PASS N4-RECEIVE-OBSERVATION-BARRIERS\n";
+        ObservableLifecycleIdentities();std::cout<<"PASS N4-OBSERVABLE-LIFECYCLE-IDENTITY\n";
         SameLocalRebuild();std::cout<<"PASS N3-COORDINATOR-SAME-LOCAL-80\n";
         GapAndNoReceiver();std::cout<<"PASS N3-COORDINATOR-NO-RECIPIENT\n";
         ExplicitShutdownPending();std::cout<<"PASS N3-COORDINATOR-SHUTDOWN-PENDING\n";

@@ -1,0 +1,7 @@
+// Dedicated bounded type for the unqualified BYTES_NATIVE fragmentation experiment.
+// The sequence bound is a DDS type contract, not the native transport message limit.
+struct ExperimentLargeSample
+{
+    unsigned long index;
+    sequence<octet, 1048576> data;
+};

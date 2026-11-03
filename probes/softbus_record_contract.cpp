@@ -3,7 +3,7 @@
 #include <limits>
 #include <stdexcept>
 
-namespace mdds_probe {
+namespace fastdds_dsoftbus_probe {
 namespace {
 void IncrementSaturated(std::size_t& value) noexcept
 {
@@ -319,4 +319,4 @@ RecordSnapshot SoftbusRecordContract::Snapshot() const
     auto snapshot = state_; snapshot.queued = events_.size(); snapshot.owned = owned_count_;
     return snapshot;
 }
-} // namespace mdds_probe
+} // namespace fastdds_dsoftbus_probe

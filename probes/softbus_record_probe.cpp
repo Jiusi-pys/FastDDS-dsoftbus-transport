@@ -1,6 +1,7 @@
 // S2 native Socket record experiment, not a Fast DDS Transport implementation.
 // This executable NEVER creates/reloads/revokes a token or writes token JSON.
 #include "softbus_record_contract.hpp"
+#include "softbus_probe_profile.hpp"
 #include "token_first_entry.hpp"
 #include <accesstoken_kit.h>
 #include <token_setproc.h>
@@ -22,9 +23,11 @@
 #include <thread>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 namespace {
-using namespace mdds_probe;
+using namespace fastdds_dsoftbus_probe;
 using namespace OHOS::Security::AccessToken;
 using Clock = std::chrono::steady_clock;
 constexpr char process_name[] = "fastdds_dsoftbus_probe";
@@ -33,10 +36,18 @@ constexpr char package_name[] = "com.kaihong.mdds";
 constexpr char provider_path[] = "/system/lib64/platformsdk/libsoftbus_client.z.so";
 constexpr auto run_budget = std::chrono::seconds(7);
 constexpr auto quiet_observation = std::chrono::milliseconds(200);
+static_assert(probe_bytes_data_type == DATA_TYPE_BYTES, "Bytes enum ABI changed");
+static_assert(probe_raw_data_type == DATA_TYPE_RAW_STREAM, "Raw stream enum ABI changed");
+static_assert(probe_encrypted_raw_data_type == DATA_TYPE_RAW_STREAM_ENCRYPED,
+        "Encrypted raw stream enum ABI changed");
 
 struct Options {
     bool server = false;
     bool list_nodes = false;
+    bool check_identities = false;
+    std::string identity_output;
+    ProbeProfile profile = ProbeProfile::Bytes;
+    bool profile_explicit = false;
     std::uint64_t token = 0;
     std::string local_name, remote_listen_name, peer_network_id, expected_initiator_name, expected_peer_network_id;
 };
@@ -46,15 +57,20 @@ void Usage()
     std::cerr << "Usage: softbus_record_probe --server --local-name <listen>"
         " --expected-remote-initiator-name <dial> --expected-peer-network-id <64hex>"
         " --expected-token <owned-id> --preflight-confirmed\n"
-        "   or: softbus_record_probe --list-nodes --expected-token <owned-id> --preflight-confirmed\n"
+        "   or: softbus_record_probe --list-nodes [--check-identities] --expected-token <owned-id> --preflight-confirmed\n"
         "--list-nodes queries current local/online network IDs only; creates no Socket and changes no network membership.\n"
+        "--check-identities additionally observes local and online-peer UDID availability without printing identity bytes.\n"
+        "With that mode only, --identity-output <exact-window>/local-udid.bin exclusively writes the validated local identity privately.\n"
+        "It requires at least one online peer, and accepts no grant or network-membership changes.\n"
         "   or: softbus_record_probe --client --local-name <dial> --remote-listen-name <listen>"
         " --peer-network-id <64hex> --expected-peer-network-id <same64hex>"
         " --expected-token <owned-id> --preflight-confirmed\n"
         "Requires externally verified owned normal/DATASYNC identity; performs no token-file writes.\n"
-        "Record-mode token allowlist: 671793191 (A), 671320465 (B); board binding is externally verified.\n"
+        "Record-mode token allowlist: registered A/B identities; board binding is externally verified.\n"
         "--preflight-confirmed is an operator assertion, not internal authorization evidence.\n"
-        "Experiment: one process, one peer, five byte records, 7s absolute run budget.\n"
+        "Record modes accept --profile bytes|raw|raw-encrypted (default: bytes, logged explicitly).\n"
+        "--list-nodes rejects --profile and remains a read-only route query.\n"
+        "Experiment: one process, one peer, five records, 7s absolute run budget.\n"
         "SDK calls are not cancellable by this budget; use external 10s watchdog (FAIL if triggered).\n";
 }
 bool ValidName(const std::string& name)
@@ -83,6 +99,13 @@ bool ParseOptions(int argc, char** argv, Options& options)
         if ((key == "--server" || key == "--client" || key == "--list-nodes") && !mode)
         { mode = true; options.server = key == "--server"; options.list_nodes = key == "--list-nodes"; }
         else if (key == "--preflight-confirmed" && !preflight) preflight = true;
+        else if (key == "--check-identities" && !options.check_identities) options.check_identities = true;
+        else if (key == "--identity-output" && options.identity_output.empty() && i+1<argc) options.identity_output=argv[++i];
+        else if (key == "--profile" && !options.profile_explicit && i + 1 < argc)
+        {
+            options.profile_explicit = true;
+            if (!ParseProbeProfile(argv[++i], options.profile)) return false;
+        }
         else if (key == "--expected-token" && !token && i + 1 < argc)
         {
             token = true; const std::string value(argv[++i]);
@@ -103,8 +126,9 @@ bool ParseOptions(int argc, char** argv, Options& options)
     if (!mode || !token || !preflight || options.token == 0 ||
             options.token > std::numeric_limits<AccessTokenID>::max()) return false;
     if (options.list_nodes)
-        return options.local_name.empty() && options.remote_listen_name.empty() && options.peer_network_id.empty() &&
+        return (options.identity_output.empty() || (options.check_identities&&ValidIdentityExportPath(options.identity_output))) && !options.profile_explicit && options.local_name.empty() && options.remote_listen_name.empty() && options.peer_network_id.empty() &&
                 options.expected_initiator_name.empty() && options.expected_peer_network_id.empty();
+    if (options.check_identities || !options.identity_output.empty()) return false;
     if (!AdmitTokenEntry({TokenEntryMode::Record, true, preflight, options.token})) return false;
     if (!ValidName(options.local_name) || !ValidNetwork(options.expected_peer_network_id)) return false;
     if (options.server)
@@ -170,7 +194,78 @@ TaskCheckpoint ObserveMainTask()
     return observed;
 }
 
-bool ListOnlineNodes()
+bool SavePrivateIdentity(const std::string& path,const void* bytes,std::size_t length)
+{
+    if(!ValidIdentityExportPath(path)||!ValidIdentityExportBytes(bytes,length))return false;
+    const auto parent=path.substr(0,path.rfind('/'));
+    const int directory=open(parent.c_str(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+    if(directory<0)return false;
+    struct stat owned{};
+    if(fstat(directory,&owned)!=0||!S_ISDIR(owned.st_mode)||owned.st_uid!=getuid()||(owned.st_mode&0022)) {close(directory);return false;}
+    const int file=openat(directory,"local-udid.bin",O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,0600);
+    if(file<0){close(directory);return false;}
+    struct stat created{};
+    bool ok=fstat(file,&created)==0&&S_ISREG(created.st_mode)&&(created.st_mode&0777)==0600&&created.st_uid==getuid();
+    std::size_t offset=0;
+    while(ok&&offset<length) {
+        const auto written=write(file,static_cast<const unsigned char*>(bytes)+offset,length-offset);
+        if(written<0&&errno==EINTR)continue;
+        if(written<=0){ok=false;break;}offset+=static_cast<std::size_t>(written);
+    }
+    if(close(file)!=0)ok=false;
+    if(!ok) {
+        struct stat current{};
+        if(fstatat(directory,"local-udid.bin",&current,AT_SYMLINK_NOFOLLOW)==0&&current.st_dev==created.st_dev&&current.st_ino==created.st_ino)
+            (void)unlinkat(directory,"local-udid.bin",0);
+    }
+    if(close(directory)!=0)ok=false;
+    return ok;
+}
+bool CheckNodeIdentities(void* provider, const std::string& local_id,
+        const std::vector<std::string>& remote_ids,const std::string& output)
+{
+    const auto get_key = reinterpret_cast<decltype(&GetNodeKeyInfo)>(dlsym(provider, "GetNodeKeyInfo"));
+    if (!get_key)
+    {
+        std::cout << "stage=identity_summary result=FAIL reason=GetNodeKeyInfo_symbol_missing"
+            << " local=NOT_QUERIED remote=NOT_QUERIED qualification_only=true\n";
+        return false;
+    }
+    std::array<std::uint8_t,UDID_BUF_LEN> local_identity{};
+    std::size_t local_length=0;
+    const auto query = [get_key,&local_identity,&local_length](const std::string& network, const char* kind, std::size_t index) {
+        std::array<std::uint8_t, UDID_BUF_LEN> identity;
+        identity.fill(0xa5); // A missing native terminator must not be supplied by this probe.
+        const auto started = Clock::now();
+        std::cout << "stage=GetNodeKeyInfo action=START route_kind=" << kind << " index=" << index
+            << " key=NODE_KEY_UDID buffer_capacity=" << identity.size() << '\n';
+        const int rc = get_key(package_name, network.c_str(), NODE_KEY_UDID,
+                identity.data(), static_cast<std::int32_t>(identity.size()));
+        const auto observed = ObserveProbeIdentity(rc, identity.data(), identity.size());
+        if(observed.valid&&!std::strcmp(kind,"local")) {local_length=observed.length;std::copy_n(identity.begin(),local_length,local_identity.begin());}
+        identity.fill(0); // Identity bytes are never included in diagnostics.
+        std::cout << "stage=GetNodeKeyInfo action=RETURN route_kind=" << kind << " index=" << index
+            << " rc=" << rc << " elapsed_ms="
+            << std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-started).count()
+            << " nul_terminated=" << observed.nul_terminated << " identity_length=" << observed.length
+            << " valid=" << observed.valid << " identity_bytes=NOT_LOGGED\n";
+        return observed.valid;
+    };
+    const auto checked=CheckProbeIdentitySet(local_id,remote_ids,!output.empty(),query);
+    const bool local_valid=checked.local_valid,complete=checked.complete;
+    const auto remote_valid=checked.remote_valid;
+    const bool exported=output.empty() || (complete&&SavePrivateIdentity(output,local_identity.data(),local_length));
+    local_identity.fill(0);
+    if(!output.empty())std::cout<<"stage=identity_export result="<<(exported?"PASS":"FAIL")<<" bytes="<<local_length<<" exclusive=1 mode=0600 identity_bytes=NOT_LOGGED\n";
+    std::cout << "stage=identity_summary result=" << (complete ? "PASS" : "FAIL")
+        << " local_valid=" << local_valid << " remote_expected=" << checked.remote_expected
+        << " remote_valid=" << remote_valid << " remote="
+        << (!output.empty()?"NOT_QUERIED_LOCAL_EXPORT":remote_ids.empty() ? "NOT_OBSERVED" : remote_valid == remote_ids.size() ? "ALL_VALID" : "INCOMPLETE")
+        << " network_id_as_stable_identity=false qualification_only=true\n";
+    return complete&&exported;
+}
+
+bool ListOnlineNodes(bool check_identities,const std::string& identity_output)
 {
     // Deliberately separate from Runtime/LoadProvider: this mode cannot create
     // or bind a Socket. The provider stays loaded until process exit.
@@ -222,11 +317,19 @@ bool ListOnlineNodes()
     std::cout << "stage=route_summary query_valid=true remote_count=" << remote_ids.size()
         << " route_available=" << !remote_ids.empty() << " free_returned=" << freed
         << " allocation_present=" << had_buffer << " node_observation_cap=32 communication=NOT_RUN\n";
-    return true;
+    return !check_identities || CheckNodeIdentities(provider, local_id, remote_ids,identity_output);
+}
+
+const ProbeProfileDescription& RequireProfile(ProbeProfile profile)
+{
+    const auto* description = DescribeProbeProfile(profile);
+    if (!description) throw std::invalid_argument("unknown_probe_profile");
+    return *description;
 }
 
 struct Runtime {
     Options options;
+    const ProbeProfileDescription profile;
     SoftbusRecordContract contract;
     Clock::time_point start = Clock::now();
     Clock::time_point deadline = start + run_budget;
@@ -237,14 +340,15 @@ struct Runtime {
     decltype(&Listen) listen = nullptr;
     decltype(&Bind) bind = nullptr;
     decltype(&SendBytes) send = nullptr;
+    decltype(&SendStream) send_stream = nullptr;
     decltype(&Shutdown) shutdown = nullptr;
     ISocketListener listener{};
     std::size_t shutdown_returned = 0;
     bool sdk_threshold_failed = false;
     explicit Runtime(Options value)
-        : options(std::move(value)), contract(options.server,
+        : options(std::move(value)), profile(RequireProfile(options.profile)), contract(options.server,
               options.server ? options.expected_initiator_name : options.remote_listen_name,
-              options.expected_peer_network_id, DATA_TYPE_BYTES) {}
+              options.expected_peer_network_id, profile.peer_data_type) {}
 };
 
 // Intentionally process-lifetime storage, not a leaked worker thread. The SDK
@@ -280,7 +384,25 @@ void Bound(int socket, PeerSocketInfo peer) noexcept
     });
 }
 void Bytes(int socket, const void* data, std::uint32_t size) noexcept
-{ Callback([&](Runtime& value) { value.contract.OnBytes(socket, data, size); }); }
+{
+    Callback([&](Runtime& value) {
+        if (value.profile.send_method != ProbeSendMethod::Bytes)
+        { value.contract.Fail("unexpected_bytes_callback"); return; }
+        value.contract.OnBytes(socket, data, size);
+    });
+}
+void Stream(int socket, const StreamData* data, const StreamData*, const StreamFrameInfo*) noexcept
+{
+    Callback([&](Runtime& value) {
+        if (value.profile.send_method != ProbeSendMethod::Stream)
+        { value.contract.Fail("unexpected_stream_callback"); return; }
+        if (!ValidateProbeStreamFrame(data != nullptr, data ? data->buf : nullptr,
+                data ? data->bufLen : 0, record_queue_bytes))
+        { value.contract.Fail("invalid_stream_frame"); return; }
+        // The existing record queue takes ownership before this SDK callback returns.
+        value.contract.OnBytes(socket, data->buf, static_cast<std::size_t>(data->bufLen));
+    });
+}
 void Closed(int socket, ShutdownReason reason) noexcept
 { Callback([&](Runtime& value) { value.contract.OnShutdown(socket, reason); }); }
 void Error(int socket, std::int32_t code) noexcept
@@ -293,9 +415,11 @@ long long At(Runtime& value, Clock::time_point at = Clock::now())
 void LogEvent(Runtime& value, const RecordEvent& event)
 {
     const char* kind = event.kind == RecordEventKind::Bound ? "OnBind" : event.kind == RecordEventKind::Bytes ?
-        "OnBytes" : event.kind == RecordEventKind::Shutdown ? "OnShutdown" : "OnError";
+        (value.profile.send_method == ProbeSendMethod::Bytes ? "OnBytes" : "OnStream") :
+        event.kind == RecordEventKind::Shutdown ? "OnShutdown" : "OnError";
     std::cout << "event=" << kind << " at_ms=" << At(value,event.at) << " socket=" << event.socket
-        << " code=" << event.code << " before_bind_return=" << event.before_bind_return;
+        << " code=" << event.code << " before_bind_return=" << event.before_bind_return
+        << " profile=" << value.profile.name;
     if (event.kind == RecordEventKind::Bound)
         std::cout << " name_bytes=" << event.peer.name.size() << " network_bytes=" << event.peer.network_id.size()
             << " package_bytes=" << event.peer.package.size() << " data_type=" << event.peer.data_type
@@ -313,26 +437,46 @@ void LoadProvider(Runtime& value)
     value.listen = reinterpret_cast<decltype(&Listen)>(dlsym(value.provider,"Listen"));
     value.bind = reinterpret_cast<decltype(&Bind)>(dlsym(value.provider,"Bind"));
     value.send = reinterpret_cast<decltype(&SendBytes)>(dlsym(value.provider,"SendBytes"));
+    value.send_stream = reinterpret_cast<decltype(&SendStream)>(dlsym(value.provider,"SendStream"));
     value.shutdown = reinterpret_cast<decltype(&Shutdown)>(dlsym(value.provider,"Shutdown"));
-    if (!value.socket || !value.listen || !value.bind || !value.send || !value.shutdown)
+    const bool sender_present = value.profile.send_method == ProbeSendMethod::Bytes ?
+        value.send != nullptr : value.send_stream != nullptr;
+    if (!value.socket || !value.listen || !value.bind || !sender_present || !value.shutdown)
         throw std::runtime_error("provider_symbols_missing");
     // Entire current SDK structure initialized, including newer optional fields.
     value.listener = ISocketListener{};
     value.listener.OnBind = Bound; value.listener.OnBytes = Bytes;
     value.listener.OnShutdown = Closed; value.listener.OnError = Error;
     value.listener.OnMessage = UnexpectedMessage;
+    value.listener.OnStream = Stream;
 }
 bool SendRecord(Runtime& value, int socket, const std::vector<std::uint8_t>& bytes, std::size_t index)
 {
     if (Clock::now() >= value.deadline || !value.contract.Snapshot().ready) return false;
+    const bool stream = value.profile.send_method == ProbeSendMethod::Stream;
+    if (bytes.empty() || bytes.size() > record_queue_bytes ||
+            bytes.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+    { value.contract.Fail("invalid_send_record"); return false; }
+    const char* api = stream ? "SendStream" : "SendBytes";
     const auto started = Clock::now();
-    std::cout << "stage=SendBytes action=START at_ms=" << At(value,started) << " socket=" << socket
+    std::cout << "stage=" << api << " action=START at_ms=" << At(value,started) << " socket=" << socket
         << " index=" << index << " bytes=" << bytes.size() << " fnv1a=" << RecordHash(bytes) << '\n';
-    const auto rc = value.send(socket, bytes.data(), static_cast<std::uint32_t>(bytes.size()));
+    int rc;
+    if (stream)
+    {
+        // Socket API declares a mutable buf member; SendStream borrows the
+        // input for this synchronous call, as in the official raw-stream test.
+        StreamData data{reinterpret_cast<char*>(const_cast<std::uint8_t*>(bytes.data())),
+            static_cast<int>(bytes.size())};
+        StreamData ext{};
+        StreamFrameInfo frame{};
+        rc = value.send_stream(socket, &data, &ext, &frame);
+    }
+    else rc = value.send(socket, bytes.data(), static_cast<std::uint32_t>(bytes.size()));
     const auto ended = Clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(ended-started).count();
     const bool threshold = elapsed <= 1000;
-    std::cout << "stage=SendBytes action=RETURN at_ms=" << At(value,ended) << " rc=" << rc << " elapsed_ms=" << elapsed
+    std::cout << "stage=" << api << " action=RETURN at_ms=" << At(value,ended) << " rc=" << rc << " elapsed_ms=" << elapsed
         << " observation_threshold_pass=" << threshold << " submitted_result=RETURNED delivery=SEPARATE\n";
     value.sdk_threshold_failed |= !threshold;
     return rc == 0 && threshold && ended < value.deadline;
@@ -343,7 +487,8 @@ bool RunRecords(Runtime& value)
     LoadProvider(value);
     char package[] = "com.kaihong.mdds";
     SocketInfo info{};
-    info.name = value.options.local_name.data(); info.pkgName = package; info.dataType = DATA_TYPE_BYTES;
+    info.name = value.options.local_name.data(); info.pkgName = package;
+    info.dataType = static_cast<TransDataType>(value.profile.socket_data_type);
     if (!value.options.server)
     { info.peerName = value.options.remote_listen_name.data(); info.peerNetworkId = value.options.peer_network_id.data(); }
     auto started = Clock::now();
@@ -480,7 +625,7 @@ public:
             << " record_budget_ms=7000 record_budget_start=RUNTIME_CREATION"
             << " ordering=" << (query_only_ ? "LEGACY_MANAGER_BEFORE_SELECT" : "TOKEN_BEFORE_FIRST_EXPLICIT_MANAGER_OR_PROVIDER")
             << " historical_ipc=NOT_PROVEN sdk_thread_tokens=NOT_MEASURED\n";
-        if (query_only_) return ListOnlineNodes();
+        if (query_only_) return ListOnlineNodes(options_.check_identities,options_.identity_output);
         runtime = new Runtime(std::move(options_));
         return RunRecords(*runtime);
     }
@@ -497,6 +642,14 @@ int main(int argc,char** argv)
     std::cout << std::unitbuf;
     Options options;
     if(!ParseOptions(argc,argv,options)) { Usage(); return 64; }
+    if (!options.list_nodes)
+    {
+        const auto& profile = RequireProfile(options.profile);
+        std::cout << "stage=profile requested=" << profile.name
+            << " source=" << (options.profile_explicit ? "EXPLICIT" : "DEFAULT_BYTES_COMPATIBILITY")
+            << " socket_data_type=" << profile.socket_data_type << " expected_peer_data_type=" << profile.peer_data_type
+            << " peer_type_proves_encryption=false native_options=UNCHANGED\n";
+    }
     std::cout << "scope=" << (options.list_nodes?"READONLY_ROUTE_QUERY":"SOCKET_RECORD_EXPERIMENT")
         << " role=" << (options.list_nodes?"list-nodes":options.server?"server":"client")
         << " processName=" << process_name << " package=" << package_name << " uid=" << getuid() << " pid=" << getpid()

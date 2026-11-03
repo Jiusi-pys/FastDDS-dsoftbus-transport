@@ -1,5 +1,9 @@
 # N3-1 根构建接线完成记录
 
+本文件保留 N3 历史构建与 target 命名以绑定原始收据；它不定义当前公开
+`FastDDSDSoftBusTransport` 接口。当前命名和安装入口见 [NAMING](NAMING.md)
+与 [安装说明](INSTALL.md)。
+
 ## 状态
 
 本记录只覆盖 N3-1：将既有 N2 SDK-free 发送执行模型接入根 CMake 生产目标，并验证源码子工程消费者。它不代表 N3 application 生命周期语义完成，也不代表真实 DSoftBus Transport 可用。
