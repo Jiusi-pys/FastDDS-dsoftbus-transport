@@ -4,7 +4,7 @@
 the direct-goal runner never set `max_msg_size_no_frag`, so `DSoftBusTransport::init` rejected its 65536-byte
 maximum against Fast DDS 2.14's default 65500 limit and the Participant was null on both boards. With a one-line
 runner config fix, fresh-process A↔B passed 3 writes / 3 takes per side with clean destroy, exit and entry restore.
-Host stock ctest on this branch: FAIL 53/64 (11 candidate-tree fake-socket tests). A 150000-byte fragmented sample per direction also passed (m3). Reconnect/re-accept, hot rebuild and ROS 2 on this build are NOT_RUN. Details:
+Host stock ctest on this branch: FAIL 53/64 (11 candidate-tree fake-socket tests). A 150000-byte fragmented sample per direction also passed (m3). Same-name Participant hot rebuild PASS on device (m4, m7). Route outage (15 s IP drop) does NOT recover: the stopped outgoing socket is never renewed in the stock path (m5, m6), so re-accept remains NOT IMPLEMENTED. ROS 2 on this build is NOT_RUN. Details:
 [STAGE1_DIRECT_GOAL_DEVICE_20261104.md](STAGE1_DIRECT_GOAL_DEVICE_20261104.md).
 
 ## 2026-10-31 evaluator rejection evidence — COMPLETE LOCAL / SYNTHETIC ONLY

@@ -2,6 +2,7 @@
 #include "../../examples/dds214_layer_baseline/LayerSample.hpp"
 #include "frag_sample.hpp"
 #include <cstdio>
+#include <cstdlib>
 #include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
@@ -64,6 +65,7 @@ struct Session {
     NS_RunHandle& h;Signals signals;fd::TypeSupport type{new LayerSampleType};
     std::unique_ptr<ds::experimental::Runtime> runtime;
     std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface> descriptor;
+    std::vector<std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>> retained_descriptors;
     fd::DomainParticipantFactory* factory=nullptr;fd::DomainParticipant* participant=nullptr;
     fd::DataWriter* writer=nullptr;fd::DataReader* reader=nullptr;
     std::thread pump,watch;std::atomic<bool> pump_failed{false};bool finish_attempted=false,closed=false;
@@ -90,7 +92,7 @@ struct Session {
         try{if(pump.joinable())pump.join();}catch(...){ok=false;}
         {std::lock_guard<std::mutex> l(h.watch_gate);h.watch_stop=true;h.watch_changed.notify_all();}
         try{if(watch.joinable())watch.join();}catch(...){ok=false;}
-        if(ok){descriptor.reset();try{if(runtime&&!runtime->Close())ok=false;}catch(...){ok=false;}}
+        if(ok){descriptor.reset();retained_descriptors.clear();try{if(runtime&&!runtime->Close())ok=false;}catch(...){ok=false;}}
         closed=ok;return ok;
     }
 };
@@ -110,7 +112,7 @@ static void guid(uint8_t* p,const eprosima::fastrtps::rtps::GUID_t& g){std::memc
 static int64_t sequence(const eprosima::fastrtps::rtps::SequenceNumber_t& s){need(s.high>=0&&(s.high||s.low));return (int64_t(s.high)<<32)|s.low;}
 static void run_session(Session& s,NS_RunResult& out){
     auto& h=s.h;const auto& q=h.request.deployment;const auto& local=h.request.local;
-    auto config=configuration(q);s.runtime=std::make_unique<ds::experimental::Runtime>(backend(config,q));
+    auto config=configuration(q);s.runtime=std::make_unique<ds::experimental::Runtime>(backend(config,q),ds::experimental::RuntimeLifetime::PersistentNativeAnchor);
     need(s.runtime->SetPreConnectGate([&s,&h]{try{
         const auto o=s.runtime->ObserveSocket();const auto& listen=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Listen)];
         need(!o.fake_sdk&&!o.stopped&&!o.closed&&!o.listener_stopped&&o.listener_configured&&o.listener_socket&&*o.listener_socket>=0&&!o.first_api_error&&!o.first_callback_error&&!o.first_exception&&listen.calls==1&&listen.returns==1&&listen.last_call&&listen.last_call->called&&listen.last_call->returned&&listen.last_call->provider_return==0);
@@ -170,6 +172,78 @@ static void run_session(Session& s,NS_RunResult& out){
         const auto fleft=q.deadline_ns-ticks();need(h.live(),NS_CANCELLED);need(fleft<=uint64_t(INT32_MAX)*1000000000u,NS_CONTEXT);
         need(fw->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(static_cast<int32_t>(fleft/1000000000u),static_cast<uint32_t>(fleft%1000000000u)))==RC::RETCODE_OK);
         std::printf("FRAG_SAMPLE side=%u bytes=%u max_message=%u written=1 taken=1 verified=1 acked=1\n",static_cast<unsigned>(local.side),stage1_frag::kBytes,static_cast<unsigned>(config.maxMessageSize));std::fflush(stdout);
+    }
+    {   // Same-name Participant hot rebuild on the live native anchor (PersistentNativeAnchor).
+        // Delete the whole Participant, create a new one with the same name from a new
+        // descriptor, then exchange one 150000-byte sample per direction on a
+        // TRANSIENT_LOCAL topic so a peer that rebuilds later still receives it.
+        std::vector<std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>> retained{s.descriptor};
+        const auto old_prefix=s.participant->guid().guidPrefix;
+        need(s.participant->delete_contained_entities()==RC::RETCODE_OK);need(s.factory->delete_participant(s.participant)==RC::RETCODE_OK);
+        s.participant=nullptr;s.writer=nullptr;s.reader=nullptr;need(h.live()&&!s.pump_failed,NS_CANCELLED);
+        s.descriptor=s.runtime->MakeStockDescriptor(config);need(bool(s.descriptor));retained.push_back(s.descriptor);
+        qos.transport().user_transports={s.descriptor};
+        s.participant=s.factory->create_participant(q.domain,qos);need(s.participant);need(!(s.participant->guid().guidPrefix==old_prefix));
+        need(std::string(s.participant->get_qos().name().c_str())==std::string(qos.name().c_str()));
+        need(s.type.register_type(s.participant)==RC::RETCODE_OK);
+        fd::TypeSupport rb_type{new stage1_frag::Type};need(rb_type.register_type(s.participant)==RC::RETCODE_OK);
+        pub=s.participant->create_publisher(fd::PUBLISHER_QOS_DEFAULT);sub=s.participant->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pub&&sub);
+        auto rtopic=[&](unsigned side){return s.participant->create_topic("native_run_"+std::to_string(local.run)+"_"+std::to_string(side)+"_rebuild",rb_type.get_type_name(),fd::TOPIC_QOS_DEFAULT);};
+        auto* rtx=rtopic(local.side);auto* rrx=rtopic(1-local.side);need(rtx&&rrx);
+        fd::DataWriterQos bwq=wq;fd::DataReaderQos brq=rq;bwq.history().depth=1;brq.history().depth=1;
+        bwq.durability().kind=fd::TRANSIENT_LOCAL_DURABILITY_QOS;brq.durability().kind=fd::TRANSIENT_LOCAL_DURABILITY_QOS;
+        auto* bw=pub->create_datawriter(rtx,bwq,&s.signals);auto* br=sub->create_datareader(rrx,brq,&s.signals);need(bw&&br);
+        auto mine=stage1_frag::make(local.run+1,local.side);need(bw->write(&mine));
+        bool got=false;
+        for(;;){const auto seen=h.progress.snapshot();need(h.live()&&!s.pump_failed,NS_CANCELLED);
+            for(;;){stage1_frag::Sample v;fd::SampleInfo info;const auto rc=br->take_next_sample(&v,&info);if(rc==RC::RETCODE_NO_DATA)break;need(rc==RC::RETCODE_OK&&info.valid_data&&!got);
+                need(stage1_frag::valid(v,local.run+1,1-local.side));got=true;}
+            if(got)break;need(h.progress.wait(seen,end_at(q.deadline_ns)),NS_CANCELLED);}
+        const auto bleft=q.deadline_ns-ticks();need(h.live(),NS_CANCELLED);need(bleft<=uint64_t(INT32_MAX)*1000000000u,NS_CONTEXT);
+        need(bw->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(static_cast<int32_t>(bleft/1000000000u),static_cast<uint32_t>(bleft%1000000000u)))==RC::RETCODE_OK);
+        // Recreate the standard endpoints for the existing ACK/teardown protocol.
+        tx=topic(local.side);rx=topic(1-local.side);need(tx&&rx);
+        s.writer=pub->create_datawriter(tx,wq,&s.signals);s.reader=sub->create_datareader(rx,rq,&s.signals);need(s.writer&&s.reader);
+        std::printf("HOT_REBUILD side=%u same_name=1 new_guid_prefix=1 descriptors=%u sample_bytes=%u written=1 taken=1 verified=1 acked=1\n",static_cast<unsigned>(local.side),static_cast<unsigned>(retained.size()),stage1_frag::kBytes);std::fflush(stdout);
+        s.retained_descriptors=std::move(retained);
+    }
+    if([]{const char* d=std::getenv("TMPDIR");if(!d)return false;return access((std::string(d)+"/route_window").c_str(),F_OK)==0;}())
+    {   // Route outage window (opt-in: TMPDIR/route_window exists): 45 s of 200 ms counter samples per direction on the live
+        // Participant. The host drops all IP traffic between the boards for part of it.
+        // Pass requires samples to arrive again after the longest gap (recovery).
+        auto rtopic=[&](unsigned side){return s.participant->create_topic("native_run_"+std::to_string(local.run)+"_"+std::to_string(side)+"_route",s.type.get_type_name(),fd::TOPIC_QOS_DEFAULT);};
+        auto* otx=rtopic(local.side);auto* orx=rtopic(1-local.side);need(otx&&orx);
+        fd::DataWriterQos owq=wq;fd::DataReaderQos orq=rq;owq.history().depth=16;orq.history().depth=16;
+        auto* ow=pub->create_datawriter(otx,owq,&s.signals);auto* orr=sub->create_datareader(orx,orq,&s.signals);need(ow&&orr);
+        for(;;){const auto seen=h.progress.snapshot();need(h.live()&&!s.pump_failed,NS_CANCELLED);fd::PublicationMatchedStatus w;fd::SubscriptionMatchedStatus r;
+            need(ow->get_publication_matched_status(w)==RC::RETCODE_OK&&orr->get_subscription_matched_status(r)==RC::RETCODE_OK);
+            if(w.current_count>=1&&r.current_count>=1)break;need(h.progress.wait(seen,end_at(q.deadline_ns)),NS_CANCELLED);}
+        const auto t0=Clock::now();const auto window=std::chrono::seconds(45);
+        uint32_t written=0,received=0,max_peer=0,write_fail=0;int64_t max_gap_ms=0,gap_end_ms=-1,last_rx_ms=-1;bool aborted=false;
+        auto ms=[&]{return static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-t0).count());};
+        try{
+            auto next=t0;
+            while(Clock::now()-t0<window){
+                need(h.live()&&!s.pump_failed,NS_CANCELLED);
+                if(Clock::now()>=next){LayerSample v;v.run=local.run+2;v.side=local.side;v.ordinal=written+1;v.payload=stage1_run::payload(v.run,v.side,1);
+                    if(ow->write(&v))++written;else ++write_fail;next+=std::chrono::milliseconds(200);}
+                for(;;){LayerSample v;fd::SampleInfo info;const auto rc=orr->take_next_sample(&v,&info);if(rc==RC::RETCODE_NO_DATA)break;need(rc==RC::RETCODE_OK);
+                    if(!info.valid_data)continue;need(v.run==local.run+2&&v.side==1-local.side);
+                    const auto now=ms();if(last_rx_ms>=0&&now-last_rx_ms>max_gap_ms){max_gap_ms=now-last_rx_ms;gap_end_ms=now;}
+                    last_rx_ms=now;++received;if(v.ordinal>max_peer)max_peer=v.ordinal;}
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+        }catch(...){aborted=true;}
+        const bool recovered=!aborted&&gap_end_ms>=0&&last_rx_ms>gap_end_ms&&last_rx_ms>=45000-3000;
+        std::printf("ROUTE_OUTAGE side=%u written=%u write_fail=%u received=%u max_peer=%u max_gap_ms=%lld gap_end_ms=%lld last_rx_ms=%lld aborted=%d pump_failed=%d recovered=%d\n",
+            static_cast<unsigned>(local.side),written,write_fail,received,max_peer,static_cast<long long>(max_gap_ms),static_cast<long long>(gap_end_ms),static_cast<long long>(last_rx_ms),int(aborted),int(s.pump_failed.load()),int(recovered));std::fflush(stdout);
+        {const auto o=s.runtime->ObserveSocket();const auto& snd=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Send)];
+         const auto& sk=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Socket)];const auto& bd=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Bind)];const auto& sh=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Shutdown)];
+         auto opt=[](const std::optional<std::int32_t>& v){return v?static_cast<long long>(*v):-99999LL;};
+         std::printf("ROUTE_SOCKET side=%u stopped=%d closed=%d out_sock=%lld out_stopped=%d acc_sock=%lld acc_stopped=%d listen_stopped=%d shutdown_reason=%lld first_cb_err=%lld api_err=%d socket_calls=%llu bind_calls=%llu bind_last=%lld send_calls=%llu send_returns=%llu send_last=%lld shutdown_calls=%llu cb=%llu rejected_cb=%llu\n",
+            static_cast<unsigned>(local.side),int(o.stopped),int(o.closed),opt(o.outgoing_socket),int(o.outgoing_stopped),opt(o.accepted_socket),int(o.accepted_stopped),int(o.listener_stopped),opt(o.shutdown_reason),opt(o.first_callback_error),int(bool(o.first_api_error)),
+            (unsigned long long)sk.calls,(unsigned long long)bd.calls,bd.last_call?opt(bd.last_call->provider_return):-99999LL,(unsigned long long)snd.calls,(unsigned long long)snd.returns,snd.last_call?opt(snd.last_call->provider_return):-99999LL,(unsigned long long)sh.calls,(unsigned long long)o.callback_entries,(unsigned long long)o.rejected_callbacks);std::fflush(stdout);}
+        need(recovered,NS_CANCELLED);
     }
     const auto left=q.deadline_ns-ticks();need(h.live(),NS_CANCELLED);need(left<=uint64_t(INT32_MAX)*1000000000u,NS_CONTEXT);
     need(s.writer->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(static_cast<int32_t>(left/1000000000u),static_cast<uint32_t>(left%1000000000u)))==RC::RETCODE_OK);
