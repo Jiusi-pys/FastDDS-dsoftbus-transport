@@ -121,13 +121,15 @@ Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m3-20261104/` (`RESULT.md`, 
 Result on both boards: samples were received until the drop (about 5.8 s into the window), and
 none arrived for the remaining ~24 s after the route returned (`recovered=0`).
 
-The socket observation at the end of the window showed:
-- `out_stopped=1`: DSoftBus shut down the outgoing socket.
+The aggregated socket observation at the end of the window showed:
 - `socket_calls=2`: one listener plus the original outgoing socket, so no new Socket/Bind was attempted.
-- `send_calls` stopped growing, and there was no pump error and no abort.
+- `send_calls` stopped growing (A 212, B 252), and there was no pump error and no abort.
+- The root `out_stopped=1` is **not** evidence of an SDK shutdown. In stock circuit mode the root object
+  owns no outgoing socket and marks it closed by design (`PublicSocketBackend.cpp:369`). Per-circuit
+  OnShutdown and its reason were not captured.
 
-Cause: in the stock domain-circuit mode, a stopped outgoing socket is never renewed. Sends then
-return ProviderStopped without surfacing to the pump. The existing renewal path
+Likely cause, not yet proven per circuit: in the stock domain-circuit mode, a circuit socket that
+DSoftBus stopped during the outage is never renewed, and later sends stop without surfacing an error. The existing renewal path
 (`ProviderAdapter` AdvanceHostReaccept / ResetBoundedConnection) is enabled only in the
 default-off bounded-reaccept experiment, and `Runtime` rejects that experiment together with the stock/persistent modes.
 **Status: route-down re-accept NOT IMPLEMENTED for this path, DEVICE-confirmed gap.**
