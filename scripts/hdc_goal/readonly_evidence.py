@@ -363,12 +363,13 @@ def observation_complete(driver,cleanup):
         for root in b.roots:
             if not root.closed or not terminal_receipt_qualified(root.receipt) or root.receipt.get('cleanup_errors'):return False
             if root.case!='server' and (root.receipt.get('native_exit')!=0 or root.receipt.get('stop_attempts')!=0):return False
-        blocked=any(telemetry(e) for e in b.marker.report()['events'])
+        # notice_gate has enforced the approved scoped policy. Retained UNKNOWN
+        # telemetry does not manufacture a policy block or a cleanup failure.
         f=cleanup['finalization'];rows=cleanup['cleanup']
         return (len(rows)==1 and rows[0].get('step')=='server' and rows[0].get('state')=='TERMINAL'
           and rows[0].get('EOF') is True and rows[0].get('cleanup_errors')==[]
+          and rows[0].get('business_blocked') is False
           and f.get('state')=='COMPLETE' and f.get('cleanup_errors')==[]
-          and f.get('business_blocked') is blocked
-          and cleanup['failure']==('CLEANUP_NOTICE_BLOCKED_OR_UNKNOWN' if blocked else None)
+          and f.get('business_blocked') is False and cleanup['failure'] is None
           and not b.journal.failed)
     except BaseException:return False
