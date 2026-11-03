@@ -248,8 +248,9 @@ if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     target_link_libraries(stock_transport_domain_circuit_tests PRIVATE stock_transport_host_fake)
     target_compile_definitions(stock_transport_domain_circuit_tests PRIVATE FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1)
     target_include_directories(stock_transport_domain_circuit_tests PRIVATE
-        "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
-    foreach(_case names default-remote identity socket-collision raw)
+        "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common"
+        "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center")
+    foreach(_case names default-remote identity socket-collision raw route-renewal)
         add_test(NAME stock_transport.circuit.${_case} COMMAND stock_transport_domain_circuit_tests ${_case})
         set_tests_properties(stock_transport.circuit.${_case} PROPERTIES TIMEOUT 25)
     endforeach()

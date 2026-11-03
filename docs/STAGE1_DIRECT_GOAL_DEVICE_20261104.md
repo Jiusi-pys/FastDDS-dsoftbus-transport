@@ -182,8 +182,18 @@ In every run each board also reported status 0, phase 4, 3/3 writes/takes, destr
 restored_entry 1, and the controller reported `ROOT_MATCH_GUID_SN_PAYLOAD_ACK_DONE_TEARDOWN=1` with exit 0.
 No processes or iptables rules remained on either board.
 
-**Host.** `integrations/ros2/stock` builds, and ctest stays at 53/64 with the **identical** 11 pre-existing failures.
-No host test exercises circuit renewal, so this behaviour has device evidence only.
+**Host.** `integrations/ros2/stock` builds. ctest is 54/65: the new case passes, and the 11 failures are the
+**identical** pre-existing ones.
+
+New case `stock_transport.circuit.route-renewal` (`tests/ros2_host/stock_transport/domain_circuit_tests.cpp`, Fake Socket only):
+- The test pairs stock Participants and exchanges traffic, then takes the peer node offline in the fake node directory.
+- It ends all four circuit connections with `OnShutdown(SHUTDOWN_REASON_LINK_DOWN)` through the new `public_socket_fake::LinkDown`.
+- It asserts that no `Socket`/`Bind` happens while the peer is offline.
+- It brings the peer online and requires exactly one fresh `Socket` and `Bind` per side, each with a new SDK ID.
+- It then requires two DDS round trips on the same Participants and a clean close with zero residue.
+
+Mutation check: with the two `AdvanceCircuitRenewal()` pump calls removed, the case fails with
+"circuit dial lane was not renewed after the peer came back online".
 
 **Limits.**
 - One outage per run was tested (two separate runs).

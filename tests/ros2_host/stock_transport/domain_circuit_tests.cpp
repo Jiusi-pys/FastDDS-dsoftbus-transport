@@ -8,6 +8,7 @@
 #undef SendMessage
 #endif
 #include <socket.h>
+#include "FakeNodeDirectory.hpp"
 
 namespace {
 // Observation-only delegate: returns precisely the owned pointer supplied by
@@ -223,9 +224,44 @@ void SocketIdCollision(){
     std::cout<<"SOCKET_ID_COLLISION raw_positive=1 original_owner_retained=1 foreign_Shutdown=0 failed_view=REFUSED\n";
 }
 }
+// Route loss and recovery on one live domain circuit: the SDK ends both circuit
+// connections with LINK_DOWN while the peer node is offline; the transport must
+// not redial before the peer is online again, then renews the dial lane with a
+// fresh Socket/Bind, re-accepts the peer's new connection, and the same stock
+// Participants exchange DDS samples again. Host Fake Socket evidence only.
+void RouteRenewal(){
+    T2LifecycleFixture f;f.Pair(0);f.Traffic(0,1);
+    public_socket_fake::EnableFreshReplacementIds();
+    auto set_online=[](bool online){std::lock_guard<std::mutex> lock(fake_node::gate);fake_node::nodes.clear();
+        if(online){fake_node::nodes["model.net.A"]="udid.A";fake_node::nodes["model.net.B"]="udid.B";}};
+    set_online(false);
+    const auto before=public_socket_fake::Observe();
+    const auto old_out=public_socket_fake::CurrentSocket(0,1),old_acc=public_socket_fake::CurrentSocket(0,2);
+    const auto ended=public_socket_fake::LinkDown(SHUTDOWN_REASON_LINK_DOWN);
+    T2Check(ended==4,"route loss must end both circuit connections on both sides");
+    std::this_thread::sleep_for(1500ms);
+    const auto offline=public_socket_fake::Observe();
+    for(unsigned side=0;side<2;++side)T2Check(offline.sockets[side]==before.sockets[side]&&offline.binds[side]==before.binds[side],
+        "redial attempted while the peer node was offline");
+    set_online(true);
+    const auto deadline=std::chrono::steady_clock::now()+10s;public_socket_fake::Snapshot renewed;
+    for(;;){renewed=public_socket_fake::Observe();
+        if(renewed.binds[0]>before.binds[0]&&renewed.binds[1]>before.binds[1])break;
+        T2Check(std::chrono::steady_clock::now()<deadline,"circuit dial lane was not renewed after the peer came back online");
+        std::this_thread::sleep_for(50ms);}
+    for(unsigned side=0;side<2;++side)T2Check(renewed.sockets[side]==before.sockets[side]+1&&renewed.binds[side]==before.binds[side]+1,
+        "exactly one fresh Socket/Bind per side");
+    T2Check(public_socket_fake::CurrentSocket(0,1)!=old_out&&public_socket_fake::CurrentSocket(0,2)!=old_acc,"renewal reused a retired SDK ID");
+    f.Traffic(0,2);f.Traffic(0,3);
+    const auto s=f.runtimes[0]->ObserveSocket();
+    T2Check(s.domain_circuits==1&&s.domain_outgoing_sockets[0]&&*s.domain_outgoing_sockets[0]==public_socket_fake::CurrentSocket(0,1),
+        "renewed outgoing socket not owned by the circuit");
+    f.Finish();set_online(false);
+    std::cout<<"ROUTE_RENEWAL link_down=4 offline_redial=0 fresh_socket_bind=1/side reaccept=1 dds_after=2_cycles same_participants=1 close_residue=0\n";
+}
 int main(int argc,char** argv){try{
     T2LoadedDll();T2Check(argc==2,"one circuit case");const std::string c=argv[1];
     if(c=="names")CircuitNames();else if(c=="default-remote")DefaultRemote();else if(c=="identity")CircuitIdentity();
-    else if(c=="socket-collision")SocketIdCollision();else if(c=="raw")CircuitRaw();else throw std::runtime_error("unknown circuit case");
+    else if(c=="socket-collision")SocketIdCollision();else if(c=="raw")CircuitRaw();else if(c=="route-renewal")RouteRenewal();else throw std::runtime_error("unknown circuit case");
     std::cout<<"PASS domain_circuit "<<c<<" HOST_FAKE_SOCKET_ONLY DEVICE_TESTED=0\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL domain_circuit "<<e.what()<<'\n';return 1;}}

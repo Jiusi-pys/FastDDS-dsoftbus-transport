@@ -38,6 +38,10 @@ void DelayBindCallbacks();
 void ReleaseBindCallbacks();
 void EnableFreshReplacementIds();
 void DisconnectDirection(int from,bool outgoing_first);
+// Route loss model: every live outgoing/accepted connection receives the original
+// OnShutdown with `reason` (e.g. SHUTDOWN_REASON_LINK_DOWN) and is then retired.
+// Listeners stay live. Returns the number of connections ended.
+unsigned LinkDown(int reason);
 int CurrentSocket(int side,int role);
 enum class InjectedOperation {Socket,Listen,Bind};
 void FailNext(InjectedOperation,std::int32_t);

@@ -43,6 +43,18 @@ void DisconnectDirection(int from,bool outgoing_first){
     else{in->OnShutdown(b,SHUTDOWN_REASON_PEER);out->OnShutdown(a,SHUTDOWN_REASON_PEER);}
     link->changed.notify_all();Event("FAKE_CONTROLLED_CONNECTION_END",from,"original_outgoing="+std::to_string(a)+",original_accepted="+std::to_string(b));
 }
+unsigned LinkDown(int reason){
+    struct End{const ISocketListener* listener;int id;int side;};std::vector<End> ends;
+    {std::lock_guard<std::mutex> lock(link->gate);
+        for(auto& row:link->rows)if(row.active&&row.role!=0&&row.listener)ends.push_back({row.listener,row.id,row.side});}
+    // Notify before retiring: a send racing this event is queued and later
+    // dropped as terminal, as for a real link that dies under in-flight data.
+    for(const auto& e:ends)e.listener->OnShutdown(e.id,static_cast<ShutdownReason>(reason));
+    {std::lock_guard<std::mutex> lock(link->gate);
+        for(const auto& e:ends){const auto k=Index(e.id);if(k>=0){link->rows[k].active=false;link->rows[k].peer=-1;++link->counts.notified[e.side];}}}
+    link->changed.notify_all();Event("FAKE_LINK_DOWN",0,"connections="+std::to_string(ends.size())+",reason="+std::to_string(reason));
+    return static_cast<unsigned>(ends.size());
+}
 void FailNext(InjectedOperation op,std::int32_t rc){std::lock_guard<std::mutex> lock(link->gate);injected[static_cast<std::size_t>(op)]=rc;}
 void SetShutdownBarrier(std::function<void()> fn){std::lock_guard<std::mutex> lock(link->gate);shutdown_barrier=std::move(fn);}
 void SetBindBarrier(std::function<void()> fn){std::lock_guard<std::mutex> lock(link->gate);bind_barrier=std::move(fn);}
