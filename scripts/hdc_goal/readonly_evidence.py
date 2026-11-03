@@ -29,6 +29,14 @@ def number(text,lo=0,hi=18446744073709551615):
 
 def typed(label,data,expected):
     """Exact producer grammars. Identity values are comparison-only locals."""
+    if label=='cause':
+        require(type(data) is bytes and 0<len(data)<=512,'CAUSE_READ_BOUND')
+        from startup_cause import decode
+        try:return decode(data)
+        except ValueError as error:
+            allowed={'CAUSE_FRAME','CAUSE_ENCODING','CAUSE_SCHEMA','CAUSE_NUMBER','CAUSE_ENUM','CAUSE_CONTRADICTION','CAUSE_STAGE_REASON'}
+            reason=error.args[0] if len(error.args)==1 and type(error.args[0]) is str and error.args[0] in allowed else 'CAUSE_UNKNOWN'
+            return {'record':'UNKNOWN','reason':reason,'association':'FIXED_PATH_ONLY','SDK_quiet':'UNKNOWN','success_inferred':False}
     require(data and len(data)<=1024 and data.endswith(b'\n') and b'\r' not in data,'RECORD_INCOMPLETE')
     try:text=data.decode('ascii')
     except UnicodeError:raise EvidenceUnknown('RECORD_ENCODING') from None
@@ -101,9 +109,15 @@ def proc_status(data,expected):
 
 class Projection:
     """One bounded stream; no raw or field digest is emitted or persisted."""
-    def __init__(self,side,expected):
+    def __init__(self,side,expected,*,mode='full'):
         require(side in ('A','B'),'SIDE');self.side=side;self.expected=expected
+        require(mode in ('full','cause','process') and (mode!='process' or side=='B'),'PROJECTION_MODE')
+        self.mode=mode
+        self.caps={'cause':512} if mode=='cause' else CAPS
         self.labels=(('P0',) if side=='B' else ())+('failure','result','exit','stage')+(('status','P1') if side=='B' else ())
+        if mode=='cause':self.labels=('cause',)
+        elif mode=='process':self.labels=('P0','status','P1')
+        self.source_cap=512 if mode=='cause' else 16384 if mode=='process' else SOURCE_CAP
         self.pending=bytearray();self.payload=bytearray();self.total=0;self.source_bytes=0;self.index=0
         self.current=None;self.begun=False;self.done=False;self.failed=False;self.reason=None;self.rows={};self.eol=None
 
@@ -134,16 +148,16 @@ class Projection:
                 self.finish_item();return
             require(re.fullmatch(rb' *(?:[0-9a-f]{2} *)+',line) is not None,'HEX_FORMAT')
             self.payload.extend(bytes.fromhex(line.decode('ascii')))
-            require(len(self.payload)<=CAPS[self.current[0]]+32,'ITEM_CAP');return
+            require(len(self.payload)<=self.caps[self.current[0]]+32,'ITEM_CAP');return
         if line.startswith(b'S1RO_ABORT '):raise EvidenceUnknown('REMOTE_BOUND_OR_IDENTITY_UNKNOWN')
         if line==('S1RO_DONE '+self.side+' 0').encode():
             require(self.index==len(self.labels),'QUERY_INCOMPLETE');self.done=True;return
         m=re.fullmatch(rb'S1RO_ITEM ([A-Za-z0-9]+) (DATA|MISSING|NOT_VISIBLE) ([0-9]{1,5})',line)
         require(m is not None and self.index<len(self.labels),'ITEM_HEADER')
-        label=m[1].decode();require(label==self.labels[self.index],'ITEM_ORDER');n=number(m[3].decode(),0,CAPS[label])
+        label=m[1].decode();require(label==self.labels[self.index],'ITEM_ORDER');n=number(m[3].decode(),0,self.caps[label])
         state=m[2].decode()
         if state!='DATA':
-            require(n==0 and (state=='MISSING' and label in ('failure','result','exit','stage')
+            require(n==0 and (state=='MISSING' and label in ('failure','result','exit','stage','cause')
               or state=='NOT_VISIBLE' and label in ('P0','status','P1')),'ITEM_ABSENCE')
             self.rows[label]={'record':state};self.index+=1;return
         require(n>0,'EMPTY_ITEM');self.current=(label,n);self.payload.clear()
@@ -151,8 +165,8 @@ class Projection:
     def finish_item(self):
         label,n=self.current;wire=bytes(self.payload);footer=b'\x00MDDS_READ_RC=0\x00'
         require(wire.endswith(footer),'READ_COMMAND_NONZERO_OR_UNKNOWN');data=wire[:-len(footer)]
-        require(len(data)==n if label in ('failure','result','exit','stage') else 0<len(data)<CAPS[label],'SOURCE_COUNT_OR_BOUNDARY_UNKNOWN')
-        self.source_bytes+=len(data);require(self.source_bytes<=SOURCE_CAP,'SOURCE_TOTAL_CAP')
+        require(len(data)==n if label in ('failure','result','exit','stage','cause') else 0<len(data)<self.caps[label],'SOURCE_COUNT_OR_BOUNDARY_UNKNOWN')
+        self.source_bytes+=len(data);require(self.source_bytes<=self.source_cap,'SOURCE_TOTAL_CAP')
         if label in ('P0','P1'):row={'record':'VALID',**proc_stat(data,self.expected)}
         elif label=='status':row={'record':'VALID',**proc_status(data,self.expected)}
         else:row=typed(label,data,self.expected)
@@ -161,8 +175,8 @@ class Projection:
 
     def finish(self):
         require(not self.failed and self.done and not self.pending and self.current is None,'QUERY_EOF_INCOMPLETE')
-        process='NOT_CHECKED_A'
-        if self.side=='B':
+        process='NOT_REQUESTED' if self.mode=='cause' else 'NOT_CHECKED_A'
+        if 'P0' in self.labels:
             p,q,s=(self.rows[k] for k in ('P0','P1','status'))
             if p['record']==q['record']==s['record']=='NOT_VISIBLE':process='PID_NOT_VISIBLE_AT_TWO_SNAPSHOTS'
             else:
@@ -171,21 +185,26 @@ class Projection:
                 process={'ZOMBIE':'SAME_STARTTIME_ZOMBIE','DEAD_SNAPSHOT':'SAME_STARTTIME_DEAD_SNAPSHOT',
                   'RUNNING_SNAPSHOT':'SAME_STARTTIME_RUNNING_SNAPSHOT'}[p['state']]
                 require(all(x['parent_matches'] for x in (p,q,s)),'PROCESS_PARENT_CHANGED')
-        return {'side':self.side,'files':{k:v for k,v in self.rows.items() if k in ('failure','result','exit','stage')},
+        return {'side':self.side,'files':{k:v for k,v in self.rows.items() if k in ('failure','result','exit','stage','cause')},
           'process':process,'source_bytes':self.source_bytes,'exe':'EXE_LINK_NOT_READ_BOUNDED_INTERFACE_UNAVAILABLE',
           'image_bytes':'UNVERIFIED','identity_restored_all_workers':'UNKNOWN','SDK_quiet':'UNKNOWN','remote_descendants':'UNKNOWN'}
 
     def erase(self):self.pending.clear();self.payload.clear()
 
 
-def query(side,expected):
+def query(side,expected,*,mode='full',root=None):
     """Fixed POSIX shell; source reads use dd's one-byte input blocks.
 
     No readlink is invoked: its internal source read has no specified cap.
     Path/open comparisons are sampled consistency, never atomic O_NOFOLLOW.
     """
     require(side in ('A','B'),'SIDE')
-    for k in ('pid','birth','parent','uid','euid','gid','egid','run'):number(str(expected[k]))
+    require(mode in ('full','cause','process') and (mode!='process' or side=='B'),'QUERY_MODE')
+    if mode!='cause':
+        for k in ('pid','birth','parent','uid','euid','gid','egid','run'):number(str(expected[k]))
+    if root is None:root=ROOT
+    require(type(root) is str and re.fullmatch(r'/data/local/tmp/mdds_direct_[0-9]{8}_[0-9a-f]{8}/data',root) is not None,'FIXED_RECORD_ROOT')
+    require(mode!='full' or root==ROOT,'HISTORICAL_ROOT_UNCHANGED')
     text=r'''LC_ALL=C; export LC_ALL; set -f
 exec 2>/dev/null
 abort() { printf 'S1RO_ABORT BOUND_OR_IDENTITY_UNKNOWN\n'; exit 122; }
@@ -209,7 +228,8 @@ close_checked() {
  exec 3<&- || abort
 }
 read_record() {
- label=$1; file=$2
+ label=$1; file=$2; limit=${3:-1024}
+ test "$limit" = 512 || test "$limit" = 1024 || abort
  if test ! -e "$file" && test ! -L "$file"; then
   test -d "$root" && test -x "$root" || abort
   missing=$(stat -c '%i' "$file" 2>&1); missing_rc=$?
@@ -218,7 +238,7 @@ read_record() {
    printf 'S1RO_ITEM %s MISSING 0\n' "$label";; *) abort;; esac
   unset missing; return
  fi
- open_checked "$file"; test "$size" -gt 0 && test "$size" -le 1024 || abort
+ open_checked "$file"; test "$size" -gt 0 && test "$size" -le "$limit" || abort
  printf 'S1RO_ITEM %s DATA %s\n' "$label" "$size"
  { dd bs=1 count="$size" <&3 2>/dev/null; rc=$?; printf '\000MDDS_READ_RC=%s\000' "$rc"; } | od -An -v -tx1 || abort
  close_checked; printf 'S1RO_END %s OK\n' "$label"
@@ -249,14 +269,18 @@ read_status() {
  close_checked; printf 'S1RO_END status OK\n'
 }
 '''
-    text+="root='"+ROOT+"'\n"
-    text+="for part in /data /data/local /data/local/tmp '${root%/data}' \"$root\"; do test -d \"$part\" && test ! -L \"$part\" || abort; done\n".replace("'${root%/data}'",'"${root%/data}"')
+    if mode!='process':
+        text+="root='"+root+"'\n"
+        text+="for part in /data /data/local /data/local/tmp '${root%/data}' \"$root\"; do test -d \"$part\" && test ! -L \"$part\" || abort; done\n".replace("'${root%/data}'",'"${root%/data}"')
+    else:text+='test -d /proc && test ! -L /proc || abort\n'
     text+="printf 'S1RO_BEGIN "+side+"\\n'\n"
-    if side=='B':
+    if side=='B' and mode!='cause':
         text+="proc='/proc/"+str(expected['pid'])+"'; expected_pid="+str(expected['pid'])+"; expected_birth="+str(expected['birth'])+"\nproc_snapshot P0\n"
-    for label,name in [('failure','failure'),('result','data-result'),('exit','exit'),('stage','stage')]:
+    records=[] if mode=='process' else [('cause','cause')] if mode=='cause' else [('failure','failure'),('result','data-result'),('exit','exit'),('stage','stage')]
+    for label,name in records:
         text+='read_record '+label+' "$root/'+name+'.'+side+'"\n'
-    if side=='B':text+='read_status\nproc_snapshot P1\n'
+        if mode=='cause':text=text[:-1]+' 512\n'
+    if side=='B' and mode!='cause':text+='read_status\nproc_snapshot P1\n'
     return text+"printf 'S1RO_DONE "+side+" 0\\n'; exit 0\n"
 
 
