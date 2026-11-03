@@ -1,6 +1,7 @@
 #include "V1NativeNameTestSupport.hpp"
 #include <fastdds_dsoftbus/dsoftbus/ProviderAdapter.hpp>
 #include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <functional>
@@ -29,7 +30,7 @@ void Check(bool ok, const char* reason) { if (!ok) throw std::runtime_error(reas
 Locator Loc(std::uint8_t n) { EndpointId id{}; id[0]=0x0A; id[14]=0x7F; id[15]=n; Locator l; Check(LocatorCodec::Encode(id,l),"locator"); return l; }
 struct Receiver final : InputChannels::Receiver {
     int calls=0; bool throwing=false; std::vector<std::uint8_t> bytes;
-    void OnDataReceived(const eprosima::fastdds::rtps::octet* p, std::uint32_t n,
+    void OnDataReceived(const std::uint8_t* p, std::uint32_t n,
             const Locator&, const Locator&) override {
         ++calls; if(throwing) throw std::runtime_error("receiver callback"); bytes.assign(p,p+n);
     }

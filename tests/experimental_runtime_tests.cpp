@@ -1,9 +1,9 @@
 #include "V1NativeNameTestSupport.hpp"
 // Actual assembly of the installed experimental entry over the test-only Fake C
-// boundary. The installed entry documents one Runtime and one Participant per
-// process, and the process-global service-record table is not reusable across two
-// live pairs, so each case runs in its own process and the CTest entries select
-// the case by argument. Within one process the two runtimes still exist
+// boundary. Normal lifetime signs one descriptor that admits two independent
+// facades; deleting the last facade permanently closes that Runtime. Exposed
+// native service records still cannot be recycled, so each case runs in its own
+// process selected by CTest argument. Within one process the two runtimes exist
 // simultaneously, which is what makes the per-object ownership of the gate
 // observable. No case substitutes a precomputed "verified" flag for an event.
 #include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
@@ -56,14 +56,22 @@ int Baseline() {
     auto da=a.MakeDescriptor(descriptor(0)),db=b.MakeDescriptor(descriptor(1));
     if(!da||!db||a.MakeDescriptor(descriptor(0)))return 1;
     std::unique_ptr<Transport> ta(da->create_transport()),tb(db->create_transport());
-    if(!ta||!tb||da->create_transport())return 2;
+    std::unique_ptr<Transport> second_a(da->create_transport()),second_b(db->create_transport());
+    if(!ta||!tb||!second_a||!second_b)return 2;
+    std::unique_ptr<Transport> third_a(da->create_transport()),third_b(db->create_transport());
+    if(third_a||third_b)return 7; // same descriptor, fixed two-view bound
+    if(a.Close()||b.Close())return 8; // both facades exist before either init
     bool aa=false,bb=false;std::thread x([&]{aa=ta->init();}),y([&]{bb=tb->init();});x.join();y.join();
     if(!aa||!bb)return 3;
-    if(a.ObserveSocket().fake_sdk||b.ObserveSocket().fake_sdk)return 4; // actual real shim, explicitly Fake C boundary in this test only
+    if(a.ObserveSocket().fake_sdk||b.ObserveSocket().fake_sdk)return 4; // real shim, explicitly Fake C boundary
     ta->shutdown();tb->shutdown();ta.reset();tb.reset();
+    if(a.Close()||b.Close())return 9; // unused second facades independently hold lifetime
+    second_a->shutdown();second_b->shutdown();second_a.reset();second_b.reset();
     if(!a.Close()||!b.Close())return 5;
+    std::unique_ptr<Transport> reopened_a(da->create_transport()),reopened_b(db->create_transport());
+    if(reopened_a||reopened_b)return 10; // last view permanently closed each owner
     if(!NoResidue())return 6;
-    std::cout<<"BASELINE_ONE_SHOT_AND_CLOSE_PASS"<<std::endl;return 0;
+    std::cout<<"BASELINE_SINGLE_DESCRIPTOR_TWO_FACADES_AND_CLOSE_PASS"<<std::endl;return 0;
 }
 
 // The assembly hook must run once per runtime, strictly after that side published

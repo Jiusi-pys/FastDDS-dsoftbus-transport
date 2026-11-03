@@ -4,6 +4,7 @@
 #include <fastdds_dsoftbus/dsoftbus/InputChannels.hpp>
 #include <fastdds_dsoftbus/dsoftbus/NativeOwnerTable.hpp>
 #include <fastdds_dsoftbus/dsoftbus/ProcessClock.hpp>
+#include <fastdds_dsoftbus/dsoftbus/RuntimeWorkSignal.hpp>
 #include <fastdds_dsoftbus/dsoftbus/ReceiveAdmissionDiagnostic.hpp>
 #include <cstdint>
 #include <functional>
@@ -151,7 +152,7 @@ public:
     // Throws invalid_argument for empty/noncanonical/duplicate slots or invalid
     // limits; throws bad_alloc without publication. Slots never grow afterward.
     explicit ApplicationAttachments(const std::vector<Locator>& fixed_locals,
-            AttachmentLimits limits = {});
+            AttachmentLimits limits = {}, std::shared_ptr<RuntimeWorkSignal> work = {});
     ~ApplicationAttachments();
     ApplicationAttachments(const ApplicationAttachments&) = delete;
     ApplicationAttachments& operator=(const ApplicationAttachments&) = delete;
@@ -174,6 +175,10 @@ public:
             const void* bytes, std::size_t size,ReceiveAdmissionDiagnostic* diagnostic=nullptr);
     ReceiveWork TryTake();
     AttachmentUsage SnapshotUsage() const;
+    void NotifyWork() const noexcept;
+    // Pending queue only, not taken/delivering records. The loop which supplies
+    // the optional signal uses default real ProcessClock for every admission.
+    ProcessClock::Clock::time_point NextReceiveDeadline() const;
     ApplicationIdentity ObserveApplication(const ApplicationClaim&) const noexcept;
     ReceiverIdentity ObserveReceiver(const ReceiverBinding&) const noexcept;
 
@@ -224,13 +229,15 @@ private:
         std::function<void()> close_wait;
         std::function<void()> detach_wait;
     };
-    ApplicationAttachments(const std::vector<Locator>&, AttachmentLimits, TestHooks);
+    ApplicationAttachments(const std::vector<Locator>&, AttachmentLimits, TestHooks,
+            std::shared_ptr<RuntimeWorkSignal> work = {});
     void TestSetIncarnation(const ApplicationClaim&, const Locator&, std::uint64_t);
     void TestSetCopyingActivity(const ApplicationClaim&,std::size_t);
     std::weak_ptr<InputChannels> TestCore(const ApplicationClaim&) const;
     std::weak_ptr<void> TestBudget() const;
     std::unique_ptr<detail::AttachmentsControl> control_;
     TestHooks hooks_;
+    const std::shared_ptr<RuntimeWorkSignal> work_;
 };
 } // namespace fastdds_dsoftbus::dsoftbus
 #endif

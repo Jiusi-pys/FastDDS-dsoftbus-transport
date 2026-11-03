@@ -39,6 +39,20 @@ private:
 // created a record, completed a call or destroyed anything.
 enum class BindingPhase { Empty, Prepared, Connected, Published, Closing, Closed, Failed };
 
+// By-value facts for the explicitly staged public Socket creation path. A
+// legacy Error(-1) alone is never evidence of a returned SDK failure.
+struct PreExposureSocketResult {
+    NativeSocketResult native = NativeSocketResult::Error(-1);
+    bool api_called = false, api_returned = false, callback_unexposed = false;
+    std::optional<NativeSocketId> returned_handle;
+    std::optional<std::int32_t> provider_error;
+    bool KnownNegativeNoHandle() const noexcept {
+        return callback_unexposed && api_called && api_returned && !returned_handle &&
+            provider_error && *provider_error < 0 &&
+            native.kind == NativeSocketResult::Kind::Error && native.value == *provider_error;
+    }
+};
+
 // The provider is whoever performs the real SDK calls for one binding: the
 // production backend, or a Host test supplying model inputs. A value returned
 // here is a model input, not evidence about the SDK.
@@ -47,8 +61,18 @@ class ServiceRecordProvider
 public:
     virtual ~ServiceRecordProvider() = default;
     virtual NativeSocketResult CreateSocket() noexcept = 0;
+    // Default providers keep the original early, permanent exposure. Opt-in
+    // implementations must configure the original entrance before Listen/Bind.
+    virtual bool CanCreateBeforeExposure() const noexcept { return false; }
+    virtual PreExposureSocketResult CreateSocketBeforeExposure() noexcept { return {}; }
+    virtual NativeStatus ConfigureCallbackEntrance(const RecordEntrance&) noexcept {
+        return NativeStatus::InvalidConfiguration;
+    }
     virtual SyncListenResult Listen(NativeSocketId) noexcept = 0;
     virtual SyncBindResult Bind(NativeSocketId) noexcept = 0;
+    virtual SyncBindResult Bind(NativeSocketId,std::chrono::steady_clock::time_point) noexcept {
+        return SyncBindResult::Error(-1);
+    }
     virtual void Shutdown(NativeSocketId) noexcept = 0;
 };
 
@@ -235,9 +259,14 @@ public:
     // Publish : the record-side membership, the application/receiver lease, and
     //           then the single point at which this binding starts admitting.
     NativeStatus Prepare() noexcept;
+    // Internal shared-listener circuit metadata. Publishes this record's real
+    // two role entrances, but owns no native ID and performs no Socket/Bind.
+    // Later native bindings join the original record; it is never retargeted.
+    NativeStatus PrepareRecordAnchor() noexcept;
     NativeStatus CommitAccepted(NativeSocketId) noexcept;
     NativeStatus ObserveProviderShutdown(NativeSocketId) noexcept;
     NativeStatus Connect() noexcept;
+    NativeStatus Connect(std::chrono::steady_clock::time_point,bool& attempt_entered) noexcept;
     NativeStatus Publish() noexcept;
     // Independent RX-only control for a sole-member local registration. Native
     // owner/record/route/TX remain live. Queued RX is canceled without a pump.
@@ -283,6 +312,9 @@ public:
     // binding that joins that role. Empty for a role this binding never had
     // issued, which for a joiner is the role it did not join.
     RecordEntrance RoleEntrance(RecordRole) const noexcept;
+    // True only for a fresh, nonaccepted record prepared by an explicit provider.
+    // RoleEntrance remains empty until Connect commits callback publication.
+    bool CallbackPublicationDeferred() const noexcept;
 
     // Delivery side of the same composition: takes one queued admission into a
     // real execution lease and hands it back bound to this binding. The delivery
@@ -290,6 +322,9 @@ public:
     // receiver callback is refused instead of deadlocking, whatever entry point
     // ran the delivery; a delivery this binding did not issue is refused.
     NativeResult<BindingDelivery> NextAdmitted() noexcept;
+    // Root-only aggregate pump, with a stable, authorized finite table set.
+    // Does not alter the legacy single-table queue or its refusal rules.
+    NativeResult<BindingDelivery> NextAdmittedAuthorized(const std::array<NativeOwnerTable*,2>&) noexcept;
     InputDeliveryResult RunAdmitted(BindingDelivery&) noexcept;
 
     // Close and retirement are separate premises, each requested explicitly.

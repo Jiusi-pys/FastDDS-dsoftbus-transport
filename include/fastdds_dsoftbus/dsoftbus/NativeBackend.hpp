@@ -73,6 +73,9 @@ struct BackendSocketResult {
     std::optional<std::int32_t> socket;
     bool api_called=false,api_returned=false;
     std::optional<std::int32_t> provider_error; // negative failure, never a successful handle
+    // Explicit public Socket-only call: this role has not published an entrance.
+    // False by default; a negative sentinel or backend kind grants no proof.
+    bool callback_unexposed=false;
 };
 struct BackendSendResult {
     BackendStatus status = BackendStatus::NativeBackendUnavailable;
@@ -104,11 +107,19 @@ public:
     virtual v1::RouteResult ResolveNode(const v1::DeviceIdentity&,const std::string&) {return {};}
     virtual BackendStatus ConfigurePeerRoute(const Route&) {return BackendStatus::None;}
     virtual BackendSocketResult Create(ProviderCallbacks) = 0;
+    virtual bool CanCreateBeforeEntrance() const noexcept {return false;}
+    virtual BackendSocketResult CreateBeforeEntrance(ProviderCallbacks,RecordRole) {
+        return {BackendStatus::NativeBackendUnavailable,{}};
+    }
     virtual BackendSocketResult CreateListener(ProviderCallbacks) {return {};}
     // Original opaque ownership, not a provider-created token or qualification.
     virtual BackendStatus CommitAcceptedOwner(const RecordEntrance&,const NativeOwnerLease&) {return BackendStatus::NotImplemented;}
     virtual BackendCallResult Listen(std::int32_t) = 0;
     virtual BackendCallResult Bind(std::int32_t) = 0;
+    // Timed setup is opt-in. Never silently fall back to an untimed SDK call.
+    virtual BackendCallResult Bind(std::int32_t,std::chrono::steady_clock::time_point) {
+        return BackendStatus::NotImplemented;
+    }
     // Synchronous borrow only. Phase 0 declared this port; the opt-in Host loop
     // invokes it exclusively behind NativeSendExecution's original owner/payload
     // ticket. The public Socket shim is implemented for compile/contract tests;

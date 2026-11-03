@@ -45,6 +45,8 @@ NativeSendRunResult NativeSendInvocation::Run() noexcept
 {
     if(!state_) return {NativeStatus::InvalidHandle};
     auto call=std::move(state_); // Once only; releases every borrow after actual return/unwind.
+    auto domain_permit = call->domain_guard_ ? call->domain_guard_->TryEnter(DomainOperation::NativeSend) : ViewDomainGuard::Permit{};
+    if (!domain_permit) return {NativeStatus::Revoked, NativeSendOutcome::NotEntered, std::nullopt, domain_permit.status()};
     std::shared_ptr<detail::NativeSendResources> resources;
     const auto entered=detail::NativeEgressBridge::EnterInvocation(*call,resources);
     NativeSendRunResult result{entered};
@@ -97,13 +99,15 @@ void NativeRevokeTicket::Progress() noexcept
 }
 NativeSendExecution::NativeSendExecution(NativeOwnerTable& table) noexcept : state_(detail::NativeEgressBridge::Bind(table)) {}
 NativeResult<EgressRegistration> NativeSendExecution::CreateRuntime(const NativeTableConfiguration& config,
-        const std::vector<EgressSelection>& selections, SendQueueLimits limits) const noexcept
-{return CreateRuntimeImpl(config,nullptr,selections,limits);}
+        const std::vector<EgressSelection>& selections, SendQueueLimits limits, std::shared_ptr<RuntimeWorkSignal> work) const noexcept
+{return CreateRuntimeImpl(config,nullptr,selections,limits,std::move(work));}
 NativeResult<EgressRegistration> NativeSendExecution::CreateRuntimeForLocals(const NativeTableConfiguration& config,
-        const std::vector<Locator>& locals,const std::vector<EgressSelection>& selections,SendQueueLimits limits) const noexcept
-{return CreateRuntimeImpl(config,&locals,selections,limits);}
+        const std::vector<Locator>& locals,const std::vector<EgressSelection>& selections,SendQueueLimits limits,
+        std::shared_ptr<RuntimeWorkSignal> work) const noexcept
+{return CreateRuntimeImpl(config,&locals,selections,limits,std::move(work));}
 NativeResult<EgressRegistration> NativeSendExecution::CreateRuntimeImpl(const NativeTableConfiguration& config,
-        const std::vector<Locator>* locals,const std::vector<EgressSelection>& selections,SendQueueLimits limits) const noexcept
+        const std::vector<Locator>* locals,const std::vector<EgressSelection>& selections,SendQueueLimits limits,
+        std::shared_ptr<RuntimeWorkSignal> work) const noexcept
 {
     try {
         auto ceiling=std::shared_ptr<detail::RuntimeCeilingLease>(new detail::RuntimeCeilingLease(state_,limits));
@@ -134,7 +138,7 @@ NativeResult<EgressRegistration> NativeSendExecution::CreateRuntimeImpl(const Na
         if(!plan.value) return Failure<EgressRegistration>(plan.issue.code==EgressError::AllocationFailure?
                 NativeStatus::AllocationFailure:NativeStatus::DirectoryRejected);
         auto source=std::shared_ptr<detail::NativeGenerationAdapter>(new detail::NativeGenerationAdapter(ceiling));
-        auto runtime=std::make_shared<RuntimeSendPath>(plan.value,limits,std::move(source));
+        auto runtime=std::make_shared<RuntimeSendPath>(plan.value,limits,std::move(source),std::move(work));
         auto registration=std::shared_ptr<detail::EgressState>(new detail::EgressState(ceiling,std::move(runtime)));
         const auto published=detail::NativeEgressBridge::Publish(*registration);
         if(published!=NativeStatus::None) return Failure<EgressRegistration>(published);
@@ -143,11 +147,18 @@ NativeResult<EgressRegistration> NativeSendExecution::CreateRuntimeImpl(const Na
       catch(const std::invalid_argument&) {return Failure<EgressRegistration>(NativeStatus::InvalidLimits);}
 }
 SenderAttachResult NativeSendExecution::Attach(EgressRegistration r, eprosima::fastdds::rtps::SendResourceList& list) const
+{ return Attach(std::move(r), list, {}); }
+SenderAttachResult NativeSendExecution::Attach(EgressRegistration r, eprosima::fastdds::rtps::SendResourceList& list,
+        const std::shared_ptr<ViewDomainGuard>& guard) const
 {
     if(!r) return {SenderAttachStatus::InvalidRuntime};
     const auto status=detail::NativeEgressBridge::Check(state_,*r.state_);
     if(status!=NativeStatus::None) return {status==NativeStatus::ForeignState?SenderAttachStatus::InvalidRuntime:SenderAttachStatus::RuntimeClosed};
-    return DSoftBusSenderResource::Attach(list,r.state_->runtime_);
+    return DSoftBusSenderResource::Attach(list,r.state_->runtime_,guard);
+}
+bool NativeSendExecution::BindPendingSender(EgressRegistration r,const std::shared_ptr<RuntimeSenderBinding>& pending) const {
+    if(!r||detail::NativeEgressBridge::Check(state_,*r.state_)!=NativeStatus::None)return false;
+    return DSoftBusSenderResource::BindPending(pending,r.state_->runtime_);
 }
 NativeResult<NativeSendWork> NativeSendExecution::Take(EgressRegistration r) const noexcept
 {
@@ -168,6 +179,7 @@ NativeResult<NativeSendInvocation> NativeSendExecution::TryAdmit(NativeSendWork&
         auto call=std::shared_ptr<detail::NativeSendInvocationState>(new detail::NativeSendInvocationState);
         auto resources=std::shared_ptr<detail::NativeSendResources>(new detail::NativeSendResources);
         auto& reg=*work.state_->registration_;const auto& record=*work.state_->record_;
+        call->domain_guard_ = reg.runtime_->DomainGuard();
         call->registration_=work.state_->registration_;call->deadline_=record.deadline();
         resources->provider_=std::move(provider);resources->work_=std::move(work.state_);
         call->resources_=std::move(resources);

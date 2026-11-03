@@ -14,6 +14,14 @@ struct Snapshot {
 };
 void Configure(std::shared_ptr<host_dds::Trace>,bool forwarding);
 void SetListenerNames(const std::array<std::string,2>&);
+// Inactive Fake rows only; preserves counters, old callback values and numeric
+// IDs. This is fixture naming, not a production reconnect/drain guarantee.
+void SetInitiatorNames(const std::array<std::string,2>&);
+struct SavedBytesCallback {
+    std::int32_t socket=-1;
+    void (*function)(std::int32_t,const void*,std::uint32_t)=nullptr;
+};
+SavedBytesCallback SaveAcceptedBytes(int side);
 void SetPacketObserver(std::function<void(int,const std::uint8_t*,std::size_t)>);
 void UseBoundedBackpressure();
 void SetSendObserver(std::function<void(int,int)>);
@@ -34,4 +42,12 @@ int CurrentSocket(int side,int role);
 enum class InjectedOperation {Socket,Listen,Bind};
 void FailNext(InjectedOperation,std::int32_t);
 void SetShutdownBarrier(std::function<void()>);
+// Host-only precise first-Bind scheduling; callable runs without the Fake gate.
+void SetBindBarrier(std::function<void()>);
+// Original listener shutdown callback, without inventing an accepted-connection end.
+void StopListener(int side);
+// Direct invocation of the original listener function value. Test-supplied
+// peer fields are not synthesized from the production domain codec.
+bool ProbeCandidate(int side,std::int32_t id,const std::string& name,const std::string& network,
+        const std::string& package,int data_type);
 }

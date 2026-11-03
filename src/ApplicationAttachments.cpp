@@ -246,10 +246,12 @@ InputDeliveryResult ReceiveWork::Deliver()
             record->bytes.data(), record->bytes.size());
 }
 
-ApplicationAttachments::ApplicationAttachments(const std::vector<Locator>& locals, AttachmentLimits limits)
-    : ApplicationAttachments(locals, limits, {}) {}
+ApplicationAttachments::ApplicationAttachments(const std::vector<Locator>& locals, AttachmentLimits limits,
+        std::shared_ptr<RuntimeWorkSignal> work)
+    : ApplicationAttachments(locals, limits, {}, std::move(work)) {}
 ApplicationAttachments::ApplicationAttachments(const std::vector<Locator>& locals,
-        AttachmentLimits limits, TestHooks hooks) : hooks_(std::move(hooks))
+        AttachmentLimits limits, TestHooks hooks, std::shared_ptr<RuntimeWorkSignal> work)
+    : hooks_(std::move(hooks)), work_(std::move(work))
 {
     ValidateLimits(limits);
     if (locals.empty() || locals.size() > limits.logical_slots) throw std::invalid_argument("invalid logical slots");
@@ -502,7 +504,20 @@ ReceiveAdmissionResult ApplicationAttachments::AdmitReceive(const Locator& local
     if(result!=ReceiveAdmissionResult::Accepted) return result;
     result=CopyReceive(capture,bytes,diagnostic);
     if(result!=ReceiveAdmissionResult::Accepted) return result;
-    return CommitReceive(capture,clock,diagnostic);
+    result=CommitReceive(capture,clock,diagnostic);
+    if(result==ReceiveAdmissionResult::Accepted)NotifyWork();
+    return result;
+}
+void ApplicationAttachments::NotifyWork() const noexcept
+{ if(work_)work_->Notify(); }
+ProcessClock::Clock::time_point ApplicationAttachments::NextReceiveDeadline() const
+{
+    auto& control=*control_;
+    std::lock_guard<std::mutex> lock(control.budget->mutex);
+    auto deadline=ProcessClock::Clock::time_point::max();
+    for(auto* record=control.queue.get();record;record=record->next.get())
+        deadline=(std::min)(deadline,record->expiry);
+    return deadline;
 }
 ReceiveAdmissionResult ApplicationAttachments::CaptureReceive(const ApplicationClaim& claim,const Locator& local,
         const Locator& remote,const NativeIdentityConstraint& pin,ProcessClock::Clock::time_point expiry,

@@ -49,6 +49,9 @@ ReceiveAdmissionResult ProcessReceiveBridge::Admit(ApplicationAttachments& a,Nat
                     ReceiveAdmissionResult::Revoked):ReceiveAdmissionResult::Revoked;
         result=a.CommitReceive(capture,clock,diagnostic);
     }
+    // Both the native guard and the attachments queue gate are released. The
+    // SDK callback only copied and committed bytes; the external pump dispatches.
+    if(result==ReceiveAdmissionResult::Accepted)a.NotifyWork();
     if(result==ReceiveAdmissionResult::Accepted&&capture.observer_)
         capture.observer_->OnReceive(ReceiveStage::Queued,capture.diagnostic_,nullptr,0);
     return result;
@@ -101,6 +104,31 @@ NativeResult<ProcessReceiveInvocation> ProcessReceiveBridge::Next(ApplicationAtt
         if(result.issue.code==NativeStatus::NotReady||result.issue.code==NativeStatus::AllocationFailure) {
             a.RequeueReceive(work);
             if(result.issue.code==NativeStatus::AllocationFailure) return result;
+        }
+    }
+    return Failure<ProcessReceiveInvocation>(NativeStatus::NotFound);
+}
+NativeResult<ProcessReceiveInvocation> ProcessReceiveBridge::NextAuthorized(ApplicationAttachments& a,
+        const std::array<NativeOwnerTable*,2>& tables,const ProcessClock& clock)
+{
+    const auto count=a.SnapshotUsage().queued;
+    for(std::size_t i=0;i<count;++i) {
+        auto work=a.TryTake();if(!work)break;
+        const auto pin=a.ReceiveIdentity(work);
+        if(!pin)continue;
+        NativeOwnerTable* original=nullptr;
+        // The root owns this finite table set for the whole pump. Select only
+        // the work's original opaque state; never retarget to a current owner.
+        for(auto* table:tables)if(table) {
+            auto identity=NativeReceiveBridge::Acquire(*table,pin);
+            if(identity.status()!=NativeStatus::ForeignState){original=table;break;}
+        }
+        if(!original)continue; // Foreign provenance was never admitted by this root.
+        auto result=TryEnter(a,*original,work,clock);
+        if(result)return result;
+        if(result.issue.code==NativeStatus::NotReady||result.issue.code==NativeStatus::AllocationFailure) {
+            a.RequeueReceive(work);
+            if(result.issue.code==NativeStatus::AllocationFailure)return result;
         }
     }
     return Failure<ProcessReceiveInvocation>(NativeStatus::NotFound);

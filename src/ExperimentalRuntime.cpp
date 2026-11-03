@@ -23,24 +23,47 @@ bool RuntimeProbeBeforeConnect() noexcept {
 }
 namespace fastdds_dsoftbus::dsoftbus::experimental {
 struct Runtime::Impl {
+    static bool DefaultShared(const phase0::PublicSocketConfiguration& c) noexcept {
+        return !c.bounded_reaccept_host&&!c.bounded_native_reaccept_experiment&&!c.route_lifecycle;
+    }
+    explicit Impl(phase0::PublicSocketConfiguration config,RuntimeLifetime lifetime=RuntimeLifetime::Participant)
+        : binding(config), backend(std::make_shared<phase0::PublicSocketBackend>(std::move(config))),
+          loop(lifetime==RuntimeLifetime::PersistentNativeAnchor?
+              host_test::HostProviderLoop::CreateOwnedShared(backend):DefaultShared(binding)?
+              host_test::HostProviderLoop::CreateParticipantShared(backend):std::make_shared<host_test::HostProviderLoop>(backend)),
+          lifetime(lifetime),shared_views(lifetime==RuntimeLifetime::PersistentNativeAnchor||DefaultShared(binding)) {}
 #ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
-    explicit Impl(phase0::PublicSocketConfiguration config,std::shared_ptr<ProcessReceiveObserver> observer={})
+    Impl(phase0::PublicSocketConfiguration config,std::shared_ptr<ProcessReceiveObserver> observer)
         : binding(config), backend(std::make_shared<phase0::PublicSocketBackend>(std::move(config))),
-          loop(std::make_shared<host_test::HostProviderLoop>(backend,std::move(observer))) {}
-#else
-    explicit Impl(phase0::PublicSocketConfiguration config)
-        : binding(config), backend(std::make_shared<phase0::PublicSocketBackend>(std::move(config))),
-          loop(std::make_shared<host_test::HostProviderLoop>(backend)) {}
+          loop(DefaultShared(binding)?host_test::HostProviderLoop::CreateParticipantShared(backend,std::move(observer)):
+              std::make_shared<host_test::HostProviderLoop>(backend,std::move(observer))),
+          lifetime(RuntimeLifetime::Participant),shared_views(DefaultShared(binding)) {}
 #endif
     const phase0::PublicSocketConfiguration binding;
     std::shared_ptr<phase0::PublicSocketBackend> backend;
     std::shared_ptr<host_test::HostProviderLoop> loop;
+    const RuntimeLifetime lifetime;
+    const bool shared_views;
+    std::mutex control;
     std::atomic<bool> issued{false}, created{false};
 };
 struct Runtime::Descriptor final : eprosima::fastdds::rtps::TransportDescriptorInterface {
     Descriptor(const DSoftBusTransportDescriptor& value, std::shared_ptr<Impl> state)
         : TransportDescriptorInterface(value.maxMessageSize,1), config(value), impl(std::move(state)) {}
     eprosima::fastdds::rtps::TransportInterface* create_transport() const override {
+        if(impl->shared_views){
+            try {
+                std::lock_guard<std::mutex> lock(impl->control);
+                auto view=impl->loop->Join(impl->loop);
+                if(!view)return nullptr;
+                // Keep the admission transaction alive across new/descriptor-copy
+                // failure, including constructor partial unwind. Publish only a
+                // complete facade, immediately before its original pointer escapes.
+                auto facade=HostFacadeTestAccess::Create(config,view);
+                if(!view->PublishFacade())return nullptr;
+                return facade.release();
+            }catch(...){return nullptr;}
+        }
         if(impl->created.exchange(true)) return nullptr;
         try { return HostFacadeTestAccess::Create(config,impl->loop).release(); }
         catch(...) { return nullptr; }
@@ -50,18 +73,29 @@ struct Runtime::Descriptor final : eprosima::fastdds::rtps::TransportDescriptorI
     std::shared_ptr<Impl> impl;
 };
 Runtime::Runtime(phase0::PublicSocketConfiguration config) : impl_(std::make_shared<Impl>(std::move(config))) {}
+Runtime::Runtime(phase0::PublicSocketConfiguration config,RuntimeLifetime lifetime)
+    : impl_(std::make_shared<Impl>(std::move(config),lifetime)) {}
 #ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
 Runtime::Runtime(phase0::PublicSocketConfiguration config,std::shared_ptr<ProcessReceiveObserver> observer)
     : impl_(std::make_shared<Impl>(std::move(config),std::move(observer))) {}
 #endif
 bool Runtime::SetPreConnectGate(std::function<bool()> gate) {
     // Refuse to change the coordination point once this runtime's descriptor, and
-    // therefore its one-shot factory path, exists. The gate belongs to this
+    // therefore its immutable native configuration, exists. The gate belongs to this
     // Runtime's own loop, so it can never affect another runtime's connect.
     if (impl_->issued.load()) return false;
     return impl_->loop->SetPreConnectGate(std::move(gate));
 }
 Runtime::~Runtime() = default;
+std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>
+Runtime::MakeStockDescriptor(const DSoftBusTransportDescriptor& config) {
+    if (config.ValidateV1().code != DirectoryError::None) return {};
+    // ValidateV1 proved that every IdentityBinding has the same native domain.
+    // This is the original configured primitive, not an inversion of a locator.
+    auto scoped = config;
+    scoped.expected_domain_id = config.directory.identities.front().domain;
+    return MakeDescriptor(scoped);
+}
 std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>
 Runtime::MakeDescriptor(const DSoftBusTransportDescriptor& config) {
     const auto issue = config.ValidateV1();
@@ -82,15 +116,58 @@ Runtime::MakeDescriptor(const DSoftBusTransportDescriptor& config) {
        config.directory.routes.front().fields.expected_remote_initiator_names!=std::vector<std::string>{binding.expected_peer_initiator_name}) {
         std::fputs("Fast DDS DSoftBus descriptor: native deployment binding mismatch\n",stderr);return {};
     }
-    if(impl_->issued.exchange(true)) return {};
-    return std::make_shared<Descriptor>(config,impl_);
+    // ValidateV1 proved a nonempty, single-domain identity directory. Preserve
+    // its configured primitive; a later public callback verifies the actual
+    // Participant domain. No callback means Await, never unscoped delivery.
+    auto canonical=config;
+    if(!impl_->shared_views&&!canonical.expected_domain_id)
+        canonical.expected_domain_id=canonical.directory.identities.front().domain;
+    std::lock_guard<std::mutex> lock(impl_->control);
+    if(impl_->lifetime==RuntimeLifetime::PersistentNativeAnchor){
+        // These default-off experiments need native reincarnation/control-work
+        // contracts, not merely another view of this live native incarnation.
+        if(binding.bounded_reaccept_host||binding.bounded_native_reaccept_experiment||binding.route_lifecycle)return {};
+        if(!impl_->issued.load()){
+            if(!impl_->loop->EnableDomainCircuits()||!impl_->loop->Start(canonical))return {};
+            impl_->issued.store(true);
+        }
+    }else if(impl_->shared_views){
+        // Normal lifetime signs one descriptor; that descriptor owns the two-view
+        // factory capacity. Do not consume issuance before allocation succeeds.
+        if(impl_->issued.load())return {};
+        // Stage every throwing descriptor copy before metadata startup/publication.
+        auto descriptor=std::make_shared<Descriptor>(canonical,impl_);
+        if(!impl_->issued.load()){
+            if(!impl_->loop->EnableDomainCircuits()||!impl_->loop->Start(canonical))return {};
+            impl_->issued.store(true);
+        }
+        return descriptor;
+    }else if(impl_->issued.exchange(true))return {}; // separate legacy experiments
+    return std::make_shared<Descriptor>(canonical,impl_);
 }
 NativeSendRunResult Runtime::PumpSend() noexcept { return impl_->loop->PumpSend(); }
 phase0::BackendStatus Runtime::PumpReceive() noexcept { return impl_->loop->PumpReceive(); }
-bool Runtime::Close() noexcept { return impl_->loop->Shutdown(); }
+std::uint64_t Runtime::WorkGeneration() const noexcept { return impl_->loop->WorkGeneration(); }
+WorkWaitResult Runtime::WaitForWork(std::uint64_t& generation) {
+    const auto& c=impl_->binding;
+    if(c.bounded_reaccept_host||c.bounded_native_reaccept_experiment||c.route_lifecycle)
+        return WorkWaitResult::UnsupportedConfiguration;
+    return impl_->loop->WaitForWork(generation);
+}
+void Runtime::RequestPumpStop() noexcept { impl_->loop->RequestPumpStop(); }
+bool Runtime::Close() noexcept {
+    std::lock_guard<std::mutex> lock(impl_->control);
+    return impl_->loop->Shutdown();
+}
 phase0::PublicSocketObservation Runtime::ObserveSocket() const { return impl_->backend->Observe(); }
 }
 namespace fastdds_dsoftbus::dsoftbus::phase0 {
+host_test::HostLoopObservation RuntimeProbeAccess::ObserveRuntime(const experimental::Runtime& runtime) noexcept {
+    return runtime.impl_->loop->Observe();
+}
+host_test::DomainCircuitObservations RuntimeProbeAccess::ObserveDomainCircuits(const experimental::Runtime& runtime) noexcept {
+    return runtime.impl_->loop->ObserveDomainCircuits();
+}
 bool RuntimeProbeAccess::BeforeNativeClose(experimental::Runtime& runtime,
         std::function<void(const host_test::RuntimeShutdownPoint&)> observer) {
     // Assembly and MakeDescriptor belong to the same external control thread.

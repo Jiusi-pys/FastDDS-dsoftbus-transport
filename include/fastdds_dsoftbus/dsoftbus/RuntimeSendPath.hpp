@@ -2,6 +2,8 @@
 #define FASTDDS_DSOFTBUS_DSOFTBUS_RUNTIME_SEND_PATH_HPP
 
 #include <fastdds_dsoftbus/dsoftbus/SendQueue.hpp>
+#include <fastdds_dsoftbus/dsoftbus/RuntimeWorkSignal.hpp>
+#include <fastdds_dsoftbus/dsoftbus/ViewDomainGuard.hpp>
 #include <fastdds/rtps/common/LocatorsIterator.hpp>
 #include <fastdds_dsoftbus/dsoftbus/FastddsApi.hpp>
 
@@ -81,7 +83,8 @@ using RuntimeIdentityHandle = std::shared_ptr<const detail::RuntimeIdentity>;
 enum class RuntimeSendStatus
 {
     Accepted, Released, RuntimeClosed, DeadlineExpired, InvalidInput, InvalidDestination,
-    NoOwnedTargets, UnresolvedConnection, InvalidConnectionSnapshot, PreparationFailed, QueueRejected
+    NoOwnedTargets, UnresolvedConnection, InvalidConnectionSnapshot, PreparationFailed, QueueRejected,
+    DomainAwaiting, DomainRefused, DomainClosed, DomainCounterExhausted
 };
 struct RuntimeSendReport
 {
@@ -98,13 +101,18 @@ public:
     using NetworkBuffer = fastdds_dsoftbus::binding::NetworkBuffer;
     using Iterator = eprosima::fastdds::rtps::LocatorsIterator;
     RuntimeSendPath(EgressPlan::Snapshot, SendQueueLimits,
-            std::shared_ptr<const ConnectionGenerationSource>);
+            std::shared_ptr<const ConnectionGenerationSource>, std::shared_ptr<RuntimeWorkSignal> work = {});
     ~RuntimeSendPath();
     RuntimeSendPath(const RuntimeSendPath&) = delete;
     RuntimeSendPath& operator=(const RuntimeSendPath&) = delete;
     RuntimeIdentityHandle identity() const noexcept;
     EgressPlan::Snapshot plan() const noexcept;
     bool stop_requested() const noexcept;
+    // Published once by Attach, including a sealed null legacy binding. Atomic
+    // shared_ptr reads never acquire attachment_mutex_ under a sender gate.
+    std::shared_ptr<ViewDomainGuard> DomainGuard() const noexcept {
+        return std::atomic_load_explicit(&domain_guard_, std::memory_order_acquire);
+    }
     // Inputs/finite nonblocking iterator range remain valid throughout this
     // call; begin is consumed. Only this runtime's nonempty owned batch is
     // admitted. The original deadline is never renewed; the queue's 20 ms cap
@@ -122,6 +130,11 @@ private:
     friend class DSoftBusSenderResource;
     friend class RuntimeSendPathTestAccess;
     friend class detail::NativeEgressBridge;
+    bool BindDomainGuardLocked(const std::shared_ptr<ViewDomainGuard>& guard) noexcept {
+        if (domain_bound_) return DomainGuard() == guard;
+        std::atomic_store_explicit(&domain_guard_, guard, std::memory_order_release);
+        domain_bound_ = true; return true;
+    }
     // Single atomic arbitration: a producer either enters before Freeze or
     // cannot enter. These narrow operations never drain or destroy records.
     static constexpr std::uint64_t closed_bit_ = std::uint64_t{1} << 63;
@@ -135,7 +148,8 @@ private:
         std::function<void()> after_close_request; // Outside attachment gate; nonthrowing.
     };
     RuntimeSendPath(EgressPlan::Snapshot, SendQueueLimits,
-            std::shared_ptr<const ConnectionGenerationSource>, std::unique_ptr<SendQueue>, TestHooks);
+            std::shared_ptr<const ConnectionGenerationSource>, std::unique_ptr<SendQueue>, TestHooks,
+            std::shared_ptr<RuntimeWorkSignal> work = {});
     Clock::time_point Now() const noexcept;
     const EgressPlan::Snapshot plan_;
     const std::shared_ptr<const ConnectionGenerationSource> generations_;
@@ -143,8 +157,11 @@ private:
     const std::size_t max_record_bytes_;
     std::unique_ptr<SendQueue> queue_;
     mutable std::mutex attachment_mutex_;
+    bool domain_bound_ = false; // attachment_mutex_ only; never rebound.
+    std::shared_ptr<ViewDomainGuard> domain_guard_;
     std::atomic<std::uint64_t> producer_state_{0};
     TestHooks hooks_;
+    const std::shared_ptr<RuntimeWorkSignal> work_;
 };
 } // namespace fastdds_dsoftbus::dsoftbus
 #endif

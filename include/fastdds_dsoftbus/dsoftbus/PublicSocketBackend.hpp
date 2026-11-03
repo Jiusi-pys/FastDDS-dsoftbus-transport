@@ -23,6 +23,15 @@ struct PublicSocketConfiguration {
     // Separate finite process-restart experiment. Only 1 (default) or 2;
     // never a reusable/unbounded SDK callback or owner-table allowance.
     unsigned bounded_native_reset_limit=1;
+    // Explicit caller contract, default off. Socket may leave SDK server/name
+    // state even when it returns a negative error. Reuse ONLY the project's
+    // never-published callback record after such a returned no-handle failure.
+    // Each fresh Runtime must preserve every native service name's complete
+    // deployment mapping (identity/domain/peer/package/QoS/configuration) for
+    // the caller's entire deployment lifetime. Never use this to change a
+    // name's mapping or infer SDK cleanup/drain. Unknown outcomes and any
+    // Listen/Bind exposure remain permanent; NodeRoute/reaccept cannot opt in.
+    bool immutable_deployment_no_listener_record_reuse=false;
 };
 enum class PublicSocketOperation {Socket,Listen,Bind,Send,Shutdown,Count};
 struct PublicSocketCall {
@@ -39,6 +48,9 @@ struct PublicSocketObservation {
     bool listener_configured=false;
     std::optional<std::int32_t> outgoing_socket,listener_socket,accepted_socket;
     bool outgoing_stopped=false,listener_stopped=false,accepted_stopped=false;
+    std::array<std::optional<std::int32_t>,2> domain_outgoing_sockets{},domain_accepted_sockets{};
+    std::size_t domain_circuits=0;
+    std::size_t family_ids_retained=0,family_collisions=0;
     RecordRole role=RecordRole::Client;
     std::array<PublicSocketCall,static_cast<std::size_t>(PublicSocketOperation::Count)> operations{};
     std::optional<PublicSocketError> first_api_error;
@@ -61,6 +73,7 @@ public:
     ~PublicSocketBackend() override;
     BackendKind Kind()const noexcept override;
     BackendIdentity Identity()const override;
+    std::string PackageName() const;
     BackendTopology Topology()const noexcept override;
     bool BoundedReacceptHost()const noexcept override;
     bool BoundedReacceptExperiment()const noexcept override;
@@ -70,18 +83,27 @@ public:
     BackendIdentity ListenerIdentity()const override;
     BackendStatus ConfigureEntrance(const RecordEntrance&) override;
     BackendSocketResult Create(ProviderCallbacks) override;
+    bool CanCreateBeforeEntrance() const noexcept override;
+    BackendSocketResult CreateBeforeEntrance(ProviderCallbacks,RecordRole) override;
     BackendSocketResult CreateListener(ProviderCallbacks) override;
     BackendStatus CommitAcceptedOwner(const RecordEntrance&,const NativeOwnerLease&) override;
     BackendCallResult Listen(std::int32_t) override;
     BackendCallResult Bind(std::int32_t) override;
+    BackendCallResult Bind(std::int32_t,std::chrono::steady_clock::time_point) override;
     BackendSendResult Send(std::int32_t,const std::uint8_t*,std::size_t,std::chrono::steady_clock::time_point) override;
     BackendCallResult Shutdown(std::int32_t) override;
     PublicSocketObservation Observe()const;
+    // Runtime-only shared-listener circuit assembly. Resolver performs metadata
+    // admission only; native calls occur on the external public-domain binder.
+    bool SetCircuitResolver(std::function<std::shared_ptr<PublicSocketBackend>(const BackendPeer&)>);
+    std::shared_ptr<PublicSocketBackend> CreateCircuit(std::uint32_t domain);
+    bool SetIncomingCallbacks(ProviderCallbacks);
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK
     // Fake-build scheduling only, never an SDK callback context or proof input.
     void SetAcceptedCommitHookForTest(void(*)(void*) noexcept,void*) noexcept;
 #endif
 private:
+    friend struct detail::PublicSocketState;
     std::shared_ptr<detail::PublicSocketState> state_;
 };
 }

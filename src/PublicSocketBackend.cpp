@@ -2,6 +2,7 @@
 #include <socket.h>
 #include <softbus_bus_center.h>
 #include <fastdds_dsoftbus/dsoftbus/NativeOwnerTable.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DomainCircuitName.hpp>
 #include <algorithm>
 #include <atomic>
 #include <cstring>
@@ -67,6 +68,24 @@ struct PublicSocketState {
         if(dual){copy(listener_name,config.listener_identity.service_name);listener_info={listener_name.data(),nullptr,nullptr,package.data(),DATA_TYPE_BYTES};listener_qos_count=static_cast<std::uint32_t>(config.listen_qos.size());for(std::size_t i=0;i<config.listen_qos.size();++i)listener_qos[i]={static_cast<QosType>(config.listen_qos[i].type),config.listen_qos[i].value};}
     }
     const PublicSocketConfiguration config;
+    // Root owns at most two immutable circuits. No SDK entry or native ID is
+    // rebound, and child -> root is weak so closure has no ownership cycle.
+    std::shared_ptr<const std::function<std::shared_ptr<PublicSocketBackend>(const BackendPeer&)>> circuit_resolver;
+    std::array<std::shared_ptr<PublicSocketBackend>,2> circuit_children;
+    std::weak_ptr<PublicSocketState> shared_listener;
+    ProviderCallbacks incoming_callbacks;
+    struct CircuitIncoming {
+        bool used=false,prepared=false,active=false,closed=false,observed=false,failed=false;
+        std::int32_t id=-1;BackendPeer peer;ProviderCallbacks callbacks;
+        std::weak_ptr<PublicSocketState> child;NativeOwnerLease owner;
+        BackendStatus close_status=BackendStatus::None;
+    };
+    std::array<CircuitIncoming,2> circuit_incoming;
+    struct FamilyId {bool used=false;std::int32_t id=-1;unsigned kind=0;std::weak_ptr<PublicSocketState> owner;};
+    // Same existing root owner ceiling12; includes observed/rejected native ID
+    // tombstones. These are not extra callback entries or native owners.
+    std::array<FamilyId,12> family_ids;
+    std::size_t family_collisions=0;
     std::shared_ptr<const std::function<void(bool,std::string_view)>> node_sink;
     bool node_subscribed=false,node_sealed=false,node_registering=false;
     BackendStatus node_cleanup_status=BackendStatus::None;
@@ -128,7 +147,99 @@ struct PublicSocketState {
 #endif
         out.data_type=RecordDataType::Bytes;return true;
     }
+    std::optional<bool> CircuitNegotiate(RecordRole role,std::int32_t id,PeerSocketInfo peer,bool access_info) {
+        decltype(circuit_resolver) resolver;
+        {std::lock_guard<std::mutex> lock(gate);resolver=circuit_resolver;
+            if(!resolver||role!=RecordRole::Server)return std::nullopt;
+            ++observation.callback_entries;++observation.negotiation_callbacks;
+            if(access_info||id<0||listener_closed||listener_observed||listener_failed||observation.stopped||listener_socket<0) {
+                ++observation.negotiations_denied;return false;
+            }
+        }
+        BackendPeer value;const bool valid_peer=PeerValue(peer,value);
+        std::size_t family=family_ids.size();
+        {std::lock_guard<std::mutex> lock(gate);
+            for(std::size_t i=0;i<family_ids.size();++i)if(family_ids[i].used&&family_ids[i].id==id) {
+                // Only an identical still-live original negotiation is idempotent.
+                for(const auto& old:circuit_incoming)if(old.used&&old.id==id&&valid_peer&&old.peer==value&&!old.failed&&!old.closed&&!old.observed)
+                    return old.prepared||old.active;
+                ++observation.negotiations_denied;return false;
+            }
+            for(std::size_t i=0;i<family_ids.size();++i)if(!family_ids[i].used){family=i;family_ids[i].used=true;family_ids[i].id=id;family_ids[i].kind=2;break;}
+            if(family==family_ids.size()){++observation.negotiations_denied;return false;}
+        }
+        if(!valid_peer)return false;
+        auto child=(*resolver)(value); // Metadata only, outside the SDK-state gate.
+        if(!child||child->state_->shared_listener.lock().get()!=this)return false;
+        ProviderCallbacks cb;
+        {std::lock_guard<std::mutex> child_lock(child->state_->gate);cb=child->state_->incoming_callbacks;}
+        if(!cb)return false;
+        std::size_t index=circuit_incoming.size();
+        {std::lock_guard<std::mutex> lock(gate);
+            if(listener_closed||listener_observed||observation.stopped)return false;
+            for(std::size_t i=0;i<circuit_incoming.size();++i) {
+                const auto& old=circuit_incoming[i];
+                if(old.used&&(old.id==id||old.child.lock()==child->state_)) {
+                    if(old.id==id&&old.peer==value&&old.child.lock()==child->state_&&!old.failed&&!old.closed&&!old.observed)
+                        return old.prepared||old.active;
+                    ++observation.negotiations_denied;return false;
+                }
+                if(!old.used&&index==circuit_incoming.size())index=i;
+            }
+            if(index==circuit_incoming.size()){++observation.negotiations_denied;return false;}
+            auto& slot=circuit_incoming[index];slot.used=true;slot.id=id;slot.peer=value;slot.callbacks=cb;slot.child=child->state_;
+            family_ids[family].owner=child->state_;
+        }
+        const auto result=cb.OnNegotiate(id,value);
+        {std::lock_guard<std::mutex> lock(gate);auto& slot=circuit_incoming[index];
+            slot.prepared=result==BackendStatus::None;slot.failed=!slot.prepared;
+            if(!slot.prepared)++observation.negotiations_denied;
+        }
+        return result==BackendStatus::None;
+    }
+    bool CircuitBound(RecordRole role,std::int32_t id,PeerSocketInfo peer) {
+        ProviderCallbacks cb;BackendPeer value;
+        {std::lock_guard<std::mutex> lock(gate);
+            if(!circuit_resolver||role!=RecordRole::Server)return false;
+            ++observation.callback_entries;
+            if(listener_closed||listener_observed||observation.stopped)return true;
+            for(auto& slot:circuit_incoming)if(slot.used&&slot.id==id&&slot.prepared&&!slot.failed&&!slot.closed&&!slot.observed){cb=slot.callbacks;break;}
+        }
+        if(!cb||!PeerValue(peer,value))return true;
+        {std::lock_guard<std::mutex> lock(gate);for(const auto& slot:circuit_incoming)if(slot.used&&slot.id==id&&!(slot.peer==value))return true;}
+        const auto result=cb.OnBind(id,value);
+        {std::lock_guard<std::mutex> lock(gate);for(auto& slot:circuit_incoming)if(slot.used&&slot.id==id){slot.active=result==BackendStatus::None;slot.failed=!slot.active;if(slot.failed)++observation.rejected_callbacks;}}
+        return true;
+    }
+    bool CircuitBytes(RecordRole role,std::int32_t id,const void* data,std::uint32_t size) {
+        ProviderCallbacks cb;
+        {std::lock_guard<std::mutex> lock(gate);
+            if(!circuit_resolver||role!=RecordRole::Server)return false;
+            ++observation.callback_entries;
+            if(!observation.stopped&&!listener_closed&&!listener_observed&&data&&size&&size<=config.max_message_size)
+                for(const auto& slot:circuit_incoming)if(slot.used&&slot.id==id&&slot.active&&!slot.failed&&!slot.closed&&!slot.observed){cb=slot.callbacks;break;}
+            if(!cb){++observation.rejected_callbacks;return true;}
+        }
+        const auto result=cb.OnBytes(id,data,size);
+        if(result!=BackendStatus::None){std::lock_guard<std::mutex> lock(gate);++observation.rejected_callbacks;}
+        return true;
+    }
+    bool CircuitStop(RecordRole role,std::int32_t id,std::int32_t value,bool error) {
+        ProviderCallbacks cb;
+        {std::lock_guard<std::mutex> lock(gate);
+            if(!circuit_resolver||role!=RecordRole::Server)return false;
+            if(id==listener_socket)return false; // Existing root listener terminal path.
+            ++observation.callback_entries;
+            for(auto& slot:circuit_incoming)if(slot.used&&slot.id==id) {
+                cb=slot.callbacks;if(error)slot.failed=true;else slot.observed=true;break;
+            }
+            if(!cb){++observation.rejected_callbacks;return true;}
+        }
+        if(error)(void)cb.OnError(id,value);else(void)cb.OnNativeShutdown(id);
+        return true;
+    }
     void Bytes(RecordRole role,std::int32_t id,const void* data,std::uint32_t size){
+        if(CircuitBytes(role,id,data,size))return;
         ProviderCallbacks cb;
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_BOUNDED_REGRESSION
         bool experiment_accepted=false;
@@ -152,6 +263,7 @@ if(experiment_accepted&&::fastdds_dsoftbus::dsoftbus::dds_experiment::DropRegres
         if(result!=BackendStatus::None){FASTDDS_DSOFTBUS_PROBE_EVENT("OnBytesRejected",0,int(role),id,int(result),size);std::lock_guard<std::mutex> lock(gate);++observation.rejected_callbacks;}
     }
     void Stop(RecordRole role,std::int32_t id,std::int32_t value,bool error){
+        if(CircuitStop(role,id,value,error))return;
         ProviderCallbacks cb;bool known=false,is_accepted=false,ambiguous_first=false;
         {std::lock_guard<std::mutex> lock(gate);++observation.callback_entries;
             if(dual&&role==RecordRole::Server){
@@ -174,6 +286,7 @@ if(experiment_accepted&&::fastdds_dsoftbus::dsoftbus::dds_experiment::DropRegres
         if(!error){std::lock_guard<std::mutex> lock(gate);if(is_accepted&&!BoundedRequested())accepted_owner={};RefreshClosed();}
     }
     void Bound(RecordRole role,std::int32_t id,PeerSocketInfo peer){
+        if(CircuitBound(role,id,peer))return;
         ProviderCallbacks cb;
         {std::lock_guard<std::mutex> lock(gate);++observation.callback_entries;
             if(dual&&role==RecordRole::Server){if(listener_closed||listener_socket<0){++observation.rejected_callbacks;return;}cb=listener_callbacks;}
@@ -188,6 +301,7 @@ if(experiment_accepted&&::fastdds_dsoftbus::dsoftbus::dds_experiment::DropRegres
         if(!PeerValue(peer,value)||cb.OnBind(id,value)!=BackendStatus::None){if(BoundedRequested())(void)cb.OnNegotiationRejected(id);std::lock_guard<std::mutex> lock(gate);++observation.rejected_callbacks;}
     }
     bool Negotiate(RecordRole role,std::int32_t id,PeerSocketInfo peer,bool access_info){
+        if(const auto result=CircuitNegotiate(role,id,peer,access_info))return *result;
         ProviderCallbacks cb;
         {std::lock_guard<std::mutex> lock(gate);if(role==RecordRole::Server)++observation.negotiation_callbacks;}
         {std::lock_guard<std::mutex> lock(gate);++observation.callback_entries;
@@ -247,7 +361,40 @@ BackendKind PublicSocketBackend::Kind()const noexcept {
     return BackendKind::DSoftBusProvider;
 #endif
 }
+bool PublicSocketBackend::SetCircuitResolver(std::function<std::shared_ptr<PublicSocketBackend>(const BackendPeer&)> resolver) {
+    if(!resolver)return false;
+    auto owned=std::make_shared<const decltype(resolver)>(std::move(resolver));
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(!state_->dual||state_->attempted||state_->listener_attempted||state_->circuit_resolver||state_->BoundedRequested()||state_->config.route_lifecycle)return false;
+    state_->circuit_resolver=std::move(owned);state_->primary_closed=true;return true; // No root outgoing native Socket.
+}
+std::shared_ptr<PublicSocketBackend> PublicSocketBackend::CreateCircuit(std::uint32_t domain) {
+    auto config=state_->config;
+    if(!EncodeDomainCircuitName(state_->config.identity.service_name,domain,config.identity.service_name)||
+            !EncodeDomainCircuitName(state_->config.expected_peer_initiator_name,domain,config.expected_peer_initiator_name))return {};
+    config.listener_identity={};config.listen_qos.clear();
+    {std::lock_guard<std::mutex> lock(state_->gate);
+        if(!state_->circuit_resolver||state_->listener_closed||state_->observation.stopped)return {};
+        for(const auto& child:state_->circuit_children)if(child&&child->state_->config.identity.service_name==config.identity.service_name)return child;
+    }
+    auto child=std::make_shared<PublicSocketBackend>(std::move(config));
+    if(!child->state_->valid)return {};
+    child->state_->shared_listener=state_;
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(state_->listener_closed||state_->observation.stopped)return {};
+    for(auto& old:state_->circuit_children) {
+        if(old&&old->state_->config.identity.service_name==child->state_->config.identity.service_name)return old;
+        if(!old){old=child;return child;}
+    }
+    return {};
+}
+bool PublicSocketBackend::SetIncomingCallbacks(ProviderCallbacks callbacks) {
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(!callbacks||state_->shared_listener.expired()||state_->incoming_callbacks||state_->attempted)return false;
+    state_->incoming_callbacks=std::move(callbacks);return true;
+}
 BackendIdentity PublicSocketBackend::Identity()const{return state_->config.identity;}
+std::string PublicSocketBackend::PackageName()const{return state_->config.package_name;}
 BackendTopology PublicSocketBackend::Topology()const noexcept{return state_->dual?BackendTopology::ListenerAndOutgoing:BackendTopology::SingleOwner;}
 std::size_t PublicSocketBackend::MaxMessageSize()const noexcept{return state_->config.max_message_size;}
 BackendIdentity PublicSocketBackend::ListenerIdentity()const{return state_->config.listener_identity;}
@@ -266,24 +413,66 @@ BackendStatus PublicSocketBackend::ConfigureEntrance(const RecordEntrance& entry
     return BackendStatus::None;
 }
 namespace {
-BackendSocketResult CreateSocket(const std::shared_ptr<detail::PublicSocketState>& s,ProviderCallbacks callbacks,bool listening){
+std::optional<std::size_t> ReserveFamilyId(const std::shared_ptr<detail::PublicSocketState>& root,
+        const std::shared_ptr<detail::PublicSocketState>& owner,bool listener) {
+    std::lock_guard<std::mutex> lock(root->gate);
+    for(std::size_t i=0;i<root->family_ids.size();++i)if(!root->family_ids[i].used) {
+        auto& slot=root->family_ids[i];slot.used=true;slot.kind=listener?0:1;slot.owner=owner;return i;
+    }
+    return std::nullopt;
+}
+bool CommitFamilyId(const std::shared_ptr<detail::PublicSocketState>& root,std::size_t slot,std::int32_t id) {
+    std::lock_guard<std::mutex> lock(root->gate);
+    for(std::size_t i=0;i<root->family_ids.size();++i)if(i!=slot&&root->family_ids[i].used&&root->family_ids[i].id==id) {
+        ++root->family_collisions;return false;
+    }
+    root->family_ids[slot].id=id;return true;
+}
+BackendSocketResult CreateSocket(const std::shared_ptr<detail::PublicSocketState>& s,ProviderCallbacks callbacks,bool listening,bool before_entrance=false){
+    auto family_root=s->shared_listener.lock();if(!family_root&&s->circuit_resolver)family_root=s;
+    std::optional<std::size_t> family;
+    if(family_root){family=ReserveFamilyId(family_root,s,listening);if(!family)return {BackendStatus::Capacity,{}};}
     SocketInfo info{};std::shared_ptr<const std::array<char,65>> peer_snapshot;std::uint64_t route_version=0;bool network_changed=false;
     {std::lock_guard<std::mutex> lock(s->gate);
         auto& attempted=listening?s->listener_attempted:s->attempted;
         const bool configured=listening?s->observation.listener_configured:s->observation.configured;
-        if(!s->valid||!configured||attempted||s->observation.closed||!callbacks){s->Reject(PublicSocketOperation::Socket,BackendStatus::InvalidState);return {BackendStatus::InvalidState,{}};}
+        const bool fresh=!(listening?s->listener_entry:s->entry)&&!configured;
+        const bool stage_allowed=s->valid&&!s->config.route_lifecycle&&!s->BoundedRequested()&&fresh;
+        if(!s->valid||(before_entrance?!stage_allowed:!configured)||attempted||s->observation.closed||!callbacks){s->Reject(PublicSocketOperation::Socket,BackendStatus::InvalidState);return {BackendStatus::InvalidState,{}};}
         attempted=true;(listening?s->listener_callbacks:s->callbacks)=std::move(callbacks);s->Enter(PublicSocketOperation::Socket);
         info=listening?s->listener_info:s->info;peer_snapshot=s->peer_snapshot;route_version=s->peer_snapshot_version;network_changed=s->peer_snapshot_changed;if(!listening&&peer_snapshot)info.peerNetworkId=const_cast<char*>(peer_snapshot->data());}
     if(!listening&&peer_snapshot)FASTDDS_DSOFTBUS_PROBE_EVENT("NodeSocket_route_binding",s->observation.entry_index,-1,-1,network_changed?1:0,route_version);
-    try{FASTDDS_DSOFTBUS_PROBE_EVENT("Socket_enter",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),-1,0,0);const auto id=::Socket(info);FASTDDS_DSOFTBUS_PROBE_EVENT("Socket_return",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),id,id,0);std::lock_guard<std::mutex> lock(s->gate);
+    try{FASTDDS_DSOFTBUS_PROBE_EVENT("Socket_enter",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),-1,0,0);const auto id=::Socket(info);FASTDDS_DSOFTBUS_PROBE_EVENT("Socket_return",listening?s->observation.listener_entry_index:s->observation.entry_index,int(listening?RecordRole::Server:s->config.role),id,id,0);
+        if(id>=0&&family_root&&!CommitFamilyId(family_root,*family,id)) {
+            // An indistinguishable foreign live ID grants no second Shutdown
+            // right. Preserve the actual positive raw return in observation;
+            // the original family owner retains that ID and its close duty.
+            std::lock_guard<std::mutex> lock(s->gate);s->Returned(PublicSocketOperation::Socket,{},id);s->observation.stopped=true;
+            return {BackendStatus::InvalidIdentity,{},true,true,{}};
+        }
+        if(id<0&&family_root){std::lock_guard<std::mutex> lock(family_root->gate);family_root->family_ids[*family]={};}
+        std::lock_guard<std::mutex> lock(s->gate);
         if(id>=0){(listening?s->listener_socket:s->socket)=id;
             if(listening||s->config.role==RecordRole::Server)s->observation.listener_socket=id;else s->observation.outgoing_socket=id;
-            const auto fact=s->Returned(PublicSocketOperation::Socket,{},id);return {fact.status,id,true,true,{}};}
-        const auto fact=s->Returned(PublicSocketOperation::Socket,id);return {fact.status,{},true,true,id};
+            const auto fact=s->Returned(PublicSocketOperation::Socket,{},id);
+            const bool unexposed=before_entrance&&!(listening?s->listener_entry:s->entry)&&!(listening?s->observation.listener_configured:s->observation.configured);
+            return {fact.status,id,true,true,{},unexposed};}
+        const auto fact=s->Returned(PublicSocketOperation::Socket,id);
+        const bool unexposed=before_entrance&&!(listening?s->listener_entry:s->entry)&&!(listening?s->observation.listener_configured:s->observation.configured);
+        return {fact.status,{},true,true,id,unexposed};
     }catch(...){std::lock_guard<std::mutex> lock(s->gate);auto fact=s->Exception(PublicSocketOperation::Socket);return {fact.status,{},true,false,{}};}
 }
 }
 BackendSocketResult PublicSocketBackend::Create(ProviderCallbacks cb){return CreateSocket(state_,std::move(cb),false);}
+bool PublicSocketBackend::CanCreateBeforeEntrance()const noexcept {
+    return state_->valid&&state_->config.immutable_deployment_no_listener_record_reuse&&
+            !state_->config.route_lifecycle&&!state_->BoundedRequested();
+}
+BackendSocketResult PublicSocketBackend::CreateBeforeEntrance(ProviderCallbacks cb,RecordRole role) {
+    if(!CanCreateBeforeEntrance()||(role!=state_->config.role&&!(state_->dual&&role==RecordRole::Server)))
+        return {BackendStatus::InvalidState,{}};
+    return CreateSocket(state_,std::move(cb),state_->dual&&role==RecordRole::Server,true);
+}
 bool PublicSocketBackend::RouteLifecycleEnabled()const noexcept{return state_->valid&&state_->config.route_lifecycle&&BoundedReacceptExperiment();}
 BackendStatus PublicSocketBackend::SubscribeNodes(std::function<void(bool,std::string_view)> sink){
     if(!RouteLifecycleEnabled()||!sink)return BackendStatus::InvalidState;
@@ -394,6 +583,17 @@ void PublicSocketBackend::SetAcceptedCommitHookForTest(void(*fn)(void*) noexcept
 }
 #endif
 BackendStatus PublicSocketBackend::CommitAcceptedOwner(const RecordEntrance& entry,const NativeOwnerLease& owner){
+    if(auto parent=state_->shared_listener.lock()) {
+        const auto facts=owner.Observe();
+        if(!entry||entry.role()!=RecordRole::Server||!facts.owned_id||facts.role!=NativeOwnerRole::Accepted)return BackendStatus::InvalidIdentity;
+        std::lock_guard<std::mutex> lock(parent->gate);
+        for(auto& slot:parent->circuit_incoming)if(slot.used&&slot.id==*facts.owned_id&&slot.child.lock()==state_) {
+            if(slot.failed||slot.closed||slot.observed||parent->listener_closed||parent->observation.stopped)return BackendStatus::ProviderStopped;
+            if(slot.owner&&!(slot.owner==owner))return BackendStatus::DuplicateRecord;
+            slot.owner=owner;return BackendStatus::None;
+        }
+        return BackendStatus::InvalidIdentity;
+    }
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_FAKE_SDK
     void(*hook)(void*) noexcept=nullptr;void* context=nullptr;
     {std::lock_guard<std::mutex> lock(state_->gate);hook=state_->before_capability;context=state_->before_capability_context;}
@@ -410,15 +610,28 @@ BackendStatus PublicSocketBackend::CommitAcceptedOwner(const RecordEntrance& ent
 }
 
 namespace {
-BackendCallResult Setup(const std::shared_ptr<detail::PublicSocketState>& s,std::int32_t id,RecordRole role){
+BackendCallResult Setup(const std::shared_ptr<detail::PublicSocketState>& s,std::int32_t id,RecordRole role,
+        std::optional<std::chrono::steady_clock::time_point> deadline={}){
     const auto op=role==RecordRole::Client?PublicSocketOperation::Bind:PublicSocketOperation::Listen;
     const bool listening=s->dual&&role==RecordRole::Server;
+    std::array<QosTV,detail::qos_capacity> timed_qos{};std::uint32_t timed_count=0;
     {std::lock_guard<std::mutex> lock(s->gate);
         if(!(listening?s->observation.listener_configured:s->observation.configured)||(!s->dual&&s->config.role!=role)||(listening?s->listener_socket:s->socket)<0||id!=(listening?s->listener_socket:s->socket)||s->observation.stopped||s->observation.closed){s->Reject(op,BackendStatus::InvalidState);return BackendStatus::InvalidState;}
+        if(deadline) {
+            const auto remaining=std::chrono::duration_cast<std::chrono::milliseconds>(*deadline-std::chrono::steady_clock::now()).count();
+            if(remaining<=0){s->Reject(op,BackendStatus::InvalidState);return BackendStatus::InvalidState;}
+            timed_qos=s->qos;timed_count=s->qos_count;std::size_t slot=timed_count;
+            for(std::size_t i=0;i<timed_count;++i)if(timed_qos[i].qos==QOS_TYPE_MAX_WAIT_TIMEOUT){slot=i;break;}
+            if(slot==timed_count){if(timed_count==timed_qos.size()){s->Reject(op,BackendStatus::Capacity);return BackendStatus::Capacity;}++timed_count;}
+            const auto bounded=static_cast<std::int32_t>(std::min<std::int64_t>(remaining,INT32_MAX));
+            const auto configured=slot<s->qos_count?timed_qos[slot].value:bounded;
+            if(configured<=0){s->Reject(op,BackendStatus::InvalidState);return BackendStatus::InvalidState;}
+            timed_qos[slot]={QOS_TYPE_MAX_WAIT_TIMEOUT,std::min(configured,bounded)};
+        }
         s->Enter(op);}
     try {const auto& listener=detail::Listener(listening?s->observation.listener_entry_index:s->observation.entry_index);
         FASTDDS_DSOFTBUS_PROBE_EVENT(role==RecordRole::Client?"Bind_enter":"Listen_enter",listening?s->observation.listener_entry_index:s->observation.entry_index,int(role),id,0,0);
-        const auto rc=role==RecordRole::Client ? ::Bind(id,s->qos.data(),s->qos_count,&listener) : ::Listen(id,listening?s->listener_qos.data():s->qos.data(),listening?s->listener_qos_count:s->qos_count,&listener);
+        const auto rc=role==RecordRole::Client ? ::Bind(id,deadline?timed_qos.data():s->qos.data(),deadline?timed_count:s->qos_count,&listener) : ::Listen(id,listening?s->listener_qos.data():s->qos.data(),listening?s->listener_qos_count:s->qos_count,&listener);
         FASTDDS_DSOFTBUS_PROBE_EVENT(role==RecordRole::Client?"Bind_return":"Listen_return",listening?s->observation.listener_entry_index:s->observation.entry_index,int(role),id,rc,0);
         std::lock_guard<std::mutex> lock(s->gate);return s->Returned(op,rc);
     }catch(...){std::lock_guard<std::mutex> lock(s->gate);return s->Exception(op);}
@@ -426,6 +639,7 @@ BackendCallResult Setup(const std::shared_ptr<detail::PublicSocketState>& s,std:
 }
 BackendCallResult PublicSocketBackend::Listen(std::int32_t id){return Setup(state_,id,RecordRole::Server);}
 BackendCallResult PublicSocketBackend::Bind(std::int32_t id){return Setup(state_,id,RecordRole::Client);}
+BackendCallResult PublicSocketBackend::Bind(std::int32_t id,std::chrono::steady_clock::time_point deadline){return Setup(state_,id,RecordRole::Client,deadline);}
 BackendSendResult PublicSocketBackend::Send(std::int32_t id,const std::uint8_t* p,std::size_t size,std::chrono::steady_clock::time_point deadline){
     auto s=state_;
     {std::lock_guard<std::mutex> lock(s->gate);
@@ -438,6 +652,27 @@ BackendSendResult PublicSocketBackend::Send(std::int32_t id,const std::uint8_t* 
     }catch(...){std::lock_guard<std::mutex> lock(s->gate);s->Exception(PublicSocketOperation::Send);return {BackendStatus::ProviderException,{},true,false};}
 }
 BackendCallResult PublicSocketBackend::Shutdown(std::int32_t id){
+    if(auto parent=state_->shared_listener.lock()) {
+        bool own_primary=false;{std::lock_guard<std::mutex> lock(state_->gate);own_primary=state_->socket>=0&&id==state_->socket;}
+        if(!own_primary) {
+            std::size_t index=parent->circuit_incoming.size();
+            {std::lock_guard<std::mutex> lock(parent->gate);
+                for(std::size_t i=0;i<parent->circuit_incoming.size();++i) {
+                    auto& slot=parent->circuit_incoming[i];
+                    if(slot.used&&slot.id==id&&slot.child.lock()==state_&&slot.owner){index=i;break;}
+                }
+                if(index==parent->circuit_incoming.size())return BackendStatus::ForeignSocket;
+                auto& slot=parent->circuit_incoming[index];
+                if(slot.closed||slot.observed){slot.closed=true;return slot.close_status;}
+                slot.closed=true;parent->Enter(PublicSocketOperation::Shutdown);
+            }
+            BackendCallResult result;
+            try{::Shutdown(id);std::lock_guard<std::mutex> lock(parent->gate);result=parent->Returned(PublicSocketOperation::Shutdown,{});}
+            catch(...){std::lock_guard<std::mutex> lock(parent->gate);result=parent->Exception(PublicSocketOperation::Shutdown);}
+            {std::lock_guard<std::mutex> lock(parent->gate);parent->circuit_incoming[index].close_status=result.status;}
+            return result;
+        }
+    }
     auto s=state_;int lane=-1;
     {std::lock_guard<std::mutex> lock(s->gate);
         if(s->socket>=0&&id==s->socket)lane=0;
@@ -457,12 +692,30 @@ BackendCallResult PublicSocketBackend::Shutdown(std::int32_t id){
     return result;
 }
 PublicSocketObservation PublicSocketBackend::Observe()const{
-    std::lock_guard<std::mutex> lock(state_->gate);auto result=state_->observation;
+    std::array<std::shared_ptr<PublicSocketBackend>,2> children;
+    PublicSocketObservation result;
+    {std::lock_guard<std::mutex> lock(state_->gate);result=state_->observation;children=state_->circuit_children;
     result.outgoing_stopped=state_->primary_closed||state_->primary_observed||state_->primary_failed;
     result.listener_stopped=state_->listener_closed||state_->listener_observed||state_->listener_failed;
     result.accepted_stopped=state_->accepted_closed||state_->accepted_observed||state_->accepted_failed;
     if(result.configured)result.exceptions+=detail::Slots()[result.entry_index].exceptions.load();
     if(result.listener_configured)result.exceptions+=detail::Slots()[result.listener_entry_index].exceptions.load();
+    result.family_collisions=state_->family_collisions;
+    for(const auto& id:state_->family_ids)if(id.used)++result.family_ids_retained;
+    for(std::size_t i=0;i<state_->circuit_incoming.size();++i)if(state_->circuit_incoming[i].used&&state_->circuit_incoming[i].owner)
+        result.domain_accepted_sockets[i]=state_->circuit_incoming[i].id;
+    }
+    for(std::size_t i=0;i<children.size();++i)if(children[i]) {
+        const auto child=children[i]->Observe();++result.domain_circuits;
+        result.domain_outgoing_sockets[i]=child.outgoing_socket;
+        if(!result.outgoing_socket)result.outgoing_socket=child.outgoing_socket;
+        for(std::size_t j=0;j<result.operations.size();++j) {
+            result.operations[j].attempts+=child.operations[j].attempts;result.operations[j].calls+=child.operations[j].calls;result.operations[j].returns+=child.operations[j].returns;
+        }
+        result.callback_entries+=child.callback_entries;result.rejected_callbacks+=child.rejected_callbacks;result.exceptions+=child.exceptions;
+        if(!result.first_api_error)result.first_api_error=child.first_api_error;
+        if(!result.first_exception)result.first_exception=child.first_exception;
+    }
     return result;
 }
 }

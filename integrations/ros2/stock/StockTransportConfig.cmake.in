@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" OR NOT OHOS_STL STREQUAL "c++_shared")
+    message(FATAL_ERROR "Installed stock product requires OHOS with the declared shared SDK C++ runtime")
+endif()
+include(CMakeFindDependencyMacro)
+find_dependency(fastrtps 2.14.5 EXACT CONFIG)
+find_dependency(fastcdr 2.2.5 EXACT CONFIG)
+find_dependency(Threads)
+include("${CMAKE_CURRENT_LIST_DIR}/FastDDSDSoftBusStockTargets.cmake")
+check_required_components(FastDDSDSoftBusStock)

@@ -7,6 +7,7 @@
 #include "../../integrations/ros2/target/NativeObservation.hpp"
 #include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
 #include <fastdds_dsoftbus/dsoftbus/RuntimeProbeAccess.hpp>
+#include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <fastdds_dsoftbus/dsoftbus/FastddsApi.hpp>
 #include <socket.h>
 #include <array>
@@ -137,6 +138,22 @@ int main(int argc,char** argv){
         owner.open=owner.transport->OpenInputChannel(setup.local,&receiver,frame_size);check(owner.open,"input open");
         await([&]{return phase0::RuntimeProbeAccess::ObserveConnection(runtime).adapter.accepted_phase==phase0::AcceptedPhase::Active;},"accepted activation");
         const auto sockets=runtime.ObserveSocket();check(sockets.outgoing_socket&&sockets.accepted_socket,"actual socket owners");
+        auto* guarded=dynamic_cast<DSoftBusTransport*>(owner.transport.get());
+        check(guarded&&guarded->domain_snapshot().state==ViewDomainState::Await,"observer raw view must await domain");
+        eprosima::fastdds::rtps::SendResourceList pending;
+        const auto remote=setup.descriptor.directory.routes.front().key.remote_locator;
+        check(owner.transport->OpenOutputChannel(pending,remote),"Await sender resource");
+        std::vector<Locator> targets{remote};
+        eprosima::fastdds::rtps::Locators first(targets.begin()),last(targets.end());
+        const std::uint8_t opaque[]{1,3,5,7};
+        check(!pending.front()->send(opaque,sizeof(opaque),&first,&last,std::chrono::steady_clock::now()+std::chrono::seconds(1)),"observer raw Await submitted bytes");
+        // Explicit component-driver domain, not confirmation inferred from the
+        // descriptor's expected value. The original six ingress records follow.
+        eprosima::fastdds::rtps::LocatorList peers;fastdds_dsoftbus::binding::PortParameters ports;
+        Locator initial=remote;
+        check(owner.transport->configureInitialPeerLocator(initial,ports,151,peers)&&guarded->domain_snapshot().state==ViewDomainState::Ready,
+            "controlled observer raw domain151 callback");
+        pending.clear();
         auto send=[&](unsigned sequence,unsigned index){
             const auto payload=frame(sequence);check(::SendBytes(*sockets.outgoing_socket,payload.data(),static_cast<uint32_t>(payload.size()))==0,"Host SendBytes");
             const auto& observed=observer->Wait(index);

@@ -78,13 +78,14 @@ EndpointDirectory::Snapshot EgressPlan::directory() const noexcept { return dire
 const std::vector<Locator>& EgressPlan::selected_locals() const noexcept { return locals_; }
 
 RuntimeSendPath::RuntimeSendPath(EgressPlan::Snapshot plan, SendQueueLimits limits,
-        std::shared_ptr<const ConnectionGenerationSource> generations)
-    : RuntimeSendPath(std::move(plan), limits, std::move(generations), nullptr, {}) {}
+        std::shared_ptr<const ConnectionGenerationSource> generations, std::shared_ptr<RuntimeWorkSignal> work)
+    : RuntimeSendPath(std::move(plan), limits, std::move(generations), nullptr, {}, std::move(work)) {}
 RuntimeSendPath::RuntimeSendPath(EgressPlan::Snapshot plan, SendQueueLimits limits,
-        std::shared_ptr<const ConnectionGenerationSource> generations, std::unique_ptr<SendQueue> queue, TestHooks hooks)
+        std::shared_ptr<const ConnectionGenerationSource> generations, std::unique_ptr<SendQueue> queue, TestHooks hooks,
+        std::shared_ptr<RuntimeWorkSignal> work)
     : plan_(std::move(plan)), generations_(std::move(generations)),
       identity_(std::make_shared<detail::RuntimeIdentity>()), max_record_bytes_(limits.max_record_bytes),
-      queue_(std::move(queue)), hooks_(std::move(hooks))
+      queue_(std::move(queue)), hooks_(std::move(hooks)), work_(std::move(work))
 {
     if (!plan_ || !generations_ || limits.peer_records == 0 || limits.peer_bytes == 0 ||
             limits.global_records == 0 || limits.global_bytes == 0 || limits.max_record_bytes == 0 ||
@@ -174,6 +175,9 @@ RuntimeSendReport RuntimeSendPath::Submit(const std::vector<NetworkBuffer>& buff
         report.queue_result = queue_->EnqueueBatch(targets.data(), targets.size(), priority,
                 original_deadline, views.data(), views.size(), total_bytes);
         report.status = *report.queue_result == SendAdmission::Accepted ? RuntimeSendStatus::Accepted : RuntimeSendStatus::QueueRejected;
+        // EnqueueBatch has released its queue gate. Notification never invokes
+        // native work or an observer on this producer's stack.
+        if (report.status == RuntimeSendStatus::Accepted && work_) work_->Notify();
         return report;
     } catch (...) {
         // Preparation/iterator/source failures cannot publish a partial batch.

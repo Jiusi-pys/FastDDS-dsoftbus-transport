@@ -3,6 +3,7 @@
 #include <fastdds_dsoftbus/dsoftbus/HostProviderLoop.hpp>
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <cstring>
 #include <functional>
 #include <future>
@@ -59,7 +60,7 @@ struct Mock final:NativeBackend {
 };
 struct Receiver final:InputChannels::Receiver {
     std::atomic<int> calls{0};std::vector<std::uint8_t> bytes;Locator local,remote;std::function<void()> pause;
-    void OnDataReceived(const rtps::octet* p,std::uint32_t n,const Locator& l,const Locator& r)override{
+    void OnDataReceived(const std::uint8_t* p,std::uint32_t n,const Locator& l,const Locator& r)override{
         ++calls;if(pause)pause();bytes.assign(p,p+n);local=l;remote=r;
     }
 };
@@ -69,7 +70,11 @@ struct F {
     std::unique_ptr<DSoftBusTransport> transport=HostFacadeTestAccess::Create(config,loop);
     rtps::SendResourceList senders;
     void Init(bool input=true){Check(transport->init(),"injected actual facade init");if(input)Check(transport->OpenInputChannel(L(2),&receiver,64),"input registration");Check(transport->OpenOutputChannel(senders,L(3)),"actual output resource");}
+#if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+    bool Send(){std::uint8_t data[]={1,2,3,4};std::vector<Locator> peers{L(3)};rtps::Locators begin(peers.begin()),end(peers.end());const bool ok=senders.front()->send(data,4,&begin,&end,std::chrono::steady_clock::now()+5s);std::memset(data,9,4);return ok;}
+#else
     bool Send(){std::uint8_t data[]={1,2,3,4};std::vector<rtps::NetworkBuffer> b{{data,2},{data+2,2}};std::vector<Locator> peers{L(3)};rtps::Locators begin(peers.begin()),end(peers.end());const bool ok=senders.front()->send(b,4,&begin,&end,std::chrono::steady_clock::now()+5s,23);std::memset(data,9,4);return ok;}
+#endif
     void Close(){transport->shutdown();auto v=loop->Observe();Check(v.closed&&v.sealed&&v.active_pumps==0&&v.tx.records==0&&v.tx.bytes==0,"observable work settled");Check(v.close.adapter_drained&&v.close.sdk_drain==SdkDrain::Unproven,"no SDK drain claim");}
 };
 }

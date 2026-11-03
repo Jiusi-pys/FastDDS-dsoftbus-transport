@@ -68,8 +68,13 @@ public:
     ProviderAdapter(const ProviderAdapter&) = delete;
     ProviderAdapter& operator=(const ProviderAdapter&) = delete;
     BackendStatus Initialize() noexcept;
+    BackendStatus InitializeListenerOnly() noexcept;
+    BackendStatus PrepareCircuitAnchor() noexcept;
+    BackendStatus InitializeCircuitOutgoing(std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max()) noexcept;
+    ProviderCallbacks IncomingCallbacks() const noexcept;
     BackendStatus Publish() noexcept;
     BackendStatus DispatchOne() noexcept;
+    BackendStatus DispatchAuthorized(const std::array<NativeOwnerTable*,2>&) noexcept;
     BackendStatus CloseAccepted() noexcept;
     // Explicit bounded experiment control; ends only the current owned lane.
     BackendStatus RequestNormalEnd(RecordRole) noexcept;
@@ -88,6 +93,7 @@ friend class ::fastdds_dsoftbus::dsoftbus::host_test::HostProviderLoop;
             const BindingRequest&, bool);
     std::shared_ptr<NativeSendProvider> BindSendProvider(NativeOwnerTable&) const noexcept;
     void SealIngress() noexcept;
+    BackendStatus InitializeImpl(bool listener_only) noexcept;
     explicit ProviderAdapter(std::shared_ptr<detail::ProviderAdapterState>) noexcept;
     std::shared_ptr<detail::ProviderAdapterState> state_;
 };

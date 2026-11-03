@@ -41,6 +41,9 @@ public:
     {return detail::ProcessReceiveBridge::Next(a,n,Clock(now));}
     static auto NextWithClock(ApplicationAttachments& a,NativeOwnerTable& n,const ProcessClock& clock)
     {return detail::ProcessReceiveBridge::Next(a,n,clock);}
+    static auto AdmitReal(ApplicationAttachments& a,NativeOwnerTable& n,const ApplicationClaim& c,
+            const NativeIdentityConstraint& pin,const void* bytes,std::size_t size,SendQueue::Clock::time_point expiry)
+    {return detail::ProcessReceiveBridge::Admit(a,n,c,pin,bytes,size,expiry,ProcessClock{});}
 };
 class ApplicationAttachmentsTestAccess
 {
@@ -226,6 +229,29 @@ void ReceiverReplacementAfterPreflight()
     CHECK(a.SnapshotUsage().records==0&&old.calls==0&&fresh.calls==0&&core->SnapshotUsage().in_flight==0);
     CHECK(f.table->SnapshotUsage().receives==0);a.AwaitDetached(c);
 }
+void RealPendingExpiry()
+{
+    Fixture f(false);Receiver receiver;
+    auto signal=std::make_shared<RuntimeWorkSignal>();
+    ApplicationAttachments a({L(2)},{},signal);auto claim=f.Claim(a);
+    CHECK(a.OpenReceiver(claim,L(2),&receiver).result==ReceiverOpenResult::Opened);
+    auto before=signal->Generation();
+    const auto expiry=SendQueue::Clock::now()+150ms;
+    CHECK(ProcessReceiveTestAccess::AdmitReal(a,*f.table,claim,f.Pin(),payload,sizeof(payload),expiry)==ReceiveAdmissionResult::Accepted);
+    CHECK(a.SnapshotUsage().queued==1&&signal->Generation()!=before);
+    auto seen=signal->Generation();
+    CHECK(!ProcessReceiveTestAccess::NextWithClock(a,*f.table,ProcessClock{}));
+    CHECK(a.SnapshotUsage().queued==1&&a.NextReceiveDeadline()==expiry);
+    CHECK(signal->Wait(seen,a.NextReceiveDeadline())==WorkWaitResult::Deadline);
+    CHECK(SendQueue::Clock::now()>=expiry);
+    CHECK(!ProcessReceiveTestAccess::NextWithClock(a,*f.table,ProcessClock{}));
+    CHECK(a.SnapshotUsage().records==0&&a.SnapshotUsage().bytes==0&&receiver.calls==0);
+    CHECK(a.NextReceiveDeadline()==SendQueue::Clock::time_point::max());
+    auto idle=std::async(std::launch::async,[&]{return signal->Wait(seen,a.NextReceiveDeadline());});
+    CHECK(idle.wait_for(80ms)==std::future_status::timeout);
+    signal->Close();CHECK(Finish(idle)==WorkWaitResult::Closed);
+    a.AwaitDetached(claim);
+}
 int main(){try{
     OriginalIdentityAndLease();std::cout<<"PASS N3-PINNED-LEASE\n";
     ReceiverAndApplicationIsolation();std::cout<<"PASS N3-PINNED-ISOLATION\n";
@@ -234,5 +260,6 @@ int main(){try{
     NativeInvalidationAndAbandonedPermit();std::cout<<"PASS N3-PINNED-NATIVE-ABANDON\n";
     CopyCancellation();std::cout<<"PASS N3-PINNED-COPY-CANCEL\n";
     BindingRequiresFiniteDeadline();std::cout<<"PASS N3-PINNED-FINITE-DEADLINE\n";
-    ReceiverReplacementAfterPreflight();std::cout<<"PASS N3-PINNED-INPUT-REPLACEMENT\n";return 0;
+    ReceiverReplacementAfterPreflight();std::cout<<"PASS N3-PINNED-INPUT-REPLACEMENT\n";
+    RealPendingExpiry();std::cout<<"PASS N3-REAL-PENDING-EXPIRY-WAIT-AND-DRAIN\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

@@ -22,6 +22,9 @@ DSoftBusTransport::~DSoftBusTransport() { shutdown(); }
 DSoftBusTransport::DSoftBusTransport(const DSoftBusTransportDescriptor& descriptor, HostBackendTag,
         std::shared_ptr<HostFacadeBackend> backend)
     : TransportInterface(LocatorCodec::kind), frozen_(descriptor), report_(descriptor),
+      domain_guard_(backend && backend->RequiresDomainBinding() && !descriptor.expected_domain_id ?
+          ViewDomainGuard::CreateUnbound(descriptor.directory.identities.front().domain) :
+          descriptor.expected_domain_id ? ViewDomainGuard::Create(*descriptor.expected_domain_id) : nullptr),
 #ifdef FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT
       mode_(FacadeMode::IsolatedExperiment), host_backend_(std::move(backend)) {}
 #else
@@ -165,9 +168,9 @@ bool DSoftBusTransport::OpenOutputChannel(SendResourceList& list, const Locator&
     }
     const auto attached =
 #if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
-        r->host_backend ? r->host_backend->Attach(list) :
+        r->host_backend ? r->host_backend->AttachWithDomainGuard(list, domain_guard_) :
 #endif
-        DSoftBusSenderResource::Attach(list, r->runtime);
+        DSoftBusSenderResource::Attach(list, r->runtime, domain_guard_);
     if (!attached.ok()) Diagnose({FacadeError::SenderAttachRejected, "open_output"});
     return attached.ok();
 }
@@ -188,14 +191,20 @@ bool DSoftBusTransport::OpenOutputChannels(SendResourceList& list, const Selecto
     if (!owned) return false;
     const auto result =
 #if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
-        r->host_backend ? r->host_backend->Attach(list) :
+        r->host_backend ? r->host_backend->AttachWithDomainGuard(list, domain_guard_) :
 #endif
-        DSoftBusSenderResource::Attach(list, r->runtime);
+        DSoftBusSenderResource::Attach(list, r->runtime, domain_guard_);
     if (!result.ok()) Diagnose({FacadeError::SenderAttachRejected, "open_outputs"});
     return result.ok();
 }
 void DSoftBusTransport::CloseOutputChannels(SendResourceList&, const SelectorEntry&)
 { /* Aggregate resource still serves other endpoints; only list-owner Release or shutdown stops it. */ }
+void DSoftBusTransport::GuardedReceiver::OnDataReceived(const std::uint8_t* data,
+        std::uint32_t size, const Locator& local, const Locator& remote)
+{
+    auto permit = guard_->TryEnter(DomainOperation::Receive);
+    if (permit) target_->OnDataReceived(data, size, local, remote);
+}
 bool DSoftBusTransport::OpenInputChannel(const Locator& local, Receiver* receiver, std::uint32_t capacity)
 {
     auto r = ReadyLease(); if (!r) { Diagnose({FacadeError::InvalidState, "open_input"}); return false; }
@@ -204,16 +213,30 @@ bool DSoftBusTransport::OpenInputChannel(const Locator& local, Receiver* receive
     if (capacity < frozen_.maxMessageSize) { Diagnose({FacadeError::InsufficientReceiverCapacity, "open_input"}); return false; }
     std::lock_guard<std::mutex> control(slot->control);
     if (!ReadyLease()) { Diagnose({FacadeError::InvalidState, "open_input"}); return false; }
+    std::unique_ptr<GuardedReceiver> prepared;
+    Receiver* input_receiver = receiver;
+    if (domain_guard_) {
+        if (slot->receiver_proxy && slot->receiver_proxy->target() != receiver) {
+            Diagnose({FacadeError::InputConflict, "open_input_receiver"}); return false;
+        }
+        try {
+            if (!slot->receiver_proxy) prepared = std::make_unique<GuardedReceiver>(receiver, domain_guard_);
+        } catch (const std::bad_alloc&) {
+            Diagnose({FacadeError::AllocationFailure, "open_input_proxy"}); return false;
+        }
+        input_receiver = slot->receiver_proxy ? slot->receiver_proxy.get() : prepared.get();
+    }
     const auto result =
 #if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
-        r->host_backend ? r->host_backend->Open(local, receiver) :
+        r->host_backend ? r->host_backend->Open(local, input_receiver) :
 #endif
-        r->inputs->Open(local, receiver);
+        r->inputs->Open(local, input_receiver);
     if (result != InputOpenResult::Opened && result != InputOpenResult::AlreadyOpen) {
         Diagnose({result == InputOpenResult::AllocationFailure ? FacadeError::AllocationFailure :
             result == InputOpenResult::Closing || result == InputOpenResult::Disabled ? FacadeError::InputClosing : FacadeError::InputConflict,
             "open_input"}); return false;
     }
+    if (prepared) slot->receiver_proxy = std::move(prepared);
     if (hooks_.after_core_open) hooks_.after_core_open();
     {
         std::lock_guard<std::mutex> lock(lifecycle_);
@@ -242,13 +265,14 @@ bool DSoftBusTransport::CloseInputChannel(const Locator& local)
         const bool was_open=slot->committed_open.exchange(false);
         const bool closed=r->host_backend->CloseInput(local);
         if(!closed) {slot->committed_open.store(was_open);Diagnose({FacadeError::InputClosing,"host_input_close_failed"});}
+        else slot->receiver_proxy.reset();
         return closed;
     }
 #endif
     std::lock_guard<std::mutex> control(slot->control);
     slot->committed_open.store(false);
     if (hooks_.after_close_mark) hooks_.after_close_mark();
-    r->inputs->Close(local); return true;
+    r->inputs->Close(local); slot->receiver_proxy.reset(); return true;
 }
 bool DSoftBusTransport::DoInputLocatorsMatch(const Locator& a, const Locator& b) const
 { auto r = ReadyLease(); return r && a == b && r->FindLocal(a); }
@@ -316,10 +340,35 @@ bool DSoftBusTransport::getDefaultUnicastLocators(LocatorList& out, std::uint32_
 bool DSoftBusTransport::fillMetatrafficMulticastLocator(Locator&, std::uint32_t) const { return false; }
 bool DSoftBusTransport::fillMetatrafficUnicastLocator(Locator& local, std::uint32_t) const { return is_local_locator(local); }
 bool DSoftBusTransport::configureInitialPeerLocator(Locator& remote, const fastdds_dsoftbus::binding::PortParameters&,
-        std::uint32_t, LocatorList& out) const
+        std::uint32_t domain, LocatorList& out) const
 {
+    if (domain_guard_ && !domain_guard_->automatic() && domain != domain_guard_->expected_domain_id()) {
+        domain_guard_->Confirm(domain); Diagnose({FacadeError::DomainRefused, "initial_peer_domain"}); return false;
+    }
     auto r = ReadyLease(); if (!r || !LocatorCodec::IsValid(remote) || !r->plan->Find(remote)) return false;
-    LocatorList prepared(out); prepared.push_back(remote); out.swap(prepared); return true;
+    LocatorList prepared(out); prepared.push_back(remote);
+    if (domain_guard_) {
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+        if (host_backend_ && host_backend_->RequiresDomainBinding()) {
+            const auto before=domain_guard_->Snapshot();
+            if(before.state==ViewDomainState::Closed||before.state==ViewDomainState::Refused||
+                    (before.first_observed_domain&&*before.first_observed_domain!=domain)) {
+                domain_guard_->Confirm(domain);Diagnose({FacadeError::DomainRefused,"initial_peer_domain"});return false;
+            }
+            if(!host_backend_||!host_backend_->BindDomain(domain,domain_guard_)) {
+                domain_guard_->Refuse(domain);
+                std::fprintf(stderr,"DSoftBus domain binding actual=%u reason=NativeCircuitUnavailable\n",domain);
+                Diagnose({FacadeError::DomainRefused,"native_domain_circuit"});return false;
+            }
+        }
+#endif
+        const auto state = domain_guard_->Confirm(domain);
+        if (state != ViewDomainState::Ready) {
+            Diagnose({state == ViewDomainState::Closed ? FacadeError::DomainClosed : FacadeError::DomainRefused,
+                "initial_peer_domain"}); return false;
+        }
+    }
+    out.swap(prepared); return true;
 }
 bool DSoftBusTransport::fillUnicastLocator(Locator& local, std::uint32_t) const { return is_local_locator(local); }
 std::uint32_t DSoftBusTransport::max_recv_buffer_size() const { return ReadyLease() ? frozen_.maxMessageSize : 0; }
@@ -327,6 +376,7 @@ bool DSoftBusTransport::is_localhost_allowed() const { return false; }
 void DSoftBusTransport::update_network_interfaces() {}
 void DSoftBusTransport::shutdown()
 {
+    if (domain_guard_) domain_guard_->Close();
     std::shared_ptr<Ready> r;
     { std::lock_guard<std::mutex> lock(lifecycle_); state_ = FacadeState::Closing; r = ready_; }
     if (hooks_.after_shutdown_request) hooks_.after_shutdown_request();

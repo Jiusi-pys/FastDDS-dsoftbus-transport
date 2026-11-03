@@ -347,11 +347,23 @@ void EgressOldResource(){
     rtps::SendResourceList old;
     Check(f.p->OpenOutputChannel(old,L(3)),"first view sender resource before its close");
     Check(!old.empty(),"one attached resource");
+#if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+    std::uint8_t data[]={9,9};std::vector<Locator> peers{L(3)};
+#else
     std::uint8_t data[]={9,9};std::vector<rtps::NetworkBuffer> buffers{{data,2}};std::vector<Locator> peers{L(3)};
+#endif
+#if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+    {rtps::Locators begin(peers.begin()),end(peers.end());Check(old.front()->send(data,2,&begin,&end,std::chrono::steady_clock::now()+5s),"that resource sends while its view is live");}
+#else
     {rtps::Locators begin(peers.begin()),end(peers.end());Check(old.front()->send(buffers,2,&begin,&end,std::chrono::steady_clock::now()+5s,0),"that resource sends while its view is live");}
+#endif
     f.p->shutdown();
     const int before=f.mock->sends;
+#if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+    {rtps::Locators begin(peers.begin()),end(peers.end());Check(!old.front()->send(data,2,&begin,&end,std::chrono::steady_clock::now()+5s),"the old resource is refused after the close");}
+#else
     {rtps::Locators begin(peers.begin()),end(peers.end());Check(!old.front()->send(buffers,2,&begin,&end,std::chrono::steady_clock::now()+5s,0),"the old resource is refused after the close");}
+#endif
     Check(f.mock->sends==before,"a refusal creates no new send");
     const auto v=f.root->Observe();
     Check(v.tx.records==0&&v.send.admitted_outstanding==0,"no ticket is created for the revoked registration");
@@ -416,7 +428,11 @@ void BudgetCeiling(){
     Check(mock->closes==1,"the remaining view still finalizes exactly once");
 }
 
+#if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+bool Submit(DSoftBusTransport& t){rtps::SendResourceList list;Check(t.OpenOutputChannel(list,L(3)),"own sender resource");std::uint8_t data[]={7,8};std::vector<Locator> peers{L(3)};rtps::Locators begin(peers.begin()),end(peers.end());return list.front()->send(data,2,&begin,&end,std::chrono::steady_clock::now()+5s);}
+#else
 bool Submit(DSoftBusTransport& t){rtps::SendResourceList list;Check(t.OpenOutputChannel(list,L(3)),"own sender resource");std::uint8_t data[]={7,8};std::vector<rtps::NetworkBuffer> buffers{{data,2}};std::vector<Locator> peers{L(3)};rtps::Locators begin(peers.begin()),end(peers.end());return list.front()->send(buffers,2,&begin,&end,std::chrono::steady_clock::now()+5s,0);}
+#endif
 void Sending(){SharedFixture f;Event entered,release,sealed;std::thread send,close;std::atomic<bool> done=false;Cleanup cleanup{[&]{release.Signal();if(send.joinable())send.join();if(close.joinable())close.join();HostProviderLoopTestAccess::Hooks(*f.root,{},{});}};f.mock->during_send=[&]{entered.Signal();release.Wait();};HostProviderLoopTestAccess::Hooks(*f.root,{},[&]{sealed.Signal();});Check(Submit(*f.p),"P submission");send=std::thread([&]{f.root->PumpSend();});entered.Wait();close=std::thread([&]{f.p->shutdown();done=true;});sealed.Wait();Check(!done&&f.mock->closes==0&&f.root->Observe().native.send.entered==1,"original in-Send ticket owner not released");Check(f.root->Observe().send.admitted_outstanding==1&&!f.root->Observe().send.drained,"the in-flight admission is charged and the registration is not drained");Check(!f.joined->Observe().send.admission_closed,"the other view's own registration stays open");release.Signal();send.join();close.join();Check(f.root->Observe().send.drained&&f.root->Observe().send.admitted_outstanding==0,"the closed view settles once its execution returns");f.mock->during_send={};f.Pump();Check(f.rq.calls==1&&f.rp.calls==0,"returned send echo only enters surviving Q");Check(Submit(*f.q),"Q send admission survived P revoke");f.joined->PumpSend();f.Pump();Check(f.rq.calls==2,"Q continued TX RX");}
 void JoinLast(){SharedFixture f;f.q.reset();Event sealed,release;std::thread close;Cleanup cleanup{[&]{release.Signal();if(close.joinable())close.join();HostProviderLoopTestAccess::Hooks(*f.root,{},{});}};HostProviderLoopTestAccess::Hooks(*f.root,{},[&]{sealed.Signal();release.Wait();});close=std::thread([&]{f.p->shutdown();});sealed.Wait();auto next=f.root->Join();Check(bool(next),"join wins before last membership release");release.Signal();close.join();Check(f.mock->closes==0,"reserved live join keeps native runtime");Receiver fresh;auto p=HostFacadeTestAccess::Create(f.config,next);Check(p->init()&&p->OpenInputChannel(L(2),&fresh,64),"reserved view starts");p.reset();Check(f.mock->closes==1&&!f.root->Join(),"last close wins, old retained handle cannot resurrect");}
 }
