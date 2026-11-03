@@ -17,15 +17,15 @@ spec.loader.exec_module(h)
 REPO = h.REPO
 BASE = Path('E:/Codex-FastDDS-stage1-directdds-reasons-package-20261031-d01')
 BASE_SHA = 'f989dfac19d45f13e2c6388f06ea8e8866e0562848c7815dc46077c7a897be4a'
-PACKAGE = REPO/'build/directdds-df-contract-package-20261103-d01'
+PACKAGE = REPO/'build/directdds-terminal-package-20261103-d01'
 ACTIVE = PACKAGE/'active'
-RUN = Path('E:/Codex-FastDDS-directdds-once-20261103_c2d7a641')
-DEVICE = '/data/local/tmp/mdds_direct_20261103_c2d7a641'
-SCOPE = 'ONE_NEW_CURRENT_STOCK_DDS_AB_DF_CONTRACT_240S_D03'
-NONCE = 'C2D7A641_DIRECT_DDS_240S_D03'
-PROBE_RUN = 'c2d7a64131d0aa60'
-DATA_RUN = 'c2d7a64131d0aa61'
-CARD_PATH = 'docs/DIRECT_DDS_DF_EXECUTION.md'
+RUN = Path('E:/Codex-FastDDS-directdds-once-20261103_d5a29f38')
+DEVICE = '/data/local/tmp/mdds_direct_20261103_d5a29f38'
+SCOPE = 'ONE_NEW_CURRENT_STOCK_DDS_AB_TERMINAL_PROOF_240S_D04'
+NONCE = 'D5A29F38_DIRECT_DDS_240S_D04'
+PROBE_RUN = 'd5a29f3831d0aa60'
+DATA_RUN = 'd5a29f3831d0aa61'
+CARD_PATH = 'docs/DIRECT_DDS_TERMINAL_EXECUTION.md'
 spec = importlib.util.spec_from_file_location('_dds_resource_query', HERE/'resource_query.py')
 resource_query = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(resource_query)
