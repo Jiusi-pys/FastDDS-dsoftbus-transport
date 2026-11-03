@@ -1,8 +1,10 @@
 # Fixed df receipt contract
 
-This local repair addresses a public-source contract defect. It does not identify
-the actual content behind the latest `DF_RECORD_UNKNOWN`, reclassify that failed
-attempt, authorize raw access, or grant a DDS retry.
+This local repair addresses a public-source contract defect. A subsequently
+approved local405-byte classification confirms the old two-name display-mount
+whitelist as the captured receipt incompatibility, without publishing field
+values. The original failed attempt remains failed; no additional raw access
+or DDS retry is authorized.
 
 The fixed query is `df -k /data/local/tmp`. The gate means that filesystem's
 available KiB must reach65536; it does not require its displayed mount-table
@@ -90,30 +92,44 @@ passed, then `readonly.2` failed with `DF_RECORD_UNKNOWN`. Deployment, identity
 selection/restore, probes and real/cross-device DDS were NOT_RUN; once was
 consumed and no automatic retry occurred. That actual result's DEVICE_TESTED=true
 describes only the HDC/read-only prefix, not DDS integration. This new repair is
-HOST_TESTED only, DEVICE_TESTED=false; actual405-byte content and failure cause
-remain unconfirmed. Overall DDS/Stage1 remains NOT_VERIFIED.
+HOST_TESTED only, DEVICE_TESTED=false. The completed local classification below
+confirms the host receipt incompatibility; it proves no Native, SDK, network or
+DDS success. Overall DDS/Stage1 remains NOT_VERIFIED.
 
 Documentation readiness and the final tester's `Commit gate: PASS` cover local
 repair/preparation only. Main retains graph/pre-commit disposition and Git
 transitions. No test, review or documentation result grants actual read or DDS
 execution authority.
 
-## Separate local read proposal
+## Completed local diagnostic and current boundary
 
 The ignored [D02 proposal](../build/df-receipt-analysis-20261102-d01/LOCAL_DF405_DIAGNOSTIC_PROPOSAL_D02.json)
-binds the reviewed reader source and private target metadata. At the final-test
-snapshot its operator binding, actual INTENT and actual RESULT were all absent;
-the actual body was neither opened nor hashed. A new specific direct approval
-is required for one local read of exactly `[0,405)`: at most one ReadFile call,
-405 bytes total, original-handle and path identity checks before/after, and
-successful close before classification. Prior RESULT/INTENT or unknown state
-stops before target I/O; the old DDS once remains spent.
+bound the reviewed reader source and private target metadata. At the earlier
+47-test snapshot, its operator binding, actual INTENT and actual RESULT were
+absent and the actual body was unread. A later specific direct approval was
+executed exactly once: the [actual-read result](../build/df-receipt-analysis-20261102-d01/LOCAL405_ACTUAL_TEST_RESULT_D01.json)
+and [outcome](../build/df-receipt-analysis-20261102-d01/LOCAL405_MAIN_OUTCOME_D01.json)
+report one ReadFile call for `[0,405)`, exactly405 bytes, same original handle,
+identity/path checks before and after, and successful close. Operator, INTENT
+and RESULT now exist; the local read permit is CONSUMED_NO_RETRY. The old DDS
+once also remains spent. No receipt was reopened for this documentation.
+
+The enums report complete standard `df -k` framing, six fields on one line,
+no edge whitespace, three unsigned ASCII numeric columns, an attached percent,
+OTHER_LEXICAL_ABSOLUTE display mount, strict candidate ACCEPTED and no
+unclassified remainder. The classified mount lies outside the historical
+two-name whitelist. This confirms that the published d9c3036 repair addresses
+this captured resource-receipt mismatch; no additional parser change is needed
+for it. It does not attest current free resources or change the prior FAIL.
 
 Only fixed framing, header, row-shape, numeric/percentage syntax, path-category,
 candidate-acceptance and unknown-remainder enums may be returned. No raw text,
 variable values or content hashes are emitted. The exact file identity stays
 in ignored private records. Unsupported whitespace/escaped/wrapped paths or
-`-P` header variants remain UNKNOWN and cannot pass. Even a recognized format
-or candidate parser acceptance would not reclassify the previous attempt,
-confirm the vendor binary, authorize HDC or grant a DDS retry. No new HDC,
-SDK/device action, signal or execution package is part of this proposal.
+`-P` header variants remain UNKNOWN and cannot pass. The reported candidate
+acceptance does not confirm the vendor binary, authorize HDC or grant a DDS
+retry. The local read performed no HDC/SDK/device/identity action and emitted no
+raw fields or content hashes. The [fresh full DDS binding](DIRECT_DDS_DF_EXECUTION.md)
+has separate initial14/review/final14 offline evidence, reusing this phase's47
+component tests by exact hashes; those47 were not rerun. New-candidate DDS is
+NOT_RUN, DEVICE_TESTED=false, and needs a new specific single-run grant.

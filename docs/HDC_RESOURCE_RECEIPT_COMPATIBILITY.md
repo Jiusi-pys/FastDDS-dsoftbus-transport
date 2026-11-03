@@ -1,6 +1,6 @@
 # HDC resource receipt compatibility and verification state
 
-Status as of 2026-11-02. This note covers the pure host parser and future source
+Status as of 2026-11-03. This note covers the pure host parser and future source
 composition changes in `scripts/hdc_goal/resource_receipt.py` and
 `prepare_directdds.py`, with their two test modules. The subsequent authorized
 local classification and fresh AWK-free candidate are distinguished below;
@@ -14,14 +14,28 @@ for commit `61bec0b` retain FAIL_OR_HOLD, entry exit1: server, targets and provi
 passed; resource `readonly.2` failed with `DF_RECORD_UNKNOWN`. Deployment,
 identity selection/restore, probes and all real/cross-device DDS were NOT_RUN.
 The once is consumed. Its device evidence covers only the HDC/read-only prefix,
-not DDS integration; the actual405-byte body has not been read or hashed and its
-cause remains unconfirmed. The subsequent
+not DDS integration. A later separately approved
+[local405-byte actual classification](../build/df-receipt-analysis-20261102-d01/LOCAL405_ACTUAL_TEST_RESULT_D01.json)
+completed one405-byte read with original-handle/path checks and close, returning
+only enums: complete standard `df -k`, single six-field row, unsigned ASCII
+counts, attached percent, no edge padding, OTHER_LEXICAL_ABSOLUTE mount,
+candidate ACCEPTED and no unclassified remainder. This confirms the old
+two-name whitelist as the captured host receipt incompatibility; actual mount
+values and content hashes are not published. The local permit is now consumed,
+its operator/INTENT/RESULT exist, and the original actual FAIL is unchanged.
+The subsequent
 [local df display-path repair](HDC_DF_RECEIPT_CONTRACT.md) is HOST_TESTED: final47
 PASS, zero skips, with zero open blocking review findings. It preserves the fixed
 `df -k` query, strict receipts and resource thresholds; DEVICE_TESTED=false for
-this repair and overall Stage1 NOT_VERIFIED. A separate local405-byte enum read
-still needs a new specific approval; neither repair nor classification grants
-a DDS retry. The sections below retain the earlier evidence snapshots.
+this repair and overall Stage1 NOT_VERIFIED. The
+[fresh complete DDS binding](DIRECT_DDS_DF_EXECUTION.md) has initial14 PASS,
+zero-blocker independent review and fresh final14 PASS; it reuses the prior47
+component tests by exact hashes, without rerunning all47. Its new run/five
+controls remain absent at the final-test snapshot, new DDS NOT_RUN and
+DEVICE_TESTED=false. Root's later appended final hashes/private binding establish
+freeze, not execution authority. A new specific single-run DDS grant is still
+required; the405-byte read authorization grants no DDS execution. The sections
+below retain the earlier evidence snapshots.
 
 ## Earlier actual attempt remains failed
 
