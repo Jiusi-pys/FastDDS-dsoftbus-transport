@@ -76,9 +76,24 @@ class CompositionTests(unittest.TestCase):
     def test_payload_sources_and_native_oracles_are_exact_reuse(self):
         with runtime() as m:
             base=b.BASE/'active'
-            for name in ('goal_records.py','goal_evidence.py','goal_win32_owned.py','goal_handle_lifecycle.py'):
+            for name in ('goal_records.py','goal_evidence.py','goal_win32_owned.py'):
                 old=b.h.read_safe(base/name).replace(b'9a72c6e431d0aa60',b.PROBE_RUN.encode()).replace(b'9a72c6e431d0aa61',b.DATA_RUN.encode())
-                if name!='goal_evidence.py':self.assertEqual(m.buffers[name],old)
+                if name=='goal_win32_owned.py':
+                    # Only the observation adapter changes; creation, permits,
+                    # hash/pin association and resume/stop remain exact ASTs.
+                    def classes(data):
+                        return {n.name:{f.name:ast.dump(f,include_attributes=False)
+                                for f in n.body if isinstance(f,ast.FunctionDef)}
+                                for n in ast.parse(data).body if isinstance(n,ast.ClassDef)}
+                    before,after=classes(old),classes(m.buffers[name])
+                    self.assertEqual(set(before),set(after))
+                    for cls,methods in before.items():
+                        self.assertEqual(set(after[cls])-set(methods),{'wait_terminal'} if cls=='IdentityOps' else set())
+                        for method in methods:
+                            if (cls,method)!=('OwnedRoot','identity'):
+                                self.assertEqual(methods[method],after[cls][method])
+                    self.assertIn(b'observe_owned_binding(self,IdentityOps()',m.buffers[name])
+                elif name!='goal_evidence.py':self.assertEqual(m.buffers[name],old)
                 else:
                     # Only the receipt framing/resource adapter changes here;
                     # full DDS/restore/transfer evaluators remain exact AST reuse.
@@ -87,6 +102,7 @@ class CompositionTests(unittest.TestCase):
                     self.assertEqual(set(before),set(after))
                     for symbol in before:
                         if symbol not in ('parse_client','step_stdout'):self.assertEqual(before[symbol],after[symbol])
+            self.assertEqual(m.buffers['goal_handle_lifecycle.py'],b.h.read_safe(b.HERE/'goal_handle_lifecycle.py'))
             expected=json.loads(b.h.read_safe(base/'GOAL_INPUTS_D01.json'))
             for row in expected['readonly_commands']:
                 row['argv']=[arg.replace('/data/local/tmp/mdds_direct_20261031_9a72c6e4',b.DEVICE) for arg in row['argv']]
@@ -275,14 +291,16 @@ class CompositionTests(unittest.TestCase):
                     self.pi=types.SimpleNamespace(hProcess=self.owner['pid']);self.reads=[{'name':s,'eof':False} for s in ('stdout','stderr')]
                     self.receipt={'case':step.id,'created':False,'bound':True,'resumed':False,'terminal':False,'EOF':False,
                                   'native_exit':None,'stop_attempts':0,'cleanup_errors':[],'tool_sha256':step.executable_sha256,
-                                  'hProcess':self.pi.hProcess,'owner':self.owner,'FileID':[1,self.pi.hProcess,3]}
+                                  'hProcess':self.pi.hProcess,'owner':self.owner,'FileID':[1,self.pi.hProcess,3],
+                                  'signal_authority':False}
                     self.initial=False
-                def create(self):self.receipt['created']=True
+                def create(self):self.receipt.update(created=True,signal_authority=True)
                 def resume(self):self.receipt['resumed']=True
                 def state(self):return 'TERMINAL' if self.receipt['terminal'] else 'LIVE'
                 def identity(self,require_live=False):
                     if require_live:c.need(self.state()=='LIVE','FAKE_LIVE')
                     if self.state()=='TERMINAL':
+                        self.receipt['signal_authority']=False
                         self.receipt['terminal_binding_verified']=True
                         self.receipt['terminal_proof']={'hProcess':self.pi.hProcess,'pid':self.owner['pid'],'birth':100,
                             'image':self.owner['image'],'FileID':self.receipt['FileID'],

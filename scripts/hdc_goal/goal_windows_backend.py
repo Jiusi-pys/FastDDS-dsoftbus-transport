@@ -90,6 +90,9 @@ class GoalWindowsBackend:
         if step.kind!='server':need(self.server_ok(),'SERVER_NOT_READY_BEFORE_CREATE')
         self.journal.case=step.id;root.goal_started=time.monotonic()
         need(root.goal_started<deadline,'WORK_DEADLINE_AFTER_SERVER_CHECK')
+        duration=LIMITS['long_ms'] if step.kind=='long' else LIMITS['total_ms'] if step.kind=='server' else 110000 if step.kind=='controller' else LIMITS['client_ms']
+        identity_deadline=min(deadline,root.goal_started+duration/1000)
+        root.identity_deadline=min(identity_deadline,root.goal_started+LIMITS['bind_ms']/1000)
         root.create();sample=self.observe(root,'PRE_RESUME')
         if step.kind=='server':self.baseline=sample['system']['commit_total_bytes']
         need(aggregate_reason(sample['system'],list(self.latest.values()),self.baseline,start=True) is None,'PRE_RESUME_RESOURCE')
@@ -98,8 +101,10 @@ class GoalWindowsBackend:
         need(time.monotonic()-root.goal_started<=LIMITS['bind_ms']/1000,'BIND_DEADLINE_BEFORE_RESUME')
         root.resume();need(time.monotonic()-root.goal_started<=LIMITS['bind_ms']/1000,'BIND_DEADLINE')
         need(time.monotonic()<deadline,'WORK_DEADLINE_AFTER_RESUME')
+        root.identity_deadline=identity_deadline
         self.grant.mark_started(step.id,root.receipt)
     def observe(self,root,phase):
+        self.journal.case=root.case
         self.root_samples[root.case]=self.root_samples.get(root.case,0)+1;need(self.root_samples[root.case]<=(LIMITS['server_samples'] if root.case=='server' else LIMITS['client_samples']),'ROOT_SAMPLE_CAP');self.samples+=1;need(self.samples<=LIMITS['process_samples'],'PROCESS_SAMPLE_CAP');self.epochs+=1;need(self.epochs<=LIMITS['system_epochs'],'SYSTEM_SAMPLE_CAP')
         if root.identity(require_live=phase=='PRE_RESUME')=='TERMINAL':
             self.latest.pop(root.case,None);return None
@@ -119,7 +124,10 @@ class GoalWindowsBackend:
         self.latest[root.case]=sample['process'];self.journal.emit({'case':root.case,'resource':sample});return sample
     def server_ok(self):
         servers=[r for r in self.roots if r.case=='server'];need(len(servers)==1,'SERVER_ROOT_COUNT');server=servers[0]
-        need(server.state()=='LIVE','SERVER_DIED');server.identity(require_live=True);rows=self.w.tcp_table();selected=[r for r in rows if r['port']==8710]
+        previous=self.journal.case;self.journal.case=server.case
+        try:
+            need(server.state()=='LIVE','SERVER_DIED');server.identity(require_live=True);rows=self.w.tcp_table();selected=[r for r in rows if r['port']==8710]
+        finally:self.journal.case=previous
         need(all(r['pid']==server.owner['pid'] and r['address'] in ('127.0.0.1','::ffff:127.0.0.1') for r in selected),'ENDPOINT_REPLACED')
         need(all(r['port']==8710 and r['address'] in ('127.0.0.1','::ffff:127.0.0.1') for r in rows if r['pid']==server.owner['pid']),'UNEXPECTED_SERVER_LISTENER')
         return bool(selected)
@@ -164,9 +172,11 @@ class GoalWindowsBackend:
         if now-self.last_sample>=.1:self.last_sample=now
         self.notice_gate();self.storage();need(not self.journal.failed,'RECORD_FAILED')
     def outcome(self,root,step):
+        self.journal.case=root.case
         if step.kind=='server' and root.state()=='LIVE':
             if not self.server_ok():
                 need(time.monotonic()-root.goal_started<LIMITS['server_ready_ms']/1000,'SERVER_LISTENER_DEADLINE');return None
+            need(time.monotonic()<min(root.identity_deadline,root.goal_started+LIMITS['server_ready_ms']/1000),'SERVER_ACCEPT_DEADLINE')
             self.grant.mark_server_ready(root.receipt,True)
             return {'step':step.id,'accepted':True,'terminal':False,'listener_owned':True}
         if root.state()!='TERMINAL' or not root.receipt['EOF']:return None
@@ -202,11 +212,23 @@ class GoalWindowsBackend:
         # acceptance and its durable receipt must come AFTER that boundary.
         root.close()
         accepted=accepted and terminal_receipt_qualified(root.receipt) and not root.receipt['cleanup_errors'] and not self.journal.failed
-        root.receipt['accepted_evidence']=accepted
+        # This exclusive per-root file is a pre-accept observation. Publication
+        # or the final server check can cross a deadline. Only the existing
+        # batch accepted ledger is authoritative for the later grant commit.
+        root.receipt.update(content_evidence_qualified=accepted,accepted_evidence=False,
+                            step_acceptance='PENDING' if accepted else 'REJECTED')
         self.w.put(root.dest/'RESULT.json',root.receipt)
         need(not self.journal.failed,'ROOT_FINAL_RECORD_FAILED')
         if accepted:
-            need(self.server_ok(),'SERVER_CHANGED_BEFORE_ACCEPT');self.grant.accept(step.id,root.receipt)
+            try:
+                need(self.server_ok(),'SERVER_CHANGED_BEFORE_ACCEPT')
+                need(time.monotonic()<root.identity_deadline,'STEP_ACCEPT_DEADLINE')
+                root.receipt['accepted_evidence']=True
+                self.grant.accept(step.id,root.receipt)
+                root.receipt['step_acceptance']='ACCEPTED'
+            except BaseException:
+                root.receipt.update(accepted_evidence=False,step_acceptance='REJECTED')
+                raise
         return {'step':step.id,'accepted':accepted,'terminal':True,'native_exit':root.receipt['native_exit'],'evidence':evaluated,'cleanup_errors':list(root.receipt['cleanup_errors'])}
     def storage(self):
         from goal_storage import scan
@@ -250,7 +272,11 @@ class GoalWindowsBackend:
             if not root.closed:
                 phase='STATE_OR_IDENTITY'
                 if root.state()=='LIVE':
-                    phase='STOP';root.stop(deadline)
+                    # A revoked signal capability is never recreated merely
+                    # to finish cleanup. Read/drain and prove terminal only.
+                    if root.receipt.get('signal_authority') is True:
+                        phase='STOP';root.stop(deadline)
+                    else:root.receipt['stop_skipped']='NO_SIGNAL_AUTHORITY'
                 phase='DRAIN'
                 need(not self.capture_failed,'CAPTURE_ALREADY_FAILED_NO_DRAIN')
                 drained=root.drain(deadline,max(0,(LIMITS['server_capture'] if root.case=='server' else LIMITS['client_capture'])-self.captured[root.case]),lambda stream,data,b,a:self.observe_chunk(root,stream,data,b,a,'CLEANUP'))

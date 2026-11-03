@@ -39,22 +39,25 @@ CODE_PATHS = ('scripts/hdc_goal/prepare_directdds.py', 'scripts/hdc_goal/dds_obs
               'tests/test_hdc_directdds_composition.py', 'docs/DIRECT_DDS_OBSERVATION_EXECUTION.md')
 CODE_PATHS=(*CODE_PATHS,'scripts/hdc_goal/resource_receipt.py','tests/test_hdc_resource_receipt.py',
             'docs/HDC_RESOURCE_RECEIPT_COMPATIBILITY.md','scripts/hdc_goal/resource_query.py',
-            'tests/test_hdc_resource_query.py','docs/HDC_DF_RECEIPT_CONTRACT.md',CARD_PATH)
+            'tests/test_hdc_resource_query.py','docs/HDC_DF_RECEIPT_CONTRACT.md',CARD_PATH,
+            'scripts/hdc_goal/goal_handle_lifecycle.py','tests/test_hdc_handle_lifecycle.py',
+            'docs/HDC_TERMINAL_IDENTITY.md')
 CONTROLS = h.CONTROLS
 
 
-def replace_method(text, name, source):
+def replace_method(text, name, source, class_name='GoalWindowsBackend'):
     def find(value):
-        classes = [n for n in ast.parse(value).body if isinstance(n, ast.ClassDef) and n.name == 'GoalWindowsBackend']
+        classes = [n for n in ast.parse(value).body if isinstance(n, ast.ClassDef) and n.name == class_name]
         h.need(len(classes) == 1, 'BACKEND_CLASS')
-        return next((n for n in classes[0].body if isinstance(n, ast.FunctionDef) and n.name == name), None)
-    old, new = find(text), find(source)
+        return classes[0],next((n for n in classes[0].body if isinstance(n, ast.FunctionDef) and n.name == name), None)
+    old_class,old = find(text)
+    _,new = find(source)
     h.need(new is not None, 'METHOD_SOURCE')
     lines = source.splitlines(keepends=True)
     replacement = ''.join(lines[new.lineno-1:new.end_lineno])+'\n'
-    if old is None:
-        return text.rstrip()+'\n'+replacement
     lines = text.splitlines(keepends=True)
+    if old is None:
+        return ''.join(lines[:old_class.end_lineno])+'\n'+replacement+''.join(lines[old_class.end_lineno:])
     return ''.join(lines[:old.lineno-1])+replacement+''.join(lines[old.end_lineno:])
 
 
@@ -99,6 +102,24 @@ def source_buffers():
     buffers['dds_observation.py'] = h.read_safe(HERE/'dds_observation.py')
     buffers['dds_notice.py'] = h.read_safe(HERE/'dds_notice.py')
     buffers['resource_receipt.py'] = h.read_safe(HERE/'resource_receipt.py')
+    buffers['goal_handle_lifecycle.py'] = h.read_safe(HERE/'goal_handle_lifecycle.py')
+    # Adapt only observation methods. The creator, permit, retained image pin,
+    # hash binding, resume and stop mechanisms remain the reviewed originals.
+    win32 = buffers['goal_win32_owned.py'].decode()
+    win32 = h.replace_once(win32, 'observe_binding,bounded_drain',
+                           'observe_binding,bounded_drain,observe_owned_binding')
+    win32 = replace_method(win32, 'identity', '''class OwnedRoot:
+ def identity(self,require_live=False):
+  return observe_owned_binding(self,IdentityOps(),require_live)
+''', 'OwnedRoot')
+    win32 = replace_method(win32, 'wait_terminal', '''class IdentityOps:
+ def wait_terminal(self,h,timeout_ms):
+  need(type(timeout_ms) is int and 0<timeout_ms<=50,'TRANSITION_WAIT_BOUND')
+  value=K.WaitForSingleObject(h,timeout_ms)
+  need(value in (0,258),'TRANSITION_WAIT_UNKNOWN')
+  return value
+''', 'IdentityOps')
+    buffers['goal_win32_owned.py'] = win32.encode()
     evidence=buffers['goal_evidence.py'].decode().replace('\r\n','\n')
     evidence=h.replace_once(evidence,"text=data.decode('utf-8','strict').replace('\\r\\n','\\n')",
                             "from resource_receipt import receipt_text\n    text=receipt_text(data,need)")
@@ -110,8 +131,10 @@ def source_buffers():
     buffers['goal_storage.py']=storage.encode()
     backend = buffers['goal_windows_backend.py'].decode()
     maintained = h.read_safe(HERE/'goal_windows_backend.py').decode()
-    for name in ('create_and_resume', 'observe_chunk', 'cleanup_notice', 'cleanup', 'complete_cleanup', 'outcome'):
+    for name in ('create_and_resume', 'server_ok', 'observe_chunk', 'cleanup_notice', 'cleanup', 'complete_cleanup', 'outcome'):
         backend = replace_method(backend, name, maintained)
+    backend = h.replace_once(backend, "    def observe(self,root,phase):\n",
+                             "    def observe(self,root,phase):\n        self.journal.case=root.case\n")
     backend = h.replace_once(backend, "self.epochs=0;self.samples=0;", "self.stream_bytes={};self.capture_failed=False;self.epochs=0;self.samples=0;")
     backend = h.replace_once(backend, 'from goal_notice import Marker', 'from dds_notice import DDSMarker')
     backend = h.replace_once(backend, 'self.marker=Marker(self.notice_event,cases=tuple(grant.registry),max_total=12*1048576)',
@@ -120,6 +143,11 @@ def source_buffers():
     # Preserve the DDS baseline's total sample/output/storage caps. Do not copy
     # the probe's extra per-root fields or its missing active_inventory import.
     backend = h.replace_once(backend, "if not self.server_ok():\n                need(time.monotonic()-root.goal_started<LIMITS['server_ready_ms']/1000,'SERVER_LISTENER_DEADLINE');return None", "if not self.server_ok():return None")
+    # DDS has an original work/server lifetime deadline, not the readiness
+    # probe's separate listener cap. Do not introduce a nonexistent LIMITS key.
+    backend = h.replace_once(backend,
+        "time.monotonic()<min(root.identity_deadline,root.goal_started+LIMITS['server_ready_ms']/1000),'SERVER_ACCEPT_DEADLINE'",
+        "time.monotonic()<root.identity_deadline,'SERVER_ACCEPT_DEADLINE'")
     backend = h.replace_once(backend, "self.marker.feed(root.case,stream,data,'MONITOR',before,after)", "self.observe_chunk(root,stream,data,before,after,'MONITOR')")
     policy = '''
     def notice_gate(self):
