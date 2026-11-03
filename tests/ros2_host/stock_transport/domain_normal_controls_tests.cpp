@@ -197,7 +197,17 @@ void NormalAwaitSenders(){
     T2Check(!NormalRawSend(*cached.front(),ar,77)&&NormalRawSend(*fresh.front(),ar,78),"old sender retargeted or fresh Ready blocked");
     T2Check(a.PumpSend().actual_return_code==0&&public_socket_fake::PumpOne(),"fresh Ready actual native call");b.PumpReceive();
     T2Check(rb.calls==1&&rb.marker==78,"fresh sender exact payload");
-    const auto after=public_socket_fake::Observe();for(unsigned side=0;side<2;++side)T2Check(after.sockets[side]==native.sockets[side]&&after.binds[side]==native.binds[side]&&after.shutdowns[side]==native.shutdowns[side],"raw view replacement rebuilt native");
+    // Lazy-TX contract (2026-10-26): the only native change after the snapshot is the
+    // first-TX dial of side 0 (its first send came later): exactly one
+    // Socket+Bind there. No Shutdown and no listener change anywhere: the view
+    // replacement itself never rebuilds native resources.
+    const auto after=public_socket_fake::Observe();
+    for(unsigned side=0;side<2;++side){const unsigned d=side==0u?1u:0u;
+        if(after.sockets[side]!=native.sockets[side]+d||after.shutdowns[side]!=native.shutdowns[side]||after.listens[side]!=native.listens[side]||after.binds[side]!=native.binds[side]+d)
+            std::cout<<"LAZY_REPLACEMENT_MISMATCH side="<<side<<" sockets="<<native.sockets[side]<<"->"<<after.sockets[side]
+                <<" binds="<<native.binds[side]<<"->"<<after.binds[side]<<" shutdowns="<<native.shutdowns[side]<<"->"<<after.shutdowns[side]<<std::endl;
+        T2Check(after.sockets[side]==native.sockets[side]+d&&after.shutdowns[side]==native.shutdowns[side]&&after.listens[side]==native.listens[side]&&after.binds[side]==native.binds[side]+d,
+            "raw view replacement rebuilt native");}
     ta.reset();keep.reset();tb.reset();cached.clear();fresh.clear();remote.clear();T2Check(a.Close()&&b.Close()&&!da->create_transport(),"raw final normal close/reopen");
     const auto end=public_socket_fake::Observe();T2Check(!end.live&&!end.queued&&!end.bytes&&!end.invalid,"raw final residue");
     std::cout<<"NORMAL_AWAIT_SENDERS cached_Closed=DENIED fresh_Await=DENIED native_provider_delta=0 old_lease=NOT_RETARGETED fresh_Ready_marker=78 callback_source=CONTROLLED_RAW_DRIVER SDK_drain=UNKNOWN\n";

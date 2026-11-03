@@ -197,7 +197,17 @@ void CircuitRaw(){
         !phase0::RuntimeProbeAccess::ObserveRuntime(a).receive.active_applications,"fresh Await acquired a delivery lease or delivered bytes");
     T2Check(ta->configureInitialPeerLocator(ar,ports,151,peers),"fresh raw actual-domain confirmation");
     wire(74);a.PumpReceive();T2Check(replacement.calls==1&&replacement.marker==74&&!ra.calls,"fresh Ready payload/old lease isolation");
-    const auto after=public_socket_fake::Observe();for(unsigned side=0;side<2;++side)T2Check(after.sockets[side]==native.sockets[side]&&after.shutdowns[side]==native.shutdowns[side],"same-incarnation replacement rebuilt native");
+    // Lazy-TX contract (2026-10-26): the only native change after the snapshot is the
+    // first-TX dial of side 1 (its first send came later): exactly one
+    // Socket+Bind there. No Shutdown and no listener change anywhere: the view
+    // replacement itself never rebuilds native resources.
+    const auto after=public_socket_fake::Observe();
+    for(unsigned side=0;side<2;++side){const unsigned d=side==1u?1u:0u;
+        if(after.sockets[side]!=native.sockets[side]+d||after.shutdowns[side]!=native.shutdowns[side]||after.listens[side]!=native.listens[side]||after.binds[side]!=native.binds[side]+d)
+            std::cout<<"LAZY_REPLACEMENT_MISMATCH side="<<side<<" sockets="<<native.sockets[side]<<"->"<<after.sockets[side]
+                <<" binds="<<native.binds[side]<<"->"<<after.binds[side]<<" shutdowns="<<native.shutdowns[side]<<"->"<<after.shutdowns[side]<<std::endl;
+        T2Check(after.sockets[side]==native.sockets[side]+d&&after.shutdowns[side]==native.shutdowns[side]&&after.listens[side]==native.listens[side]&&after.binds[side]==native.binds[side]+d,
+            "same-incarnation replacement rebuilt native");}
     ta.reset();keep.reset();tb.reset();as.clear();bs.clear();T2Check(a.Close()&&b.Close(),"normal raw final close");
     T2Check(!da->create_transport(),"normal last close reopened");const auto end=public_socket_fake::Observe();T2Check(!end.live&&!end.queued&&!end.bytes&&!end.invalid,"raw final residue");
     std::cout<<"CIRCUIT_RAW Await_RX=no_lease Await_TX=DENIED unsupported=AWAIT late_actual=READY mismatch=STICKY queued_provider=NOT_ENTERED Refused_RX=DENIED replacement=FRESH old_lease=NOT_RETARGETED same_native_incarnation=1 SDK_drain=UNKNOWN\n";

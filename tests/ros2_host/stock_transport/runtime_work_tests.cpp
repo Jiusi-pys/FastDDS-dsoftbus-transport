@@ -144,6 +144,16 @@ struct WorkPair final {
         check(value.ConfigureV1(ScopedHostDeployment(input)).code==DirectoryError::None,"descriptor");return value;
     }
 };
+// Lazy-TX contract (2026-10-26): a view's outgoing circuit is dialed only by
+// its first send after genuine Ready; a receive-only peer never dials. Native
+// Fake rows are therefore listeners + outgoing of each sender + the matching
+// accepted row on its peer.
+void ExpectLazyNative(unsigned live,unsigned binds_a,unsigned binds_b,const char* why){
+    const auto s=public_socket_fake::Observe();
+    if(s.live!=live||s.binds[0]!=binds_a||s.binds[1]!=binds_b)
+        std::cout<<"LAZY_NATIVE_MISMATCH why="<<why<<" live="<<s.live<<" binds="<<s.binds[0]<<','<<s.binds[1]<<std::endl;
+    check(s.live==live&&s.binds[0]==binds_a&&s.binds[1]==binds_b,why);
+}
 void RunWorkLifecycle(const std::string& mode) {
     const bool factory_case=mode=="factory"||mode=="factory-held-native";
     const bool stop_case=mode=="stop",inflight=mode=="stop-inflight";
@@ -224,7 +234,9 @@ void RunWorkLifecycle(const std::string& mode) {
             "controlled raw domain151 confirmation");
     };
     confirm_raw(*tb,cb);if(!factory_case)confirm_raw(*ta,ca);
-    check(public_socket_fake::Observe().live==6,"six live native Fake sockets");
+    // Confirmation alone opens no TX; only the Factory Participant has sent (SPDP).
+    if(factory_case)ExpectLazyNative(4,1,0,"lazy TX: only the sending Factory side dialed");
+    else ExpectLazyNative(2,0,0,"lazy TX: confirmed raw views must not dial before a send");
     if(factory_case){
         const auto active=phase0::RuntimeProbeAccess::ObserveDomainCircuits(a);
         const host_test::DomainCircuitObservation* active_domain=nullptr;
@@ -286,7 +298,7 @@ void RunWorkLifecycle(const std::string& mode) {
             }
             b.RequestPumpStop();
             check(wb.done.wait_for(80ms)==std::future_status::timeout,"stop cancelled running receiver unsafely");
-            check(public_socket_fake::Observe().live==6,"stop closed native resources with receiver running");
+            ExpectLazyNative(4,1,0,"stop closed native resources with receiver running");
             {std::lock_guard<std::mutex> lock(rb.gate);rb.release=true;rb.changed.notify_all();}
             check(wb.Join()==WorkWaitResult::StopRequested,"running receiver did not settle before stop result");
             b_joined=true;
@@ -302,7 +314,7 @@ void RunWorkLifecycle(const std::string& mode) {
     }
     if(stop_case){
         a.RequestPumpStop();check(wa.Join()==WorkWaitResult::StopRequested,"explicit stop result");
-        check(public_socket_fake::Observe().live==6,"stop silently closed native resources");
+        ExpectLazyNative(2,0,0,"stop silently closed native resources");
     }
     if(factory_case){
         const auto before=public_socket_fake::Observe();
@@ -329,8 +341,10 @@ void RunWorkLifecycle(const std::string& mode) {
         // owned_ids counts deliberately retained original identities even after
         // Shutdown. Do not erase these tombstones or claim SDK quiescence. Every
         // owner must be terminal; all actual activity/credits must be zero.
-        check(native.owners==3&&native.owned_ids==3&&
-            native.phases[static_cast<std::size_t>(NativeOwnerPhase::RetainedNotQuiescent)]==3,
+        // Lazy TX: A owns its listener and its dialed outgoing only; receive-only B
+        // never dialed, so A has no accepted owner.
+        check(native.owners==2&&native.owned_ids==2&&
+            native.phases[static_cast<std::size_t>(NativeOwnerPhase::RetainedNotQuiescent)]==2,
             "not all original owners reached retained terminal state");
         check(native.callbacks==0&&native.receives==0&&
             native.setup.reserved==0&&native.setup.entered==0&&native.send.reserved==0&&native.send.entered==0&&
@@ -408,8 +422,11 @@ void RunWorkLifecycle(const std::string& mode) {
         const auto& circuit_native=*closed_circuit->native;
         check(circuit_adapter.phase==phase0::AdapterPhase::Closed&&!circuit_adapter.input_open&&circuit_adapter.ingress_active==0,
             "circuit adapter activity after natural delete");
-        check(circuit_native.owners==2&&circuit_native.owned_ids==2&&
-            circuit_native.phases[static_cast<std::size_t>(NativeOwnerPhase::RetainedNotQuiescent)]==2,
+        std::cout<<"WORK_TERMINAL_CIRCUIT_NATIVE owners="<<circuit_native.owners<<" owned_ids="<<circuit_native.owned_ids
+            <<" retained="<<circuit_native.phases[static_cast<std::size_t>(NativeOwnerPhase::RetainedNotQuiescent)]<<std::endl;
+        // Lazy TX: the circuit owns only A's dialed outgoing; B never dialed A.
+        check(circuit_native.owners==1&&circuit_native.owned_ids==1&&
+            circuit_native.phases[static_cast<std::size_t>(NativeOwnerPhase::RetainedNotQuiescent)]==1,
             "circuit original identities not retained in terminal state");
         check(circuit_native.callbacks==0&&circuit_native.receives==0&&
             circuit_native.setup.reserved==0&&circuit_native.setup.entered==0&&
@@ -417,7 +434,8 @@ void RunWorkLifecycle(const std::string& mode) {
             circuit_native.close.reserved==0&&circuit_native.close.entered==0,"pending circuit native activity after natural delete");
         std::cout<<"WORK_CLEANUP_OWNER_MAPPING root_native_includes_circuit=1 circuit_listener_metadata_only=1"
             <<" owner_fields_after_release=UNAVAILABLE SDK_QUIESCENCE=UNPROVEN"<<std::endl;
-        for(const auto* entry:{&circuit_adapter.binding,&circuit_adapter.listener,&circuit_adapter.accepted,&state.adapter.listener}){
+        // Lazy TX: receive-only B never dialed, so the circuit accepted entry was never used.
+        for(const auto* entry:{&circuit_adapter.binding,&circuit_adapter.listener,&state.adapter.listener}){
             std::cout<<"CLOSED_ENTRY phase="<<static_cast<int>(entry->phase)<<" socket="<<entry->socket
                 <<" membership="<<entry->membership<<" receiver="<<entry->receiver_open
                 <<" callbacks="<<entry->callbacks_in_flight<<" records="<<entry->receive.records
@@ -429,7 +447,7 @@ void RunWorkLifecycle(const std::string& mode) {
                 entry->receive.queued==0&&entry->receive.taken==0&&entry->receive.delivering==0,
                 "binding or receive resources remain after natural delete");
         }
-        for(const auto* unused:{&state.adapter.binding,&state.adapter.accepted}){
+        for(const auto* unused:{&state.adapter.binding,&state.adapter.accepted,&circuit_adapter.accepted}){
             std::cout<<"UNUSED_ROOT_ENTRY phase="<<static_cast<int>(unused->phase)<<" created_record="<<unused->created_record
                 <<" socket="<<unused->socket<<" membership="<<unused->membership<<" receiver="<<unused->receiver_open<<std::endl;
             check(unused->phase==BindingPhase::Empty&&!unused->created_record&&unused->socket==-1&&!unused->membership&&
@@ -442,7 +460,7 @@ void RunWorkLifecycle(const std::string& mode) {
         const auto after=public_socket_fake::Observe();
         std::cout<<"AFTER_A_DELETE fake_live="<<after.live<<" A_shutdowns="<<after.shutdowns[0]
             <<" A_terminal_callbacks="<<after.notified[0]<<'\n';
-        check(after.live==1&&after.shutdowns[0]+after.notified[0]==3,
+        check(after.live==1&&after.shutdowns[0]+after.notified[0]==2,
             "original A Fake SDK entries not all terminated");
         const auto callback_before=a.ObserveSocket();
         public_socket_fake::LateBytes(0); // Saved original SDK callback and old numeric ID.
@@ -451,7 +469,7 @@ void RunWorkLifecycle(const std::string& mode) {
             callback_after.rejected_callbacks==callback_before.rejected_callbacks+1,
             "closed original entry accepted late bytes");
         const auto late=phase0::RuntimeProbeAccess::ObserveConnection(a);
-        check(late.native.owned_ids==3&&late.native.callbacks==0&&late.native.receives==0&&
+        check(late.native.owned_ids==2&&late.native.callbacks==0&&late.native.receives==0&&
             late.adapter.binding.receive.records==0&&late.adapter.listener.receive.records==0&&
             late.adapter.accepted.receive.records==0,"late old-ID callback acquired resources");
         std::cout<<"LATE_OLD_ID_CALLBACK_REJECTED=1 SDK_QUIESCENCE=UNPROVEN\n";

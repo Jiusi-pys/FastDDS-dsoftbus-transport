@@ -13,7 +13,7 @@ Status: **DEVICE_TESTED (bounded scope below) / NOT_PRODUCTION_QUALIFIED**.
 | ROS 2 over this build | NOT_RUN |
 | SDK quiet, worker/descendant restoration | UNKNOWN |
 | Host build of `integrations/ros2/stock` (MSVC Release, stock-host-d01 Fast DDS 2.14) | BUILDS |
-| Host ctest of `integrations/ros2/stock` | **FAIL: 53/64 pass**. 11 fail in the candidate tree's fake-socket tests: lifecycle, defaults-changed, work.pair/factory/stop/stop-inflight/factory-held-native, default_domain.raw, default_domain.startup-failure, normal_control.await-senders, circuit.raw. The runner fix is not part of this project. Log: `E:/hb1104/test.log` |
+| Host ctest of `integrations/ros2/stock` | **PASS 65/65**, after the 11 stale lazy-TX oracles were updated (see "Host suite reconciliation") |
 
 Boards: A `3e01ff55454d202020104033bf453b00`, B `3e01ff55454d202020104433991c3b00`
 (RK3588A, OpenHarmony SDK 23), controlled only through `hdc`.
@@ -204,3 +204,31 @@ Mutation check: with the two `AdvanceCircuitRenewal()` pump calls removed, the c
 - SDK quiet and drain remain unproven.
 
 Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m8…m23-20261104/`. m22 contains the scripts, the overlay source, `TRANSPORT_LIB.sha256` and the board tars.
+
+## Host suite reconciliation (11 stale oracles)
+
+All 11 historical failures had one cause. On 2026-10-26 the tree adopted the reviewed
+**lazy-TX contract**: a view's outgoing circuit is dialed only by its first send after genuine
+Ready, and a receive-only peer never dials. The STATUS record of that day says the revised suite "is not proof that every
+unchanged historical oracle passes". These 11 tests still asserted the earlier eager dial at
+transport creation or domain confirmation, which last passed on 2026-10-24 (56/56).
+
+The tests were updated to the current contract with exact expectations. None was weakened to "any":
+- **Bootstrap `lifecycle` and `defaults-changed`.** After the Factory Participant's first send: live=4, binds A=1, B=0.
+  The raw receive-only peer B never dials.
+- **Work `pair`, `stop`, `stop-inflight`, `factory` and `factory-held-native`.**
+  - After raw confirmation: live=2 with binds 0,0, or 4 with binds 1,0 in the Factory modes.
+  - Stop and inflight keep exactly those counts.
+  - Factory terminal state: root owners 2, circuit owners 1. Because B never dialed, the circuit's accepted entry
+    is now checked as *unused/Empty* rather than Closed. A's terminated socket count is 2.
+- **`circuit.raw`, `default_domain.raw` and `normal_control.await-senders`.** The view replacement still must cause
+  zero Shutdowns and zero listener changes. The only allowed native delta is exactly one first-TX Socket+Bind on the
+  side whose first send came after the snapshot.
+- **`default_domain.startup-failure`.**
+  - RX now opens with no outgoing native work.
+  - The injected outgoing Socket failure (-7654) is consumed by the first TX after genuine domain-0 Ready.
+  - It must be observed at the real API boundary, refuse that TX, stay sticky (a retry makes no new Socket call),
+    and leave the listener intact.
+  - The original failed-close and circuit snapshot checks are unchanged.
+
+No production code changed in this step. Result: stock ctest **65/65 PASS**, including `circuit.route-renewal`.

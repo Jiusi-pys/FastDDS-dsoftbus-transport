@@ -251,7 +251,17 @@ void DgRaw(){
     T2Check(await_after.sends[0]==await_native.sends[0]&&await_after.forwards[0]==await_native.forwards[0],"Await/old sender entered native provider");
     T2Check(ta->configureInitialPeerLocator(ar,ports,151,peers),"fresh raw actual-domain confirmation");
     wire(74);a.PumpReceive();T2Check(replacement.calls==1&&replacement.marker==74&&!ra.calls,"fresh Ready payload/old lease isolation");
-    const auto after=public_socket_fake::Observe();for(unsigned side=0;side<2;++side)T2Check(after.sockets[side]==native.sockets[side]&&after.shutdowns[side]==native.shutdowns[side],"same-incarnation replacement rebuilt native");
+    // Lazy-TX contract (2026-10-26): the only native change after the snapshot is the
+    // first-TX dial of side 1 (its first send came later): exactly one
+    // Socket+Bind there. No Shutdown and no listener change anywhere: the view
+    // replacement itself never rebuilds native resources.
+    const auto after=public_socket_fake::Observe();
+    for(unsigned side=0;side<2;++side){const unsigned d=side==1u?1u:0u;
+        if(after.sockets[side]!=native.sockets[side]+d||after.shutdowns[side]!=native.shutdowns[side]||after.listens[side]!=native.listens[side]||after.binds[side]!=native.binds[side]+d)
+            std::cout<<"LAZY_REPLACEMENT_MISMATCH side="<<side<<" sockets="<<native.sockets[side]<<"->"<<after.sockets[side]
+                <<" binds="<<native.binds[side]<<"->"<<after.binds[side]<<" shutdowns="<<native.shutdowns[side]<<"->"<<after.shutdowns[side]<<std::endl;
+        T2Check(after.sockets[side]==native.sockets[side]+d&&after.shutdowns[side]==native.shutdowns[side]&&after.listens[side]==native.listens[side]&&after.binds[side]==native.binds[side]+d,
+            "same-incarnation replacement rebuilt native");}
     fresh_as.clear();
     ta.reset();keep.reset();tb.reset();as.clear();bs.clear();T2Check(a.Close()&&b.Close(),"normal raw final close");
     T2Check(!da->create_transport(),"normal last close reopened");const auto end=public_socket_fake::Observe();T2Check(!end.live&&!end.queued&&!end.bytes&&!end.invalid,"raw final residue");
@@ -266,17 +276,26 @@ void DgStartupFailure(){
     auto descriptor=owner.MakeStockDescriptor(zero.descriptors[0]);T2Check(bool(descriptor),"explicit zero NativeBound descriptor");
     std::unique_ptr<DgTransport> transport(descriptor->create_transport());auto* view=dynamic_cast<DSoftBusTransport*>(transport.get());
     T2Check(view&&transport->init(),"warm failure facade start");DomainReceiver receiver;const auto local=zero.descriptors[0].directory.locals.front().local_locator;
-    T2Check(!transport->OpenInputChannel(local,&receiver,8192),"negative circuit Socket accepted input");
-    const auto first=public_socket_fake::Observe();const auto awaiting=view->domain_snapshot();
-    const auto startup_before_assert=phase0::RuntimeProbeAccess::ObserveRuntime(owner);
-    std::cout<<"NATIVE_BOUND_FAILURE_DIAGNOSTIC sockets_a="<<first.sockets[0]<<" sockets_b="<<first.sockets[1]
-        <<" listens_a="<<first.listens[0]<<" listens_b="<<first.listens[1]<<" binds_a="<<first.binds[0]<<" binds_b="<<first.binds[1]
-        <<" live="<<first.live<<" expected_known="<<awaiting.expected_domain_known<<" expected="<<awaiting.expected_domain_id
-        <<" guard_state="<<static_cast<unsigned>(awaiting.state)<<" active_applications="<<startup_before_assert.receive.active_applications
-        <<" view_controls="<<startup_before_assert.view_controls<<std::endl;
-    const auto native_first=owner.ObserveSocket();
+    // Lazy-TX contract (2026-10-26): opening RX performs no outgoing native work, so
+    // the injected outgoing Socket failure is consumed by the first TX after genuine
+    // Ready instead. It must be observed at the real API boundary, refuse that TX,
+    // stay sticky (no retried Socket), and leave RX/listener state intact.
+    T2Check(transport->OpenInputChannel(local,&receiver,8192),"lazy TX: RX input must open without outgoing native work");
     const auto socket_index=static_cast<std::size_t>(phase0::PublicSocketOperation::Socket);
-    const auto& socket_first=native_first.operations[socket_index];
+    {const auto opened=public_socket_fake::Observe();const auto native_open=owner.ObserveSocket();const auto& calls=native_open.operations[socket_index];
+        std::cout<<"LAZY_OPEN_DIAGNOSTIC sockets_a="<<opened.sockets[0]<<" binds_a="<<opened.binds[0]<<" live="<<opened.live
+            <<" socket_calls="<<calls.calls<<" error_known="<<bool(native_open.first_api_error)<<std::endl;
+        T2Check(opened.sockets[0]==1&&opened.listens[0]==1&&opened.binds[0]==0&&opened.live==1&&calls.calls==1&&calls.returns==1&&
+            !native_open.first_api_error,"RX open entered outgoing native Socket");}
+    const auto awaiting=view->domain_snapshot();
+    T2Check(awaiting.expected_domain_known&&awaiting.expected_domain_id==0&&awaiting.state==ViewDomainState::Await,"open confirmed zero domain");
+    auto remote=zero.descriptors[0].directory.routes.front().key.remote_locator;
+    eprosima::fastdds::rtps::LocatorList peers;fastdds_dsoftbus::binding::PortParameters ports;
+    T2Check(transport->configureInitialPeerLocator(remote,ports,0,peers)&&view->domain_snapshot().state==ViewDomainState::Ready,"genuine zero-domain confirmation");
+    eprosima::fastdds::rtps::SendResourceList senders;T2Check(transport->OpenOutputChannel(senders,remote),"zero-domain sender resource");
+    T2Check(!DomainSend(*senders.front(),remote),"first TX admitted despite failed outgoing Socket");
+    const auto first=public_socket_fake::Observe();
+    const auto native_first=owner.ObserveSocket();const auto& socket_first=native_first.operations[socket_index];
     std::cout<<"NATIVE_BOUND_SOCKET_CALL_DIAGNOSTIC calls="<<socket_first.calls<<" returns="<<socket_first.returns
         <<" domain_circuits="<<native_first.domain_circuits<<" error_known="<<bool(native_first.first_api_error)
         <<" error_operation="<<(native_first.first_api_error?static_cast<int>(native_first.first_api_error->operation):-1)
@@ -285,8 +304,7 @@ void DgStartupFailure(){
     T2Check(socket_first.calls==2&&socket_first.returns==2&&native_first.domain_circuits==1&&!native_first.outgoing_socket&&
         native_first.first_api_error&&native_first.first_api_error->operation==phase0::PublicSocketOperation::Socket&&
         native_first.first_api_error->code==-7654,"configured outgoing Socket failure not observed at real API boundary");
-    T2Check(awaiting.expected_domain_known&&awaiting.expected_domain_id==0&&awaiting.state==ViewDomainState::Await,"preparation confirmed zero domain");
-    T2Check(!transport->OpenInputChannel(local,&receiver,8192),"failed warm retried or published input");
+    T2Check(!DomainSend(*senders.front(),remote),"failed first TX retried and admitted");
     const auto retried=public_socket_fake::Observe();const auto runtime=phase0::RuntimeProbeAccess::ObserveRuntime(owner);
     const auto native_retried=owner.ObserveSocket();const auto& socket_retried=native_retried.operations[socket_index];
     std::cout<<"NATIVE_BOUND_SOCKET_RETRY_DIAGNOSTIC calls="<<socket_retried.calls<<" returns="<<socket_retried.returns
@@ -296,7 +314,8 @@ void DgStartupFailure(){
         retried.listens[0]==first.listens[0]&&retried.listens[1]==first.listens[1]&&
         retried.binds[0]==first.binds[0]&&retried.binds[1]==first.binds[1]&&retried.live==first.live&&
         socket_retried.calls==socket_first.calls&&socket_retried.returns==socket_first.returns&&
-        runtime.receive.active_applications==0&&runtime.view_controls==0,"failed warm repeated real Socket entry or leaked handle/app/control");
+        runtime.view_controls==0,"failed first TX repeated real Socket entry or leaked handle/control");
+    senders.clear();
     transport.reset();const bool closed=owner.Close();const auto end=public_socket_fake::Observe();
     T2Check(!end.live&&!end.queued&&!end.bytes&&!end.invalid&&end.shutdowns[0]==1,"failed warm lost/double-closed positive listener ID");
     const auto failure_snapshot=phase0::RuntimeProbeAccess::ObserveDomainCircuits(owner);

@@ -119,7 +119,10 @@ void lifecycle(bool changed) {
     const auto before = public_socket_fake::Observe();
     std::cout << "FAKE_BEFORE_DELETE live=" << before.live << " binds="
         << before.binds[0] << ',' << before.binds[1] << '\n';
-    check(before.live == 6 && before.binds[0] == 1 && before.binds[1] == 1,
+    // Lazy-TX contract (2026-10-26): the Factory Participant's first send dials
+    // A's outgoing circuit (A listener+outgoing, B listener+accepted); the raw
+    // receive-only peer B never sends and therefore never dials.
+    check(before.live == 4 && before.binds[0] == 1 && before.binds[1] == 0,
         "fake native pair was not actually created");
     // No Runtime::Close, after_delete observer, bootstrap release or manual
     // Transport shutdown precedes the public factory deletion below.
