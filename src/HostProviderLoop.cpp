@@ -183,6 +183,10 @@ std::shared_ptr<HostProviderLoop::Circuit> HostProviderLoop::EnsureCircuit(const
     for(std::size_t i=0;i<s.circuits.size();++i){if(s.circuits[i]&&s.circuits[i]->domain==domain)return s.circuits[i];if(!s.circuits[i]&&slot==s.circuits.size())slot=i;}
     if(slot==s.circuits.size())return {};
     auto circuit=std::make_shared<Circuit>();circuit->domain=domain;circuit->config=s.config;
+    // Route renewal: each circuit owns its dial and accepted lanes, so after a
+    // native shutdown (e.g. LINK_DOWN) it retires the settled owner and redials /
+    // re-accepts with a fresh SDK ID. Root configuration is unchanged.
+    circuit->config.bounded_reaccept_host=true;circuit->config.allow_closed_dial_retry=true;
     auto backend=std::dynamic_pointer_cast<PublicSocketBackend>(s.backend);if(!backend)return {};
     circuit->backend=backend->CreateCircuit(domain);if(!circuit->backend)return {};
     auto& route=circuit->config.directory.routes.front().fields;
@@ -202,6 +206,17 @@ std::shared_ptr<HostProviderLoop::Circuit> HostProviderLoop::EnsureCircuit(const
 #endif
     if(built.status!=BackendStatus::None)return {};
     circuit->adapter=std::move(built.adapter);
+    {   // Redial only after the configured peer has been continuously online for 1 s.
+        const std::weak_ptr<PublicSocketBackend> weak_backend=circuit->backend;
+        auto since=std::make_shared<std::optional<std::chrono::steady_clock::time_point>>();
+        if(!circuit->adapter->SetBoundedReplacementGate([weak_backend,since]{
+            auto b=weak_backend.lock();if(!b)return false;
+            if(!b->PeerOnline()){since->reset();return false;}
+            const auto now=std::chrono::steady_clock::now();
+            if(!*since){*since=now;return false;}
+            if(now-**since<std::chrono::seconds(1))return false;
+            since->reset();return true;}))return {};
+    }
     if(circuit->adapter->PrepareCircuitAnchor()!=BackendStatus::None||!circuit->backend->SetIncomingCallbacks(circuit->adapter->IncomingCallbacks()))return {};
     s.circuits[slot]=circuit;return circuit;
 }
@@ -769,6 +784,12 @@ void HostProviderLoop::SetSharedSendHook(std::function<void(bool)> hook) {
 #endif
 NativeSendRunResult HostProviderLoop::PumpSendImpl(HostSendObservation* observation) noexcept {
     auto& s=*state_;
+    {   // Domain-circuit route renewal. Runs before view gating: in owned/persistent
+        // assemblies the runtime-level pump has no started view of its own.
+        std::array<std::shared_ptr<Circuit>,2> renew;bool live=false;
+        {std::lock_guard<std::mutex> lock(s.gate);live=s.domain_mode&&s.started&&!s.stopping&&!s.closed;if(live){renew=s.circuits;++s.active;}}
+        if(live){State::PumpGuard pin{s,false};for(const auto& circuit:renew)if(circuit&&circuit->adapter)(void)circuit->adapter->AdvanceCircuitRenewal();}
+    }
     if(s.shared){
         std::array<std::shared_ptr<View>,2> eligible;std::size_t count=0;
         {std::lock_guard<std::mutex> lock(s.gate);
@@ -837,6 +858,12 @@ NativeSendRunResult HostProviderLoop::PumpSendImpl(HostSendObservation* observat
 }
 BackendStatus HostProviderLoop::PumpReceive() noexcept {
     auto& s=*state_;
+    {   // Domain-circuit route renewal. Runs before view gating: in owned/persistent
+        // assemblies the runtime-level pump has no started view of its own.
+        std::array<std::shared_ptr<Circuit>,2> renew;bool live=false;
+        {std::lock_guard<std::mutex> lock(s.gate);live=s.domain_mode&&s.started&&!s.stopping&&!s.closed;if(live){renew=s.circuits;++s.active;}}
+        if(live){State::PumpGuard pin{s,false};for(const auto& circuit:renew)if(circuit&&circuit->adapter)(void)circuit->adapter->AdvanceCircuitRenewal();}
+    }
     if(s.shared)
     {
         // The record and the accepted socket belong to the runtime, so this stays a
@@ -890,7 +917,14 @@ WorkWaitResult HostProviderLoop::WaitForWork(std::uint64_t& generation)
         std::lock_guard<std::mutex> lock(state_->gate);
         if(state_->started)attachments=state_->attachments.get();
     }
-    const auto deadline=attachments?attachments->NextReceiveDeadline():ProcessClock::Clock::time_point::max();
+    auto deadline=attachments?attachments->NextReceiveDeadline():ProcessClock::Clock::time_point::max();
+    {   // A pending circuit renewal waits on peer reachability, which signals no
+        // queue work; bound the sleep so the pump keeps polling it.
+        std::array<std::shared_ptr<Circuit>,2> circuits;
+        {std::lock_guard<std::mutex> lock(state_->gate);if(state_->domain_mode&&state_->started&&!state_->stopping)circuits=state_->circuits;}
+        for(const auto& circuit:circuits)if(circuit&&circuit->adapter&&circuit->adapter->CircuitRenewalPending()){
+            deadline=std::min(deadline,ProcessClock::Clock::now()+std::chrono::milliseconds(250));break;}
+    }
     return state_->work->Wait(generation,deadline);
 }
 void HostProviderLoop::RequestPumpStop() noexcept

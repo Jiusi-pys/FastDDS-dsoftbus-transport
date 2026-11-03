@@ -79,6 +79,11 @@ public:
     // Explicit bounded experiment control; ends only the current owned lane.
     BackendStatus RequestNormalEnd(RecordRole) noexcept;
     bool SetBoundedReplacementGate(std::function<bool()>);
+    // Domain-circuit route renewal step (retire a stopped accepted record, redial a
+    // stopped outgoing one). Driven by the owning loop's pump, never a callback.
+    BackendStatus AdvanceCircuitRenewal() noexcept;
+    // True while a stopped circuit lane still waits for renewal (pump must poll).
+    bool CircuitRenewalPending() const noexcept;
     static bool IsProviderCallbackContext() noexcept;
     BackendStatus CloseInput() noexcept;
     BackendStatus ReopenInput(InputChannels::Receiver*) noexcept;

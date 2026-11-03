@@ -8,7 +8,8 @@ Status: **DEVICE_TESTED (bounded scope below) / NOT_PRODUCTION_QUALIFIED**.
 | Participant delete, runtime destroy, process exit, entry identity restore | PASS (run m2) |
 | Fragmented sample: 150000 bytes per direction, transport max 65536, byte-verified and acked | PASS (run m3) |
 | Same-name Participant hot rebuild in process (PersistentNativeAnchor), 150000-byte sample both ways after rebuild | PASS (runs m4, m7) |
-| Route outage then recovery (15 s IP drop on B, `NO_REACCEPT`) | **FAIL (runs m5, m6): no recovery**. Gap confirmed, transport fix not implemented |
+| Route outage then recovery (15 s IP drop on B) | FAIL before the fix (m5, m6). **PASS with circuit route renewal (m21, m22)** |
+| Default path with the renewal library (no outage) | PASS (m23) |
 | ROS 2 over this build | NOT_RUN |
 | SDK quiet, worker/descendant restoration | UNKNOWN |
 | Host build of `integrations/ros2/stock` (MSVC Release, stock-host-d01 Fast DDS 2.14) | BUILDS |
@@ -135,3 +136,61 @@ default-off bounded-reaccept experiment, and `Runtime` rejects that experiment t
 **Status: route-down re-accept NOT IMPLEMENTED for this path, DEVICE-confirmed gap.**
 
 Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m4…m7-20261104/` (driver logs, board tars, scripts, overlay source).
+
+## Circuit route renewal: transport fix and device runs m21–m23
+
+**Observed cause (device trace, m8).** About 15 s after the IP drop starts, DSoftBus delivers
+`OnShutdown(reason=12, SHUTDOWN_REASON_LINK_DOWN)` for both the accepted socket and the outgoing
+circuit socket on each board. Before the fix, nothing reacted:
+- **No pump wake-up.** Nothing woke the sleeping pump: the shutdown signals no queue work, and sends to the
+  stopped lane are rejected before they queue any.
+- **No pump path.** No pump path drove circuit adapters. In owned/persistent assemblies, the runtime-level
+  `PumpReceive` returns before the domain branch.
+- **Owner never closable.** A native shutdown sets no close intent, so the dead owner could never settle.
+- **Re-accept refused.** `CircuitNegotiate` refused a new incoming socket while the circuit's old incoming slot existed.
+
+**Fix (transport, Socket API only).** Changed files: `src/HostProviderLoop.cpp`, `src/ProviderAdapter.cpp`,
+`src/PublicSocketBackend.cpp` and the two headers.
+- **Per-circuit renewal mode.** Each domain circuit enables the existing bounded replacement owner
+  algorithm (`bounded_reaccept_host`, `allow_closed_dial_retry`) in its own config. The root config is unchanged.
+- **Driven from both pumps.** `HostProviderLoop` calls `ProviderAdapter::AdvanceCircuitRenewal()` at the top of
+  `PumpSend` and `PumpReceive`, before view gating. While a renewal is pending, `WaitForWork` sleeps at most 250 ms.
+  A native stop on a circuit lane calls `NotifyWork`.
+- **Accepted lane.** The adapter requests close on the dead owner, waits for it to settle, closes the accepted record,
+  and resets the parent's incoming slot and family ID (`ResetBoundedConnection(Server)`, circuit branch).
+  The peer's next dial is then admitted.
+- **Dial lane.** The adapter requests close and waits for the owner to settle. It then waits for a gate: the configured
+  peer network ID must be in `GetAllNodeDeviceInfo` continuously for 1 s. Next it resets the child socket
+  (`ResetBoundedConnection(Client)`, circuit branch) and rebuilds the dial binding through `InitializeCircuitOutgoing`
+  (`Socket` + `Bind` + `Publish`). The old binding is released only after the replacement joins: the shared record
+  seals when its last owner leaves.
+- **Probe events.** Probe events `CircuitRenew_*` and `CircuitOutgoing_*` go through the existing `runtime_probe::TraceEvent` hook.
+
+**Runner (test only).** In the opt-in route window, nonzero `SendBytes` returns are counted (`send_failures`)
+instead of aborting, because sends during the outage are expected to fail. Outside the window the strict policy is unchanged.
+
+**Device results.** Transport library SHA256 `bc8e17edc8385ed36e2b5b3a7f1507103487474548add76fd088166186317b5e`
+(m22, m23; m21 used the same code before a cleanup-only refactor plus a debug print), runner `e9fda2a67fe0effc…`.
+
+| Run | Scenario | A | B |
+| --- | --- | --- | --- |
+| m21 | 15 s IP drop | `recovered=1`, 157 received, `max_peer=225`, max gap 16.8 s, new outgoing socket 4 and new accepted socket 5 | same |
+| m22 | 15 s IP drop, repeat | `recovered=1`, 155 received, `max_peer=225`, max gap 17.2 s | same |
+| m23 | no outage, default path | 3/3 normal samples, fragment and hot rebuild PASS | same |
+
+In every run each board also reported status 0, phase 4, 3/3 writes/takes, destroy 0, exit status 0 and
+restored_entry 1, and the controller reported `ROOT_MATCH_GUID_SN_PAYLOAD_ACK_DONE_TEARDOWN=1` with exit 0.
+No processes or iptables rules remained on either board.
+
+**Host.** `integrations/ros2/stock` builds, and ctest stays at 53/64 with the **identical** 11 pre-existing failures.
+No host test exercises circuit renewal, so this behaviour has device evidence only.
+
+**Limits.**
+- One outage per run was tested (two separate runs).
+- Renewal is tested for a single domain circuit only.
+- If the redial reports NoWork after the old binding was released, the record may already be sealed.
+  `renewal_failed` latches on any other error, and there is no retry backoff beyond the 250 ms poll.
+- The owner table's seen-ID tombstones reject an SDK socket ID that gets reused. The SDK issued new IDs (4, 5) here.
+- SDK quiet and drain remain unproven.
+
+Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m8…m23-20261104/`. m22 contains the scripts, the overlay source, `TRANSPORT_LIB.sha256` and the board tars.

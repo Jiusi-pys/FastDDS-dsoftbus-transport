@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <fastdds_dsoftbus/dsoftbus/PublicSocketBackend.hpp>
 #include <socket.h>
 #include <softbus_bus_center.h>
@@ -555,7 +556,44 @@ BackendStatus PublicSocketBackend::ResetHostConnection(RecordRole role,const Nat
     if(!BoundedReacceptHost())return BackendStatus::InvalidState;
     return ResetBoundedConnection(role,old);
 }
+bool PublicSocketBackend::PeerOnline() const {
+    const auto& expected=state_->config.peer_network_id;
+    if(expected.empty())return false;
+    NodeBasicInfo* nodes=nullptr;int32_t count=0;
+    const auto rc=::GetAllNodeDeviceInfo(state_->package.data(),&nodes,&count);
+    struct Release{NodeBasicInfo* p;~Release(){if(p)::FreeNodeInfo(p);}} release{nodes};
+    bool found=false;
+    if(rc==0&&count>=0&&count<=32&&(!count||nodes))for(int32_t i=0;i<count;++i){
+        const auto* end=static_cast<const char*>(std::memchr(nodes[i].networkId,0,sizeof(nodes[i].networkId)));
+        if(end&&std::string(nodes[i].networkId,static_cast<std::size_t>(end-nodes[i].networkId))==expected)found=true;
+    }
+    return found;
+}
 BackendStatus PublicSocketBackend::ResetBoundedConnection(RecordRole role,const NativeOwnerLease& old){
+    if(auto parent=state_->shared_listener.lock()) {
+        // Domain-circuit renewal after a native shutdown (e.g. LINK_DOWN). The old
+        // owner is settled; only its exact retired ID is released here.
+        if(!old.AdapterSettled())return BackendStatus::InvalidState;
+        const auto facts=old.Observe();const auto id=old.RetainedId();
+        if(!id)return BackendStatus::InvalidIdentity;
+        auto release_family=[&](std::int32_t value){for(auto& f:parent->family_ids)if(f.used&&f.id==value)f={};};
+        if(role==RecordRole::Client){
+            std::lock_guard<std::mutex> parent_lock(parent->gate);std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
+            if(parent->listener_closed||parent->observation.stopped)return BackendStatus::ProviderStopped;
+            if(facts.role!=NativeOwnerRole::Dial||s.socket!=*id||(!s.primary_observed&&!s.primary_closed)||s.primary_failed)return BackendStatus::InvalidIdentity;
+            s.attempted=false;s.socket=-1;s.primary_observed=false;s.primary_closed=false;s.close_status=BackendStatus::None;
+            s.observation.outgoing_socket.reset();s.observation.stopped=false;s.observation.closed=false;
+            release_family(*id);return BackendStatus::None;
+        }
+        if(role!=RecordRole::Server)return BackendStatus::InvalidState;
+        std::lock_guard<std::mutex> lock(parent->gate);
+        if(parent->listener_closed||parent->observation.stopped)return BackendStatus::ProviderStopped;
+        for(auto& slot:parent->circuit_incoming)if(slot.used&&slot.id==*id&&slot.child.lock()==state_) {
+            if(!slot.observed&&!slot.closed&&!slot.failed)return BackendStatus::InvalidState;
+            slot=detail::PublicSocketState::CircuitIncoming{};release_family(*id);return BackendStatus::None;
+        }
+        return BackendStatus::InvalidIdentity;
+    }
     if(!BoundedReacceptExperiment()||!old.AdapterSettled())return BackendStatus::InvalidState;
     const auto facts=old.Observe();const auto id=old.RetainedId();
     std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;

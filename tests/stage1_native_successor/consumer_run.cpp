@@ -68,13 +68,15 @@ struct Session {
     std::vector<std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>> retained_descriptors;
     fd::DomainParticipantFactory* factory=nullptr;fd::DomainParticipant* participant=nullptr;
     fd::DataWriter* writer=nullptr;fd::DataReader* reader=nullptr;
-    std::thread pump,watch;std::atomic<bool> pump_failed{false};bool finish_attempted=false,closed=false;
+    std::thread pump,watch;std::atomic<bool> pump_failed{false},tolerate_send_failures{false};std::atomic<std::uint32_t> send_failures{0};bool finish_attempted=false,closed=false;
     explicit Session(NS_RunHandle& x):h(x),signals(x){}
     void start(){
         watch=std::thread([this]{std::unique_lock<std::mutex> l(h.watch_gate);if(!h.watch_changed.wait_until(l,end_at(h.request.deployment.deadline_ns),[&]{return h.watch_stop;})){l.unlock();h.abort();runtime->RequestPumpStop();}});
         pump=std::thread([this]{try{for(;;){
             auto g=runtime->WorkGeneration();
-            for(;;){auto r=runtime->PumpSend();if(r.outcome==ds::NativeSendOutcome::ReturnedInvalidCode||r.outcome==ds::NativeSendOutcome::ReturnedByException||(r.actual_return_code&&*r.actual_return_code!=0)){pump_failed=true;h.abort();}
+            for(;;){auto r=runtime->PumpSend();if(r.outcome==ds::NativeSendOutcome::ReturnedInvalidCode||r.outcome==ds::NativeSendOutcome::ReturnedByException||(r.actual_return_code&&*r.actual_return_code!=0)){
+                // A route-outage window expects native send failures while the route is down.
+                if(tolerate_send_failures.load()&&r.outcome!=ds::NativeSendOutcome::ReturnedByException)++send_failures;else{pump_failed=true;h.abort();}}
                 if(r.status!=ds::NativeStatus::None)break;}
             ds::phase0::BackendStatus rx;do{rx=runtime->PumpReceive();}while(rx==ds::phase0::BackendStatus::None);
             if(rx!=ds::phase0::BackendStatus::NoWork&&rx!=ds::phase0::BackendStatus::InvalidState){pump_failed=true;h.abort();}
@@ -218,6 +220,7 @@ static void run_session(Session& s,NS_RunResult& out){
         for(;;){const auto seen=h.progress.snapshot();need(h.live()&&!s.pump_failed,NS_CANCELLED);fd::PublicationMatchedStatus w;fd::SubscriptionMatchedStatus r;
             need(ow->get_publication_matched_status(w)==RC::RETCODE_OK&&orr->get_subscription_matched_status(r)==RC::RETCODE_OK);
             if(w.current_count>=1&&r.current_count>=1)break;need(h.progress.wait(seen,end_at(q.deadline_ns)),NS_CANCELLED);}
+        s.tolerate_send_failures=true;
         const auto t0=Clock::now();const auto window=std::chrono::seconds(45);
         uint32_t written=0,received=0,max_peer=0,write_fail=0;int64_t max_gap_ms=0,gap_end_ms=-1,last_rx_ms=-1;bool aborted=false;
         auto ms=[&]{return static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-t0).count());};
@@ -235,8 +238,8 @@ static void run_session(Session& s,NS_RunResult& out){
             }
         }catch(...){aborted=true;}
         const bool recovered=!aborted&&gap_end_ms>=0&&last_rx_ms>gap_end_ms&&last_rx_ms>=45000-3000;
-        std::printf("ROUTE_OUTAGE side=%u written=%u write_fail=%u received=%u max_peer=%u max_gap_ms=%lld gap_end_ms=%lld last_rx_ms=%lld aborted=%d pump_failed=%d recovered=%d\n",
-            static_cast<unsigned>(local.side),written,write_fail,received,max_peer,static_cast<long long>(max_gap_ms),static_cast<long long>(gap_end_ms),static_cast<long long>(last_rx_ms),int(aborted),int(s.pump_failed.load()),int(recovered));std::fflush(stdout);
+        std::printf("ROUTE_OUTAGE side=%u written=%u write_fail=%u received=%u max_peer=%u max_gap_ms=%lld gap_end_ms=%lld last_rx_ms=%lld aborted=%d pump_failed=%d recovered=%d send_failures=%u\n",
+            static_cast<unsigned>(local.side),written,write_fail,received,max_peer,static_cast<long long>(max_gap_ms),static_cast<long long>(gap_end_ms),static_cast<long long>(last_rx_ms),int(aborted),int(s.pump_failed.load()),int(recovered),s.send_failures.load());std::fflush(stdout);
         {const auto o=s.runtime->ObserveSocket();const auto& snd=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Send)];
          const auto& sk=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Socket)];const auto& bd=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Bind)];const auto& sh=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Shutdown)];
          auto opt=[](const std::optional<std::int32_t>& v){return v?static_cast<long long>(*v):-99999LL;};

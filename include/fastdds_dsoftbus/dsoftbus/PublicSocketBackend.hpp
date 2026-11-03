@@ -79,6 +79,9 @@ public:
     bool BoundedReacceptExperiment()const noexcept override;
     BackendStatus ResetHostConnection(RecordRole,const NativeOwnerLease&) override;
     BackendStatus ResetBoundedConnection(RecordRole,const NativeOwnerLease&) override;
+    // Domain-circuit route renewal: true only when the configured peer network ID
+    // is in the current public online node list. A query failure is "not online".
+    bool PeerOnline() const;
     std::size_t MaxMessageSize()const noexcept override;
     BackendIdentity ListenerIdentity()const override;
     BackendStatus ConfigureEntrance(const RecordEntrance&) override;
