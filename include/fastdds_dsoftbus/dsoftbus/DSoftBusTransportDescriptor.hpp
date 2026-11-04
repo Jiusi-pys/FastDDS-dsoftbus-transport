@@ -34,6 +34,19 @@ struct DSoftBusTransportDescriptor final : eprosima::fastdds::rtps::TransportDes
     std::vector<Locator> default_metatraffic_unicast;
     std::vector<Locator> default_user_unicast;
     SendQueueLimits send_limits;
+    // Receive admission for this runtime's local input, in records and bytes. A record
+    // that arrives while the input is full is dropped, like UDP. 0 keeps the default
+    // (32 records / 256 KiB). Only the Participant that starts a runtime sets it.
+    std::size_t receive_records = 0;
+    std::size_t receive_bytes = 0;
+    // Participants one shared runtime admits at once (1..4). The Participant that starts
+    // the runtime sets it; joiners cannot change it. Default 2.
+    std::size_t max_participants = 2;
+    // Domain-circuit runtimes only, with expected_domain_id set: bind the view to its
+    // domain when its first input opens instead of on its first initial peer. A
+    // Participant without initial peers (Discovery Server) needs this. Default off: the
+    // view stays unconfirmed (Await) until an initial peer confirms the domain.
+    bool bind_declared_domain_at_open = false;
     v1::Profile profile = v1::Profile::BytesNative;
     v1::NativeNameScope native_name_scope;
     // Absent preserves the legacy unscoped Transport. Stock assembly opts in

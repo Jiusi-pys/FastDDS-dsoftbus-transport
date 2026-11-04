@@ -211,7 +211,7 @@ bool DSoftBusTransport::OpenInputChannel(const Locator& local, Receiver* receive
     auto* slot = r->FindLocal(local);
     if (!slot || !receiver) { Diagnose({FacadeError::InvalidLocator, "open_input"}); return false; }
     if (capacity < frozen_.maxMessageSize) { Diagnose({FacadeError::InsufficientReceiverCapacity, "open_input"}); return false; }
-    std::lock_guard<std::mutex> control(slot->control);
+    std::unique_lock<std::mutex> control(slot->control);
     if (!ReadyLease()) { Diagnose({FacadeError::InvalidState, "open_input"}); return false; }
     std::unique_ptr<GuardedReceiver> prepared;
     Receiver* input_receiver = receiver;
@@ -238,9 +238,23 @@ bool DSoftBusTransport::OpenInputChannel(const Locator& local, Receiver* receive
     }
     if (prepared) slot->receiver_proxy = std::move(prepared);
     if (hooks_.after_core_open) hooks_.after_core_open();
+    bool committed = false;
     {
         std::lock_guard<std::mutex> lock(lifecycle_);
-        if (state_ == FacadeState::ModelReady) { slot->committed_open.store(true); return true; }
+        if (state_ == FacadeState::ModelReady) { slot->committed_open.store(true); committed = true; }
+    }
+    if (committed) {
+        control.unlock();
+#if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
+        // Opt-in: a domain-circuit view whose descriptor declares its domain needs no peer
+        // to learn it, so bind now and a Participant without initial peers (Discovery
+        // Server) can talk.
+        // A failure refuses the view exactly as the initial-peer path would.
+        if (frozen_.bind_declared_domain_at_open && domain_guard_ && !domain_guard_->automatic() && host_backend_ && host_backend_->RequiresDomainBinding() &&
+                domain_guard_->Snapshot().state != ViewDomainState::Ready)
+            (void)BindViewDomain(domain_guard_->expected_domain_id());
+#endif
+        return true;
     }
     slot->committed_open.store(false);
 #if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
@@ -347,7 +361,12 @@ bool DSoftBusTransport::configureInitialPeerLocator(Locator& remote, const fastd
     }
     auto r = ReadyLease(); if (!r || !LocatorCodec::IsValid(remote) || !r->plan->Find(remote)) return false;
     LocatorList prepared(out); prepared.push_back(remote);
-    if (domain_guard_) {
+    if (domain_guard_ && !BindViewDomain(domain)) return false;
+    out.swap(prepared); return true;
+}
+bool DSoftBusTransport::BindViewDomain(std::uint32_t domain) const
+{
+    {
 #if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
         if (host_backend_ && host_backend_->RequiresDomainBinding()) {
             const auto before=domain_guard_->Snapshot();
@@ -368,7 +387,7 @@ bool DSoftBusTransport::configureInitialPeerLocator(Locator& remote, const fastd
                 "initial_peer_domain"}); return false;
         }
     }
-    out.swap(prepared); return true;
+    return true;
 }
 bool DSoftBusTransport::fillUnicastLocator(Locator& local, std::uint32_t) const { return is_local_locator(local); }
 std::uint32_t DSoftBusTransport::max_recv_buffer_size() const { return ReadyLease() ? frozen_.maxMessageSize : 0; }
