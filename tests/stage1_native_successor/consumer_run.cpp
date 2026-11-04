@@ -3,6 +3,8 @@
 #include "frag_sample.hpp"
 #include "keyed_sample.hpp"
 #include "large_sample.hpp"
+#include "plain_sample.hpp"
+#include <fastdds/dds/core/LoanableSequence.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
 #include <fastdds/dds/topic/ContentFilteredTopic.hpp>
 #include <fastdds/dds/core/condition/WaitSet.hpp>
@@ -143,7 +145,12 @@ static void guid(uint8_t* p,const eprosima::fastrtps::rtps::GUID_t& g){std::memc
 static int64_t sequence(const eprosima::fastrtps::rtps::SequenceNumber_t& s){need(s.high>=0&&(s.high||s.low));return (int64_t(s.high)<<32)|s.low;}
 static void run_session(Session& s,NS_RunResult& out){
     auto& h=s.h;const auto& q=h.request.deployment;const auto& local=h.request.local;
-    auto config=configuration(q);s.runtime=std::make_unique<ds::experimental::Runtime>(backend(config,q),ds::experimental::RuntimeLifetime::PersistentNativeAnchor);
+    auto config=configuration(q);
+    if([]{const char* d=std::getenv("TMPDIR");if(!d)return false;return access((std::string(d)+"/feature_matrix").c_str(),F_OK)==0;}()){
+        config.max_participants=4;config.receive_records=256;config.receive_bytes=2u<<20;
+        config.send_limits.peer_records=256;config.send_limits.peer_bytes=2u<<20;config.send_limits.global_records=256;config.send_limits.global_bytes=2u<<20;
+    }
+    s.runtime=std::make_unique<ds::experimental::Runtime>(backend(config,q),ds::experimental::RuntimeLifetime::PersistentNativeAnchor);
     need(s.runtime->SetPreConnectGate([&s,&h]{try{
         const auto o=s.runtime->ObserveSocket();const auto& listen=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Listen)];
         need(!o.fake_sdk&&!o.stopped&&!o.closed&&!o.listener_stopped&&o.listener_configured&&o.listener_socket&&*o.listener_socket>=0&&!o.first_api_error&&!o.first_callback_error&&!o.first_exception&&listen.calls==1&&listen.returns==1&&listen.last_call&&listen.last_call->called&&listen.last_call->returned&&listen.last_call->provider_return==0);
@@ -542,8 +549,29 @@ static void run_session(Session& s,NS_RunResult& out){
                 (void)w2b->wait_for_acknowledgments(dur(3));
             }
             barrier();
-            // A Runtime serves at most two concurrent Participants; release the second one now.
-            need(p2->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p2)==RC::RETCODE_OK);extra.ps.back()=nullptr;
+            {   // 1b. Four Participants on one Runtime (descriptor max_participants=4): the main one,
+                //     the second one above, and two more, each with its own topic and 3 samples.
+                std::array<fd::DomainParticipant*,2> px{};std::array<fd::DataWriter*,2> wx{};std::array<fd::DataReader*,2> rx_{};
+                for(unsigned k=0;k<2;++k){fd::DomainParticipantQos qx=qos;qx.name((std::string(qos.name().c_str())+"_p"+std::to_string(3+k)).c_str());
+                    auto dx=s.runtime->MakeStockDescriptor(config);need(bool(dx));s.retained_descriptors.push_back(dx);qx.transport().user_transports={dx};
+                    px[k]=s.factory->create_participant(q.domain,qx);extra.ps.push_back(px[k]);need(px[k],NS_STATE);need(s.type.register_type(px[k])==RC::RETCODE_OK);
+                    auto* pubx=px[k]->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* subx=px[k]->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pubx&&subx);
+                    fd::Topic *tx,*rx;topic2(px[k],"p"+std::to_string(3+k),s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+                    wx[k]=pubx->create_datawriter(tx,keep_all(wq),&s.signals);rx_[k]=subx->create_datareader(rx,keep_all(rq),&s.signals);need(wx[k]&&rx_[k]);}
+                const bool m=matched(wx[0],rx_[0],1,1,15000)&&matched(wx[1],rx_[1],1,1,15000);barrier();
+                for(unsigned k=0;k<2;++k)for(std::uint32_t n=1;n<=3;++n){auto v=layer(local.run+35+k,n);need(wx[k]->write(&v));}
+                std::array<std::uint32_t,2> nx{1,1};
+                const bool got=m&&waitp([&]{for(unsigned k=0;k<2;++k){for(;;){LayerSample x;fd::SampleInfo i;if(rx_[k]->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                    if(i.valid_data&&x.run==local.run+35+k&&x.side==peer&&x.ordinal==nx[k])++nx[k];}}return nx[0]==4&&nx[1]==4;},8000);
+                const bool acked=got&&wx[0]->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK&&wx[1]->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK;
+                report("four_participants_one_runtime",got&&acked,"participants=4 matched="+std::to_string(m)+" received="+std::to_string(nx[0]-1)+","+std::to_string(nx[1]-1)+" acked="+std::to_string(acked));
+                barrier();
+                for(unsigned k=2;k-->0;){need(px[k]->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(px[k])==RC::RETCODE_OK);
+                    for(auto& e:extra.ps)if(e==px[k])e=nullptr;}
+                barrier();
+            }
+            // Release the second Participant before the cases that use the main one.
+            need(p2->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p2)==RC::RETCODE_OK);for(auto& e:extra.ps)if(e==p2)e=nullptr;
         }
         barrier();
         {   // 4. ContentFilteredTopic (DDS-SQL filter with parameters) on a DynamicType that carries a TypeObject.
@@ -661,11 +689,11 @@ static void run_session(Session& s,NS_RunResult& out){
             fd::DataReaderQos r=keep_all(rq);r.reliable_reader_qos().disable_positive_ACKs.enabled=true;
             auto* nw=pub->create_datawriter(tx,w,&s.signals);auto* nr=sub->create_datareader(rx,r,&s.signals);need(nw&&nr);
             const bool m=matched(nw,nr,1,1,10000);barrier();
-            for(std::uint32_t n=1;n<=20;++n){auto v=layer(local.run+29,n);need(nw->write(&v));std::this_thread::sleep_for(std::chrono::milliseconds(10));}
+            for(std::uint32_t n=1;n<=20;++n){auto v=layer(local.run+29,n);need(nw->write(&v));} // unpaced burst
             std::uint32_t next=1;bool order=true;
             const bool got=waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(nr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data)continue;
                 if(x.run!=local.run+29||x.side!=peer||x.ordinal!=next)order=false;else ++next;}return next==21||!order;},8000);
-            report("reliable_disable_positive_acks",m&&got&&order,"received="+std::to_string(next-1)+" in_order="+std::to_string(order));
+            report("reliable_disable_positive_acks",m&&got&&order,"received="+std::to_string(next-1)+" in_order="+std::to_string(order)+" unpaced=1");
             barrier();
         }
         barrier();
@@ -695,6 +723,56 @@ static void run_session(Session& s,NS_RunResult& out){
             (void)waitp([&]{for(unsigned k=0;k<K;++k){for(;;){LayerSample x;fd::SampleInfo i;if(mr[k]->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
                 if(i.valid_data&&x.run==local.run+31&&x.side==peer&&x.ordinal==k+1&&!got[k]){got[k]=true;++total;}}}return total==K;},10000);
             report("twenty_topics_discovery_and_delivery",m&&total==K,"matched_all="+std::to_string(m)+" delivered="+std::to_string(total)+"/20");
+        }
+        barrier();
+        {   // 12b. DataWriter loans: loan_sample() on a plain type, fill in place, write the loan.
+            //      The reader takes with a LoanableSequence and returns the loan.
+            fd::TypeSupport pt{new stage1_plain::Type};need(pt.register_type(s.participant)==RC::RETCODE_OK);
+            fd::Topic *tx,*rx;topic2(s.participant,"loans",pt.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            // Data sharing off: a plain type would select it automatically (AUTO), and this case
+            // tests loans over the network transport.
+            fd::DataWriterQos lwq=keep_all(wq);lwq.data_sharing().off();fd::DataReaderQos lrq=keep_all(rq);lrq.data_sharing().off();
+            auto* lw=pub->create_datawriter(tx,lwq,&s.signals);auto* lr=sub->create_datareader(rx,lrq,&s.signals);need(lw&&lr);
+            const bool m=matched(lw,lr,1,1,10000);barrier();
+            bool loaned=true;
+            for(std::uint32_t n=1;n<=5;++n){void* raw=nullptr;if(lw->loan_sample(raw)!=RC::RETCODE_OK||!raw){loaned=false;break;}
+                stage1_plain::fill(*static_cast<stage1_plain::Sample*>(raw),local.run+37,me,n);need(lw->write(raw));}
+            std::uint32_t next=1;bool valid=true,returned=true;
+            const bool got=m&&loaned&&waitp([&]{fd::LoanableSequence<stage1_plain::Sample> data;fd::SampleInfoSeq infos;
+                if(lr->take(data,infos,4)==RC::RETCODE_OK){for(fd::LoanableCollection::size_type k=0;k<infos.length();++k){if(!infos[k].valid_data)continue;
+                    if(stage1_plain::valid(data[k],local.run+37,peer,next))++next;else valid=false;}
+                    returned=lr->return_loan(data,infos)==RC::RETCODE_OK&&returned;}
+                return next==6||!valid;},8000);
+            const bool acked=got&&lw->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK;
+            report("datawriter_loans_plain_type",got&&valid&&returned&&acked,"data_sharing=OFF loaned_writes="+std::to_string(loaned?5:0)+" received_verified="+std::to_string(next-1)+" reader_loans_returned="+std::to_string(returned)+" acked="+std::to_string(acked));
+        }
+        barrier();
+        {   // 12c. Static endpoint discovery (STATIC EDP from XML): SPDP finds the peer Participant,
+            //      endpoints match from the XML description only, then 3 samples each way.
+            const auto pname=[&](unsigned side){return std::string(qos.name().c_str()).substr(0,std::string(qos.name().c_str()).size()-1)+std::to_string(side)+"_sedp";};
+            const std::string type=s.type.get_type_name();
+            const auto ep=[&](const char* kind,unsigned id,const std::string& topic){return std::string("<")+kind+"><userId>"+std::to_string(id)+"</userId><entityID>"+std::to_string(id)+
+                "</entityID><topicName>"+topic+"</topicName><topicDataType>"+type+"</topicDataType><topicKind>NO_KEY</topicKind>"
+                "<reliabilityQos>RELIABLE_RELIABILITY_QOS</reliabilityQos><durabilityQos>VOLATILE_DURABILITY_QOS</durabilityQos></"+kind+">";};
+            const std::string xml="data://<?xml version=\"1.0\" encoding=\"utf-8\"?><staticdiscovery><participant><name>"+pname(peer)+"</name>"+
+                ep("writer",110+peer,tname("sedp",peer))+ep("reader",120+peer,tname("sedp",me))+"</participant></staticdiscovery>";
+            fd::DomainParticipantQos q5=qos;q5.name(pname(me).c_str());
+            auto d5=s.runtime->MakeStockDescriptor(config);need(bool(d5));s.retained_descriptors.push_back(d5);q5.transport().user_transports={d5};
+            auto& dc5=q5.wire_protocol().builtin.discovery_config;dc5.use_SIMPLE_EndpointDiscoveryProtocol=false;dc5.use_STATIC_EndpointDiscoveryProtocol=true;dc5.static_edp_xml_config(xml.c_str());
+            auto* p5=s.factory->create_participant(q.domain,q5);extra.ps.push_back(p5);need(p5,NS_STATE);need(s.type.register_type(p5)==RC::RETCODE_OK);
+            auto* pub5=p5->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub5=p5->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pub5&&sub5);
+            fd::Topic *tx,*rx;topic2(p5,"sedp",type,tx,rx,fd::TOPIC_QOS_DEFAULT);
+            fd::DataWriterQos w5=keep_all(wq);w5.reliability().kind=fd::RELIABLE_RELIABILITY_QOS;w5.durability().kind=fd::VOLATILE_DURABILITY_QOS;w5.endpoint().user_defined_id=static_cast<int16_t>(110+me);w5.endpoint().entity_id=static_cast<int16_t>(110+me);
+            fd::DataReaderQos r5=keep_all(rq);r5.reliability().kind=fd::RELIABLE_RELIABILITY_QOS;r5.durability().kind=fd::VOLATILE_DURABILITY_QOS;r5.endpoint().user_defined_id=static_cast<int16_t>(120+me);r5.endpoint().entity_id=static_cast<int16_t>(120+me);
+            auto* sw5=pub5->create_datawriter(tx,w5,&s.signals);auto* sr5=sub5->create_datareader(rx,r5,&s.signals);need(sw5&&sr5);
+            const bool m=matched(sw5,sr5,1,1,20000);barrier();
+            for(std::uint32_t n=1;n<=3;++n){auto v=layer(local.run+38,n);need(sw5->write(&v));}
+            std::uint32_t next=1;const bool got=m&&waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(sr5->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                if(i.valid_data&&x.run==local.run+38&&x.side==peer&&x.ordinal==next)++next;}return next==4;},8000);
+            const bool acked=got&&sw5->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK;
+            report("static_endpoint_discovery_xml",got&&acked,"edp=STATIC matched="+std::to_string(m)+" received="+std::to_string(next-1)+" acked="+std::to_string(acked));
+            barrier();
+            need(p5->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p5)==RC::RETCODE_OK);for(auto& e:extra.ps)if(e==p5)e=nullptr;
         }
         barrier();
         {   // 13. A second DDS domain (domain+1) concurrently with the main domain in the same process.
@@ -747,8 +825,11 @@ static void run_session(Session& s,NS_RunResult& out){
             //     server's GUID prefix and DSoftBus locator; then DDS data in both directions.
             namespace rt=eprosima::fastrtps::rtps;static constexpr char server_prefix[]="44.53.01.5f.46.44.44.53.44.53.42.31";
             fd::DomainParticipantQos q4=qos;q4.name((std::string(qos.name().c_str())+"_ds").c_str());
-            auto d4=s.runtime->MakeStockDescriptor(config);need(bool(d4));s.retained_descriptors.push_back(d4);q4.transport().user_transports={d4};
-            // The initial peer locator stays: the transport confirms the DDS domain while configuring it.
+            auto config4=config;config4.bind_declared_domain_at_open=true;
+            auto d4=s.runtime->MakeStockDescriptor(config4);need(bool(d4));s.retained_descriptors.push_back(d4);q4.transport().user_transports={d4};
+            // No initial peers: the client reaches the server only through m_DiscoveryServers; the view
+            // binds its declared domain when its first input opens (bind_declared_domain_at_open).
+            q4.wire_protocol().builtin.initialPeersList.clear();
             auto& dc=q4.wire_protocol().builtin.discovery_config;
             if(me==0){dc.discoveryProtocol=rt::DiscoveryProtocol_t::SERVER;std::istringstream in(server_prefix);in>>q4.wire_protocol().prefix;need(!in.fail()&&q4.wire_protocol().prefix!=rt::GuidPrefix_t::unknown());}
             else{dc.discoveryProtocol=rt::DiscoveryProtocol_t::CLIENT;rt::RemoteServerAttributes srv;need(srv.ReadguidPrefix(server_prefix));
@@ -768,7 +849,7 @@ static void run_session(Session& s,NS_RunResult& out){
             std::uint32_t next=1;const bool got=m&&waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(r4->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
                 if(i.valid_data&&x.run==local.run+34&&x.side==peer&&x.ordinal==next)++next;}return next==4;},8000);
             const bool acked=w4->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK;
-            report("discovery_server",got&&acked&&role_ok,std::string("role=")+(me==0?"SERVER":"CLIENT")+" effective_role="+std::to_string(role_ok)+" matched="+std::to_string(m)+" received="+std::to_string(next-1)+" acked="+std::to_string(acked));
+            report("discovery_server",got&&acked&&role_ok,std::string("role=")+(me==0?"SERVER":"CLIENT")+" initial_peers=0 effective_role="+std::to_string(role_ok)+" matched="+std::to_string(m)+" received="+std::to_string(next-1)+" acked="+std::to_string(acked));
             barrier();
             // Delete the client before the server so the client never outlives its server's announcements.
             if(me==1){need(p4->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p4)==RC::RETCODE_OK);extra.ps.back()=nullptr;}
@@ -794,7 +875,9 @@ static void run_session(Session& s,NS_RunResult& out){
     // Absence of our DATA_DONE still prevents compliant peer entity deletion.
     // Once DELETE_RELEASE is granted, peer teardown is legal and this strict
     // sample assertion would race normal DDS lifecycle notifications.
-    NS_RunEvent done{};done.kind=NS_DATA_DONE;h.emit(done);out.phase=3;h.wait(NS_DELETE_RELEASE);
+    // From DATA_DONE on, the peer may legally tear down: its closed sockets make our
+    // remaining heartbeats fail to send, which is not a data failure.
+    s.tolerate_send_failures=true;NS_RunEvent done{};done.kind=NS_DATA_DONE;h.emit(done);out.phase=3;h.wait(NS_DELETE_RELEASE);
     need(s.finish());NS_RunEvent deleted{};deleted.kind=NS_TEARDOWN;h.emit(deleted);out.phase=4;
 }
 static bool request_valid(const NS_RunRequest& q,const NS_RunControl& c){

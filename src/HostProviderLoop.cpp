@@ -98,6 +98,10 @@ struct HostProviderLoop::View {
     std::function<void(bool)> send_hook;
 #endif
 };
+// Upper bound on concurrent Participants (views) one runtime serves; the runtime's own
+// capacity is the starting descriptor's max_participants (default 2). Each view holds
+// its own egress registration and one attachment application (logical_slots 8).
+constexpr std::size_t kSharedViews=4;
 struct HostProviderLoop::Circuit {
     std::uint32_t domain=0;
     NativeTableConfiguration config;
@@ -146,8 +150,8 @@ struct HostProviderLoop::State {
     std::optional<BackendCloseResult> failed_open_cleanup;
     bool shared=false,opening=false,owner_pinned=false;
     bool exact_owner_admission=false,ever_facade_published=false;
-    std::size_t live_views=0,next_tx=0;
-    std::array<std::weak_ptr<View>,2> views;
+    std::size_t live_views=0,next_tx=0,view_capacity=2;
+    std::array<std::weak_ptr<View>,kSharedViews> views;
     SendQueueLimits shared_limits;
     struct PumpGuard {
         State& state;bool receive=false;
@@ -336,7 +340,7 @@ std::shared_ptr<HostProviderLoop> HostProviderLoop::Join(std::shared_ptr<HostPro
         auto v=std::make_shared<View>();
         auto result=std::shared_ptr<HostProviderLoop>(new HostProviderLoop(state_,v));
         std::lock_guard<std::mutex> lock(s.gate);
-        if(!s.shared||!s.started||s.stopping||s.closed||s.live_views==s.views.size())return {};
+        if(!s.shared||!s.started||s.stopping||s.closed||s.live_views>=s.view_capacity)return {};
         if(s.exact_owner_admission){
             if(!view_->owner||owner.get()!=this)return {};
             if(!s.live_views&&!s.owner_pinned&&s.ever_facade_published)return {};
@@ -358,11 +362,12 @@ bool HostProviderLoop::StartShared(const DSoftBusTransportDescriptor& d) noexcep
         view_->attempted=true;joining=view_->member;
     }
     if(!joining){
+        if(!d.max_participants||d.max_participants>kSharedViews)return false;
         if(!StartRuntime(d))return false;
         std::lock_guard<std::mutex> lock(s.gate);
         view_->registration=std::move(s.registration);view_->member=true;view_->started=true;
         view_->explicit_expected_domain=d.expected_domain_id;
-        s.views[0]=view_;s.live_views=1;s.shared_limits=d.send_limits;return true;
+        s.views[0]=view_;s.live_views=1;s.shared_limits=d.send_limits;s.view_capacity=d.max_participants;return true;
     }
     try {
         const auto& expected=s.shared_limits;const auto& given=d.send_limits;
@@ -556,8 +561,9 @@ void HostProviderLoop::SetSharedControlHooks(std::function<void()> before_publis
 }
 bool HostProviderLoop::Start(const DSoftBusTransportDescriptor& d) noexcept {
     if(view_->owner){
+        if(!d.max_participants||d.max_participants>kSharedViews)return false;
         const auto result=StartRuntime(d);
-        if(result){std::lock_guard<std::mutex> lock(state_->gate);view_->started=true;state_->shared_limits=d.send_limits;}
+        if(result){std::lock_guard<std::mutex> lock(state_->gate);view_->started=true;state_->shared_limits=d.send_limits;state_->view_capacity=d.max_participants;}
         if(result)state_->work->Notify();
         return result;
     }
@@ -605,6 +611,8 @@ bool HostProviderLoop::StartRuntime(const DSoftBusTransportDescriptor& d) noexce
     auto native=NativeOwnerTable::Build(s.config);if(!native){STARTUP_CAPTURE("LoopStart_NativeStatus_result",UINT64_MAX,-1,-1,int(native.issue.code),0);return false;}s.native=std::move(*native.value);
     AttachmentLimits receive_limits;
     receive_limits.max_record_bytes=d.maxMessageSize;
+    if(d.receive_records){receive_limits.local_records=d.receive_records;receive_limits.records=std::max(receive_limits.records,2*d.receive_records);}
+    if(d.receive_bytes){receive_limits.local_bytes=d.receive_bytes;receive_limits.bytes=std::max(receive_limits.bytes,2*d.receive_bytes);}
     s.attachments=std::make_unique<ApplicationAttachments>(std::vector<Locator>{d.directory.locals[0].local_locator},receive_limits,s.work);
     s.execution=std::make_unique<NativeSendExecution>(*s.native);
     auto reg=s.execution->CreateRuntime(s.config,d.egress_selections,d.send_limits,s.work);if(!reg){STARTUP_CAPTURE("LoopStart_RegistrationRefused_result",UINT64_MAX,-1,-1,1,0);return false;}
@@ -791,7 +799,7 @@ NativeSendRunResult HostProviderLoop::PumpSendImpl(HostSendObservation* observat
         if(live){State::PumpGuard pin{s,false};for(const auto& circuit:renew)if(circuit&&circuit->adapter&&circuit->adapter->CircuitRenewalPending())(void)circuit->adapter->AdvanceCircuitRenewal();}
     }
     if(s.shared){
-        std::array<std::shared_ptr<View>,2> eligible;std::size_t count=0;
+        std::array<std::shared_ptr<View>,kSharedViews> eligible;std::size_t count=0;
         {std::lock_guard<std::mutex> lock(s.gate);
             // The runtime owns the send queue, so driving it is a runtime-level
             // capability. Who may drive it is one rule shared with PumpReceive: a view
@@ -1088,11 +1096,11 @@ HostLoopObservation HostProviderLoop::Observe() const noexcept {
     if(adapter)v.adapter=adapter->Observe();
     if(s.shared){
         EgressRegistration registration;
-        std::array<EgressRegistration,2> all;
+        std::array<EgressRegistration,kSharedViews> all;
         {std::lock_guard<std::mutex> lock(s.gate);v.shared_runtime=true;v.live_views=s.live_views;v.receiver_identity=view_->identity;v.retired_receiver_identity=view_->retired_identity;v.input_open=view_->receiver!=nullptr;v.input_closing=view_->input_closing;v.view_controls=view_->controls;v.view_closing=view_->closing;registration=view_->registration;for(std::size_t i=0;i<s.views.size();++i)if(auto live=s.views[i].lock())all[i]=live->registration;}
         std::array<std::shared_ptr<Circuit>,2> circuits;
         std::shared_ptr<Circuit> selected;
-        std::array<std::shared_ptr<Circuit>,2> owners;
+        std::array<std::shared_ptr<Circuit>,kSharedViews> owners;
         {std::lock_guard<std::mutex> lock(s.gate);circuits=s.circuits;selected=view_->circuit;for(std::size_t i=0;i<s.views.size();++i)if(auto live=s.views[i].lock())owners[i]=live->circuit;}
         if(registration){v.tx=registration.SnapshotUsage();v.send=(selected?selected->execution.get():s.execution.get())->Observe(registration);}
         for(std::size_t i=0;i<all.size();++i)if(all[i])v.runtime_admitted_outstanding+=(owners[i]?owners[i]->execution.get():s.execution.get())->Observe(all[i]).admitted_outstanding;

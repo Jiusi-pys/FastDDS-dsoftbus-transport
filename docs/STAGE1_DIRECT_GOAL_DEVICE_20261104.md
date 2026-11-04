@@ -16,6 +16,7 @@ Status: **DEVICE_TESTED (bounded scope below) / NOT_PRODUCTION_QUALIFIED**.
 | Board B reboot, then a fresh full run | PASS (m33) |
 | Merged into the 2334b68 main line (`claude/stage1-merge-20261104`) | Host stock 66/66, root 131/133 (2 pre-existing); device m35–m38 PASS |
 | Fast DDS feature matrix: 15 cases both directions (see "Fast DDS feature matrix") | PASS 15/15 per side, three consecutive runs (m56–m58) and combined with the QoS matrix (m59); 10 features NOT_APPLICABLE (unimplemented in 2.14, or not built on the board) |
+| Fixes for the feature-matrix findings (see "Fixes for the feature-matrix findings"); matrix now 18 cases | PASS 18/18 per side with the QoS matrix 8/8, three consecutive runs (m83–m85); route outage recovered (m86, m87); plain baseline (m88) |
 | ROS 2 over this build | NOT_RUN |
 | SDK quiet, worker/descendant restoration | UNKNOWN |
 | Host build of `integrations/ros2/stock` (MSVC Release, stock-host-d01 Fast DDS 2.14) | BUILDS |
@@ -340,14 +341,14 @@ Changing the board's Fast DDS build is outside the "do not modify the ROS 2 → 
   - In m43, board B crashed (SIGSEGV) in `DDSSQLFilter::DDSFilterFactory::delete_content_filter`. The receive thread was removing a remote filtered reader while the user thread deleted the local CFT, and the factory's expression pool is not synchronized.
   - The test staggers local CFT create, update and delete between the boards.
   - Applications that change CFTs while remote filtered readers come and go are exposed to this upstream race.
-- **At most two Participants per Runtime.** A Runtime serves at most two concurrent Participants (`HostProviderLoop` views capacity 2). A third Participant on the same Runtime does not join (m52), so the test deletes the second one first. Another domain needs another Runtime.
+- **At most two Participants per Runtime** (fixed later: descriptor `max_participants`, up to 4; see below). A Runtime serves at most two concurrent Participants (`HostProviderLoop` views capacity 2). A third Participant on the same Runtime does not join (m52), so the test deletes the second one first. Another domain needs another Runtime.
 - **Discovery Server needs the initial peer locator.** DS Participants must keep the peer locator in `initialPeersList`. The transport confirms the DDS domain while configuring initial peers. Without it the views stay in Await and never match (m54).
 - **Burst loss with positive ACKs disabled.** Unpaced 20-sample bursts lost the last 4 samples on one side in some runs (m40, m42, m48).
   - The transport queues are bounded: send 32 records / 256 KiB per peer by default, configurable through `send_limits`; receive 32 records / 256 KiB per local, fixed. Like UDP, overflow is dropped.
   - RELIABLE with normal ACKs recovers. With positive ACKs disabled the writer forgets samples after the keep duration, so a lost tail is not repaired.
   - Raising `send_limits` to 512 records / 8 MiB removed the loss in 3/3 runs (m44–m46). At 256 records / 2 MiB it still occurred once (m48), so the send queue is not the only factor.
   - All runtimes on one native table share a process-wide ceiling of 16 MiB / 2048 records. Per-runtime `send_limits` must leave room for the second Participant: with 16 MiB global it did not join (m44–m46).
-- **Not run.** Static EDP, TypeLookup service (remote type discovery), DataWriter loans, and a peer process restart within one live process.
+- **Not run here.** Static EDP, TypeLookup service (remote type discovery), DataWriter loans, and a peer process restart within one live process. Static EDP and loans were added later (see below).
 
 Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m39…m59-20261104/`. Runner builds: `E:/Codex-FastDDS-directgoal-feature-20261104` (final) and `E:/Codex-FastDDS-directgoal-burstdiag-20261104` (diagnostic, unpaced burst and raised `send_limits`).
 
@@ -364,3 +365,37 @@ Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m39…m59-20261104/`. Runner
   - The flow-controller timing bound relies on the link being much faster than the 64 KiB/100 ms limit. 1 MiB is observed in about 35 ms.
   - The no-positive-ACK case checks delivery only.
   - A failing run's teardown is not staggered for CFT.
+
+## Fixes for the feature-matrix findings (m66–m88)
+
+Transport changes (`src/ProviderAdapter.cpp`, `src/HostProviderLoop.cpp`, `src/DSoftBusTransport.cpp`,
+`DSoftBusTransportDescriptor.hpp`). Defaults are unchanged, so every existing contract and host test keeps
+its behaviour; the new capabilities are opt-in descriptor fields.
+
+| Finding | Fix | Evidence |
+| --- | --- | --- |
+| Circuit renewal `Bind` ran on the pump thread and could stall the other circuit for up to 10 s | The redial runs on a renewal worker thread. The attempt stays pinned as an adapter control, so `Close()` waits for it and then joins the thread. A pump never joins a worker that is still cleaning up (`renewal_worker_busy`); the worker wakes the pump when it ends | Host `circuit.route-renewal` and `circuit.renewal-bind-failure` pass (stock 66/66, three repeats). Device route outage (15 s DROP on B): `CircuitRenew_dial_result=0`, `recovered=1`, `pump_failed=0` on both sides (m82, m86, m87) |
+| At most two Participants per Runtime | Descriptor `max_participants` (1..4, default 2), set by the descriptor that starts the runtime | `four_participants_one_runtime`: four Participants on one Runtime, 3/3 samples each way on two extra topics |
+| Discovery Server needed an initial peer, because the domain was confirmed only while configuring initial peers | Descriptor `bind_declared_domain_at_open` (default off): with `expected_domain_id`, a domain-circuit view binds its domain when its first input opens | `discovery_server` now runs with `initial_peers=0` on both the SERVER and the CLIENT |
+| Unpaced bursts were dropped by the bounded queues (no-positive-ACK tail loss) | Descriptor `receive_records` / `receive_bytes` (0 keeps 32 records / 256 KiB). The feature runs use receive 256 records / 2 MiB and send 256 records / 2 MiB per peer and globally, which stays inside the 16 MiB / 2048-record process egress ceiling with 7 registrations | `reliable_disable_positive_acks` now writes 20 samples unpaced: 20/20 in order on both sides in m66 and m76–m85 |
+| Fast DDS 2.14.5 `DDSFilterFactory` race (CFT ops vs remote filtered-reader removal) | Not fixable in this project: it is inside Fast DDS, which the rules keep unmodified. The test keeps staggering local CFT operations | Unchanged |
+
+New feature cases (test code only):
+- `datawriter_loans_plain_type`: `loan_sample()` on a plain bounded type (`plain_sample.hpp`), filled in place and written, 5/5 byte-verified; the reader takes with a `LoanableSequence` and returns the loan. Data sharing is set OFF on both endpoints so the case measures the network path. A plain type must override both `is_plain()` overloads for Fast DDS 2.14 to lend.
+- `static_endpoint_discovery_xml`: a Participant with STATIC EDP from an inline `data://` XML (user and entity IDs on both sides). It matches and delivers 3/3 each way with SPDP only.
+
+Test-harness fix: after a side emits `DATA_DONE`, its pump tolerates send failures. The peer may legally tear down from then on, and its closed socket made the next heartbeat `SendBytes` fail; this failed m77 after every case had passed.
+
+**Runs.** Library SHA256 `842c6c95f1b85ddd27a0241a0daab8ae19b37c417c04b186f26a3aef3e72190b`, runner `465261f8…`.
+- m83, m84, m85: QoS matrix 8/8 and feature matrix 18/18 per side, controller exit 0, status 0.
+- m86, m87: route outage recovered on both sides.
+- m88: plain run (no matrix flags): fragmented sample and hot rebuild pass.
+- Host: stock 66/66 three repeats; root 131/133 with the same two pre-existing failures (`dsoftbus.native_owner_model`, `dsoftbus.process_receive`). `dsoftbus.service_record_binding.callback-destroy-fails-fast` failed once under `-j 8` and passed 5/5 alone; its code is untouched.
+
+**Still open.**
+- TypeLookup service (remote type discovery) and a peer process restart inside one live process are not run.
+- Remaining P3 review items: fault suppression during a renewal attempt covers all adapter faults; a failed circuit reset latches `renewal_failed`; `PeerOnline` reads only the first 32 nodes; renewal does not take `domain_setup`.
+- Test P3s: the flow-controller timing bound assumes a fast link; the no-positive-ACK case checks delivery only.
+- GitNexus `impact` / `detect_changes` cannot run on this worktree (the index covers only the main checkout); recorded gate exception.
+
+Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m66…m88-20261104/`, runner build `E:/Codex-FastDDS-directgoal-fix2-20261105`, install `E:/Codex-FastDDS-transport-arm-fix2-20261105/install`.

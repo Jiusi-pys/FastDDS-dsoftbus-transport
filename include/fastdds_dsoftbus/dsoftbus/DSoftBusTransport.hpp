@@ -145,6 +145,10 @@ private:
     void Diagnose(FacadeDiagnostic) const;
     bool InitFailure(FacadeDiagnostic);
     bool AppendDefaults(LocatorList&, const std::vector<Locator>&) const;
+    // Binds this view to its domain circuit and confirms the domain guard. Used by the
+    // first initial peer and, when the descriptor declares expected_domain_id, by the
+    // first opened input, so a Discovery Server Participant needs no initial peer.
+    bool BindViewDomain(std::uint32_t domain) const;
     const DSoftBusTransportDescriptor frozen_;
     DSoftBusTransportDescriptor report_;
     const std::shared_ptr<ViewDomainGuard> domain_guard_ = frozen_.expected_domain_id ?
