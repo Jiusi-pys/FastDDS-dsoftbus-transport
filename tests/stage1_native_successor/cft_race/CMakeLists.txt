@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.20)
+project(cft_race CXX)
+set(CMAKE_CXX_STANDARD 17)
+find_package(fastcdr REQUIRED)
+find_package(fastrtps REQUIRED)
+add_executable(cft_race cft_race.cpp)
+target_link_libraries(cft_race fastrtps fastcdr)

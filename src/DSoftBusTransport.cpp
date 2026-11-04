@@ -210,7 +210,15 @@ bool DSoftBusTransport::OpenInputChannel(const Locator& local, Receiver* receive
     auto r = ReadyLease(); if (!r) { Diagnose({FacadeError::InvalidState, "open_input"}); return false; }
     auto* slot = r->FindLocal(local);
     if (!slot || !receiver) { Diagnose({FacadeError::InvalidLocator, "open_input"}); return false; }
-    if (capacity < frozen_.maxMessageSize) { Diagnose({FacadeError::InsufficientReceiverCapacity, "open_input"}); return false; }
+    if (capacity < frozen_.maxMessageSize) {
+        // Fast DDS caps a secure Participant's receive buffers at 65535 bytes (uint16), so a
+        // transport maxMessageSize above that leaves such a Participant without any input.
+        // Fast DDS does not report a refused input channel; make the refusal visible.
+        std::fprintf(stderr, "DSoftBus input refused: receiver capacity %u < transport maxMessageSize %u"
+            " (secure Participants need maxMessageSize <= 65535)\n", static_cast<unsigned>(capacity),
+            static_cast<unsigned>(frozen_.maxMessageSize));
+        Diagnose({FacadeError::InsufficientReceiverCapacity, "open_input"}); return false;
+    }
     std::unique_lock<std::mutex> control(slot->control);
     if (!ReadyLease()) { Diagnose({FacadeError::InvalidState, "open_input"}); return false; }
     std::unique_ptr<GuardedReceiver> prepared;

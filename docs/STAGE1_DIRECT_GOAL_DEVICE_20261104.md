@@ -18,6 +18,7 @@ Status: **DEVICE_TESTED (bounded scope below) / NOT_PRODUCTION_QUALIFIED**.
 | Fast DDS feature matrix: 15 cases both directions (see "Fast DDS feature matrix") | PASS 15/15 per side, three consecutive runs (m56–m58) and combined with the QoS matrix (m59); 10 features NOT_APPLICABLE (unimplemented in 2.14, or not built on the board) |
 | Fixes for the feature-matrix findings (see "Fixes for the feature-matrix findings"); matrix now 18 cases | PASS 18/18 per side with the QoS matrix 8/8, three consecutive runs (m83–m85); route outage recovered (m86, m87); plain baseline (m88) |
 | Stage 1 closure: remaining review items fixed; TypeLookup and peer process restart added (see "Stage 1 closure"); matrix now 20 cases | PASS 20/20 per side with the QoS matrix 8/8, three consecutive runs (m99–m101); route outage recovered (m102, m103); plain baseline (m104) |
+| Full-feature Fast DDS 2.14.5 (Security, Statistics) and the content-filter race (see FASTDDS_FULL_BUILD_AND_CFT_RACE_20261105.md) | PASS QoS 8/8 + feature 23/23 per side (m134–m136); race reproduced with UDP/TCP and DSoftBus, workaround verified, Fast DDS patch proposed |
 | ROS 2 over this build | NOT_RUN |
 | SDK quiet, worker/descendant restoration | UNKNOWN |
 | Host build of `integrations/ros2/stock` (MSVC Release, stock-host-d01 Fast DDS 2.14) | BUILDS |
