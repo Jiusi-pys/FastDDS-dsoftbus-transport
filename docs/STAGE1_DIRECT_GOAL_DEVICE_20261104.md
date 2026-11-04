@@ -15,6 +15,7 @@ Status: **DEVICE_TESTED (bounded scope below) / NOT_PRODUCTION_QUALIFIED**.
 | Peer process SIGKILL mid-run, then a fresh run | Clean teardown on the survivor (m31); next run PASS (m32) |
 | Board B reboot, then a fresh full run | PASS (m33) |
 | Merged into the 2334b68 main line (`claude/stage1-merge-20261104`) | Host stock 66/66, root 131/133 (2 pre-existing); device m35–m38 PASS |
+| Fast DDS feature matrix: 15 cases both directions (see "Fast DDS feature matrix") | PASS 15/15 per side, three consecutive runs (m56–m58) and combined with the QoS matrix (m59); 10 features NOT_APPLICABLE (unimplemented in 2.14, or not built on the board) |
 | ROS 2 over this build | NOT_RUN |
 | SDK quiet, worker/descendant restoration | UNKNOWN |
 | Host build of `integrations/ros2/stock` (MSVC Release, stock-host-d01 Fast DDS 2.14) | BUILDS |
@@ -294,3 +295,72 @@ Result: `QOS_MATRIX summary all_pass=1` on both sides in m27, m28, m32, m33, m35
 - **GitNexus.** `detect_changes` cannot run here. The index covers only the main checkout, not worktrees, so this is a recorded gate exception.
 
 Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m27…m38-20261104/`, tester logs `E:/tester_stock_1104`, `E:/tester_root_1104`.
+
+## Fast DDS feature matrix (m39–m59)
+
+The opt-in runner block (marker file `TMPDIR/feature_matrix`, in `tests/stage1_native_successor/consumer_run.cpp`; new type in `large_sample.hpp`) is test code only. The runner is symmetric: both boards run every case and synchronize at a barrier between cases. The board Fast DDS is 2.14.5, with `SECURITY=OFF`, `SQLITE3=ON` and no `FASTDDS_STATISTICS`.
+
+**Final runs.**
+- Runner `0e6cd141…` (after the independent review fixes below) and transport library `2270588f…`.
+- Three consecutive full passes on both boards: m63, m64 and m65. Each had 15/15 cases, controller exit 0 and status 0.
+- m65 also ran the QoS matrix (8/8) in the same process.
+- The pre-review runner passed in the same way in m56–m59.
+
+| Case | Asserted on both boards |
+| --- | --- |
+| Second Participant, same Runtime and domain | It matches its peer and receives 3/3 samples while the main Participant stays live |
+| Discovery user/topic/group data | The peer's `user_data`, `topic_data` and `group_data` all arrive through participant and publisher discovery |
+| ASYNCHRONOUS publish + flow controller (64 KiB / 100 ms) | 6 × 150000-byte samples arrive byte-verified and acknowledged. Write-to-ack takes ≥ 1 s (observed 1.7–3.0 s), so the rate limit took effect |
+| TRANSIENT durability, SQLite persistence | A writer writes 3 samples, is deleted and is recreated with the same persistence GUID, then writes 2 more. A late reader receives 1..5 in order |
+| ContentFilteredTopic (DDS-SQL, DynamicType with TypeObject) | `n > %0 AND n < %1` with 3,8 yields exactly 4,5,6,7. After `set_expression_parameters(10,13)` it yields exactly 11,12 |
+| BEST_EFFORT + KEEP_LAST | 50 samples at 20 ms intervals: at least 45 received, in order, no duplicates (observed 50/50) |
+| Reader KEEP_LAST depth 1 | Of 10 acknowledged samples, the reader keeps exactly 1, the newest |
+| Reader resource limits (`max_samples` 5), KEEP_ALL RELIABLE | Exactly 5 samples are buffered before take, then all 20 arrive in order and are acknowledged (back-pressure; writer heartbeat 100 ms) |
+| Request/reply | 3 requests per side. Each reply carries `related_sample_identity` equal to the matching request's identity |
+| WaitSet + StatusCondition + ReadCondition | The wait wakes on DATA_AVAILABLE or NOT_READ. The sample is NOT_READ / NEW / ALIVE. After `read` the condition clears and the unread count is 0 |
+| RELIABLE with positive ACKs disabled | 20/20 in order. Writes are paced at 10 ms (see limits) |
+| 1 MiB sample | 1048576 bytes, byte-verified and acknowledged |
+| 20 topics at once | All 20 writer/reader pairs match and deliver |
+| Second DDS domain (domain+1) concurrently | Uses a second Runtime with its own pump, because DSoftBus service names encode the domain. 3/3 samples are delivered and acknowledged, and the second Runtime closes cleanly while the main domain continues |
+| Discovery Server | Board A runs a SERVER and board B a CLIENT that knows only the server prefix and locator. The effective role (and the server's GUID prefix) is checked on the created Participant. Both match, and 3/3 samples are delivered each way |
+
+**Reported as not applicable.**
+
+| Feature | Reason |
+| --- | --- |
+| TimeBasedFilter, DestinationOrder, Presentation, LatencyBudget, TransportPriority, DurabilityService | Not implemented in Fast DDS 2.14; `QosPolicies.hpp` marks them "not implemented in this version" |
+| DDS Security | The board Fast DDS is built with `SECURITY=OFF` |
+| Statistics | The board Fast DDS is built without `FASTDDS_STATISTICS` |
+| Data sharing, SHM transport, zero-copy loans, intraprocess | Same-host only, so not a network-transport path |
+
+Changing the board's Fast DDS build is outside the "do not modify the ROS 2 → Fast DDS path" rule.
+
+**Findings and limits from these runs.**
+- **Fast DDS 2.14.5 content-filter crash (not the transport).**
+  - In m43, board B crashed (SIGSEGV) in `DDSSQLFilter::DDSFilterFactory::delete_content_filter`. The receive thread was removing a remote filtered reader while the user thread deleted the local CFT, and the factory's expression pool is not synchronized.
+  - The test staggers local CFT create, update and delete between the boards.
+  - Applications that change CFTs while remote filtered readers come and go are exposed to this upstream race.
+- **At most two Participants per Runtime.** A Runtime serves at most two concurrent Participants (`HostProviderLoop` views capacity 2). A third Participant on the same Runtime does not join (m52), so the test deletes the second one first. Another domain needs another Runtime.
+- **Discovery Server needs the initial peer locator.** DS Participants must keep the peer locator in `initialPeersList`. The transport confirms the DDS domain while configuring initial peers. Without it the views stay in Await and never match (m54).
+- **Burst loss with positive ACKs disabled.** Unpaced 20-sample bursts lost the last 4 samples on one side in some runs (m40, m42, m48).
+  - The transport queues are bounded: send 32 records / 256 KiB per peer by default, configurable through `send_limits`; receive 32 records / 256 KiB per local, fixed. Like UDP, overflow is dropped.
+  - RELIABLE with normal ACKs recovers. With positive ACKs disabled the writer forgets samples after the keep duration, so a lost tail is not repaired.
+  - Raising `send_limits` to 512 records / 8 MiB removed the loss in 3/3 runs (m44–m46). At 256 records / 2 MiB it still occurred once (m48), so the send queue is not the only factor.
+  - All runtimes on one native table share a process-wide ceiling of 16 MiB / 2048 records. Per-runtime `send_limits` must leave room for the second Participant: with 16 MiB global it did not join (m44–m46).
+- **Not run.** Static EDP, TypeLookup service (remote type discovery), DataWriter loans, and a peer process restart within one live process.
+
+Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m39…m59-20261104/`. Runner builds: `E:/Codex-FastDDS-directgoal-feature-20261104` (final) and `E:/Codex-FastDDS-directgoal-burstdiag-20261104` (diagnostic, unpaced burst and raised `send_limits`).
+
+**Independent review of the test code.** The review reported one P0 and several P2/P3 findings.
+- **P0, gate deadlock in case 13: not confirmed by the device runs.** The claim was that the second Runtime's pre-connect gate would block `MakeStockDescriptor`. Case 13 passed in m41, m49–m51 and m55–m65 with `listener_gate=0`, so on the device the gate is not entered before Participant creation.
+- **Fixed:**
+  - Equal barrier counts when the domain+1 Participant is missing.
+  - A failed second-Runtime teardown now leaks the Runtime instead of destroying it while in use.
+  - 100 ms heartbeat in the resource-limits case, with exactly 5 samples required.
+  - The Discovery Server prefix parse and effective role are asserted.
+  - The fixed `main_participant_live` string was replaced by a real check.
+- **The fix pass introduced a defect.** A `//` comment hid the second Runtime's factory assignment and crashed m60–m62 (SIGSEGV in `Second::teardown`). It was corrected before m63–m65.
+- **Open (P3):**
+  - The flow-controller timing bound relies on the link being much faster than the 64 KiB/100 ms limit. 1 MiB is observed in about 35 ms.
+  - The no-positive-ACK case checks delivery only.
+  - A failing run's teardown is not staggered for CFT.

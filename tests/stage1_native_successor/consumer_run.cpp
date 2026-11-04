@@ -2,6 +2,19 @@
 #include "../../examples/dds214_layer_baseline/LayerSample.hpp"
 #include "frag_sample.hpp"
 #include "keyed_sample.hpp"
+#include "large_sample.hpp"
+#include <fastdds/dds/domain/DomainParticipantListener.hpp>
+#include <fastdds/dds/topic/ContentFilteredTopic.hpp>
+#include <fastdds/dds/core/condition/WaitSet.hpp>
+#include <fastdds/dds/subscriber/ReadCondition.hpp>
+#include <fastdds/rtps/flowcontrol/FlowControllerDescriptor.hpp>
+#include <fastdds/rtps/attributes/ServerAttributes.h>
+#include <sstream>
+#include <fastrtps/types/DynamicTypeBuilderFactory.h>
+#include <fastrtps/types/DynamicTypeBuilder.h>
+#include <fastrtps/types/DynamicDataFactory.h>
+#include <fastrtps/types/DynamicData.h>
+#include <fastrtps/types/DynamicPubSubType.h>
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/core/status/DeadlineMissedStatus.hpp>
 #include <fastdds/dds/core/status/LivelinessChangedStatus.hpp>
@@ -103,6 +116,16 @@ struct Session {
         if(ok){descriptor.reset();retained_descriptors.clear();try{if(runtime&&!runtime->Close())ok=false;}catch(...){ok=false;}}
         closed=ok;return ok;
     }
+};
+// Feature matrix: observes peer user/topic/group data during discovery (test code only).
+struct DiscoverySpy final:fd::DomainParticipantListener {
+    NS_RunHandle& h;std::string want_user,want_topic,want_group;std::atomic<bool> user{false},topic{false},group{false};
+    explicit DiscoverySpy(NS_RunHandle& x):h(x){}
+    template<class V> static bool eq(const V& v,const std::string& s){if(v.size()!=s.size())return false;for(std::size_t i=0;i<s.size();++i)if(v[i]!=static_cast<unsigned char>(s[i]))return false;return true;}
+    void on_participant_discovery(fd::DomainParticipant*,eprosima::fastrtps::rtps::ParticipantDiscoveryInfo&& info) override{
+        if(eq(info.info.m_userData.data_vec(),want_user))user=true;h.progress.notify();}
+    void on_publisher_discovery(fd::DomainParticipant*,eprosima::fastrtps::rtps::WriterDiscoveryInfo&& info) override{
+        if(eq(info.info.m_qos.m_topicData.data_vec(),want_topic))topic=true;if(eq(info.info.m_qos.m_groupData.data_vec(),want_group))group=true;h.progress.notify();}
 };
 static ds::DSoftBusTransportDescriptor configuration(const NS_Request& q){
     ds::V1Deployment d;d.identity={q.name_space,q.domain,q.udid};d.slot=q.slot;d.callback_namespace="native.successor.run";
@@ -428,6 +451,338 @@ static void run_session(Session& s,NS_RunResult& out){
         barrier(17);
         std::printf("QOS_MATRIX side=%u test=content_filtered_topic pass=SKIPPED reason=test_types_have_no_type_object\n",me);
         std::printf("QOS_MATRIX side=%u summary all_pass=%d\n",me,int(all));std::fflush(stdout);
+        need(all,NS_STATE);
+    }
+    if([]{const char* d=std::getenv("TMPDIR");if(!d)return false;return access((std::string(d)+"/feature_matrix").c_str(),F_OK)==0;}())
+    {   // Fast DDS feature matrix (opt-in: TMPDIR/feature_matrix). Symmetric across the two boards;
+        // one FEATURE_MATRIX line per case; any failure fails the run. Test code only.
+        namespace ft=eprosima::fastrtps::types;
+        const unsigned me=local.side,peer=1-local.side;bool all=true;std::uint32_t stage=0;
+        auto tname=[&](const std::string& what,unsigned side){return "native_run_"+std::to_string(local.run)+"_"+std::to_string(side)+"_f_"+what;};
+        auto waitp=[&](auto pred,int ms){const auto end=Clock::now()+std::chrono::milliseconds(ms);
+            for(;;){const auto seen=h.progress.snapshot();need(h.live()&&!s.pump_failed,NS_CANCELLED);if(pred())return true;if(Clock::now()>=end)return false;
+                (void)h.progress.wait(seen,std::min(end,Clock::now()+std::chrono::milliseconds(50)));}};
+        auto report=[&](const char* test,bool pass,const std::string& detail){all=all&&pass;
+            std::printf("FEATURE_MATRIX side=%u test=%s pass=%d %s\n",me,test,int(pass),detail.c_str());std::fflush(stdout);};
+        auto topic2=[&](fd::DomainParticipant* p,const std::string& what,const std::string& type,fd::Topic*& tx,fd::Topic*& rx,const fd::TopicQos& tq){
+            tx=p->create_topic(tname(what,me),type,tq);rx=p->create_topic(tname(what,peer),type,tq);need(tx&&rx);};
+        auto matched=[&](fd::DataWriter* w,fd::DataReader* r,int wn,int rn,int ms){return waitp([&]{fd::PublicationMatchedStatus a;fd::SubscriptionMatchedStatus b;
+            need(w->get_publication_matched_status(a)==RC::RETCODE_OK&&r->get_subscription_matched_status(b)==RC::RETCODE_OK);return a.current_count==wn&&b.current_count==rn;},ms);};
+        auto layer=[&](std::uint64_t run,std::uint32_t n){LayerSample v;v.run=run;v.side=me;v.ordinal=n;v.payload=stage1_run::payload(run,me,n);return v;};
+        auto dur=[](int sec){return eprosima::fastrtps::Duration_t(sec,0u);};
+        fd::Topic *sync_tx=nullptr,*sync_rx=nullptr;topic2(s.participant,"sync",s.type.get_type_name(),sync_tx,sync_rx,fd::TOPIC_QOS_DEFAULT);
+        fd::DataWriterQos swq=wq;swq.durability().kind=fd::TRANSIENT_LOCAL_DURABILITY_QOS;swq.history().kind=fd::KEEP_ALL_HISTORY_QOS;
+        fd::DataReaderQos srq=rq;srq.durability().kind=fd::TRANSIENT_LOCAL_DURABILITY_QOS;srq.history().kind=fd::KEEP_ALL_HISTORY_QOS;
+        auto* sw=pub->create_datawriter(sync_tx,swq,&s.signals);auto* sr=sub->create_datareader(sync_rx,srq,&s.signals);need(sw&&sr);
+        std::uint32_t peer_stage=0;
+        auto barrier=[&]{const auto n=++stage;auto v=layer(local.run+20,n);need(sw->write(&v));
+            need(waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(sr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                if(i.valid_data&&x.run==local.run+20&&x.side==peer&&x.ordinal>peer_stage)peer_stage=x.ordinal;}return peer_stage>=n;},20000),NS_CANCELLED);};
+        auto keep_all=[](auto q){q.history().kind=fd::KEEP_ALL_HISTORY_QOS;return q;};
+        // Extra participants are deleted before the session's own teardown, also on failure.
+        DiscoverySpy spy(h);spy.want_user="fdds-dsb-user-"+std::to_string(peer);spy.want_topic="fdds-dsb-topic-"+std::to_string(peer);spy.want_group="fdds-dsb-group-"+std::to_string(peer);
+        struct Extra{fd::DomainParticipantFactory* f;std::vector<fd::DomainParticipant*> ps;
+            ~Extra(){for(auto it=ps.rbegin();it!=ps.rend();++it){if(!*it)continue;try{if((*it)->delete_contained_entities()==RC::RETCODE_OK)(void)f->delete_participant(*it);}catch(...){}}}} extra{s.factory,{}};
+        auto octets=[](const std::string& t){return std::vector<eprosima::fastrtps::rtps::octet>(t.begin(),t.end());};
+        barrier();
+        {   // 1. Second Participant in the same process and domain, with user/topic/group data,
+            //    a flow controller and SQLite persistence configured on it.
+            fd::DomainParticipantQos q2=qos;q2.name((std::string(qos.name().c_str())+"_p2").c_str());
+            auto d2=s.runtime->MakeStockDescriptor(config);need(bool(d2));s.retained_descriptors.push_back(d2);q2.transport().user_transports={d2};
+            q2.user_data().data_vec(octets("fdds-dsb-user-"+std::to_string(me)));
+            auto fc=std::make_shared<eprosima::fastdds::rtps::FlowControllerDescriptor>();fc->name="fdds_dsb_fc";fc->max_bytes_per_period=65536;fc->period_ms=100;q2.flow_controllers().push_back(fc);
+            const std::string db=std::string(std::getenv("TMPDIR"))+"/persist_"+std::to_string(me)+".db";(void)unlink(db.c_str());
+            q2.properties().properties().emplace_back("dds.persistence.plugin","builtin.SQLITE3");q2.properties().properties().emplace_back("dds.persistence.sqlite3.filename",db);
+            auto* p2=s.factory->create_participant(q.domain,q2,&spy,fd::StatusMask::none());extra.ps.push_back(p2);need(p2,NS_STATE);
+            need(s.type.register_type(p2)==RC::RETCODE_OK);
+            fd::TopicQos tq=fd::TOPIC_QOS_DEFAULT;tq.topic_data().data_vec(octets("fdds-dsb-topic-"+std::to_string(me)));
+            fd::PublisherQos pq=fd::PUBLISHER_QOS_DEFAULT;pq.group_data().data_vec(octets("fdds-dsb-group-"+std::to_string(me)));
+            auto* pub2=p2->create_publisher(pq);auto* sub2=p2->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pub2&&sub2);
+            fd::Topic *tx,*rx;tx=p2->create_topic(tname("p2",me),s.type.get_type_name(),tq);rx=p2->create_topic(tname("p2",peer),s.type.get_type_name(),fd::TOPIC_QOS_DEFAULT);need(tx&&rx);
+            auto* w2=pub2->create_datawriter(tx,keep_all(wq),&s.signals);auto* r2=sub2->create_datareader(rx,keep_all(rq),&s.signals);need(w2&&r2);
+            const bool m=matched(w2,r2,1,1,15000);barrier();
+            for(std::uint32_t n=1;n<=3;++n){auto v=layer(local.run+21,n);need(w2->write(&v));}
+            std::uint32_t next=1;const bool got=m&&waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(r2->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                if(i.valid_data&&x.run==local.run+21&&x.side==peer&&x.ordinal==next&&x.payload==stage1_run::payload(x.run,peer,x.ordinal))++next;}return next==4;},8000);
+            report("second_participant_same_domain",got,"matched="+std::to_string(m)+" received="+std::to_string(next-1)+" main_participant_live="+std::to_string(s.participant!=nullptr));
+            const bool disc=waitp([&]{return spy.user.load()&&spy.topic.load()&&spy.group.load();},5000);
+            report("discovery_user_topic_group_data",disc,"user_data="+std::to_string(spy.user.load())+" topic_data="+std::to_string(spy.topic.load())+" group_data="+std::to_string(spy.group.load()));
+            barrier();
+            {   // 2. ASYNCHRONOUS publish mode through a 64 KiB / 100 ms flow controller: 6 x 150000-byte samples.
+                fd::TypeSupport ft2{new stage1_frag::Type};need(ft2.register_type(p2)==RC::RETCODE_OK);
+                fd::Topic *atx,*arx;topic2(p2,"async",ft2.get_type_name(),atx,arx,fd::TOPIC_QOS_DEFAULT);
+                fd::DataWriterQos aw=keep_all(wq);aw.publish_mode().kind=fd::ASYNCHRONOUS_PUBLISH_MODE;aw.publish_mode().flow_controller_name="fdds_dsb_fc";
+                auto* fw=pub2->create_datawriter(atx,aw,&s.signals);auto* fr=sub2->create_datareader(arx,keep_all(rq),&s.signals);need(fw&&fr);
+                const bool am=matched(fw,fr,1,1,15000);barrier();
+                const auto t0=Clock::now();for(std::uint32_t n=1;n<=6;++n){auto v=stage1_frag::make(local.run+40+n,me);need(fw->write(&v));}
+                const bool acked=fw->wait_for_acknowledgments(dur(25))==RC::RETCODE_OK;
+                const auto ack_ms=std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-t0).count();
+                std::uint32_t nextf=1;const bool fok=am&&waitp([&]{for(;;){stage1_frag::Sample v;fd::SampleInfo i;if(fr->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;
+                    if(i.valid_data&&stage1_frag::valid(v,local.run+40+nextf,peer))++nextf;}return nextf==7;},25000);
+                // 6 x 150000 bytes at 65536 bytes / 100 ms needs at least ~1.3 s.
+                report("async_publish_flow_controller",fok&&acked&&ack_ms>=1000,"received_verified="+std::to_string(nextf-1)+" acked="+std::to_string(acked)+" write_to_ack_ms="+std::to_string(ack_ms)+" limit=65536B/100ms");
+            }
+            barrier();
+            {   // 3. TRANSIENT durability with the SQLite persistence plugin: history survives writer recreation.
+                fd::Topic *ptx,*prx;topic2(p2,"persist",s.type.get_type_name(),ptx,prx,fd::TOPIC_QOS_DEFAULT);
+                fd::DataWriterQos pw=keep_all(wq);pw.durability().kind=fd::TRANSIENT_DURABILITY_QOS;
+                pw.properties().properties().emplace_back("dds.persistence.guid","fd.d5.b0.77.72.69.74.65.72.00.00.0"+std::to_string(me+1)+"|0.0.1.3");
+                auto* w1=pub2->create_datawriter(ptx,pw,&s.signals);need(w1);
+                for(std::uint32_t n=1;n<=3;++n){auto v=layer(local.run+22,n);need(w1->write(&v));}
+                need(pub2->delete_datawriter(w1)==RC::RETCODE_OK);
+                auto* w2b=pub2->create_datawriter(ptx,pw,&s.signals);need(w2b);
+                for(std::uint32_t n=4;n<=5;++n){auto v=layer(local.run+22,n);need(w2b->write(&v));}
+                barrier();
+                fd::DataReaderQos pr=keep_all(rq);pr.durability().kind=fd::TRANSIENT_LOCAL_DURABILITY_QOS;
+                auto* rr=sub2->create_datareader(prx,pr,&s.signals);need(rr);
+                std::uint32_t nextp=1;bool order=true;
+                const bool pok=waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(rr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data)continue;
+                    if(x.run!=local.run+22||x.side!=peer||x.ordinal!=nextp)order=false;else ++nextp;}return nextp==6||!order;},10000)&&order&&nextp==6;
+                report("transient_durability_sqlite_persistence",pok,"received="+std::to_string(nextp-1)+" in_order="+std::to_string(order)+" writer_recreated=1");
+                (void)w2b->wait_for_acknowledgments(dur(3));
+            }
+            barrier();
+            // A Runtime serves at most two concurrent Participants; release the second one now.
+            need(p2->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p2)==RC::RETCODE_OK);extra.ps.back()=nullptr;
+        }
+        barrier();
+        {   // 4. ContentFilteredTopic (DDS-SQL filter with parameters) on a DynamicType that carries a TypeObject.
+            auto* f=ft::DynamicTypeBuilderFactory::get_instance();auto* sb=f->create_struct_builder();need(sb);
+            need(sb->add_member(0,"side",f->create_uint32_type())==RC::RETCODE_OK&&sb->add_member(1,"n",f->create_uint32_type())==RC::RETCODE_OK);
+            need(sb->set_name("FastDDSDSoftBusCft214")==RC::RETCODE_OK);ft::DynamicType_ptr dt=sb->build();need(bool(dt));
+            fd::TypeSupport ct(new ft::DynamicPubSubType(dt));need(ct.register_type(s.participant)==RC::RETCODE_OK);
+            fd::Topic *tx,*rx;topic2(s.participant,"cft",ct.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            auto* cw=pub->create_datawriter(tx,keep_all(wq),&s.signals);need(cw);barrier();
+            // Fast DDS 2.14.5's DDS-SQL filter factory pools expressions without a lock, and remote
+            // reader filters are created/updated/deleted on the receive thread. Local filter changes
+            // are therefore staggered between the boards so the two never overlap in one process.
+            auto staged=[&](auto fn){for(unsigned turn=0;turn<2;++turn){if(turn==me)fn();std::this_thread::sleep_for(std::chrono::milliseconds(1000));barrier();}};
+            fd::ContentFilteredTopic* cft=nullptr;fd::DataReader* cr=nullptr;
+            staged([&]{cft=s.participant->create_contentfilteredtopic(tname("cft_view",peer),rx,"n > %0 AND n < %1",{"3","8"});need(cft,NS_STATE);
+                cr=sub->create_datareader(cft,keep_all(rq),&s.signals);need(cr);});
+            struct DD{ft::DynamicData* d;~DD(){if(d)ft::DynamicDataFactory::get_instance()->delete_data(d);}};
+            DD wd{ft::DynamicDataFactory::get_instance()->create_data(dt)},rd{ft::DynamicDataFactory::get_instance()->create_data(dt)};need(wd.d&&rd.d);
+            const auto side_id=wd.d->get_member_id_by_name("side"),n_id=wd.d->get_member_id_by_name("n");
+            auto send=[&](std::uint32_t a,std::uint32_t b){for(std::uint32_t n=a;n<=b;++n){need(wd.d->set_uint32_value(me,side_id)==RC::RETCODE_OK&&wd.d->set_uint32_value(n,n_id)==RC::RETCODE_OK);need(cw->write(wd.d));}};
+            std::vector<std::uint32_t> got;bool foreign=false;
+            auto drain=[&]{for(;;){fd::SampleInfo i;if(cr->take_next_sample(rd.d,&i)!=RC::RETCODE_OK)break;if(!i.valid_data)continue;std::uint32_t sd=0,n=0;
+                need(rd.d->get_uint32_value(sd,side_id)==RC::RETCODE_OK&&rd.d->get_uint32_value(n,n_id)==RC::RETCODE_OK);if(sd!=peer)foreign=true;else got.push_back(n);}};
+            const bool m=matched(cw,cr,1,1,10000);barrier();send(1,10);
+            (void)waitp([&]{drain();return got.size()>=4;},5000);(void)cw->wait_for_acknowledgments(dur(3));barrier();drain();
+            const auto first=got;got.clear();
+            staged([&]{need(cft->set_expression_parameters({"10","13"})==RC::RETCODE_OK);});
+            send(11,15);(void)waitp([&]{drain();return got.size()>=2;},5000);(void)cw->wait_for_acknowledgments(dur(3));barrier();drain();
+            const bool ok=m&&!foreign&&first==std::vector<std::uint32_t>{4,5,6,7}&&got==std::vector<std::uint32_t>{11,12};
+            auto list=[](const std::vector<std::uint32_t>& v){std::string r;for(auto x:v)r+=(r.empty()?"":",")+std::to_string(x);return r.empty()?std::string("-"):r;};
+            report("content_filtered_topic_sql",ok,"filter='n > %0 AND n < %1' params=3,8 got="+list(first)+" params=10,13 got="+list(got)+" type_object=dynamic");
+            staged([&]{need(sub->delete_datareader(cr)==RC::RETCODE_OK&&s.participant->delete_contentfilteredtopic(cft)==RC::RETCODE_OK);});
+        }
+        barrier();
+        {   // 5. BEST_EFFORT + KEEP_LAST: 50 samples at 20 ms; in order, no duplicates.
+            fd::Topic *tx,*rx;topic2(s.participant,"besteffort",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            fd::DataWriterQos w=wq;w.reliability().kind=fd::BEST_EFFORT_RELIABILITY_QOS;w.history().depth=64;
+            fd::DataReaderQos r=rq;r.reliability().kind=fd::BEST_EFFORT_RELIABILITY_QOS;r.history().depth=64;
+            auto* bw=pub->create_datawriter(tx,w,&s.signals);auto* br=sub->create_datareader(rx,r,&s.signals);need(bw&&br);
+            const bool m=matched(bw,br,1,1,10000);barrier();
+            std::uint32_t last=0,received=0;bool order=true;
+            auto drain=[&]{for(;;){LayerSample x;fd::SampleInfo i;if(br->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data||x.run!=local.run+23||x.side!=peer)continue;
+                if(x.ordinal<=last)order=false;last=x.ordinal;++received;}};
+            for(std::uint32_t n=1;n<=50;++n){auto v=layer(local.run+23,n);need(bw->write(&v));drain();std::this_thread::sleep_for(std::chrono::milliseconds(20));}
+            (void)waitp([&]{drain();return last==50;},3000);
+            report("best_effort_keep_last",m&&order&&received>=45,"received="+std::to_string(received)+"/50 in_order_no_dup="+std::to_string(order));
+        }
+        barrier();
+        {   // 6. Reader KEEP_LAST depth 1: of 10 acknowledged samples only the newest is kept.
+            fd::Topic *tx,*rx;topic2(s.participant,"depth1",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            fd::DataWriterQos w=wq;w.history().depth=16;fd::DataReaderQos r=rq;r.history().depth=1;
+            auto* dw=pub->create_datawriter(tx,w,&s.signals);auto* dr=sub->create_datareader(rx,r,&s.signals);need(dw&&dr);
+            const bool m=matched(dw,dr,1,1,10000);barrier();
+            for(std::uint32_t n=1;n<=10;++n){auto v=layer(local.run+24,n);need(dw->write(&v));}
+            const bool acked=dw->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK;barrier();
+            unsigned count=0;std::uint32_t lastn=0;for(;;){LayerSample x;fd::SampleInfo i;if(dr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(i.valid_data&&x.run==local.run+24&&x.side==peer){++count;lastn=x.ordinal;}}
+            report("keep_last_depth1_reader",m&&acked&&count==1&&lastn==10,"kept="+std::to_string(count)+" newest="+std::to_string(lastn)+" acked="+std::to_string(acked));
+        }
+        barrier();
+        {   // 7. Reader resource limits (max_samples 5) with KEEP_ALL RELIABLE: back-pressure, then all 20 in order.
+            fd::Topic *tx,*rx;topic2(s.participant,"limits",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            fd::DataReaderQos r=keep_all(rq);r.resource_limits().max_samples=5;r.resource_limits().max_instances=1;r.resource_limits().max_samples_per_instance=5;r.resource_limits().allocated_samples=5;
+            fd::DataWriterQos lwq=keep_all(wq);lwq.reliable_writer_qos().times.heartbeatPeriod=eprosima::fastrtps::Duration_t(0,100000000);
+            auto* lw=pub->create_datawriter(tx,lwq,&s.signals);auto* lr=sub->create_datareader(rx,r,&s.signals);need(lw&&lr);
+            const bool m=matched(lw,lr,1,1,10000);barrier();
+            for(std::uint32_t n=1;n<=20;++n){auto v=layer(local.run+25,n);need(lw->write(&v));}
+            std::this_thread::sleep_for(std::chrono::milliseconds(800));const auto peak=lr->get_unread_count();
+            std::uint32_t next=1;bool order=true;
+            const bool got=waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(lr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data)continue;
+                if(x.run!=local.run+25||x.side!=peer||x.ordinal!=next)order=false;else ++next;}return next==21||!order;},10000);
+            const bool acked=lw->wait_for_acknowledgments(dur(15))==RC::RETCODE_OK;
+            report("reader_resource_limits_backpressure",m&&got&&order&&peak==5&&acked,"buffered_before_take="+std::to_string(peak)+" max_samples=5 received="+std::to_string(next-1)+" in_order="+std::to_string(order)+" acked="+std::to_string(acked));
+        }
+        barrier();
+        {   // 8. Request/reply correlation through related_sample_identity.
+            fd::Topic *qtx,*qrx,*ptx,*prx;topic2(s.participant,"request",s.type.get_type_name(),qtx,qrx,fd::TOPIC_QOS_DEFAULT);topic2(s.participant,"reply",s.type.get_type_name(),ptx,prx,fd::TOPIC_QOS_DEFAULT);
+            auto* qw=pub->create_datawriter(qtx,keep_all(wq),&s.signals);auto* qr=sub->create_datareader(qrx,keep_all(rq),&s.signals);
+            auto* pw=pub->create_datawriter(ptx,keep_all(wq),&s.signals);auto* pr=sub->create_datareader(prx,keep_all(rq),&s.signals);need(qw&&qr&&pw&&pr);
+            const bool m=matched(qw,qr,1,1,10000)&&matched(pw,pr,1,1,10000);barrier();
+            std::array<eprosima::fastrtps::rtps::SampleIdentity,3> ids{};
+            for(std::uint32_t n=1;n<=3;++n){auto v=layer(local.run+26,n);eprosima::fastrtps::rtps::WriteParams p;need(qw->write(&v,p));ids[n-1]=p.sample_identity();}
+            unsigned served=0,correlated=0,wrong=0;
+            const bool ok=m&&waitp([&]{
+                for(;;){LayerSample x;fd::SampleInfo i;if(qr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data||x.run!=local.run+26||x.side!=peer)continue;
+                    auto v=layer(local.run+27,x.ordinal+100);eprosima::fastrtps::rtps::WriteParams p;p.related_sample_identity(i.sample_identity);need(pw->write(&v,p));++served;}
+                for(;;){LayerSample x;fd::SampleInfo i;if(pr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data||x.run!=local.run+27||x.side!=peer)continue;
+                    if(x.ordinal>=101&&x.ordinal<=103&&i.related_sample_identity==ids[x.ordinal-101])++correlated;else ++wrong;}
+                return served==3&&correlated==3;},10000);
+            (void)pw->wait_for_acknowledgments(dur(3));
+            report("request_reply_related_sample_identity",ok&&wrong==0,"served="+std::to_string(served)+" correlated_replies="+std::to_string(correlated)+" mismatched="+std::to_string(wrong));
+        }
+        barrier();
+        {   // 9. WaitSet with a StatusCondition (DATA_AVAILABLE) and a ReadCondition (NOT_READ); read() then sample states.
+            fd::Topic *tx,*rx;topic2(s.participant,"waitset",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            auto* ww=pub->create_datawriter(tx,wq,nullptr);auto* wr=sub->create_datareader(rx,rq,nullptr);need(ww&&wr);
+            fd::StatusCondition& sc=wr->get_statuscondition();need(sc.set_enabled_statuses(fd::StatusMask::data_available())==RC::RETCODE_OK);
+            fd::ReadCondition* rc=wr->create_readcondition(fd::NOT_READ_SAMPLE_STATE,fd::ANY_VIEW_STATE,fd::ANY_INSTANCE_STATE);need(rc);
+            fd::WaitSet ws;need(ws.attach_condition(sc)==RC::RETCODE_OK&&ws.attach_condition(*rc)==RC::RETCODE_OK);
+            const bool m=matched(ww,wr,1,1,10000);barrier();
+            {auto v=layer(local.run+28,1);need(ww->write(&v));}
+            fd::ConditionSeq active;const bool woke=ws.wait(active,dur(5))==RC::RETCODE_OK&&!active.empty();
+            bool rc_seen=false;for(auto* c:active)if(c==rc)rc_seen=true;
+            if(!rc_seen)rc_seen=waitp([&]{return rc->get_trigger_value();},2000);
+            LayerSample x;fd::SampleInfo i;const bool read=wr->read_next_sample(&x,&i)==RC::RETCODE_OK&&i.valid_data&&x.run==local.run+28&&x.side==peer;
+            const bool states=read&&i.sample_state==fd::NOT_READ_SAMPLE_STATE&&i.view_state==fd::NEW_VIEW_STATE&&i.instance_state==fd::ALIVE_INSTANCE_STATE;
+            const bool cleared=!rc->get_trigger_value()&&wr->get_unread_count()==0;
+            need(ws.detach_condition(*rc)==RC::RETCODE_OK&&ws.detach_condition(sc)==RC::RETCODE_OK&&wr->delete_readcondition(rc)==RC::RETCODE_OK);
+            (void)ww->wait_for_acknowledgments(dur(3));
+            report("waitset_status_and_read_condition",m&&woke&&rc_seen&&states&&cleared,"woke="+std::to_string(woke)+" read_condition="+std::to_string(rc_seen)+" states_not_read_new_alive="+std::to_string(states)+" cleared_after_read="+std::to_string(cleared));
+        }
+        barrier();
+        {   // 10. RELIABLE with positive ACKs disabled.
+            fd::Topic *tx,*rx;topic2(s.participant,"noacks",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            fd::DataWriterQos w=keep_all(wq);w.reliable_writer_qos().disable_positive_acks.enabled=true;w.reliable_writer_qos().disable_positive_acks.duration=dur(1);
+            fd::DataReaderQos r=keep_all(rq);r.reliable_reader_qos().disable_positive_ACKs.enabled=true;
+            auto* nw=pub->create_datawriter(tx,w,&s.signals);auto* nr=sub->create_datareader(rx,r,&s.signals);need(nw&&nr);
+            const bool m=matched(nw,nr,1,1,10000);barrier();
+            for(std::uint32_t n=1;n<=20;++n){auto v=layer(local.run+29,n);need(nw->write(&v));std::this_thread::sleep_for(std::chrono::milliseconds(10));}
+            std::uint32_t next=1;bool order=true;
+            const bool got=waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(nr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data)continue;
+                if(x.run!=local.run+29||x.side!=peer||x.ordinal!=next)order=false;else ++next;}return next==21||!order;},8000);
+            report("reliable_disable_positive_acks",m&&got&&order,"received="+std::to_string(next-1)+" in_order="+std::to_string(order));
+            barrier();
+        }
+        barrier();
+        {   // 11. 1 MiB sample (~17 transport messages of <= 64 KiB) per direction, byte-verified and acknowledged.
+            fd::TypeSupport lt{new stage1_large::Type};need(lt.register_type(s.participant)==RC::RETCODE_OK);
+            fd::Topic *tx,*rx;topic2(s.participant,"large",lt.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            fd::DataWriterQos w=wq;w.history().depth=1;fd::DataReaderQos r=rq;r.history().depth=1;
+            auto* lw=pub->create_datawriter(tx,w,&s.signals);auto* lr=sub->create_datareader(rx,r,&s.signals);need(lw&&lr);
+            const bool m=matched(lw,lr,1,1,10000);barrier();
+            const auto t0=Clock::now();{auto v=stage1_large::make(local.run+30,me);need(lw->write(&v));}
+            bool got=false;const bool rx_ok=m&&waitp([&]{for(;;){stage1_large::Sample v;fd::SampleInfo i;if(lr->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;
+                if(i.valid_data&&stage1_large::valid(v,local.run+30,peer))got=true;}return got;},25000);
+            const bool acked=lw->wait_for_acknowledgments(dur(25))==RC::RETCODE_OK;
+            const auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-t0).count();
+            report("large_sample_1MiB",rx_ok&&acked,"bytes="+std::to_string(stage1_large::kBytes)+" verified="+std::to_string(got)+" acked="+std::to_string(acked)+" ms="+std::to_string(ms));
+        }
+        barrier();
+        {   // 12. Discovery and delivery across 20 topics at once.
+            constexpr unsigned K=20;std::array<fd::DataWriter*,K> mw{};std::array<fd::DataReader*,K> mr{};
+            for(unsigned k=0;k<K;++k){fd::Topic *tx,*rx;topic2(s.participant,"many"+std::to_string(k),s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+                mw[k]=pub->create_datawriter(tx,wq,&s.signals);mr[k]=sub->create_datareader(rx,rq,&s.signals);need(mw[k]&&mr[k]);}
+            const bool m=waitp([&]{for(unsigned k=0;k<K;++k){fd::PublicationMatchedStatus a;fd::SubscriptionMatchedStatus b;
+                need(mw[k]->get_publication_matched_status(a)==RC::RETCODE_OK&&mr[k]->get_subscription_matched_status(b)==RC::RETCODE_OK);if(a.current_count!=1||b.current_count!=1)return false;}return true;},20000);
+            barrier();
+            for(unsigned k=0;k<K;++k){auto v=layer(local.run+31,k+1);need(mw[k]->write(&v));}
+            std::array<bool,K> got{};unsigned total=0;
+            (void)waitp([&]{for(unsigned k=0;k<K;++k){for(;;){LayerSample x;fd::SampleInfo i;if(mr[k]->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                if(i.valid_data&&x.run==local.run+31&&x.side==peer&&x.ordinal==k+1&&!got[k]){got[k]=true;++total;}}}return total==K;},10000);
+            report("twenty_topics_discovery_and_delivery",m&&total==K,"matched_all="+std::to_string(m)+" delivered="+std::to_string(total)+"/20");
+        }
+        barrier();
+        {   // 13. A second DDS domain (domain+1) concurrently with the main domain in the same process.
+            //     DSoftBus service names encode the domain, so each domain uses its own Runtime.
+            NS_Request q1=q;q1.domain=q.domain+1;auto config1=configuration(q1);
+            struct Second{fd::DomainParticipantFactory* f=nullptr;std::unique_ptr<ds::experimental::Runtime> rt;std::thread pump;std::atomic<bool> failed{false},go{false},gated{false};
+                fd::DomainParticipant* p=nullptr;std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface> desc;bool closed=false,torn=false;
+                bool teardown(){if(torn)return closed;torn=true;bool ok=true;
+                    if(p){try{if(p->delete_contained_entities()!=RC::RETCODE_OK||f->delete_participant(p)!=RC::RETCODE_OK)ok=false;else p=nullptr;}catch(...){ok=false;}}
+                    go=true;if(rt)rt->RequestPumpStop();if(pump.joinable())pump.join();
+                    if(ok&&rt){desc.reset();try{ok=rt->Close();}catch(...){ok=false;}}closed=ok;return ok;}
+                // On a failed teardown the Runtime is leaked, never destroyed while still in use.
+                ~Second(){if(!teardown()&&rt)(void)rt.release();}} d1;d1.f=s.factory;
+            d1.rt=std::make_unique<ds::experimental::Runtime>(backend(config1,q1),ds::experimental::RuntimeLifetime::PersistentNativeAnchor);
+            // Dial only after the peer's second runtime exists (barrier below).
+            need(d1.rt->SetPreConnectGate([&d1,&h]{d1.gated=true;const auto end=Clock::now()+std::chrono::seconds(30);
+                while(!d1.go.load()){if(Clock::now()>=end||!h.live())return false;std::this_thread::sleep_for(std::chrono::milliseconds(20));}return true;}));
+            d1.desc=d1.rt->MakeStockDescriptor(config1);need(bool(d1.desc));
+            d1.pump=std::thread([&d1]{try{for(;;){auto g=d1.rt->WorkGeneration();
+                for(;;){auto r=d1.rt->PumpSend();if(r.outcome==ds::NativeSendOutcome::ReturnedInvalidCode||r.outcome==ds::NativeSendOutcome::ReturnedByException||(r.actual_return_code&&*r.actual_return_code!=0))d1.failed=true;
+                    if(r.status!=ds::NativeStatus::None)break;}
+                ds::phase0::BackendStatus rx;do{rx=d1.rt->PumpReceive();}while(rx==ds::phase0::BackendStatus::None);
+                if(rx!=ds::phase0::BackendStatus::NoWork&&rx!=ds::phase0::BackendStatus::InvalidState)d1.failed=true;
+                auto w=d1.rt->WaitForWork(g);if(w!=ds::WorkWaitResult::Work&&w!=ds::WorkWaitResult::Deadline){if(w!=ds::WorkWaitResult::StopRequested&&w!=ds::WorkWaitResult::Closed)d1.failed=true;return;}}}catch(...){d1.failed=true;}});
+            fd::DomainParticipantQos q3=qos;q3.name((std::string(qos.name().c_str())+"_d1").c_str());
+            q3.transport().user_transports={d1.desc};q3.transport().max_msg_size_no_frag=config1.maxMessageSize;
+            q3.wire_protocol().builtin.metatrafficUnicastLocatorList.clear();q3.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(config1.default_user_unicast.at(0));
+            q3.wire_protocol().builtin.initialPeersList.clear();q3.wire_protocol().builtin.initialPeersList.push_back(config1.directory.routes.at(0).key.remote_locator);
+            q3.wire_protocol().default_unicast_locator_list.clear();q3.wire_protocol().default_unicast_locator_list.push_back(config1.default_user_unicast.at(0));
+            // Both second runtimes have published their listener (gate entered) before either dials.
+            const bool gated=waitp([&]{return d1.gated.load();},10000);barrier();d1.go=true;
+            d1.p=s.factory->create_participant(q1.domain,q3);
+            bool ok=false;std::string detail="listener_gate="+std::to_string(gated)+" participant_created="+std::to_string(d1.p!=nullptr)+" domain="+std::to_string(q1.domain);
+            barrier();
+            if(d1.p){need(s.type.register_type(d1.p)==RC::RETCODE_OK);auto* pub3=d1.p->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub3=d1.p->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pub3&&sub3);
+                fd::Topic *tx,*rx;topic2(d1.p,"domain1",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+                auto* w3=pub3->create_datawriter(tx,keep_all(wq),&s.signals);auto* r3=sub3->create_datareader(rx,keep_all(rq),&s.signals);need(w3&&r3);
+                const bool m=matched(w3,r3,1,1,20000);barrier();
+                for(std::uint32_t n=1;n<=3;++n){auto v=layer(local.run+32,n);need(w3->write(&v));}
+                std::uint32_t next=1;const bool got=m&&waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(r3->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                    if(i.valid_data&&x.run==local.run+32&&x.side==peer&&x.ordinal==next)++next;}return next==4;},8000);
+                const bool acked=w3->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK;barrier();
+                const bool clean=d1.teardown();
+                ok=got&&acked&&clean&&!d1.failed.load();detail+=" matched="+std::to_string(m)+" received="+std::to_string(next-1)+" acked="+std::to_string(acked)+" second_runtime_closed="+std::to_string(clean)+" pump_failed="+std::to_string(d1.failed.load());
+            }else{barrier();barrier();}
+            report("second_domain_concurrent",ok,detail);
+        }
+        barrier();
+        {   // 14. Discovery Server: side A runs a SERVER Participant, side B a CLIENT that only knows the
+            //     server's GUID prefix and DSoftBus locator; then DDS data in both directions.
+            namespace rt=eprosima::fastrtps::rtps;static constexpr char server_prefix[]="44.53.01.5f.46.44.44.53.44.53.42.31";
+            fd::DomainParticipantQos q4=qos;q4.name((std::string(qos.name().c_str())+"_ds").c_str());
+            auto d4=s.runtime->MakeStockDescriptor(config);need(bool(d4));s.retained_descriptors.push_back(d4);q4.transport().user_transports={d4};
+            // The initial peer locator stays: the transport confirms the DDS domain while configuring it.
+            auto& dc=q4.wire_protocol().builtin.discovery_config;
+            if(me==0){dc.discoveryProtocol=rt::DiscoveryProtocol_t::SERVER;std::istringstream in(server_prefix);in>>q4.wire_protocol().prefix;need(!in.fail()&&q4.wire_protocol().prefix!=rt::GuidPrefix_t::unknown());}
+            else{dc.discoveryProtocol=rt::DiscoveryProtocol_t::CLIENT;rt::RemoteServerAttributes srv;need(srv.ReadguidPrefix(server_prefix));
+                srv.metatrafficUnicastLocatorList.push_back(config.directory.routes.at(0).key.remote_locator);dc.m_DiscoveryServers.push_back(srv);}
+            barrier(); // the server exists before the client starts pinging it
+            if(me==0){auto* p4=s.factory->create_participant(q.domain,q4);extra.ps.push_back(p4);need(p4,NS_STATE);}
+            barrier();
+            if(me==1){auto* p4=s.factory->create_participant(q.domain,q4);extra.ps.push_back(p4);need(p4,NS_STATE);}
+            auto* p4=extra.ps.back();need(s.type.register_type(p4)==RC::RETCODE_OK);
+            const auto eff=p4->get_qos().wire_protocol().builtin.discovery_config.discoveryProtocol;
+            const bool role_ok=me==0?(eff==rt::DiscoveryProtocol_t::SERVER&&p4->guid().guidPrefix==q4.wire_protocol().prefix):eff==rt::DiscoveryProtocol_t::CLIENT;
+            auto* pub4=p4->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub4=p4->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pub4&&sub4);
+            fd::Topic *tx,*rx;topic2(p4,"ds",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            auto* w4=pub4->create_datawriter(tx,keep_all(wq),&s.signals);auto* r4=sub4->create_datareader(rx,keep_all(rq),&s.signals);need(w4&&r4);
+            const bool m=matched(w4,r4,1,1,20000);barrier();
+            for(std::uint32_t n=1;n<=3;++n){auto v=layer(local.run+34,n);need(w4->write(&v));}
+            std::uint32_t next=1;const bool got=m&&waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(r4->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                if(i.valid_data&&x.run==local.run+34&&x.side==peer&&x.ordinal==next)++next;}return next==4;},8000);
+            const bool acked=w4->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK;
+            report("discovery_server",got&&acked&&role_ok,std::string("role=")+(me==0?"SERVER":"CLIENT")+" effective_role="+std::to_string(role_ok)+" matched="+std::to_string(m)+" received="+std::to_string(next-1)+" acked="+std::to_string(acked));
+            barrier();
+            // Delete the client before the server so the client never outlives its server's announcements.
+            if(me==1){need(p4->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p4)==RC::RETCODE_OK);extra.ps.back()=nullptr;}
+            barrier();
+        }
+        barrier();
+        // Features outside this transport's scope or not available in the board's Fast DDS 2.14.5 build.
+        for(const char* t:{"time_based_filter","destination_order","presentation","latency_budget","transport_priority","durability_service"})
+            std::printf("FEATURE_MATRIX side=%u test=%s pass=NOT_APPLICABLE reason=not_implemented_in_fastdds_2_14\n",me,t);
+        std::printf("FEATURE_MATRIX side=%u test=dds_security pass=NOT_APPLICABLE reason=board_fastdds_built_with_SECURITY_OFF\n",me);
+        std::printf("FEATURE_MATRIX side=%u test=statistics_module pass=NOT_APPLICABLE reason=board_fastdds_built_without_FASTDDS_STATISTICS\n",me);
+        for(const char* t:{"data_sharing","shared_memory_transport","zero_copy_loans","intraprocess_delivery"})
+            std::printf("FEATURE_MATRIX side=%u test=%s pass=NOT_APPLICABLE reason=same_host_only_not_a_network_transport_path\n",me,t);
+        std::printf("FEATURE_MATRIX side=%u summary all_pass=%d\n",me,int(all));std::fflush(stdout);
         need(all,NS_STATE);
     }
     const auto left=q.deadline_ns-ticks();need(h.live(),NS_CANCELLED);need(left<=uint64_t(INT32_MAX)*1000000000u,NS_CONTEXT);
