@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),cp=require('node:child_process'),path=require('node:path');
+const {createController}=require('../../scripts/public_socket/shared_reattach/executor/runner-template.cjs');
+const {createLines}=require('../../scripts/public_socket/bounded-output.cjs');
+const {config}=require('./shared-cycle-tests.cjs');
+const helper=path.join(__dirname,'local-child.cjs');
+function child(mode,data=()=>{}){return new Promise((resolve,reject)=>{const p=cp.spawn(process.execPath,[helper,mode],{shell:false,windowsHide:true});p.stdout.on('data',data);p.on('error',reject);p.on('close',(code,signal)=>code===0&&!signal?resolve():reject(Error('Local helper failed')));});}
+async function earlyClose(){let ready;const gate=new Promise(r=>ready=r),issued=[];const c=config(10),p=createController(c,async s=>issued.push(s),()=>gate);for(const s of ['A','B'])p.line(s,`DDS_STAGE run=${c.run} side=${s} pid=${s==='A'?10:20} stage=LISTENER_READY`);await child('empty');p.end?.('A',true);ready({A:{pass:true},B:{pass:true}});const result=await p.finish();assert.deepEqual(issued,[],'closed business collector cannot license future releases');assert.equal(result.first_failure,'EARLY_COLLECTOR_CLOSE_A');}
+async function snapshots(){const p=createController(config(10),async()=>{throw Error('No release allowed');},async()=>({A:{pass:true},B:{pass:true}}));const lines=createLines(line=>p.line('A',line));await child('early-summary',lines);lines.end(true);p.end?.('A',true);const result=await p.finish();assert.equal(result.first_failure,'REMOTE_PROGRAM_FAILURE_A');assert.equal(result.program_results.A.fields.q_deleted,'0');assert.equal(result.failure_cleanup_observations.length,1);assert.equal(result.failure_cleanup_observations[0].fields.participant_rc,'0');assert.ok(result.program_results.A.sequence<result.failure_cleanup_observations[0].sequence);assert.equal(result.pass,false);}
+(async()=>{let fail=0;for(const [name,test] of [['R7 business close',earlyClose],['R8 actual controller as-of',snapshots]])try{await test();console.log('PASS',name);}catch(e){fail++;console.error('FAIL',name,e.message);}process.exitCode=fail?1:0;})();

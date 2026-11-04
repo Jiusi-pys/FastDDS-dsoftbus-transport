@@ -1,0 +1,21 @@
+{
+  "baseline": "8077386403b81cd75cf691bf883ec0769bf6a1b0",
+  "files": {
+    "token_first_entry.hpp": {
+      "source": "examples/installed_runtime_dual_board/identity/token_first_entry.hpp",
+      "sha256": "a77154aea791c38e375a25e716e88664c6b717f89c7438b1b0a7625666de2520",
+      "classification": "BYTE_SAME_REUSE_EXISTING_TOKEN_ENTRY_ABI"
+    },
+    "token_first_entry.cpp": {
+      "source": "examples/installed_runtime_dual_board/identity/token_first_entry.cpp",
+      "sha256": "c79feac03515dc5cd2aca39de32e86c7c7b6a1ca3f9d511275857702d102e57b",
+      "classification": "BYTE_SAME_REUSE_EXISTING_TOKEN_ENTRY_ABI"
+    },
+    "token_bridge.h": {
+      "source": "examples/installed_runtime_dual_board/token_bridge.h",
+      "sha256": "00d841b89a3ddde25fb260eb3ed75875e4454696af0dcf058ab05b2ae605a194",
+      "classification": "BYTE_SAME_REUSE_EXISTING_TOKEN_ENTRY_ABI"
+    }
+  },
+  "scope": "identity-only existing reviewed C/POD bridge; no Transport or RMW implementation"
+}

@@ -1,0 +1,16 @@
+{
+  "targets": {
+    "A": "REQUIRED_A_SERIAL",
+    "B": "REQUIRED_B_SERIAL"
+  },
+  "tokens": {
+    "A": "REQUIRED_NUMERIC_TOKEN",
+    "B": "REQUIRED_NUMERIC_TOKEN"
+  },
+  "hdc_path": "REQUIRED_ABSOLUTE_HDC_PATH",
+  "query_helper_path": "REQUIRED_ABSOLUTE_QUERY_HELPER_PATH",
+  "permission_baseline_sha256": {
+    "A": "REQUIRED_SHA256",
+    "B": "REQUIRED_SHA256"
+  }
+}

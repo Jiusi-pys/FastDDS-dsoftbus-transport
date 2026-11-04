@@ -85,7 +85,7 @@ Examples may include:
 - gn
 - hb
 - project-specific scripts
-- "使用"C:\Users\17715\Downloads\commandline-tools-windows-x64-6.1.1.300\command-line-tools"作为ohos native sdk进行编译"
+- "使用"C:\\Users\\17715\\Downloads\\commandline-tools-windows-x64-6.1.1.300\\command-line-tools"作为ohos native sdk进行编译"
 
 but choose commands from the repository rather than assumptions.
 

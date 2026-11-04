@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.22)
+project(fastdds_dsoftbus_experimental_socket_consumer LANGUAGES CXX)
+find_package(FastDDSDSoftBusTransport CONFIG REQUIRED COMPONENTS Experimental)
+add_executable(fastdds_dsoftbus_socket_consumer main.cpp)
+target_link_libraries(fastdds_dsoftbus_socket_consumer PRIVATE FastDDSDSoftBusTransport::fastdds_dsoftbus_experimental_runtime FastDDSDSoftBusTransport::fastdds_dsoftbus_example_types)
+target_compile_features(fastdds_dsoftbus_socket_consumer PRIVATE cxx_std_17)
+# Target loader paths are deployment inputs. Never embed the build host's DSO directories.
+set_target_properties(fastdds_dsoftbus_socket_consumer PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "$ORIGIN")
