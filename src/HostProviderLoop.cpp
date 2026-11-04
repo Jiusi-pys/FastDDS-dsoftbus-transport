@@ -221,6 +221,11 @@ std::shared_ptr<HostProviderLoop::Circuit> HostProviderLoop::EnsureCircuit(const
             if(now-**since<std::chrono::seconds(1))return false;
             since->reset();return true;}))return {};
     }
+    {   // A renewal redial takes the same root setup serialization as the first outgoing setup.
+        // The root outlives the adapter: its Close joins the renewal worker first.
+        State* root_state=root.get();
+        if(!circuit->adapter->SetCircuitRenewalSerializer([root_state]{return std::unique_lock<std::mutex>(root_state->domain_setup,std::try_to_lock);}))return {};
+    }
     if(circuit->adapter->PrepareCircuitAnchor()!=BackendStatus::None||!circuit->backend->SetIncomingCallbacks(circuit->adapter->IncomingCallbacks()))return {};
     s.circuits[slot]=circuit;return circuit;
 }

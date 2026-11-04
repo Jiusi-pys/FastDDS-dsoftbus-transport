@@ -3,6 +3,7 @@
 
 #include <fastdds_dsoftbus/dsoftbus/NativeBackend.hpp>
 #include <functional>
+#include <mutex>
 #include <fastdds_dsoftbus/dsoftbus/ServiceRecordBinding.hpp>
 namespace fastdds_dsoftbus::dsoftbus { class NativeSendProvider; }
 namespace fastdds_dsoftbus::dsoftbus::host_test { class HostProviderLoop; }
@@ -79,6 +80,9 @@ public:
     // Explicit bounded experiment control; ends only the current owned lane.
     BackendStatus RequestNormalEnd(RecordRole) noexcept;
     bool SetBoundedReplacementGate(std::function<bool()>);
+    // Circuit renewal: returns a try-lock on the owner's setup serialization. A redial
+    // runs only while it is held, like the first outgoing setup. Before Publish only.
+    bool SetCircuitRenewalSerializer(std::function<std::unique_lock<std::mutex>()>);
     // Domain-circuit route renewal step (retire a stopped accepted record, redial a
     // stopped outgoing one). Driven by the owning loop's pump, never a callback.
     BackendStatus AdvanceCircuitRenewal() noexcept;

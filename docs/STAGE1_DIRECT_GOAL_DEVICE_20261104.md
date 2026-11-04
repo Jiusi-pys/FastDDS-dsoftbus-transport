@@ -17,6 +17,7 @@ Status: **DEVICE_TESTED (bounded scope below) / NOT_PRODUCTION_QUALIFIED**.
 | Merged into the 2334b68 main line (`claude/stage1-merge-20261104`) | Host stock 66/66, root 131/133 (2 pre-existing); device m35–m38 PASS |
 | Fast DDS feature matrix: 15 cases both directions (see "Fast DDS feature matrix") | PASS 15/15 per side, three consecutive runs (m56–m58) and combined with the QoS matrix (m59); 10 features NOT_APPLICABLE (unimplemented in 2.14, or not built on the board) |
 | Fixes for the feature-matrix findings (see "Fixes for the feature-matrix findings"); matrix now 18 cases | PASS 18/18 per side with the QoS matrix 8/8, three consecutive runs (m83–m85); route outage recovered (m86, m87); plain baseline (m88) |
+| Stage 1 closure: remaining review items fixed; TypeLookup and peer process restart added (see "Stage 1 closure"); matrix now 20 cases | PASS 20/20 per side with the QoS matrix 8/8, three consecutive runs (m99–m101); route outage recovered (m102, m103); plain baseline (m104) |
 | ROS 2 over this build | NOT_RUN |
 | SDK quiet, worker/descendant restoration | UNKNOWN |
 | Host build of `integrations/ros2/stock` (MSVC Release, stock-host-d01 Fast DDS 2.14) | BUILDS |
@@ -399,3 +400,39 @@ Test-harness fix: after a side emits `DATA_DONE`, its pump tolerates send failur
 - GitNexus `impact` / `detect_changes` cannot run on this worktree (the index covers only the main checkout); recorded gate exception.
 
 Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m66…m88-20261104/`, runner build `E:/Codex-FastDDS-directgoal-fix2-20261105`, install `E:/Codex-FastDDS-transport-arm-fix2-20261105/install`.
+
+## Stage 1 closure (m89–m104)
+
+Closes every open item recorded above. Branch `claude/stage1-closure-20261105`.
+
+**Transport review items (all fixed).**
+
+| Item | Fix | Evidence |
+| --- | --- | --- |
+| `PeerOnline` read only the first 32 nodes | It reads every node the SDK returns | New host case `stock_transport.circuit.renewal-many-nodes` (peer listed after 40 other online nodes). It fails with the old 32-node cap and passes with the fix |
+| Fault suppression during a renewal attempt covered all adapter faults | Only faults raised on the attempt's own worker thread are scoped to the attempt; a fault on another lane stays a real provider fault | Host circuit cases; device route outage m102/m103 |
+| A failed circuit reset latched `renewal_failed` | A failed owner reset is retried with the redial backoff (the failed owner is kept as `pending_reset_owner`); only 5 consecutive reset failures latch | Host `renewal-bind-failure`; device route outage |
+| Renewal did not take `domain_setup` | The redial runs only while it holds a try-lock on the root `domain_setup` (`ProviderAdapter::SetCircuitRenewalSerializer`), like the first outgoing setup; a busy lock retries after 50 ms | Host circuit cases; device route outage |
+
+**Previously not run, now device-tested.**
+- `type_lookup_remote_type`: each side publishes a DynamicType the peer never builds, with TypeInformation in discovery but no TypeObject (`auto_fill_type_object(false)`). The peer resolves the type with `register_remote_type`, creates a reader from it and reads 3/3 samples with every field checked. Reported path `typelookup_before_register`: the TypeObject was already present when `register_remote_type` ran. It cannot have come from discovery, so it came from the peer's TypeLookup service.
+  - Fast DDS 2.14 detail: when the TypeObject is already known, `register_remote_type` registers the type itself, returns `RETCODE_OK` and never calls the callback; the callback is used only on the `RETCODE_NO_DATA` path. A host A/B over plain UDP (`tl_host`) shows the same, so this is Fast DDS behaviour, not the transport.
+- `peer_process_restart`: board B runs the peer in a separate OS process (the runner re-executes its own image with `MDDS_RESTART_HELPER`). It exchanges 3/3 samples with board A, is killed with SIGKILL (no teardown), and a fresh process (new PID, new GUID prefix) starts. Board A's process, Runtime and Participant stay live: it sees the peer leave (lease 3 s), renews its circuit, matches the new process and exchanges 3/3 again. The new process exits 0 with its Runtime closed; A's Runtime then closes cleanly with no pump failure.
+  - Protocol detail found on the way: the DSoftBus listener appears with the first Participant, and Participant creation blocks in the pre-connect gate. Both sides must create their Participants with the gate closed and open it only after both listeners exist; a first dial to a peer without a listener is not retried.
+
+**Test P3s.**
+- Flow controller: the case now also sends the same 6 × 150000 bytes through an unthrottled async writer on the same link and requires the throttled time to be at least 1.2 s and at least twice the unthrottled time (observed 1704 ms vs 17 ms).
+- No positive ACKs: delivery is the only observable outcome by design (the writer gets no positive acknowledgements to assert); the case now writes an unpaced burst and requires 20/20 in order.
+
+**Runs.** Library SHA256 `41240aa9b7b1c8e18748b08673a4d9e8694d8e144bb36df6e69b1050c82d5cda`.
+- m99, m100, m101: QoS 8/8 and feature 20/20 per side, controller exit 0, status 0.
+- m102, m103: route outage recovered on both sides (`CircuitRenew_dial_result=0`).
+- m104: plain run (fragmented sample, hot rebuild).
+- Host: stock 67/67 three repeats; root 131/133 with the same two pre-existing failures.
+- GitNexus now indexes this worktree (`gitnexus analyze --index-only .`); `impact` was run before the edits (risk UNKNOWN/MEDIUM, confirmed by text search) and `detect_changes` before the commit.
+
+**What remains outside Stage 1.**
+- The Fast DDS 2.14.5 `DDSFilterFactory` race is inside Fast DDS, which the rules keep unmodified. Applications must not change a ContentFilteredTopic while remote filtered readers come and go; the test staggers those operations.
+- Security and statistics are not built into the board's Fast DDS; data sharing, shared memory and intraprocess delivery are same-host only.
+
+Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m89…m104-20261104/`, host A/B `E:/tl_host_b`.

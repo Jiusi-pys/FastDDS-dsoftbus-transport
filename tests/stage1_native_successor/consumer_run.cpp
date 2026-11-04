@@ -17,6 +17,7 @@
 #include <fastrtps/types/DynamicDataFactory.h>
 #include <fastrtps/types/DynamicData.h>
 #include <fastrtps/types/DynamicPubSubType.h>
+#include <fastrtps/types/TypeObjectFactory.h>
 #include <fastdds/dds/topic/Topic.hpp>
 #include <fastdds/dds/core/status/DeadlineMissedStatus.hpp>
 #include <fastdds/dds/core/status/LivelinessChangedStatus.hpp>
@@ -43,6 +44,11 @@
 #include <thread>
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
+#include <csignal>
+#include <cstring>
+#include <optional>
+extern char** environ;
 
 namespace ds=fastdds_dsoftbus::dsoftbus;
 namespace fd=eprosima::fastdds::dds;
@@ -140,6 +146,65 @@ static ds::phase0::PublicSocketConfiguration backend(const ds::DSoftBusTransport
     const auto& r=config.directory.routes.at(0).fields;ds::phase0::PublicSocketConfiguration b;
     b.package_name=q.package_name;b.identity={r.local_initiator_name,{1},{1}};b.listener_identity={config.directory.locals.at(0).local_listen_name,{2},{2}};
     b.peer_name=r.remote_listen_name;b.peer_network_id=r.remote_network_id;b.expected_peer_initiator_name=r.expected_remote_initiator_names.at(0);b.max_message_size=65536;b.listen_qos={{0,80},{1,2000}};b.bind_qos=b.listen_qos;return b;
+}
+// ---- Peer process restart helper (feature matrix only). The runner re-executes its own
+// image (/proc/self/exe) with MDDS_RESTART_HELPER=<request file>; this constructor then runs
+// one standalone peer incarnation on its own Runtime and exits before the runner's main.
+// It is a separate OS process: its own native sockets, Runtime and Participant. ----
+struct RestartRequest{NS_Request q;std::uint64_t run;std::uint32_t side,peer,incarnation,domain;char status[200],go[200],topic_tx[160],topic_rx[160];};
+static void restart_status(const char* path,const std::string& text){const std::string tmp=std::string(path)+".tmp";
+    if(FILE* f=std::fopen(tmp.c_str(),"w")){std::fputs(text.c_str(),f);std::fclose(f);std::rename(tmp.c_str(),path);}}
+static void restart_fail(const RestartRequest& r,const char* where){restart_status(r.status,std::string("fail ")+where);_exit(3);}
+static int peer_restart_helper(const RestartRequest& r){
+    auto chk=[&](bool v,const char* where){if(!v)restart_fail(r,where);};
+    NS_Request q=r.q;q.domain=r.domain;ds::DSoftBusTransportDescriptor config(65536);
+    try{config=configuration(q);}catch(...){restart_fail(r,"config");}
+    auto rt=std::make_unique<ds::experimental::Runtime>(backend(config,q),ds::experimental::RuntimeLifetime::PersistentNativeAnchor);
+    // The listener appears with the first Participant; the dial waits until the live peer's
+    // listener exists too (the parent creates the go file).
+    // Participant creation blocks in this gate; reaching it means this listener exists.
+    chk(rt->SetPreConnectGate([&r]{restart_status(r.status,"listening");const auto end=Clock::now()+std::chrono::seconds(60);
+        while(access(r.go,F_OK)!=0){if(Clock::now()>=end)return false;std::this_thread::sleep_for(std::chrono::milliseconds(20));}return true;}),"gate");
+    auto desc=rt->MakeStockDescriptor(config);chk(bool(desc),"descriptor");
+    std::thread pump([&]{try{for(;;){auto g=rt->WorkGeneration();
+        for(;;){auto x=rt->PumpSend();if(x.status!=ds::NativeStatus::None)break;}
+        ds::phase0::BackendStatus rx;do{rx=rt->PumpReceive();}while(rx==ds::phase0::BackendStatus::None);
+        auto w=rt->WaitForWork(g);if(w!=ds::WorkWaitResult::Work&&w!=ds::WorkWaitResult::Deadline)return;}}catch(...){}});
+    auto* f=fd::DomainParticipantFactory::get_instance();
+    fd::DomainParticipantQos qos;qos.name(("restart_"+std::to_string(r.side)+"_"+std::to_string(r.incarnation)).c_str());
+    qos.transport().use_builtin_transports=false;qos.transport().user_transports={desc};qos.transport().max_msg_size_no_frag=config.maxMessageSize;
+    auto& b=qos.wire_protocol().builtin;b.metatrafficUnicastLocatorList.clear();b.metatrafficUnicastLocatorList.push_back(config.default_user_unicast.at(0));
+    b.metatrafficMulticastLocatorList.clear();b.initialPeersList.clear();b.initialPeersList.push_back(config.directory.routes.at(0).key.remote_locator);
+    qos.wire_protocol().default_unicast_locator_list.clear();qos.wire_protocol().default_unicast_locator_list.push_back(config.default_user_unicast.at(0));
+    b.discovery_config.leaseDuration=eprosima::fastrtps::Duration_t(3,0);b.discovery_config.leaseDuration_announcementperiod=eprosima::fastrtps::Duration_t(1,0);
+    auto* p=f->create_participant(q.domain,qos);chk(p!=nullptr,"participant");
+    fd::TypeSupport type{new LayerSampleType};chk(type.register_type(p)==RC::RETCODE_OK,"type");
+    auto* pub=p->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub=p->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);chk(pub&&sub,"pubsub");
+    auto* tx=p->create_topic(r.topic_tx,type.get_type_name(),fd::TOPIC_QOS_DEFAULT);auto* rxt=p->create_topic(r.topic_rx,type.get_type_name(),fd::TOPIC_QOS_DEFAULT);chk(tx&&rxt,"topics");
+    fd::DataWriterQos wq;wq.reliability().kind=fd::RELIABLE_RELIABILITY_QOS;wq.durability().kind=fd::VOLATILE_DURABILITY_QOS;wq.history().kind=fd::KEEP_ALL_HISTORY_QOS;wq.data_sharing().off();
+    fd::DataReaderQos rq;rq.reliability().kind=fd::RELIABLE_RELIABILITY_QOS;rq.durability().kind=fd::VOLATILE_DURABILITY_QOS;rq.history().kind=fd::KEEP_ALL_HISTORY_QOS;rq.data_sharing().off();
+    auto* w=pub->create_datawriter(tx,wq);auto* rd=sub->create_datareader(rxt,rq);chk(w&&rd,"endpoints");
+    auto until=[](auto pred,int ms){const auto end=Clock::now()+std::chrono::milliseconds(ms);while(Clock::now()<end){if(pred())return true;std::this_thread::sleep_for(std::chrono::milliseconds(20));}return pred();};
+    chk(until([&]{fd::PublicationMatchedStatus a;fd::SubscriptionMatchedStatus c;w->get_publication_matched_status(a);rd->get_subscription_matched_status(c);return a.current_count>=1&&c.current_count>=1;},45000),"match");
+    restart_status(r.status,"matched");
+    for(std::uint32_t n=1;n<=3;++n){LayerSample v;v.run=r.run;v.side=r.side;v.ordinal=n;v.payload=stage1_run::payload(v.run,v.side,n);chk(w->write(&v),"write");}
+    std::uint32_t next=1;
+    chk(until([&]{for(;;){LayerSample x;fd::SampleInfo i;if(rd->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+        if(i.valid_data&&x.run==r.run&&x.side==r.peer&&x.ordinal==next&&x.payload==stage1_run::payload(x.run,x.side,x.ordinal))++next;}return next==4;},20000),"receive");
+    chk(w->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(5,0))==RC::RETCODE_OK,"ack");
+    char prefix[64];{std::ostringstream o;o<<p->guid().guidPrefix;std::snprintf(prefix,sizeof(prefix),"%s",o.str().c_str());}
+    restart_status(r.status,std::string("exchanged received=3 pid=")+std::to_string(getpid())+" prefix="+prefix);
+    if(r.incarnation==1)for(;;)std::this_thread::sleep_for(std::chrono::seconds(1)); // killed by the parent: a crash, no teardown
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    chk(p->delete_contained_entities()==RC::RETCODE_OK&&f->delete_participant(p)==RC::RETCODE_OK,"teardown");
+    desc.reset();rt->RequestPumpStop();pump.join();const bool closed=rt->Close();
+    restart_status(r.status,std::string("done received=3 closed=")+std::to_string(closed)+" pid="+std::to_string(getpid())+" prefix="+prefix);
+    return closed?0:4;
+}
+__attribute__((constructor)) static void peer_restart_helper_entry(){
+    const char* path=std::getenv("MDDS_RESTART_HELPER");if(!path)return;
+    RestartRequest r{};FILE* f=std::fopen(path,"rb");if(!f)_exit(2);const bool ok=std::fread(&r,sizeof(r),1,f)==1;std::fclose(f);if(!ok)_exit(2);
+    _exit(peer_restart_helper(r));
 }
 static void guid(uint8_t* p,const eprosima::fastrtps::rtps::GUID_t& g){std::memcpy(p,g.guidPrefix.value,12);std::memcpy(p+12,g.entityId.value,4);}
 static int64_t sequence(const eprosima::fastrtps::rtps::SequenceNumber_t& s){need(s.high>=0&&(s.high||s.low));return (int64_t(s.high)<<32)|s.low;}
@@ -526,8 +591,21 @@ static void run_session(Session& s,NS_RunResult& out){
                 const auto ack_ms=std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-t0).count();
                 std::uint32_t nextf=1;const bool fok=am&&waitp([&]{for(;;){stage1_frag::Sample v;fd::SampleInfo i;if(fr->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;
                     if(i.valid_data&&stage1_frag::valid(v,local.run+40+nextf,peer))++nextf;}return nextf==7;},25000);
-                // 6 x 150000 bytes at 65536 bytes / 100 ms needs at least ~1.3 s.
-                report("async_publish_flow_controller",fok&&acked&&ack_ms>=1000,"received_verified="+std::to_string(nextf-1)+" acked="+std::to_string(acked)+" write_to_ack_ms="+std::to_string(ack_ms)+" limit=65536B/100ms");
+                // Baseline on the same link: the same 6 samples through an async writer without the
+                // flow controller. The limit is proven by the ratio, not by an assumed link speed.
+                fd::Topic *btx,*brx;topic2(p2,"async_free",ft2.get_type_name(),btx,brx,fd::TOPIC_QOS_DEFAULT);
+                fd::DataWriterQos bw=keep_all(wq);bw.publish_mode().kind=fd::ASYNCHRONOUS_PUBLISH_MODE;
+                auto* bfw=pub2->create_datawriter(btx,bw,&s.signals);auto* bfr=sub2->create_datareader(brx,keep_all(rq),&s.signals);need(bfw&&bfr);
+                const bool bm=matched(bfw,bfr,1,1,15000);barrier();
+                const auto t1=Clock::now();for(std::uint32_t n=1;n<=6;++n){auto v=stage1_frag::make(local.run+60+n,me);need(bfw->write(&v));}
+                const bool backed=bfw->wait_for_acknowledgments(dur(25))==RC::RETCODE_OK;
+                const auto free_ms=std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-t1).count();
+                std::uint32_t nextb=1;(void)waitp([&]{for(;;){stage1_frag::Sample v;fd::SampleInfo i;if(bfr->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;
+                    if(i.valid_data&&stage1_frag::valid(v,local.run+60+nextb,peer))++nextb;}return nextb==7;},25000);
+                // 6 x 150000 bytes at 65536 bytes / 100 ms needs at least ~1.3 s; unthrottled must be at least twice as fast.
+                const bool limited=ack_ms>=1200&&bm&&backed&&nextb==7&&free_ms*2<=ack_ms;
+                report("async_publish_flow_controller",fok&&acked&&limited,"received_verified="+std::to_string(nextf-1)+" acked="+std::to_string(acked)+" write_to_ack_ms="+std::to_string(ack_ms)+
+                    " unthrottled_ms="+std::to_string(free_ms)+" unthrottled_received="+std::to_string(nextb-1)+" limit=65536B/100ms");
             }
             barrier();
             {   // 3. TRANSIENT durability with the SQLite persistence plugin: history survives writer recreation.
@@ -775,6 +853,67 @@ static void run_session(Session& s,NS_RunResult& out){
             need(p5->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p5)==RC::RETCODE_OK);for(auto& e:extra.ps)if(e==p5)e=nullptr;
         }
         barrier();
+        {   // 12d. TypeLookup service: each side publishes a DynamicType the peer never registers.
+            //      The peer learns it from discovery (TypeInformation), fetches it through the
+            //      TypeLookup service (register_remote_type), builds a reader from it and reads.
+            struct TLSpy final:fd::DomainParticipantListener{NS_RunHandle& h;std::string want;std::mutex m;std::optional<eprosima::fastrtps::types::TypeInformation> info;std::string type_name;
+                ft::DynamicType_ptr remote;std::string remote_name;explicit TLSpy(NS_RunHandle& x):h(x){}
+                void on_type_information_received(fd::DomainParticipant*,const eprosima::fastrtps::string_255 topic,const eprosima::fastrtps::string_255 type,const eprosima::fastrtps::types::TypeInformation& ti) override{
+                    {std::lock_guard<std::mutex> l(m);if(topic.to_string()!=want||info)return;info=ti;type_name=type.to_string();}h.progress.notify();}} tl(h);
+            tl.want=tname("tl",peer);
+            fd::DomainParticipantQos q7=qos;q7.name((std::string(qos.name().c_str())+"_tl").c_str());
+            auto d7=s.runtime->MakeStockDescriptor(config);need(bool(d7));s.retained_descriptors.push_back(d7);q7.transport().user_transports={d7};
+            q7.wire_protocol().builtin.typelookup_config.use_client=true;q7.wire_protocol().builtin.typelookup_config.use_server=true;
+            auto* p7=s.factory->create_participant(q.domain,q7,&tl,fd::StatusMask::none());extra.ps.push_back(p7);need(p7,NS_STATE);
+            auto* f=ft::DynamicTypeBuilderFactory::get_instance();auto* sb=f->create_struct_builder();need(sb);
+            need(sb->add_member(0,"side",f->create_uint32_type())==RC::RETCODE_OK&&sb->add_member(1,"n",f->create_uint32_type())==RC::RETCODE_OK&&sb->add_member(2,"text",f->create_string_type(64))==RC::RETCODE_OK);
+            need(sb->set_name(("FastDDSDSoftBusTypeLookup214_"+std::to_string(me)).c_str())==RC::RETCODE_OK);ft::DynamicType_ptr dt=sb->build();need(bool(dt));
+            fd::TypeSupport ts(new ft::DynamicPubSubType(dt));ts->auto_fill_type_information(true);ts->auto_fill_type_object(false);need(ts.register_type(p7)==RC::RETCODE_OK);
+            auto* pub7=p7->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub7=p7->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pub7&&sub7);
+            auto* t7=p7->create_topic(tname("tl",me),ts.get_type_name(),fd::TOPIC_QOS_DEFAULT);need(t7);
+            auto* w7=pub7->create_datawriter(t7,keep_all(wq),&s.signals);need(w7);
+            const bool info=waitp([&]{std::lock_guard<std::mutex> l(tl.m);return bool(tl.info);},20000);
+            // register_remote_type takes the callback by lvalue reference; it is called from a
+            // TypeLookup reply thread, so it only stores the type for this thread.
+            std::function<void(const std::string&,const ft::DynamicType_ptr)> on_remote=[&tl](const std::string& name,const ft::DynamicType_ptr type){
+                {std::lock_guard<std::mutex> l2(tl.m);tl.remote=type;tl.remote_name=name;}tl.h.progress.notify();};
+            // Fast DDS 2.14: RETCODE_OK means the type was already resolvable here and was registered
+            // without the callback; RETCODE_NO_DATA means TypeLookup requests are pending and the
+            // callback brings the type. The publisher sends no TypeObject in discovery
+            // (auto_fill_type_object(false)), so on this board a resolvable TypeObject can only have
+            // come from the peer through the TypeLookup service.
+            std::string path="none";bool requested=false;
+            if(info){eprosima::fastrtps::types::TypeInformation ti;std::string tn;{std::lock_guard<std::mutex> l(tl.m);ti=*tl.info;tn=tl.type_name;}
+                const bool object_before=ft::TypeObjectFactory::get_instance()->get_type_object(&ti.complete().typeid_with_size().type_id())!=nullptr;
+                const auto rc=p7->register_remote_type(ti,tn,on_remote);
+                if(rc==RC::RETCODE_OK){fd::TypeSupport found=p7->find_type(tn);auto* dps=found?dynamic_cast<ft::DynamicPubSubType*>(found.get()):nullptr;
+                    if(dps){std::lock_guard<std::mutex> l(tl.m);tl.remote=dps->GetDynamicType();tl.remote_name=tn;}
+                    path=object_before?"typelookup_before_register":"resolved_at_register";requested=dps!=nullptr;}
+                else if(rc==RC::RETCODE_NO_DATA){path="typelookup_reply_callback";requested=true;}}
+            const bool resolved=requested&&waitp([&]{std::lock_guard<std::mutex> l(tl.m);return bool(tl.remote);},20000);
+            fd::DataReader* r7=nullptr;ft::DynamicType_ptr rt7;std::string rname;
+            if(resolved){{std::lock_guard<std::mutex> l(tl.m);rt7=tl.remote;rname=tl.remote_name;}
+                fd::TypeSupport rts(new ft::DynamicPubSubType(rt7));rts->auto_fill_type_information(false);rts->auto_fill_type_object(false);
+                if(!p7->find_type(rname))need(rts.register_type(p7,rname)==RC::RETCODE_OK);auto* rt7t=p7->create_topic(tname("tl",peer),rname,fd::TOPIC_QOS_DEFAULT);need(rt7t);
+                r7=sub7->create_datareader(rt7t,keep_all(rq),&s.signals);need(r7);}
+            const bool m=resolved&&waitp([&]{fd::PublicationMatchedStatus a;fd::SubscriptionMatchedStatus b;need(w7->get_publication_matched_status(a)==RC::RETCODE_OK&&r7->get_subscription_matched_status(b)==RC::RETCODE_OK);
+                return a.current_count==1&&b.current_count==1;},20000);
+            barrier();
+            struct DD{ft::DynamicData* d;~DD(){if(d)ft::DynamicDataFactory::get_instance()->delete_data(d);}};
+            DD wd{ft::DynamicDataFactory::get_instance()->create_data(dt)};need(wd.d);
+            for(std::uint32_t n=1;n<=3;++n){need(wd.d->set_uint32_value(me,0)==RC::RETCODE_OK&&wd.d->set_uint32_value(n,1)==RC::RETCODE_OK&&wd.d->set_string_value("tl-"+std::to_string(me)+"-"+std::to_string(n),2)==RC::RETCODE_OK);need(w7->write(wd.d));}
+            std::uint32_t next=1;bool texts=true;
+            if(m){DD rd{ft::DynamicDataFactory::get_instance()->create_data(rt7)};need(rd.d);
+                (void)waitp([&]{for(;;){fd::SampleInfo i;if(r7->take_next_sample(rd.d,&i)!=RC::RETCODE_OK)break;if(!i.valid_data)continue;std::uint32_t sd=0,n=0;std::string t;
+                    need(rd.d->get_uint32_value(sd,0)==RC::RETCODE_OK&&rd.d->get_uint32_value(n,1)==RC::RETCODE_OK&&rd.d->get_string_value(t,2)==RC::RETCODE_OK);
+                    if(sd==peer&&n==next){if(t!="tl-"+std::to_string(peer)+"-"+std::to_string(n))texts=false;++next;}}return next==4;},8000);}
+            const bool acked=w7->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK;
+            report("type_lookup_remote_type",info&&resolved&&m&&next==4&&texts&&acked,"type_information="+std::to_string(info)+" remote_type_resolved="+std::to_string(resolved)+" path="+path+" type_object_in_discovery=0"+
+                " remote_type="+rname+" matched="+std::to_string(m)+" received="+std::to_string(next-1)+" fields_ok="+std::to_string(texts)+" acked="+std::to_string(acked));
+            barrier();
+            need(p7->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p7)==RC::RETCODE_OK);for(auto& e:extra.ps)if(e==p7)e=nullptr;
+        }
+        barrier();
         {   // 13. A second DDS domain (domain+1) concurrently with the main domain in the same process.
             //     DSoftBus service names encode the domain, so each domain uses its own Runtime.
             NS_Request q1=q;q1.domain=q.domain+1;auto config1=configuration(q1);
@@ -819,6 +958,108 @@ static void run_session(Session& s,NS_RunResult& out){
                 ok=got&&acked&&clean&&!d1.failed.load();detail+=" matched="+std::to_string(m)+" received="+std::to_string(next-1)+" acked="+std::to_string(acked)+" second_runtime_closed="+std::to_string(clean)+" pump_failed="+std::to_string(d1.failed.load());
             }else{barrier();barrier();}
             report("second_domain_concurrent",ok,detail);
+        }
+        barrier();
+        {   // 13b. Peer process restart: board B runs the peer in a separate OS process (helper),
+            //      kills it (SIGKILL, no teardown) and starts a fresh process; board A's process
+            //      and its Runtime stay live and must reconnect to the new peer process.
+            //      Domain+2, so the names never collide with this process's other Runtimes.
+            NS_Request q2=q;q2.domain=q.domain+2;const std::uint64_t base=local.run+50;
+            const std::string tmpdir=std::getenv("TMPDIR");
+            std::string detail;bool ok=false;
+            if(me==0){
+                auto config2=configuration(q2);
+                struct Host{std::unique_ptr<ds::experimental::Runtime> rt;std::thread pump;std::atomic<bool> failed{false},go{false},entered{false};fd::DomainParticipantFactory* f=nullptr;fd::DomainParticipant* p=nullptr;
+                    std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface> desc;bool torn=false,closed=false;
+                    bool teardown(){if(torn)return closed;torn=true;bool good=true;if(p){if(p->delete_contained_entities()!=RC::RETCODE_OK||f->delete_participant(p)!=RC::RETCODE_OK)good=false;else p=nullptr;}
+                        go=true;if(rt)rt->RequestPumpStop();if(pump.joinable())pump.join();if(good&&rt){desc.reset();try{good=rt->Close();}catch(...){good=false;}}closed=good;if(!good)(void)rt.release();return good;}
+                    ~Host(){(void)teardown();}} hs;hs.f=s.factory;
+                hs.rt=std::make_unique<ds::experimental::Runtime>(backend(config2,q2),ds::experimental::RuntimeLifetime::PersistentNativeAnchor);
+                // Participant creation blocks in this gate (its listener exists by then).
+                need(hs.rt->SetPreConnectGate([&hs,&h]{hs.entered=true;const auto end=Clock::now()+std::chrono::seconds(40);
+                    while(!hs.go.load()){if(Clock::now()>=end||!h.live())return false;std::this_thread::sleep_for(std::chrono::milliseconds(20));}return true;}));
+                hs.desc=hs.rt->MakeStockDescriptor(config2);need(bool(hs.desc));
+                hs.pump=std::thread([&hs]{try{for(;;){auto g=hs.rt->WorkGeneration();
+                    for(;;){auto x=hs.rt->PumpSend();if(x.outcome==ds::NativeSendOutcome::ReturnedByException)hs.failed=true;if(x.status!=ds::NativeStatus::None)break;}
+                    ds::phase0::BackendStatus rx;do{rx=hs.rt->PumpReceive();}while(rx==ds::phase0::BackendStatus::None);
+                    auto w=hs.rt->WaitForWork(g);if(w!=ds::WorkWaitResult::Work&&w!=ds::WorkWaitResult::Deadline){if(w!=ds::WorkWaitResult::StopRequested&&w!=ds::WorkWaitResult::Closed)hs.failed=true;return;}}}catch(...){hs.failed=true;}});
+                fd::DomainParticipantQos q8=qos;q8.name((std::string(qos.name().c_str())+"_restart").c_str());
+                q8.transport().user_transports={hs.desc};q8.transport().max_msg_size_no_frag=config2.maxMessageSize;
+                auto& b8=q8.wire_protocol().builtin;b8.metatrafficUnicastLocatorList.clear();b8.metatrafficUnicastLocatorList.push_back(config2.default_user_unicast.at(0));
+                b8.initialPeersList.clear();b8.initialPeersList.push_back(config2.directory.routes.at(0).key.remote_locator);
+                q8.wire_protocol().default_unicast_locator_list.clear();q8.wire_protocol().default_unicast_locator_list.push_back(config2.default_user_unicast.at(0));
+                b8.discovery_config.leaseDuration=eprosima::fastrtps::Duration_t(3,0);b8.discovery_config.leaseDuration_announcementperiod=eprosima::fastrtps::Duration_t(1,0);
+                // Created on its own thread: it blocks in the gate until both listeners exist.
+                std::thread creator([&]{hs.p=s.factory->create_participant(q2.domain,q8);});
+                struct Join{std::thread& t;~Join(){if(t.joinable())t.join();}} join_creator{creator};
+                (void)waitp([&]{return hs.entered.load()||!creator.joinable();},20000);
+                barrier();             // A's listener exists; its dial waits on the gate
+                barrier();             // B's incarnation 1 listens
+                hs.go=true;creator.join();
+                need(hs.p,NS_STATE);need(s.type.register_type(hs.p)==RC::RETCODE_OK);
+                auto* pub8=hs.p->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub8=hs.p->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pub8&&sub8);
+                fd::Topic *tx,*rx;topic2(hs.p,"restart",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+                auto* w8=pub8->create_datawriter(tx,keep_all(wq),&s.signals);auto* r8=sub8->create_datareader(rx,keep_all(rq),&s.signals);need(w8&&r8);
+                auto counts=[&](int want){fd::PublicationMatchedStatus a;fd::SubscriptionMatchedStatus c;need(w8->get_publication_matched_status(a)==RC::RETCODE_OK&&r8->get_subscription_matched_status(c)==RC::RETCODE_OK);return a.current_count==want&&c.current_count==want;};
+                auto exchange=[&](unsigned inc){if(!waitp([&]{return counts(1);},45000))return 0u;
+                    for(std::uint32_t n=1;n<=3;++n){auto v=layer(base+inc,n);need(w8->write(&v));}
+                    std::uint32_t next=1;(void)waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(r8->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                        if(i.valid_data&&x.run==base+inc&&x.side==peer&&x.ordinal==next&&x.payload==stage1_run::payload(x.run,peer,x.ordinal))++next;}return next==4;},20000);
+                    (void)w8->wait_for_acknowledgments(dur(5));return next-1;};
+                const unsigned got1=exchange(1);
+                barrier();             // incarnation 1 exchanged; B kills it
+                barrier();
+                const bool gone=waitp([&]{return counts(0);},20000);   // lease 3 s
+                barrier();             // B starts incarnation 2
+                const unsigned got2=exchange(2);
+                barrier();             // incarnation 2 exchanged
+                barrier();             // incarnation 2 ended
+                const bool pump_ok=!hs.failed.load();const bool closed=hs.teardown();
+                ok=got1==3&&gone&&got2==3&&pump_ok&&closed;
+                detail="role=LIVE_PROCESS inc1_received="+std::to_string(got1)+" unmatched_after_kill="+std::to_string(gone)+" inc2_received="+std::to_string(got2)+
+                    " runtime_pump_ok="+std::to_string(pump_ok)+" runtime_closed="+std::to_string(closed);
+            }else{
+                auto spawn=[&](unsigned inc,const std::string& status)->pid_t{
+                    RestartRequest r{};r.q=q;r.run=base+inc;r.side=me;r.peer=peer;r.incarnation=inc;r.domain=q2.domain;
+                    std::snprintf(r.status,sizeof(r.status),"%s",status.c_str());std::snprintf(r.go,sizeof(r.go),"%s",(tmpdir+"/restart_go_"+std::to_string(inc)).c_str());
+                    std::snprintf(r.topic_tx,sizeof(r.topic_tx),"%s",tname("restart",me).c_str());std::snprintf(r.topic_rx,sizeof(r.topic_rx),"%s",tname("restart",peer).c_str());
+                    const std::string req=tmpdir+"/restart_req_"+std::to_string(inc);(void)unlink(status.c_str());(void)unlink(r.go);
+                    {FILE* f=std::fopen(req.c_str(),"wb");need(f!=nullptr);need(std::fwrite(&r,sizeof(r),1,f)==1);std::fclose(f);}
+                    // Everything the child needs is built before fork: only execve runs in the child.
+                    std::vector<std::string> env_s;for(char** e=environ;*e;++e)if(std::strncmp(*e,"MDDS_RESTART_HELPER=",20))env_s.emplace_back(*e);
+                    env_s.push_back("MDDS_RESTART_HELPER="+req);std::vector<char*> envp;for(auto& e:env_s)envp.push_back(e.data());envp.push_back(nullptr);
+                    char arg0[]="mdds-restart-helper";char* argv_[]={arg0,nullptr};
+                    const pid_t pid=fork();if(pid==0){execve("/proc/self/exe",argv_,envp.data());_exit(127);}
+                    return pid;};
+                auto read_status=[](const std::string& path){std::string t;if(FILE* f=std::fopen(path.c_str(),"r")){char b[256]{};if(std::fgets(b,sizeof(b),f))t=b;std::fclose(f);}return t;};
+                auto wait_status=[&](const std::string& path,const char* prefix,int ms){std::string t;(void)waitp([&]{t=read_status(path);return t.rfind(prefix,0)==0||t.rfind("fail",0)==0;},ms);return t;};
+                const std::string st1=tmpdir+"/restart_1.status",st2=tmpdir+"/restart_2.status";
+                barrier();
+                const pid_t pid1=spawn(1,st1);
+                const std::string r0=wait_status(st1,"listening",30000);
+                barrier();             // both listeners exist: release both dials
+                {FILE* g=std::fopen((tmpdir+"/restart_go_1").c_str(),"w");need(g!=nullptr);std::fclose(g);}
+                const std::string r1=wait_status(st1,"exchanged",60000);
+                barrier();
+                int ws1=0;const bool killed=pid1>0&&kill(pid1,SIGKILL)==0&&waitpid(pid1,&ws1,0)==pid1&&WIFSIGNALED(ws1)&&WTERMSIG(ws1)==SIGKILL;
+                barrier();
+                barrier();
+                const pid_t pid2=spawn(2,st2);  // spawn() clears the go file first
+                {FILE* g=std::fopen((tmpdir+"/restart_go_2").c_str(),"w");need(g!=nullptr);std::fclose(g);}  // A listens already
+                const std::string r2a=wait_status(st2,"exchanged",60000);
+                barrier();
+                const std::string r2=wait_status(st2,"done",30000);int ws2=0;
+                const bool exited=pid2>0&&waitpid(pid2,&ws2,0)==pid2&&WIFEXITED(ws2)&&WEXITSTATUS(ws2)==0;
+                barrier();
+                auto field=[](const std::string& t,const std::string& k){const auto i=t.find(k+"=");if(i==std::string::npos)return std::string();const auto j=t.find_first_of(" \n",i);return t.substr(i+k.size()+1,j==std::string::npos?std::string::npos:j-i-k.size()-1);};
+                const bool new_process=field(r1,"pid")!=field(r2,"pid")&&!field(r2,"pid").empty();
+                const bool new_participant=field(r1,"prefix")!=field(r2,"prefix")&&!field(r2,"prefix").empty();
+                ok=r1.rfind("exchanged",0)==0&&killed&&r2a.rfind("exchanged",0)==0&&r2.rfind("done",0)==0&&field(r2,"closed")=="1"&&exited&&new_process&&new_participant;
+                std::string c1=r1,c2=r2;for(auto* c:{&c1,&c2})for(auto& ch:*c)if(ch=='\n'||ch==' ')ch='_';
+                detail="role=RESTARTED_PROCESS inc1="+c1+" killed_SIGKILL="+std::to_string(killed)+" inc2="+c2+" exit0="+std::to_string(exited)+
+                    " new_pid="+std::to_string(new_process)+" new_guid_prefix="+std::to_string(new_participant);
+            }
+            report("peer_process_restart",ok,detail);
         }
         barrier();
         {   // 14. Discovery Server: side A runs a SERVER Participant, side B a CLIENT that only knows the
