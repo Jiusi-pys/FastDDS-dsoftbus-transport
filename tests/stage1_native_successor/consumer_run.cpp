@@ -4,6 +4,18 @@
 #include "keyed_sample.hpp"
 #include "large_sample.hpp"
 #include "plain_sample.hpp"
+#include <fastrtps/config.h>
+#if HAVE_SECURITY
+#include "security_pki.hpp"
+#endif
+#ifdef FASTDDS_STATISTICS
+#include <fastdds/statistics/dds/domain/DomainParticipant.hpp>
+#include <fastdds/statistics/dds/publisher/qos/DataWriterQos.hpp>
+#include <fastdds/statistics/dds/subscriber/qos/DataReaderQos.hpp>
+#include <fastdds/statistics/topic_names.hpp>
+#include <statistics/types/typesPubSubTypes.h>
+#include <statistics/types/monitorservice_typesPubSubTypes.h>
+#endif
 #include <fastdds/dds/core/LoanableSequence.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
 #include <fastdds/dds/topic/ContentFilteredTopic.hpp>
@@ -45,6 +57,7 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <csignal>
 #include <cstring>
 #include <optional>
@@ -213,6 +226,8 @@ static void run_session(Session& s,NS_RunResult& out){
     auto config=configuration(q);
     if([]{const char* d=std::getenv("TMPDIR");if(!d)return false;return access((std::string(d)+"/feature_matrix").c_str(),F_OK)==0;}()){
         config.max_participants=4;config.receive_records=256;config.receive_bytes=2u<<20;
+        // Secure Participants receive into buffers of at most 65535 bytes (Fast DDS uint16 cap); use UDP's 65500.
+        config.maxMessageSize=65500;config.send_limits.max_record_bytes=65500;
         config.send_limits.peer_records=256;config.send_limits.peer_bytes=2u<<20;config.send_limits.global_records=256;config.send_limits.global_bytes=2u<<20;
     }
     s.runtime=std::make_unique<ds::experimental::Runtime>(backend(config,q),ds::experimental::RuntimeLifetime::PersistentNativeAnchor);
@@ -556,6 +571,9 @@ static void run_session(Session& s,NS_RunResult& out){
         struct Extra{fd::DomainParticipantFactory* f;std::vector<fd::DomainParticipant*> ps;
             ~Extra(){for(auto it=ps.rbegin();it!=ps.rend();++it){if(!*it)continue;try{if((*it)->delete_contained_entities()==RC::RETCODE_OK)(void)f->delete_participant(*it);}catch(...){}}}} extra{s.factory,{}};
         auto octets=[](const std::string& t){return std::vector<eprosima::fastrtps::rtps::octet>(t.begin(),t.end());};
+        // The opt-in race stress (TMPDIR/cft_stress) runs alone: the run window cannot hold it and every case.
+        const bool stress_only=[]{const char* d=std::getenv("TMPDIR");return d&&access((std::string(d)+"/cft_stress").c_str(),F_OK)==0;}();
+        if(!stress_only){
         barrier();
         {   // 1. Second Participant in the same process and domain, with user/topic/group data,
             //    a flow controller and SQLite persistence configured on it.
@@ -1097,11 +1115,176 @@ static void run_session(Session& s,NS_RunResult& out){
             barrier();
         }
         barrier();
+#if HAVE_SECURITY
+        {   // 15. DDS Security over DSoftBus: PKI-DH authentication, Access-Permissions (join access
+            //     control, governance and permissions signed by the test CA) and AES-GCM-GMAC with
+            //     RTPS, discovery, liveliness, metadata and payload all ENCRYPT.
+            const std::string pki=std::string(std::getenv("TMPDIR"))+"/pki";(void)mkdir(pki.c_str(),0700);
+            for(const auto& f:stage1_pki::kFiles){FILE* o=std::fopen((pki+"/"+f.first).c_str(),"w");need(o!=nullptr);std::fputs(f.second,o);std::fputs("\n",o);std::fclose(o);}
+            struct AuthSpy final:fd::DomainParticipantListener{NS_RunHandle& h;std::atomic<int> authorized{0},unauthorized{0};explicit AuthSpy(NS_RunHandle& x):h(x){}
+                void onParticipantAuthentication(fd::DomainParticipant*,eprosima::fastrtps::rtps::ParticipantAuthenticationInfo&& info) override{
+                    if(info.status==eprosima::fastrtps::rtps::ParticipantAuthenticationInfo::AUTHORIZED_PARTICIPANT)++authorized;else ++unauthorized;h.progress.notify();}};
+            auto secure=[&](fd::DomainParticipantQos q9,const std::string& suffix,const std::string& ca,const std::string& id){
+                q9.name((std::string(qos.name().c_str())+suffix).c_str());auto& pr=q9.properties().properties();
+                pr.emplace_back("dds.sec.auth.plugin","builtin.PKI-DH");
+                pr.emplace_back("dds.sec.auth.builtin.PKI-DH.identity_ca","file://"+pki+"/"+ca);
+                pr.emplace_back("dds.sec.auth.builtin.PKI-DH.identity_certificate","file://"+pki+"/"+id+".pem");
+                pr.emplace_back("dds.sec.auth.builtin.PKI-DH.private_key","file://"+pki+"/"+id+"_key.pem");
+                pr.emplace_back("dds.sec.access.plugin","builtin.Access-Permissions");
+                pr.emplace_back("dds.sec.access.builtin.Access-Permissions.permissions_ca","file://"+pki+"/ca.pem");
+                pr.emplace_back("dds.sec.access.builtin.Access-Permissions.governance","file://"+pki+"/governance.p7s");
+                pr.emplace_back("dds.sec.access.builtin.Access-Permissions.permissions","file://"+pki+"/permissions"+std::to_string(me)+".p7s");
+                pr.emplace_back("dds.sec.crypto.plugin","builtin.AES-GCM-GMAC");
+                auto d9=s.runtime->MakeStockDescriptor(config);need(bool(d9));s.retained_descriptors.push_back(d9);q9.transport().user_transports={d9};return q9;};
+            AuthSpy spy9(h);
+            auto* p9=s.factory->create_participant(q.domain,secure(qos,"_sec","ca.pem","id"+std::to_string(me)),&spy9,fd::StatusMask::none());extra.ps.push_back(p9);need(p9,NS_STATE);
+            need(s.type.register_type(p9)==RC::RETCODE_OK);fd::TypeSupport fts{new stage1_frag::Type};need(fts.register_type(p9)==RC::RETCODE_OK);
+            auto* pub9=p9->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub9=p9->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pub9&&sub9);
+            fd::Topic *tx,*rx;topic2(p9,"sec",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            fd::Topic *ftx,*frx;topic2(p9,"sec_frag",fts.get_type_name(),ftx,frx,fd::TOPIC_QOS_DEFAULT);
+            auto* w9=pub9->create_datawriter(tx,keep_all(wq),&s.signals);auto* r9=sub9->create_datareader(rx,keep_all(rq),&s.signals);need(w9&&r9);
+            auto* fw9=pub9->create_datawriter(ftx,keep_all(wq),&s.signals);auto* fr9=sub9->create_datareader(frx,keep_all(rq),&s.signals);need(fw9&&fr9);
+            // Access control: the permissions deny publishing on *_f_sec_denied.
+            auto* dt9=p9->create_topic(tname("sec_denied",me),s.type.get_type_name(),fd::TOPIC_QOS_DEFAULT);need(dt9);
+            const bool denied=pub9->create_datawriter(dt9,keep_all(wq))==nullptr;
+            const bool m=matched(w9,r9,1,1,30000)&&matched(fw9,fr9,1,1,30000);barrier();
+            for(std::uint32_t n=1;n<=3;++n){auto v=layer(local.run+70,n);need(w9->write(&v));}
+            {auto v=stage1_frag::make(local.run+71,me);need(fw9->write(&v));}
+            std::uint32_t next=1;bool frag=false;
+            const bool got=m&&waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(r9->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                    if(i.valid_data&&x.run==local.run+70&&x.side==peer&&x.ordinal==next&&x.payload==stage1_run::payload(x.run,peer,x.ordinal))++next;}
+                for(;;){stage1_frag::Sample v;fd::SampleInfo i;if(fr9->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;if(i.valid_data&&stage1_frag::valid(v,local.run+71,peer))frag=true;}
+                return next==4&&frag;},15000);
+            const bool acked=w9->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK&&fw9->wait_for_acknowledgments(dur(5))==RC::RETCODE_OK;
+            report("security_pki_dh_access_aes_gcm",got&&acked&&denied&&spy9.authorized.load()>=1,"authorized="+std::to_string(spy9.authorized.load())+
+                " matched="+std::to_string(m)+" received="+std::to_string(next-1)+" fragmented_150000B="+std::to_string(frag)+" acked="+std::to_string(acked)+
+                " deny_rule_blocks_writer="+std::to_string(denied)+" protection=rtps,discovery,liveliness,metadata,data:ENCRYPT");
+            barrier();
+            need(p9->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p9)==RC::RETCODE_OK);for(auto& e:extra.ps)if(e==p9)e=nullptr;
+            barrier();
+            {   // 16. Negative: board B presents an identity issued by an untrusted CA (with permissions
+                //     that are otherwise valid). Authentication must fail on both sides; nothing matches.
+                AuthSpy spy10(h);
+                const bool rogue=me==1;
+                auto* p10=s.factory->create_participant(q.domain,secure(qos,"_sec2",rogue?"rogue_ca.pem":"ca.pem",rogue?"rogue1":"id0"),&spy10,fd::StatusMask::none());
+                extra.ps.push_back(p10);need(p10,NS_STATE);need(s.type.register_type(p10)==RC::RETCODE_OK);
+                auto* pub10=p10->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub10=p10->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pub10&&sub10);
+                fd::Topic *tx2,*rx2;topic2(p10,"sec_rogue",s.type.get_type_name(),tx2,rx2,fd::TOPIC_QOS_DEFAULT);
+                auto* w10=pub10->create_datawriter(tx2,keep_all(wq),&s.signals);auto* r10=sub10->create_datareader(rx2,keep_all(rq),&s.signals);need(w10&&r10);
+                barrier();
+                const bool rejected=waitp([&]{return spy10.unauthorized.load()>=1;},20000);
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+                fd::PublicationMatchedStatus a;fd::SubscriptionMatchedStatus b;need(w10->get_publication_matched_status(a)==RC::RETCODE_OK&&r10->get_subscription_matched_status(b)==RC::RETCODE_OK);
+                const bool none=a.total_count==0&&b.total_count==0;
+                report("security_rejects_untrusted_identity",rejected&&none&&spy10.authorized.load()==0,std::string("identity=")+(rogue?"rogue_ca":"trusted_ca")+
+                    " unauthorized_events="+std::to_string(spy10.unauthorized.load())+" authorized="+std::to_string(spy10.authorized.load())+" matched_ever="+std::to_string(a.total_count+b.total_count));
+                barrier();
+                need(p10->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p10)==RC::RETCODE_OK);for(auto& e:extra.ps)if(e==p10)e=nullptr;
+            }
+        }
+#else
+        std::printf("FEATURE_MATRIX side=%u test=dds_security pass=NOT_APPLICABLE reason=board_fastdds_built_with_SECURITY_OFF\n",me);
+#endif
+        barrier();
+#ifdef FASTDDS_STATISTICS
+        {   // 17. Statistics module over DSoftBus: each side enables statistics DataWriters and the monitor
+            //     service on one Participant and subscribes to them; samples published by the peer's
+            //     statistics writers must arrive through the transport.
+            namespace st=eprosima::fastdds::statistics;
+            fd::DomainParticipantQos q11=qos;q11.name((std::string(qos.name().c_str())+"_stat").c_str());
+            auto d11=s.runtime->MakeStockDescriptor(config);need(bool(d11));s.retained_descriptors.push_back(d11);q11.transport().user_transports={d11};
+            auto* p11=s.factory->create_participant(q.domain,q11);extra.ps.push_back(p11);need(p11,NS_STATE);
+            auto* sp=st::dds::DomainParticipant::narrow(p11);need(sp!=nullptr);
+            const char* topics[]={st::DATA_COUNT_TOPIC,st::RTPS_SENT_TOPIC,st::DISCOVERY_TOPIC,st::PHYSICAL_DATA_TOPIC,st::PUBLICATION_THROUGHPUT_TOPIC};
+            for(const char* t:topics)need(sp->enable_statistics_datawriter(t,st::dds::STATISTICS_DATAWRITER_QOS)==RC::RETCODE_OK);
+            const bool monitor=sp->enable_monitor_service()==RC::RETCODE_OK;
+            auto mine=p11->guid().guidPrefix;
+            auto foreign=[&](const st::detail::GUID_s& g){return std::memcmp(g.guidPrefix().value().data(),mine.value,12)!=0;};
+            fd::TypeSupport t_count(new st::EntityCountPubSubType),t_traffic(new st::Entity2LocatorTrafficPubSubType),t_disc(new st::DiscoveryTimePubSubType),
+                t_phys(new st::PhysicalDataPubSubType),t_mon(new st::MonitorServiceStatusDataPubSubType);
+            for(auto* t:{&t_count,&t_traffic,&t_disc,&t_phys,&t_mon})need(t->register_type(p11)==RC::RETCODE_OK);
+            auto* sub11=p11->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);auto* pub11=p11->create_publisher(fd::PUBLISHER_QOS_DEFAULT);need(sub11&&pub11);
+            auto stat_reader=[&](const char* topic,fd::TypeSupport& t){fd::Topic* tp=nullptr;
+                if(auto* found=p11->find_topic(topic,dur(0)))tp=found;else tp=p11->create_topic(topic,t.get_type_name(),fd::TOPIC_QOS_DEFAULT);
+                need(tp!=nullptr);fd::DataReaderQos rq2=st::dds::STATISTICS_DATAREADER_QOS;rq2.data_sharing().off();auto* r=sub11->create_datareader(tp,rq2);need(r!=nullptr);return r;};
+            auto* r_count=stat_reader(st::DATA_COUNT_TOPIC,t_count);auto* r_traffic=stat_reader(st::RTPS_SENT_TOPIC,t_traffic);
+            auto* r_disc=stat_reader(st::DISCOVERY_TOPIC,t_disc);auto* r_phys=stat_reader(st::PHYSICAL_DATA_TOPIC,t_phys);
+            fd::DataReaderQos mq=st::dds::STATISTICS_DATAREADER_QOS;mq.data_sharing().off();
+            fd::Topic* mt=p11->create_topic(st::MONITOR_SERVICE_TOPIC,t_mon.get_type_name(),fd::TOPIC_QOS_DEFAULT);need(mt!=nullptr);
+            auto* r_mon=sub11->create_datareader(mt,mq);need(r_mon!=nullptr);
+            s.type.register_type(p11);
+            fd::Topic *tx,*rx;topic2(p11,"stat",s.type.get_type_name(),tx,rx,fd::TOPIC_QOS_DEFAULT);
+            auto* w11=pub11->create_datawriter(tx,keep_all(wq),&s.signals);auto* r11=sub11->create_datareader(rx,keep_all(rq),&s.signals);need(w11&&r11);
+            const bool m=matched(w11,r11,1,1,20000);barrier();
+            for(std::uint32_t n=1;n<=20;++n){auto v=layer(local.run+72,n);need(w11->write(&v));}
+            const auto dsb_kind=config.default_user_unicast.at(0).kind;
+            std::uint32_t app=0,count=0,traffic=0,traffic_dsb=0,disc=0,phys=0,mon=0;
+            (void)waitp([&]{
+                for(;;){LayerSample x;fd::SampleInfo i;if(r11->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(i.valid_data&&x.run==local.run+72&&x.side==peer)++app;}
+                for(;;){st::EntityCount v;fd::SampleInfo i;if(r_count->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;if(i.valid_data&&foreign(v.guid()))++count;}
+                for(;;){st::Entity2LocatorTraffic v;fd::SampleInfo i;if(r_traffic->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;
+                    if(i.valid_data&&foreign(v.src_guid())){++traffic;if(v.dst_locator().kind()==dsb_kind)++traffic_dsb;}}
+                for(;;){st::DiscoveryTime v;fd::SampleInfo i;if(r_disc->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;if(i.valid_data&&foreign(v.local_participant_guid()))++disc;}
+                for(;;){st::PhysicalData v;fd::SampleInfo i;if(r_phys->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;if(i.valid_data&&foreign(v.participant_guid()))++phys;}
+                for(;;){st::MonitorServiceStatusData v;fd::SampleInfo i;if(r_mon->take_next_sample(&v,&i)!=RC::RETCODE_OK)break;if(i.valid_data&&foreign(v.local_entity()))++mon;}
+                return app==20&&count>0&&traffic_dsb>0&&disc>0&&phys>0&&mon>0;},20000);
+            report("statistics_and_monitor_service",m&&app==20&&count>0&&traffic_dsb>0&&disc>0&&phys>0&&monitor&&mon>0,
+                "app_received="+std::to_string(app)+" peer_data_count="+std::to_string(count)+" peer_rtps_sent="+std::to_string(traffic)+" dst_locator_kind_dsoftbus="+std::to_string(traffic_dsb)+
+                " peer_discovery="+std::to_string(disc)+" peer_physical_data="+std::to_string(phys)+" monitor_service="+std::to_string(monitor)+" peer_monitor_status="+std::to_string(mon));
+            barrier();
+            need(p11->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(p11)==RC::RETCODE_OK);for(auto& e:extra.ps)if(e==p11)e=nullptr;
+        }
+#else
+        std::printf("FEATURE_MATRIX side=%u test=statistics_module pass=NOT_APPLICABLE reason=board_fastdds_built_without_FASTDDS_STATISTICS\n",me);
+#endif
+        barrier();
+        } // !stress_only
+        // Opt-in stress (TMPDIR/cft_stress, content "wsf=0|1"): the Fast DDS 2.14.5 content-filter race over
+        // DSoftBus. Side A: writer every 1 ms plus local ContentFilteredTopic churn; side B: churn of 6
+        // remote filtered readers. wsf=0 disables writer-side filtering (reader_filters_allocation.maximum=0).
+        if([]{const char* d=std::getenv("TMPDIR");return d&&access((std::string(d)+"/cft_stress").c_str(),F_OK)==0;}()){
+            std::string mode;{FILE* m=std::fopen((std::string(std::getenv("TMPDIR"))+"/cft_stress").c_str(),"r");char b[32]{};if(m){if(std::fgets(b,sizeof(b),m))mode=b;std::fclose(m);}}
+            const bool wsf=mode.find("wsf=0")==std::string::npos;
+            // A dedicated Participant per side, so the churn never touches the harness Participant's discovery state.
+            fd::DomainParticipantQos qs=qos;qs.name((std::string(qos.name().c_str())+"_race").c_str());
+            auto dsd=s.runtime->MakeStockDescriptor(config);need(bool(dsd));s.retained_descriptors.push_back(dsd);qs.transport().user_transports={dsd};
+            auto* ps=s.factory->create_participant(q.domain,qs);extra.ps.push_back(ps);need(ps,NS_STATE);
+            auto* pubs=ps->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* subs=ps->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);need(pubs&&subs);
+            auto* bf=ft::DynamicTypeBuilderFactory::get_instance();auto* sb=bf->create_struct_builder();need(sb);
+            need(sb->add_member(0,"side",bf->create_uint32_type())==RC::RETCODE_OK&&sb->add_member(1,"n",bf->create_uint32_type())==RC::RETCODE_OK);
+            need(sb->set_name("FastDDSDSoftBusCftRace214")==RC::RETCODE_OK);ft::DynamicType_ptr dt=sb->build();need(bool(dt));
+            fd::TypeSupport ct(new ft::DynamicPubSubType(dt));need(ct.register_type(ps)==RC::RETCODE_OK);
+            auto* topic=ps->create_topic("cft_race_dsb",ct.get_type_name(),fd::TOPIC_QOS_DEFAULT);need(topic);
+            std::atomic<bool> stop{false};std::atomic<unsigned long> writes{0},iters{0};std::thread wt;fd::DataWriter* cw=nullptr;
+            barrier();
+            const auto end=Clock::now()+std::chrono::seconds(30);
+            if(me==0){fd::DataWriterQos cq=wq;if(!wsf)cq.writer_resource_limits().reader_filters_allocation.maximum=0;
+                cw=pubs->create_datawriter(topic,cq);need(cw);
+                wt=std::thread([&]{auto* d=ft::DynamicDataFactory::get_instance()->create_data(dt);unsigned n=0;
+                    while(!stop){d->set_uint32_value(0,0);d->set_uint32_value(++n%20,1);(void)cw->write(d);++writes;std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+                    ft::DynamicDataFactory::get_instance()->delete_data(d);});
+                while(Clock::now()<end&&h.live()){auto* cft=ps->create_contentfilteredtopic("local_race_"+std::to_string(iters.load()),topic,"n > %0",{"5"});
+                    if(cft){auto* r=subs->create_datareader(cft,rq);cft->set_expression_parameters({"6"});if(r)subs->delete_datareader(r);ps->delete_contentfilteredtopic(cft);}++iters;}
+                stop=true;wt.join();
+            }else{
+                while(Clock::now()<end&&h.live()){std::vector<std::pair<fd::ContentFilteredTopic*,fd::DataReader*>> v;
+                    for(int k=0;k<6;++k){auto* cft=ps->create_contentfilteredtopic("remote_race_"+std::to_string(iters.load())+"_"+std::to_string(k),topic,"n > %0",{std::to_string(k)});
+                        v.push_back({cft,cft?subs->create_datareader(cft,rq):nullptr});}
+                    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+                    for(auto& e:v){if(e.second)subs->delete_datareader(e.second);if(e.first)ps->delete_contentfilteredtopic(e.first);}
+                    ++iters;std::this_thread::sleep_for(std::chrono::milliseconds(10));}
+            }
+            int matched_total=-1;if(cw){fd::PublicationMatchedStatus ms;need(cw->get_publication_matched_status(ms)==RC::RETCODE_OK);matched_total=ms.total_count;}
+            report("cft_race_stress_dsoftbus",true,std::string("writer_side_filtering=")+(wsf?"1":"0")+" role="+(me==0?"A_writer_local_churn":"B_remote_filtered_readers")+
+                " seconds=30 writes="+std::to_string(writes.load())+" iterations="+std::to_string(iters.load())+" writer_matched_total="+std::to_string(matched_total)+" survived=1");
+            barrier();
+            if(cw)need(pubs->delete_datawriter(cw)==RC::RETCODE_OK);
+            need(ps->delete_contained_entities()==RC::RETCODE_OK&&s.factory->delete_participant(ps)==RC::RETCODE_OK);for(auto& e:extra.ps)if(e==ps)e=nullptr;
+            barrier();
+        }
         // Features outside this transport's scope or not available in the board's Fast DDS 2.14.5 build.
         for(const char* t:{"time_based_filter","destination_order","presentation","latency_budget","transport_priority","durability_service"})
             std::printf("FEATURE_MATRIX side=%u test=%s pass=NOT_APPLICABLE reason=not_implemented_in_fastdds_2_14\n",me,t);
-        std::printf("FEATURE_MATRIX side=%u test=dds_security pass=NOT_APPLICABLE reason=board_fastdds_built_with_SECURITY_OFF\n",me);
-        std::printf("FEATURE_MATRIX side=%u test=statistics_module pass=NOT_APPLICABLE reason=board_fastdds_built_without_FASTDDS_STATISTICS\n",me);
         for(const char* t:{"data_sharing","shared_memory_transport","zero_copy_loans","intraprocess_delivery"})
             std::printf("FEATURE_MATRIX side=%u test=%s pass=NOT_APPLICABLE reason=same_host_only_not_a_network_transport_path\n",me,t);
         std::printf("FEATURE_MATRIX side=%u summary all_pass=%d\n",me,int(all));std::fflush(stdout);

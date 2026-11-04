@@ -1,0 +1,64 @@
+diff -ru --strip-trailing-cr a/src/cpp/fastdds/publisher/DataWriterImpl.cpp b/src/cpp/fastdds/publisher/DataWriterImpl.cpp
+--- a/src/cpp/fastdds/publisher/DataWriterImpl.cpp	2026-11-05 06:35:41.669749600 +0800
++++ b/src/cpp/fastdds/publisher/DataWriterImpl.cpp	2026-11-05 06:35:55.369734400 +0800
+@@ -2186,6 +2186,10 @@
+ {
+     if (reader_filters_)
+     {
++        // Backport of eProsima Fast DDS 0bd912836 (v3.0.0): the RTPS writer calls on_reader_discovery
++        // without its mutex, while write() evaluates these filters under it.
++        assert(writer_);
++        std::lock_guard<RecursiveTimedMutex> guard(writer_->getMutex());
+         reader_filters_->remove_reader(reader_guid);
+     }
+ }
+@@ -2198,6 +2202,8 @@
+             !writer_->is_datasharing_compatible_with(reader_info) &&
+             reader_info.remote_locators().multicast.empty())
+     {
++        // Same race as remove_reader_filter, on the add/update path (not fixed upstream).
++        std::lock_guard<RecursiveTimedMutex> guard(writer_->getMutex());
+         reader_filters_->process_reader_filter_info(reader_guid, reader_info.content_filter(),
+                 publisher_->get_participant_impl(), topic_);
+     }
+diff -ru --strip-trailing-cr a/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.cpp b/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.cpp
+--- a/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.cpp	2026-11-05 06:35:41.753026400 +0800
++++ b/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.cpp	2026-11-05 06:35:55.370734000 +0800
+@@ -587,6 +587,7 @@
+     {
+         auto expr = static_cast<DDSFilterExpression*>(filter_instance);
+         expr->clear();
++        std::lock_guard<std::mutex> guard(expression_pool_mutex_);
+         expression_pool_.put(expr);
+     }
+     return ReturnCode_t::RETCODE_OK;
+diff -ru --strip-trailing-cr a/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp b/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp
+--- a/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp	2026-11-05 06:35:41.725544000 +0800
++++ b/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp	2026-11-05 06:35:55.370734000 +0800
+@@ -24,6 +24,8 @@
+ #include <fastdds/dds/topic/TopicDataType.hpp>
+ 
+ #include "utils/collections/ObjectPool.hpp"
++
++#include <mutex>
+ #include "DDSFilterEmptyExpression.hpp"
+ #include "DDSFilterExpression.hpp"
+ 
+@@ -63,6 +65,7 @@
+      */
+     DDSFilterExpression* get_expression()
+     {
++        std::lock_guard<std::mutex> guard(expression_pool_mutex_);
+         return expression_pool_.get([]
+                        {
+                            return new DDSFilterExpression();
+@@ -86,6 +89,9 @@
+     DDSFilterEmptyExpression empty_expression_;
+     /// Pool of DDSFilterExpression objects
+     ObjectPool<DDSFilterExpression*> expression_pool_;
++    /// The pool is shared by user threads (ContentFilteredTopic) and discovery threads (writer-side
++    /// filters of remote readers) of the same DomainParticipant.
++    std::mutex expression_pool_mutex_;
+ 
+ };
+ 
