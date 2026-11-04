@@ -27,6 +27,7 @@ void TraceEvent(const char*,std::uint64_t,int,std::int32_t,std::int64_t,std::uin
 #include <condition_variable>
 #include <limits>
 #include <mutex>
+#include <type_traits>
 
 namespace fastdds_dsoftbus::dsoftbus::phase0 {
 namespace detail {
@@ -596,7 +597,7 @@ BackendStatus RequestNormalEnd(RecordRole role) noexcept {
         return BackendStatus::None;
     }
     BackendStatus Stop(std::int32_t id) noexcept {
-        std::lock_guard<std::mutex> lock(gate);
+        std::unique_lock<std::mutex> lock(gate);
         if (phase == AdapterPhase::Closed) return BackendStatus::InvalidState;
         if (creating && socket < 0 && id >= 0) {
             // One bounded candidate for this Create call, not a native generation
@@ -608,16 +609,20 @@ BackendStatus RequestNormalEnd(RecordRole role) noexcept {
         if (socket < 0 || id != socket) return BackendStatus::ForeignSocket;
         if(external_listener)outgoing_stopped=true;else stopped=true;
         // No binding operation here: setup may still hold Binding::State::gate.
+        const bool wake=external_listener&&request.config.bounded_reaccept_host;lock.unlock();
+        if(wake)attachments.NotifyWork(); // only the work signal, no binding call
         return BackendStatus::None;
     }
     BackendStatus Error(RecordRole role,std::int32_t id,std::int32_t code) noexcept {
-        std::lock_guard<std::mutex> lock(gate);
+        std::unique_lock<std::mutex> lock(gate);
         if(phase==AdapterPhase::Closed)return BackendStatus::InvalidState;
         if((dual||external_listener)&&role==RecordRole::Server&&accepted_id==id&&accepted_phase!=AcceptedPhase::Empty&&accepted_phase!=AcceptedPhase::Closed)accepted_phase=AcceptedPhase::Stopping;
         else if(dual&&role==RecordRole::Server&&listener&&listener->Observe().socket==id){listener_stopped=true;if(accepted_phase==AcceptedPhase::Preparing||accepted_phase==AcceptedPhase::Prepared||accepted_phase==AcceptedPhase::Committing)accepted_phase=AcceptedPhase::Stopping;}
         else if(role==request.role&&socket>=0&&id==socket){if(dual||external_listener)outgoing_stopped=true;else stopped=true;}
         else return BackendStatus::ForeignSocket;
         if(!first_callback_error)first_callback_error=code;
+        const bool wake=external_listener&&request.config.bounded_reaccept_host;lock.unlock();
+        if(wake)attachments.NotifyWork(); // a circuit lane that ended needs renewal work
         return BackendStatus::None; // error is not a native shutdown observation
     }
     // One bounded line on a path that already reports not-drained; no state is read or changed beyond the labels.
@@ -927,6 +932,7 @@ BackendStatus ProviderAdapter::AdvanceCircuitRenewal() noexcept {
         NativeOwnerLease original;
         {std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
             if(s.stopped||s.listener_stopped||s.phase!=AdapterPhase::Published||s.renewal_failed)return BackendStatus::None;
+            if(s.renewal_attempt)return BackendStatus::NoWork; // another pump owns the attempt
             if(!s.redial_pending){if(!s.outgoing_stopped||!s.binding)return BackendStatus::None;original=s.CurrentDialOwner();}
             if(std::chrono::steady_clock::now()<s.renewal_retry_at)return BackendStatus::NoWork;
         }
@@ -948,8 +954,12 @@ BackendStatus ProviderAdapter::AdvanceCircuitRenewal() noexcept {
             if(!s.retained_member)s.retained_member=std::move(s.binding);else s.binding.reset();
             s.socket=-1;s.outgoing_stopped=false;s.outgoing_started=false;s.redial_pending=true;
         }
+        // Pin the attempt as a control while control_gate is still held: Close()
+        // then waits until binding/retained_member are no longer touched here.
+        std::lock_guard<std::mutex> lock(state_->gate);
+        state_->renewal_attempt=true;state_->renewal_status=BackendStatus::None;++state_->controls;
     }
-    {std::lock_guard<std::mutex> lock(state_->gate);state_->renewal_attempt=true;state_->renewal_status=BackendStatus::None;}
+    struct AttemptDone{std::remove_reference_t<decltype(*state_)>& s;~AttemptDone(){std::lock_guard<std::mutex> lock(s.gate);--s.controls;s.idle.notify_all();}} attempt_done{*state_};
     const auto status=InitializeCircuitOutgoing(std::chrono::steady_clock::now()+std::chrono::seconds(10));
     RENEW_PROBE("CircuitRenew_dial_result",status);
     std::unique_ptr<ServiceRecordBinding> release,failed;NativeOwnerLease failed_owner;

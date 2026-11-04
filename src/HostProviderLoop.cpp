@@ -788,7 +788,7 @@ NativeSendRunResult HostProviderLoop::PumpSendImpl(HostSendObservation* observat
         // assemblies the runtime-level pump has no started view of its own.
         std::array<std::shared_ptr<Circuit>,2> renew;bool live=false;
         {std::lock_guard<std::mutex> lock(s.gate);live=s.domain_mode&&s.started&&!s.stopping&&!s.closed;if(live){renew=s.circuits;++s.active;}}
-        if(live){State::PumpGuard pin{s,false};for(const auto& circuit:renew)if(circuit&&circuit->adapter)(void)circuit->adapter->AdvanceCircuitRenewal();}
+        if(live){State::PumpGuard pin{s,false};for(const auto& circuit:renew)if(circuit&&circuit->adapter&&circuit->adapter->CircuitRenewalPending())(void)circuit->adapter->AdvanceCircuitRenewal();}
     }
     if(s.shared){
         std::array<std::shared_ptr<View>,2> eligible;std::size_t count=0;
@@ -862,7 +862,7 @@ BackendStatus HostProviderLoop::PumpReceive() noexcept {
         // assemblies the runtime-level pump has no started view of its own.
         std::array<std::shared_ptr<Circuit>,2> renew;bool live=false;
         {std::lock_guard<std::mutex> lock(s.gate);live=s.domain_mode&&s.started&&!s.stopping&&!s.closed;if(live){renew=s.circuits;++s.active;}}
-        if(live){State::PumpGuard pin{s,false};for(const auto& circuit:renew)if(circuit&&circuit->adapter)(void)circuit->adapter->AdvanceCircuitRenewal();}
+        if(live){State::PumpGuard pin{s,false};for(const auto& circuit:renew)if(circuit&&circuit->adapter&&circuit->adapter->CircuitRenewalPending())(void)circuit->adapter->AdvanceCircuitRenewal();}
     }
     if(s.shared)
     {

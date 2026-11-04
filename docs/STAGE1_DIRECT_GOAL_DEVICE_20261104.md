@@ -10,6 +10,11 @@ Status: **DEVICE_TESTED (bounded scope below) / NOT_PRODUCTION_QUALIFIED**.
 | Same-name Participant hot rebuild in process (PersistentNativeAnchor), 150000-byte sample both ways after rebuild | PASS (runs m4, m7) |
 | Route outage then recovery (15 s IP drop on B) | FAIL before the fix (m5, m6). **PASS with circuit route renewal (m21, m22)** |
 | Default path with the renewal library (no outage) | PASS (m23) |
+| Fast DDS QoS / keyed matrix, 8 cases both directions (see "QoS and keyed-topic matrix") | PASS 8/8 per side (m27, m28, m32, m33, m35, m37); content filter SKIPPED |
+| Two route outages in one process | PASS (m29, m34, m36, m38) |
+| Peer process SIGKILL mid-run, then a fresh run | Clean teardown on the survivor (m31); next run PASS (m32) |
+| Board B reboot, then a fresh full run | PASS (m33) |
+| Merged into the 2334b68 main line (`claude/stage1-merge-20261104`) | Host stock 66/66, root 131/133 (2 pre-existing); device m35–m38 PASS |
 | ROS 2 over this build | NOT_RUN |
 | SDK quiet, worker/descendant restoration | UNKNOWN |
 | Host build of `integrations/ros2/stock` (MSVC Release, stock-host-d01 Fast DDS 2.14) | BUILDS |
@@ -232,3 +237,60 @@ The tests were updated to the current contract with exact expectations. None was
   - The original failed-close and circuit snapshot checks are unchanged.
 
 No production code changed in this step. Result: stock ctest **65/65 PASS**, including `circuit.route-renewal`.
+
+## QoS and keyed-topic matrix (m27–m37)
+
+Opt-in runner block (`QOS_MATRIX` marker; test code only, `tests/stage1_native_successor/consumer_run.cpp`,
+`keyed_sample.hpp`). Each case runs in both directions across the two boards, with a barrier topic between cases.
+
+| Case | What is asserted |
+| --- | --- |
+| keyed dispose/unregister | 3 instances, 2 samples each; dispose and no-writers instance states seen (`autodispose_unregistered_instances=false`) |
+| TRANSIENT_LOCAL late joiner | reader created after 5 writes receives all 5 in order |
+| KEEP_ALL + RELIABLE burst | 300 samples received in order and acknowledged |
+| DEADLINE 300 ms | requested and offered deadline-missed counts rise after the writer stops |
+| LIVELINESS AUTOMATIC 1 s | alive seen, then not-alive after the remote writer is deleted |
+| OWNERSHIP EXCLUSIVE | only the stronger established owner (strength 20) is delivered |
+| LIFESPAN 2 s | an expired batch is not delivered; fresh samples are |
+| PARTITIONS | same partition matches and delivers; a different partition neither matches nor delivers |
+| Content-filtered topic | SKIPPED: the test types carry no type object |
+
+Result: `QOS_MATRIX summary all_pass=1` on both sides in m27, m28, m32, m33, m35 (merged library) and m37 (review-fixed library).
+
+## Robustness runs
+
+- **Repeated outage.** The runner window blocks the peer IP twice (15 s each) in one 60 s window. Both outages
+  recover, with one successful circuit redial per outage per side (`CircuitRenew_dial_result value=0` twice). Runs:
+  m29, m34, m36 (merged), m38 (review-fixed: `recovered=1 outages=2 long_gaps=2 max_peer=300`, 165 received per side).
+- **Peer process kill.** m31: B's runner is sent SIGKILL during the window. A's renewal attempts fail and back off (1–8 s).
+  A then tears down cleanly. Because the fault from a failed attempt is non-sticky, `Close` is clean. The next fresh run (m32) passes in full.
+- **Board reboot.** m33: board B is rebooted. A fresh full run, including the QoS matrix, then passes.
+- **Not covered.** A restart of the peer process *inside* one live A process is not exercised. The harness binds admission to the PID.
+
+## Main-line merge and independent gate
+
+`claude/stage1-merge-20261104` merges this branch into 2334b68 (merge `b581d73`).
+- **Conflicts.** Both sides were kept. HEAD's site-tagged faults, send refusal and shutdown diagnostics remain alongside the renewal code.
+- **Independent tester: commit gate PASS.**
+  - Stock suite: 66/66.
+  - The two new circuit cases passed 3/3 repeats.
+  - Root suite: 131/133. `dsoftbus.native_owner_model` and `dsoftbus.process_receive` time out or fail identically on clean 2334b68,
+    so they are pre-existing and environment-sensitive.
+  - `public_socket_executor.flow` fails only on the baseline: a GBK decode error.
+- **Independent review: no blocking findings.** Fixed after review (`src/ProviderAdapter.cpp`, `src/HostProviderLoop.cpp`):
+  - **P2: renewal attempt not pinned against `Close()`.** The attempt is now held as an adapter control (`++controls`)
+    from the moment `control_gate` is still held until `binding`/`retained_member` are no longer touched. A second pump
+    cannot start a concurrent attempt.
+  - **P3: missing pump wake-up.** Circuit lanes ended through `Error`/`Stop` now wake the pump, as `NativeStop` already did.
+  - **P3: per-pass overhead.** The pumps call `AdvanceCircuitRenewal` only when `CircuitRenewalPending()`.
+  - **After the fixes:** stock 66/66, root 131/133 (same 2 pre-existing). Device m37 and m38 used library SHA256
+    `2270588ffc2b950e307604c0ab0433b2b47716721beb102b468b59122a9cecd0` and runner `fed960cb…` (merged headers).
+- **Open, non-blocking.** These are recorded as known limits:
+  - A renewal `Bind` runs on the pump thread and can stall the other circuit for up to the SDK's bind time. The deadline is 10 s.
+  - Fault suppression during an attempt covers all adapter faults.
+  - A failed circuit reset latches `renewal_failed`.
+  - `PeerOnline` only looks at the first 32 nodes.
+  - Renewal does not take `domain_setup` serialization.
+- **GitNexus.** `detect_changes` cannot run here. The index covers only the main checkout, not worktrees, so this is a recorded gate exception.
+
+Evidence: `E:/Codex-FastDDS-stage1-directdds-manual-m27…m38-20261104/`, tester logs `E:/tester_stock_1104`, `E:/tester_root_1104`.
