@@ -1,6 +1,7 @@
 // Stock public Factory/Writer/Reader and an explicitly extended Fake Socket C
 // seam. This is Host evidence, not SDK capacity or device qualification.
 #define main DcPriorViewsMain
+#include <cstdio>
 #include "runtime_views_tests.cpp"
 #undef main
 #include <fastdds_dsoftbus/dsoftbus/DomainCircuitName.hpp>
@@ -239,11 +240,14 @@ void SocketIdCollision(){
 // not redial before the peer is online again, then renews the dial lane with a
 // fresh Socket/Bind, re-accepts the peer's new connection, and the same stock
 // Participants exchange DDS samples again. Host Fake Socket evidence only.
-void RouteRenewal(){
+// extra_nodes: unrelated online nodes listed before the peer (> 32 checks that the
+// peer is still found past the first 32 entries of GetAllNodeDeviceInfo).
+void RouteRenewal(unsigned extra_nodes=0){
     T2LifecycleFixture f;f.Pair(0);f.Traffic(0,1);
     public_socket_fake::EnableFreshReplacementIds();
-    auto set_online=[](bool online){std::lock_guard<std::mutex> lock(fake_node::gate);fake_node::nodes.clear();
-        if(online){fake_node::nodes["model.net.A"]="udid.A";fake_node::nodes["model.net.B"]="udid.B";}};
+    auto set_online=[extra_nodes](bool online){std::lock_guard<std::mutex> lock(fake_node::gate);fake_node::nodes.clear();
+        if(online){for(unsigned i=0;i<extra_nodes;++i){char key[16];std::snprintf(key,sizeof(key),"a.node.%03u",i);fake_node::nodes[key]="udid.x";}
+            fake_node::nodes["model.net.A"]="udid.A";fake_node::nodes["model.net.B"]="udid.B";}};
     set_online(false);
     const auto before=public_socket_fake::Observe();
     const auto old_out=public_socket_fake::CurrentSocket(0,1),old_acc=public_socket_fake::CurrentSocket(0,2);
@@ -267,7 +271,7 @@ void RouteRenewal(){
     T2Check(s.domain_circuits==1&&s.domain_outgoing_sockets[0]&&*s.domain_outgoing_sockets[0]==public_socket_fake::CurrentSocket(0,1),
         "renewed outgoing socket not owned by the circuit");
     f.Finish();set_online(false);
-    std::cout<<"ROUTE_RENEWAL link_down=4 offline_redial=0 fresh_socket_bind=1/side reaccept=1 dds_after=2_cycles same_participants=1 close_residue=0\n";
+    std::cout<<"ROUTE_RENEWAL extra_nodes="<<extra_nodes<<" link_down=4 offline_redial=0 fresh_socket_bind=1/side reaccept=1 dds_after=2_cycles same_participants=1 close_residue=0\n";
 }
 // Peer process gone while its node stays online: the redial Bind fails. The
 // failed renewal must not wedge teardown: Runtime close stays clean, no residue.
@@ -305,6 +309,6 @@ void RenewalBindFailure(){
 int main(int argc,char** argv){try{
     T2LoadedDll();T2Check(argc==2,"one circuit case");const std::string c=argv[1];
     if(c=="names")CircuitNames();else if(c=="default-remote")DefaultRemote();else if(c=="identity")CircuitIdentity();
-    else if(c=="socket-collision")SocketIdCollision();else if(c=="raw")CircuitRaw();else if(c=="route-renewal")RouteRenewal();else if(c=="renewal-bind-failure")RenewalBindFailure();else throw std::runtime_error("unknown circuit case");
+    else if(c=="socket-collision")SocketIdCollision();else if(c=="raw")CircuitRaw();else if(c=="route-renewal")RouteRenewal();else if(c=="renewal-many-nodes")RouteRenewal(40);else if(c=="renewal-bind-failure")RenewalBindFailure();else throw std::runtime_error("unknown circuit case");
     std::cout<<"PASS domain_circuit "<<c<<" HOST_FAKE_SOCKET_ONLY DEVICE_TESTED=0\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL domain_circuit "<<e.what()<<'\n';return 1;}}

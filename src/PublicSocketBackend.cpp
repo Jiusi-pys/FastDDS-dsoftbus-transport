@@ -567,7 +567,7 @@ bool PublicSocketBackend::PeerOnline() const {
     const auto rc=::GetAllNodeDeviceInfo(state_->package.data(),&nodes,&count);
     struct Release{NodeBasicInfo* p;~Release(){if(p)::FreeNodeInfo(p);}} release{nodes};
     bool found=false;
-    if(rc==0&&count>=0&&count<=32&&(!count||nodes))for(int32_t i=0;i<count;++i){
+    if(rc==0&&count>=0&&(!count||nodes))for(int32_t i=0;i<count&&!found;++i){
         const auto* end=static_cast<const char*>(std::memchr(nodes[i].networkId,0,sizeof(nodes[i].networkId)));
         if(end&&std::string(nodes[i].networkId,static_cast<std::size_t>(end-nodes[i].networkId))==expected)found=true;
     }

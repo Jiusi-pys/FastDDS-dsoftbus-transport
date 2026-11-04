@@ -105,6 +105,19 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
     std::mutex renewal_spawn;
     std::thread renewal_worker;
     bool renewal_worker_busy=false; // under gate: set at spawn, cleared as the worker's last action
+    std::thread::id renewal_thread{}; // the worker running the current attempt (fault scoping)
+    std::function<std::unique_lock<std::mutex>()> renewal_serializer;
+    NativeOwnerLease pending_reset_owner; // a failed attempt's owner whose ID release must be retried
+    static constexpr unsigned kRenewalResetAttempts=5; // consecutive reset failures before latching
+    unsigned reset_failures=0; // consecutive failed owner resets (separate from redial failures)
+    // A failed reset is retried with the redial backoff; only repeated failure latches.
+    BackendStatus ResetFailedLocked(BackendStatus reset) noexcept {
+        ++reset_failures;
+        if(reset_failures>=kRenewalResetAttempts){renewal_failed=true;return reset;}
+        const unsigned shift=reset_failures<4?reset_failures-1:3;
+        renewal_retry_at=std::chrono::steady_clock::now()+std::chrono::seconds(1u<<shift);
+        return BackendStatus::NoWork;
+    }
     void JoinRenewalWorker() noexcept {
         std::lock_guard<std::mutex> spawn(renewal_spawn);
         if(renewal_worker.joinable()&&renewal_worker.get_id()!=std::this_thread::get_id())renewal_worker.join();
@@ -138,7 +151,9 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
         std::lock_guard<std::mutex> lock(gate);
         // A circuit renewal attempt's native failure (e.g. the peer process is gone)
         // is a renewal outcome retried later, not a sticky provider fault.
-        if(renewal_attempt){if(renewal_status==BackendStatus::None)renewal_status=status;return;}
+        // Only faults raised by the attempt itself (its worker thread) are scoped to it;
+        // a fault on any other lane during the attempt stays a real provider fault.
+        if(renewal_attempt&&std::this_thread::get_id()==renewal_thread){if(renewal_status==BackendStatus::None)renewal_status=status;return;}
         const bool first=provider_status==BackendStatus::None;
         if(first)provider_status=status;
         if (status == BackendStatus::ProviderException) ++exceptions;
@@ -950,6 +965,15 @@ BackendStatus ProviderAdapter::AdvanceCircuitRenewal() noexcept {
             if(!s.redial_pending){if(!s.outgoing_stopped||!s.binding)return BackendStatus::None;original=s.CurrentDialOwner();}
             if(std::chrono::steady_clock::now()<s.renewal_retry_at)return BackendStatus::NoWork;
         }
+        NativeOwnerLease pending;
+        {std::lock_guard<std::mutex> lock(state_->gate);pending=state_->pending_reset_owner;}
+        if(pending){
+            const auto reset=state_->backend->ResetBoundedConnection(RecordRole::Client,pending);
+            RENEW_PROBE("CircuitRenew_pending_reset",reset);
+            std::lock_guard<std::mutex> lock(state_->gate);
+            if(reset!=BackendStatus::None)return state_->ResetFailedLocked(reset);
+            state_->pending_reset_owner=NativeOwnerLease{};state_->reset_failures=0;
+        }
         if(original){
             // A native shutdown (e.g. LINK_DOWN) has no local normal-end request.
             if(!original.Observe().close_intent)(void)original.RequestClose();
@@ -962,9 +986,9 @@ BackendStatus ProviderAdapter::AdvanceCircuitRenewal() noexcept {
         if(original){
             const auto reset=state_->backend->ResetBoundedConnection(RecordRole::Client,original);
             RENEW_PROBE("CircuitRenew_dial_reset",reset);
-            if(reset!=BackendStatus::None){std::lock_guard<std::mutex> lock(state_->gate);state_->renewal_failed=true;return reset;}
+            if(reset!=BackendStatus::None){std::lock_guard<std::mutex> lock(state_->gate);return state_->ResetFailedLocked(reset);}
             std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
-            s.retired_outgoing=original.Observe();
+            s.retired_outgoing=original.Observe();s.reset_failures=0;
             if(!s.retained_member)s.retained_member=std::move(s.binding);else s.binding.reset();
             s.socket=-1;s.outgoing_stopped=false;s.outgoing_started=false;s.redial_pending=true;
         }
@@ -978,15 +1002,22 @@ BackendStatus ProviderAdapter::AdvanceCircuitRenewal() noexcept {
     const auto worker=[self]{
         auto& st=*self->state_;
         // Declared first, so it runs last: after this the thread only exits, and a join is short.
-        struct WorkerDone{std::remove_reference_t<decltype(st)>& s;~WorkerDone(){{std::lock_guard<std::mutex> lock(s.gate);s.renewal_worker_busy=false;s.idle.notify_all();}
+        struct WorkerDone{std::remove_reference_t<decltype(st)>& s;~WorkerDone(){{std::lock_guard<std::mutex> lock(s.gate);s.renewal_worker_busy=false;s.renewal_thread={};s.idle.notify_all();}
             s.attachments.NotifyWork();}} worker_done{st}; // wake the pump: a replacement can carry queued sends, a failure has a retry time
         struct AttemptDone{std::remove_reference_t<decltype(st)>& s;~AttemptDone(){std::lock_guard<std::mutex> lock(s.gate);--s.controls;s.idle.notify_all();}} attempt_done{st};
-        const auto status=self->InitializeCircuitOutgoing(std::chrono::steady_clock::now()+std::chrono::seconds(10));
+        {std::lock_guard<std::mutex> lock(st.gate);st.renewal_thread=std::this_thread::get_id();}
+        // Same root-before-circuit setup serialization as the first outgoing setup.
+        std::unique_lock<std::mutex> setup;
+        if(st.renewal_serializer){try{setup=st.renewal_serializer();}catch(...){}}
+        const bool serialized=!st.renewal_serializer||setup.owns_lock();
+        const auto status=serialized?self->InitializeCircuitOutgoing(std::chrono::steady_clock::now()+std::chrono::seconds(10)):BackendStatus::NoWork;
+        if(setup.owns_lock())setup.unlock();
         RENEW_PROBE("CircuitRenew_dial_result",status);
         std::unique_ptr<ServiceRecordBinding> release,failed;NativeOwnerLease failed_owner;
         {std::lock_guard<std::mutex> lock(st.gate);auto& s=st;
             s.renewal_attempt=false;
             if(status==BackendStatus::None){++s.renewals;s.redial_pending=false;s.renewal_failures=0;s.renewal_retry_at={};release=std::move(s.retained_member);}
+            else if(status==BackendStatus::NoWork)s.renewal_retry_at=std::chrono::steady_clock::now()+std::chrono::milliseconds(50); // setup busy: short retry
             else if(status!=BackendStatus::NoWork){
                 // The peer may be gone (process exit) while its node stays online:
                 // free the failed attempt now and retry with backoff (1 s .. 8 s).
@@ -1002,7 +1033,7 @@ BackendStatus ProviderAdapter::AdvanceCircuitRenewal() noexcept {
         if(failed_owner){
             const auto reset=st.backend->ResetBoundedConnection(RecordRole::Client,failed_owner);
             RENEW_PROBE("CircuitRenew_failed_reset",reset);
-            if(reset!=BackendStatus::None){std::lock_guard<std::mutex> lock(st.gate);st.renewal_failed=true;return;}
+            if(reset!=BackendStatus::None){std::lock_guard<std::mutex> lock(st.gate);st.pending_reset_owner=failed_owner;(void)st.ResetFailedLocked(reset);return;}
         }
     };
     try {
@@ -1019,6 +1050,11 @@ bool ProviderAdapter::SetBoundedReplacementGate(std::function<bool()> gate){
     std::lock_guard<std::mutex> lock(state_->gate);
     if(state_->phase!=AdapterPhase::Constructed||!state_->request.config.bounded_reaccept_host)return false;
     state_->replacement_gate=std::move(gate);return true;
+}
+bool ProviderAdapter::SetCircuitRenewalSerializer(std::function<std::unique_lock<std::mutex>()> serializer){
+    std::lock_guard<std::mutex> lock(state_->gate);
+    if(state_->phase!=AdapterPhase::Constructed||!state_->request.config.bounded_reaccept_host)return false;
+    state_->renewal_serializer=std::move(serializer);return true;
 }
 bool ProviderAdapter::IsProviderCallbackContext() noexcept {return detail::provider_callback_depth!=0;}
 BackendStatus ProviderAdapter::CloseInput() noexcept {
