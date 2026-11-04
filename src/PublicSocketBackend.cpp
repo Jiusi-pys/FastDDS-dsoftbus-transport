@@ -575,7 +575,13 @@ BackendStatus PublicSocketBackend::ResetBoundedConnection(RecordRole role,const 
         // owner is settled; only its exact retired ID is released here.
         if(!old.AdapterSettled())return BackendStatus::InvalidState;
         const auto facts=old.Observe();const auto id=old.RetainedId();
-        if(!id)return BackendStatus::InvalidIdentity;
+        if(!id){
+            // A failed Socket returned no ID: only the one-shot attempt flag needs clearing.
+            if(role!=RecordRole::Client||facts.role!=NativeOwnerRole::Dial)return BackendStatus::InvalidIdentity;
+            std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
+            if(s.socket>=0)return BackendStatus::InvalidIdentity;
+            s.attempted=false;s.observation.stopped=false;s.observation.closed=false;return BackendStatus::None;
+        }
         auto release_family=[&](std::int32_t value){for(auto& f:parent->family_ids)if(f.used&&f.id==value)f={};};
         if(role==RecordRole::Client){
             std::lock_guard<std::mutex> parent_lock(parent->gate);std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;

@@ -90,6 +90,11 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
     std::uint64_t renewals=0; // completed circuit/bounded dial replacements
     std::int64_t renewal_probe_mask=-1; // last reported renewal state (probe only)
     bool redial_pending=false; // circuit dial binding retired, replacement not yet published
+    std::unique_ptr<ServiceRecordBinding> retained_member; // replaced dial binding kept as record member until a replacement publishes
+    bool renewal_attempt=false; // a circuit renewal InitializeCircuitOutgoing is in progress
+    BackendStatus renewal_status=BackendStatus::None; // first native failure of the current attempt
+    unsigned renewal_failures=0; // consecutive failed circuit redial attempts
+    std::chrono::steady_clock::time_point renewal_retry_at{}; // earliest next redial after a failure
     NativeOwnerObservation retired_outgoing,retired_accepted;
     std::condition_variable idle;
     AdapterPhase phase = AdapterPhase::Constructed;
@@ -114,6 +119,9 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
 
     void Fault(BackendStatus status) noexcept {
         std::lock_guard<std::mutex> lock(gate);
+        // A circuit renewal attempt's native failure (e.g. the peer process is gone)
+        // is a renewal outcome retried later, not a sticky provider fault.
+        if(renewal_attempt){if(renewal_status==BackendStatus::None)renewal_status=status;return;}
         if(provider_status==BackendStatus::None)provider_status=status;
         if (status == BackendStatus::ProviderException) ++exceptions;
     }
@@ -608,6 +616,7 @@ BackendStatus RequestNormalEnd(RecordRole role) noexcept {
             }
             if (!binding->DrainComplete()) return {BackendStatus::BindingRejected, false};
         }
+        if(retained_member){(void)retained_member->Abandon();retained_member.reset();}
         if(listener&&listener->Observe().phase!=BindingPhase::Empty) {
             const auto result=listener->Abandon();
             if(result!=NativeStatus::None&&result!=NativeStatus::AlreadySettled)return {BackendStatus::BindingRejected,false};
@@ -879,10 +888,9 @@ BackendStatus ProviderAdapter::AdvanceCircuitRenewal() noexcept {
     if(accepted_result!=BackendStatus::None&&accepted_result!=BackendStatus::NoWork){RENEW_PROBE("CircuitRenew_retire_error",accepted_result);return accepted_result;}
     // Dial lane: a circuit dial binding is a record-group member, so it is
     // replaced as a whole binding (not by owner replacement) after its owner
-    // settles and the peer is reachable again. The retired binding stays alive
-    // until its replacement has joined: the shared record seals when its last
-    // owner leaves.
-    std::unique_ptr<ServiceRecordBinding> retired;
+    // settles and the peer is reachable again. The replaced binding is retained
+    // as the record member until a replacement publishes: the shared record
+    // seals when its last owner leaves, and a failed attempt never joins it.
     {
         std::unique_lock<std::mutex> control(state_->control_gate,std::try_to_lock);
         if(!control.owns_lock())return BackendStatus::NoWork;
@@ -890,30 +898,52 @@ BackendStatus ProviderAdapter::AdvanceCircuitRenewal() noexcept {
         {std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
             if(s.stopped||s.listener_stopped||s.phase!=AdapterPhase::Published||s.renewal_failed)return BackendStatus::None;
             if(!s.redial_pending){if(!s.outgoing_stopped||!s.binding)return BackendStatus::None;original=s.CurrentDialOwner();}
+            if(std::chrono::steady_clock::now()<s.renewal_retry_at)return BackendStatus::NoWork;
         }
         if(original){
             // A native shutdown (e.g. LINK_DOWN) has no local normal-end request.
             if(!original.Observe().close_intent)(void)original.RequestClose();
             if(!original.AdapterSettled())return BackendStatus::NoWork;
-            if(state_->replacement_gate){
-                try{if(!state_->replacement_gate())return BackendStatus::NoWork;}
-                catch(...){std::lock_guard<std::mutex> lock(state_->gate);state_->renewal_failed=true;RENEW_PROBE("CircuitRenew_gate_error",0);return BackendStatus::CallbackFailure;}
-            }
+        }
+        if(state_->replacement_gate){
+            try{if(!state_->replacement_gate())return BackendStatus::NoWork;}
+            catch(...){std::lock_guard<std::mutex> lock(state_->gate);state_->renewal_failed=true;RENEW_PROBE("CircuitRenew_gate_error",0);return BackendStatus::CallbackFailure;}
+        }
+        if(original){
             const auto reset=state_->backend->ResetBoundedConnection(RecordRole::Client,original);
             RENEW_PROBE("CircuitRenew_dial_reset",reset);
             if(reset!=BackendStatus::None){std::lock_guard<std::mutex> lock(state_->gate);state_->renewal_failed=true;return reset;}
             std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
             s.retired_outgoing=original.Observe();
-            retired=std::move(s.binding);s.socket=-1;s.outgoing_stopped=false;s.outgoing_started=false;s.redial_pending=true;
+            if(!s.retained_member)s.retained_member=std::move(s.binding);else s.binding.reset();
+            s.socket=-1;s.outgoing_stopped=false;s.outgoing_started=false;s.redial_pending=true;
         }
     }
+    {std::lock_guard<std::mutex> lock(state_->gate);state_->renewal_attempt=true;state_->renewal_status=BackendStatus::None;}
     const auto status=InitializeCircuitOutgoing(std::chrono::steady_clock::now()+std::chrono::seconds(10));
     RENEW_PROBE("CircuitRenew_dial_result",status);
-    retired.reset(); // after the replacement joined (or failed); outside every adapter gate
-    std::lock_guard<std::mutex> lock(state_->gate);
-    if(status==BackendStatus::None){++state_->renewals;state_->redial_pending=false;return BackendStatus::None;}
-    if(status!=BackendStatus::NoWork){state_->renewal_failed=true;state_->redial_pending=false;}
-    return status;
+    std::unique_ptr<ServiceRecordBinding> release,failed;NativeOwnerLease failed_owner;
+    {std::lock_guard<std::mutex> lock(state_->gate);auto& s=*state_;
+        s.renewal_attempt=false;
+        if(status==BackendStatus::None){++s.renewals;s.redial_pending=false;s.renewal_failures=0;s.renewal_retry_at={};release=std::move(s.retained_member);}
+        else if(status!=BackendStatus::NoWork){
+            // The peer may be gone (process exit) while its node stays online:
+            // free the failed attempt now and retry with backoff (1 s .. 8 s).
+            failed_owner=s.CurrentDialOwner();failed=std::move(s.binding);
+            s.socket=-1;s.outgoing_stopped=false;s.outgoing_started=false;s.redial_pending=true;
+            ++s.renewal_failures;const unsigned shift=s.renewal_failures<4?s.renewal_failures-1:3;
+            s.renewal_retry_at=std::chrono::steady_clock::now()+std::chrono::seconds(1u<<shift);
+            RENEW_PROBE("CircuitRenew_retry_scheduled",s.renewal_failures);
+        }
+    }
+    release.reset(); // the replacement is published; outside every adapter gate
+    if(failed){(void)failed->Abandon();failed.reset();} // shuts its returned Socket, settles its owner
+    if(failed_owner){
+        const auto reset=state_->backend->ResetBoundedConnection(RecordRole::Client,failed_owner);
+        RENEW_PROBE("CircuitRenew_failed_reset",reset);
+        if(reset!=BackendStatus::None){std::lock_guard<std::mutex> lock(state_->gate);state_->renewal_failed=true;return reset;}
+    }
+    return status==BackendStatus::None?BackendStatus::None:BackendStatus::NoWork;
 }
 bool ProviderAdapter::SetBoundedReplacementGate(std::function<bool()> gate){
     std::lock_guard<std::mutex> lock(state_->gate);

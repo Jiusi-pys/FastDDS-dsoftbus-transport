@@ -1,6 +1,12 @@
 #include "run_protocol.hpp"
 #include "../../examples/dds214_layer_baseline/LayerSample.hpp"
 #include "frag_sample.hpp"
+#include "keyed_sample.hpp"
+#include <fastdds/dds/topic/Topic.hpp>
+#include <fastdds/dds/core/status/DeadlineMissedStatus.hpp>
+#include <fastdds/dds/core/status/LivelinessChangedStatus.hpp>
+#include <algorithm>
+#include <vector>
 #include <cstdio>
 #include <cstdlib>
 #include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
@@ -221,8 +227,11 @@ static void run_session(Session& s,NS_RunResult& out){
             need(ow->get_publication_matched_status(w)==RC::RETCODE_OK&&orr->get_subscription_matched_status(r)==RC::RETCODE_OK);
             if(w.current_count>=1&&r.current_count>=1)break;need(h.progress.wait(seen,end_at(q.deadline_ns)),NS_CANCELLED);}
         s.tolerate_send_failures=true;
-        const auto t0=Clock::now();const auto window=std::chrono::seconds(45);
-        uint32_t written=0,received=0,max_peer=0,write_fail=0;int64_t max_gap_ms=0,gap_end_ms=-1,last_rx_ms=-1;bool aborted=false;
+        // Marker content "2" selects the repeated-outage variant: 60 s window, two drops.
+        const unsigned outages=[]{const char* d=std::getenv("TMPDIR");std::FILE* f=d?std::fopen((std::string(d)+"/route_window").c_str(),"r"):nullptr;
+            int c=f?std::fgetc(f):EOF;if(f)std::fclose(f);return c=='2'?2u:1u;}();
+        const auto t0=Clock::now();const auto window=std::chrono::seconds(outages==2?60:45);const int64_t window_ms=outages==2?60000:45000;
+        uint32_t written=0,received=0,max_peer=0,write_fail=0,long_gaps=0;int64_t max_gap_ms=0,gap_end_ms=-1,last_rx_ms=-1,last_gap_end_ms=-1;bool aborted=false;
         auto ms=[&]{return static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-t0).count());};
         try{
             auto next=t0;
@@ -232,14 +241,14 @@ static void run_session(Session& s,NS_RunResult& out){
                     if(ow->write(&v))++written;else ++write_fail;next+=std::chrono::milliseconds(200);}
                 for(;;){LayerSample v;fd::SampleInfo info;const auto rc=orr->take_next_sample(&v,&info);if(rc==RC::RETCODE_NO_DATA)break;need(rc==RC::RETCODE_OK);
                     if(!info.valid_data)continue;need(v.run==local.run+2&&v.side==1-local.side);
-                    const auto now=ms();if(last_rx_ms>=0&&now-last_rx_ms>max_gap_ms){max_gap_ms=now-last_rx_ms;gap_end_ms=now;}
+                    const auto now=ms();if(last_rx_ms>=0&&now-last_rx_ms>=8000){++long_gaps;last_gap_end_ms=now;}if(last_rx_ms>=0&&now-last_rx_ms>max_gap_ms){max_gap_ms=now-last_rx_ms;gap_end_ms=now;}
                     last_rx_ms=now;++received;if(v.ordinal>max_peer)max_peer=v.ordinal;}
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
             }
         }catch(...){aborted=true;}
-        const bool recovered=!aborted&&gap_end_ms>=0&&last_rx_ms>gap_end_ms&&last_rx_ms>=45000-3000;
-        std::printf("ROUTE_OUTAGE side=%u written=%u write_fail=%u received=%u max_peer=%u max_gap_ms=%lld gap_end_ms=%lld last_rx_ms=%lld aborted=%d pump_failed=%d recovered=%d send_failures=%u\n",
-            static_cast<unsigned>(local.side),written,write_fail,received,max_peer,static_cast<long long>(max_gap_ms),static_cast<long long>(gap_end_ms),static_cast<long long>(last_rx_ms),int(aborted),int(s.pump_failed.load()),int(recovered),s.send_failures.load());std::fflush(stdout);
+        const bool recovered=!aborted&&gap_end_ms>=0&&last_rx_ms>gap_end_ms&&last_rx_ms>=window_ms-3000&&long_gaps>=outages&&last_rx_ms>last_gap_end_ms;
+        std::printf("ROUTE_OUTAGE side=%u written=%u write_fail=%u received=%u max_peer=%u max_gap_ms=%lld gap_end_ms=%lld last_rx_ms=%lld aborted=%d pump_failed=%d recovered=%d send_failures=%u outages=%u long_gaps=%u\n",
+            static_cast<unsigned>(local.side),written,write_fail,received,max_peer,static_cast<long long>(max_gap_ms),static_cast<long long>(gap_end_ms),static_cast<long long>(last_rx_ms),int(aborted),int(s.pump_failed.load()),int(recovered),s.send_failures.load(),outages,long_gaps);std::fflush(stdout);
         {const auto o=s.runtime->ObserveSocket();const auto& snd=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Send)];
          const auto& sk=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Socket)];const auto& bd=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Bind)];const auto& sh=o.operations[static_cast<size_t>(ds::phase0::PublicSocketOperation::Shutdown)];
          auto opt=[](const std::optional<std::int32_t>& v){return v?static_cast<long long>(*v):-99999LL;};
@@ -247,6 +256,179 @@ static void run_session(Session& s,NS_RunResult& out){
             static_cast<unsigned>(local.side),int(o.stopped),int(o.closed),opt(o.outgoing_socket),int(o.outgoing_stopped),opt(o.accepted_socket),int(o.accepted_stopped),int(o.listener_stopped),opt(o.shutdown_reason),opt(o.first_callback_error),int(bool(o.first_api_error)),
             (unsigned long long)sk.calls,(unsigned long long)bd.calls,bd.last_call?opt(bd.last_call->provider_return):-99999LL,(unsigned long long)snd.calls,(unsigned long long)snd.returns,snd.last_call?opt(snd.last_call->provider_return):-99999LL,(unsigned long long)sh.calls,(unsigned long long)o.callback_entries,(unsigned long long)o.rejected_callbacks);std::fflush(stdout);}
         need(recovered,NS_CANCELLED);
+    }
+    if([]{const char* d=std::getenv("TMPDIR");if(!d)return false;return access((std::string(d)+"/qos_matrix").c_str(),F_OK)==0;}())
+    {   // QoS / keyed-topic matrix (opt-in: TMPDIR/qos_matrix). Symmetric: each side writes its
+        // own topics and reads the peer's. One QOS_MATRIX line per case; any failure fails the run.
+        using IH=eprosima::fastrtps::rtps::InstanceHandle_t;
+        const unsigned me=local.side,peer=1-local.side;bool all=true;
+        auto tname=[&](const char* what,unsigned side){return "native_run_"+std::to_string(local.run)+"_"+std::to_string(side)+"_q_"+what;};
+        auto waitp=[&](auto pred,int ms){const auto end=Clock::now()+std::chrono::milliseconds(ms);
+            for(;;){const auto seen=h.progress.snapshot();need(h.live()&&!s.pump_failed,NS_CANCELLED);if(pred())return true;if(Clock::now()>=end)return false;
+                (void)h.progress.wait(seen,std::min(end,Clock::now()+std::chrono::milliseconds(50)));}};
+        auto report=[&](const char* test,bool pass,const std::string& detail){all=all&&pass;
+            std::printf("QOS_MATRIX side=%u test=%s pass=%d %s\n",me,test,int(pass),detail.c_str());std::fflush(stdout);};
+        auto topic2=[&](const char* what,const std::string& type,fd::Topic*& tx,fd::Topic*& rx){
+            tx=s.participant->create_topic(tname(what,me),type,fd::TOPIC_QOS_DEFAULT);rx=s.participant->create_topic(tname(what,peer),type,fd::TOPIC_QOS_DEFAULT);need(tx&&rx);};
+        auto matched=[&](fd::DataWriter* w,fd::DataReader* r,int wn,int rn){return waitp([&]{fd::PublicationMatchedStatus a;fd::SubscriptionMatchedStatus b;
+            need(w->get_publication_matched_status(a)==RC::RETCODE_OK&&r->get_subscription_matched_status(b)==RC::RETCODE_OK);return a.current_count==wn&&b.current_count==rn;},5000);};
+        auto layer=[&](std::uint64_t run,std::uint32_t n){LayerSample v;v.run=run;v.side=me;v.ordinal=n;v.payload=stage1_run::payload(run,me,n);return v;};
+        // Cross-side barrier on a TRANSIENT_LOCAL KEEP_ALL topic.
+        fd::Topic *sync_tx=nullptr,*sync_rx=nullptr;topic2("sync",s.type.get_type_name(),sync_tx,sync_rx);
+        fd::DataWriterQos swq=wq;swq.durability().kind=fd::TRANSIENT_LOCAL_DURABILITY_QOS;swq.history().kind=fd::KEEP_ALL_HISTORY_QOS;
+        fd::DataReaderQos srq=rq;srq.durability().kind=fd::TRANSIENT_LOCAL_DURABILITY_QOS;srq.history().kind=fd::KEEP_ALL_HISTORY_QOS;
+        auto* sw=pub->create_datawriter(sync_tx,swq,&s.signals);auto* sr=sub->create_datareader(sync_rx,srq,&s.signals);need(sw&&sr);
+        std::uint32_t peer_stage=0;
+        auto barrier=[&](std::uint32_t n){auto v=layer(local.run+7,n);need(sw->write(&v));
+            need(waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(sr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                if(i.valid_data&&x.run==local.run+7&&x.side==peer&&x.ordinal>peer_stage)peer_stage=x.ordinal;}return peer_stage>=n;},15000),NS_CANCELLED);};
+        barrier(1);
+        fd::TypeSupport kt{new stage1_keyed::Type};need(kt.register_type(s.participant)==RC::RETCODE_OK);
+        {   // 1. Keyed instances, dispose and unregister (no autodispose).
+            fd::Topic *tx,*rx;topic2("keyed",kt.get_type_name(),tx,rx);
+            fd::DataWriterQos w=wq;w.history().depth=4;w.writer_data_lifecycle().autodispose_unregistered_instances=false;fd::DataReaderQos r=rq;r.history().depth=4;
+            auto* kw=pub->create_datawriter(tx,w,&s.signals);auto* kr=sub->create_datareader(rx,r,&s.signals);need(kw&&kr);
+            const bool m=matched(kw,kr,1,1);barrier(2);
+            std::array<IH,3> hs{};
+            for(std::uint32_t k=1;k<=3;++k){stage1_keyed::Sample v;v.key=k;v.run=local.run;v.side=me;hs[k-1]=kw->register_instance(&v);
+                for(std::uint32_t n=1;n<=2;++n){v.seq=n;v.tag=k*10+n;need(kw->write(&v,hs[k-1])==RC::RETCODE_OK);}}
+            {stage1_keyed::Sample v;v.run=local.run;v.side=me;v.key=1;need(kw->dispose(&v,hs[0])==RC::RETCODE_OK);v.key=2;need(kw->unregister_instance(&v,hs[1])==RC::RETCODE_OK);}
+            std::array<unsigned,3> got{};bool disposed=false,nowriters=false;std::vector<IH> handles;
+            bool ok=m&&waitp([&]{for(;;){stage1_keyed::Sample x;fd::SampleInfo i;if(kr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                if(i.valid_data){if(x.run==local.run&&x.side==peer&&x.key>=1&&x.key<=3&&x.tag==x.key*10+x.seq){++got[x.key-1];
+                    if(std::find(handles.begin(),handles.end(),i.instance_handle)==handles.end())handles.push_back(i.instance_handle);}}
+                else{if(i.instance_state==fd::NOT_ALIVE_DISPOSED_INSTANCE_STATE)disposed=true;if(i.instance_state==fd::NOT_ALIVE_NO_WRITERS_INSTANCE_STATE)nowriters=true;}}
+                return got[0]==2&&got[1]==2&&got[2]==2&&disposed&&nowriters;},5000);
+            ok=ok&&handles.size()==3;
+            report("keyed_instances_dispose_unregister",ok,"samples="+std::to_string(got[0])+","+std::to_string(got[1])+","+std::to_string(got[2])+
+                " instances="+std::to_string(handles.size())+" disposed="+std::to_string(disposed)+" no_writers="+std::to_string(nowriters));
+            (void)kw->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(2,0));
+        }
+        barrier(3);
+        {   // 2. TRANSIENT_LOCAL late joiner: reader created 1.5 s after the writer's samples.
+            fd::Topic *tx,*rx;topic2("late",s.type.get_type_name(),tx,rx);
+            fd::DataWriterQos w=wq;w.durability().kind=fd::TRANSIENT_LOCAL_DURABILITY_QOS;w.history().depth=5;
+            auto* lw=pub->create_datawriter(tx,w,&s.signals);need(lw);
+            for(std::uint32_t n=1;n<=5;++n){auto v=layer(local.run+8,n);need(lw->write(&v));}
+            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+            fd::DataReaderQos r=rq;r.durability().kind=fd::TRANSIENT_LOCAL_DURABILITY_QOS;r.history().depth=5;
+            auto* lr=sub->create_datareader(rx,r,&s.signals);need(lr);
+            std::uint32_t next=1;bool order=true;
+            const bool ok=waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(lr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data)continue;
+                if(x.run!=local.run+8||x.side!=peer||x.ordinal!=next||x.payload!=stage1_run::payload(x.run,peer,x.ordinal))order=false;else ++next;}
+                return next==6||!order;},6000)&&order&&next==6;
+            report("transient_local_late_joiner",ok,"received="+std::to_string(next-1)+" in_order="+std::to_string(order));
+            (void)lw->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(3,0));
+        }
+        barrier(4);
+        {   // 3. KEEP_ALL reliable burst of 300 samples, exact order.
+            fd::Topic *tx,*rx;topic2("burst",s.type.get_type_name(),tx,rx);
+            fd::DataWriterQos w=wq;w.history().kind=fd::KEEP_ALL_HISTORY_QOS;fd::DataReaderQos r=rq;r.history().kind=fd::KEEP_ALL_HISTORY_QOS;
+            auto* bw=pub->create_datawriter(tx,w,&s.signals);auto* br=sub->create_datareader(rx,r,&s.signals);need(bw&&br);
+            const bool m=matched(bw,br,1,1);barrier(5);
+            for(std::uint32_t n=1;n<=300;++n){auto v=layer(local.run+9,n);need(bw->write(&v));}
+            std::uint32_t next=1;bool order=true;
+            const bool ok=m&&waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(br->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data)continue;
+                if(x.run!=local.run+9||x.side!=peer||x.ordinal!=next)order=false;else ++next;}return next==301||!order;},15000)&&order&&next==301;
+            const bool acked=bw->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(5,0))==RC::RETCODE_OK;
+            report("keep_all_reliable_burst_300",ok&&acked,"received="+std::to_string(next-1)+" in_order="+std::to_string(order)+" acked="+std::to_string(acked));
+        }
+        barrier(6);
+        {   // 4. DEADLINE 300 ms: no miss while writing every 100 ms, misses after writes stop.
+            fd::Topic *tx,*rx;topic2("deadline",s.type.get_type_name(),tx,rx);
+            fd::DataWriterQos w=wq;w.deadline().period=eprosima::fastrtps::Duration_t(0,300000000);fd::DataReaderQos r=rq;r.deadline().period=w.deadline().period;
+            auto* dw=pub->create_datawriter(tx,w,&s.signals);auto* dr=sub->create_datareader(rx,r,&s.signals);need(dw&&dr);
+            const bool m=matched(dw,dr,1,1);barrier(7);
+            for(std::uint32_t n=1;n<=5;++n){auto v=layer(local.run+10,n);need(dw->write(&v));std::this_thread::sleep_for(std::chrono::milliseconds(100));}
+            fd::RequestedDeadlineMissedStatus during{};fd::OfferedDeadlineMissedStatus offered_during{};
+            need(dr->get_requested_deadline_missed_status(during)==RC::RETCODE_OK&&dw->get_offered_deadline_missed_status(offered_during)==RC::RETCODE_OK);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+            fd::RequestedDeadlineMissedStatus after{};fd::OfferedDeadlineMissedStatus offered_after{};
+            need(dr->get_requested_deadline_missed_status(after)==RC::RETCODE_OK&&dw->get_offered_deadline_missed_status(offered_after)==RC::RETCODE_OK);
+            unsigned received=0;for(;;){LayerSample x;fd::SampleInfo i;if(dr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(i.valid_data&&x.run==local.run+10&&x.side==peer)++received;}
+            const bool ok=m&&received==5&&during.total_count==0&&offered_during.total_count==0&&after.total_count>=1&&offered_after.total_count>=1;
+            report("deadline_300ms",ok,"received="+std::to_string(received)+" requested_missed="+std::to_string(during.total_count)+"->"+std::to_string(after.total_count)+
+                " offered_missed="+std::to_string(offered_during.total_count)+"->"+std::to_string(offered_after.total_count));
+        }
+        barrier(8);
+        {   // 5. AUTOMATIC liveliness (lease 1 s): peer writer alive, then not alive after it is deleted.
+            fd::Topic *tx,*rx;topic2("liveliness",s.type.get_type_name(),tx,rx);
+            fd::DataWriterQos w=wq;w.liveliness().kind=fd::AUTOMATIC_LIVELINESS_QOS;w.liveliness().lease_duration=eprosima::fastrtps::Duration_t(1,0);
+            w.liveliness().announcement_period=eprosima::fastrtps::Duration_t(0,500000000);
+            fd::DataReaderQos r=rq;r.liveliness().kind=fd::AUTOMATIC_LIVELINESS_QOS;r.liveliness().lease_duration=eprosima::fastrtps::Duration_t(1,0);
+            auto* lw=pub->create_datawriter(tx,w,&s.signals);auto* lr=sub->create_datareader(rx,r,&s.signals);need(lw&&lr);
+            auto alive=[&]{fd::LivelinessChangedStatus st;need(lr->get_liveliness_changed_status(st)==RC::RETCODE_OK);return st.alive_count;};
+            const bool m=matched(lw,lr,1,1);
+            const bool up=m&&waitp([&]{return alive()==1;},4000);
+            barrier(9);
+            need(pub->delete_datawriter(lw)==RC::RETCODE_OK);
+            const bool down=waitp([&]{return alive()==0;},5000);
+            report("liveliness_automatic_1s",up&&down,"alive_seen="+std::to_string(up)+" not_alive_after_delete="+std::to_string(down));
+        }
+        barrier(10);
+        {   // 6. EXCLUSIVE ownership: only the strength-20 writer's samples are delivered.
+            fd::Topic *tx,*rx;topic2("ownership",s.type.get_type_name(),tx,rx);
+            fd::DataWriterQos low=wq;low.ownership().kind=fd::EXCLUSIVE_OWNERSHIP_QOS;low.ownership_strength().value=10;
+            fd::DataWriterQos high=low;high.ownership_strength().value=20;
+            fd::DataReaderQos r=rq;r.ownership().kind=fd::EXCLUSIVE_OWNERSHIP_QOS;r.history().depth=32;
+            auto* w1=pub->create_datawriter(tx,low,&s.signals);auto* w2=pub->create_datawriter(tx,high,&s.signals);auto* orr=sub->create_datareader(rx,r,&s.signals);need(w1&&w2&&orr);
+            const bool m=matched(w1,orr,1,2)&&matched(w2,orr,1,2);barrier(11);
+            // Ownership is assigned on arrival: establish the strength-20 owner first.
+            {auto b=layer(local.run+11,3000);need(w2->write(&b));}
+            const bool owned=waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(orr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;
+                if(i.valid_data&&x.run==local.run+11&&x.side==peer&&x.ordinal==3000)return true;}return false;},3000);
+            barrier(19);
+            for(std::uint32_t n=1;n<=10;++n){auto a=layer(local.run+11,1000+n);auto b=layer(local.run+11,2000+n);need(w1->write(&a)&&w2->write(&b));
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));}
+            unsigned hi=0,lo=0;
+            (void)waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(orr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data||x.run!=local.run+11||x.side!=peer)continue;
+                if(x.ordinal>=2000)++hi;else ++lo;}return hi>=10;},5000);
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            for(;;){LayerSample x;fd::SampleInfo i;if(orr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data||x.run!=local.run+11||x.side!=peer)continue;if(x.ordinal>=2000)++hi;else ++lo;}
+            report("ownership_exclusive_strength",m&&owned&&hi==10&&lo==0,"owner_established="+std::to_string(owned)+" strength20="+std::to_string(hi)+" strength10="+std::to_string(lo));
+        }
+        barrier(12);
+        {   // 7. LIFESPAN 2 s: unread samples expire; fresh samples are still delivered.
+            fd::Topic *tx,*rx;topic2("lifespan",s.type.get_type_name(),tx,rx);
+            fd::DataWriterQos w=wq;w.lifespan().duration=eprosima::fastrtps::Duration_t(2,0);w.history().depth=10;
+            fd::DataReaderQos r=rq;r.lifespan().duration=eprosima::fastrtps::Duration_t(2,0);r.history().depth=10;
+            auto* fw=pub->create_datawriter(tx,w,&s.signals);auto* fr=sub->create_datareader(rx,r,&s.signals);need(fw&&fr);
+            const bool m=matched(fw,fr,1,1);barrier(13);
+            for(std::uint32_t n=1;n<=3;++n){auto v=layer(local.run+12,n);need(fw->write(&v));}
+            std::this_thread::sleep_for(std::chrono::milliseconds(3500));
+            unsigned stale=0,fresh=0;
+            auto drain=[&]{for(;;){LayerSample x;fd::SampleInfo i;if(fr->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(!i.valid_data||x.run!=local.run+12||x.side!=peer)continue;
+                if(x.ordinal<=3)++stale;else ++fresh;}};
+            drain();barrier(14);
+            for(std::uint32_t n=4;n<=5;++n){auto v=layer(local.run+12,n);need(fw->write(&v));}
+            (void)waitp([&]{drain();return fresh>=2;},1500);
+            report("lifespan_2s",m&&stale==0&&fresh==2,"expired_batch_delivered="+std::to_string(stale)+" fresh_delivered="+std::to_string(fresh));
+        }
+        barrier(15);
+        {   // 8. PARTITIONS: a reader in partition "pb" never matches a writer in "pa"; one in "pa" does.
+            fd::Topic *tx,*rx;topic2("partition",s.type.get_type_name(),tx,rx);
+            fd::PublisherQos pq=fd::PUBLISHER_QOS_DEFAULT;pq.partition().push_back("pa");
+            fd::SubscriberQos wrong_q=fd::SUBSCRIBER_QOS_DEFAULT;wrong_q.partition().push_back("pb");
+            fd::SubscriberQos right_q=fd::SUBSCRIBER_QOS_DEFAULT;right_q.partition().push_back("pa");
+            auto* ppub=s.participant->create_publisher(pq);auto* wsub=s.participant->create_subscriber(wrong_q);auto* rsub=s.participant->create_subscriber(right_q);need(ppub&&wsub&&rsub);
+            auto* pw=ppub->create_datawriter(tx,wq,&s.signals);auto* wrong=wsub->create_datareader(rx,rq,&s.signals);auto* right=rsub->create_datareader(rx,rq,&s.signals);need(pw&&wrong&&right);
+            // Both directions: our in-partition reader saw the peer writer AND our writer saw the peer's in-partition reader.
+            const bool m=waitp([&]{fd::SubscriptionMatchedStatus b;fd::PublicationMatchedStatus a;need(right->get_subscription_matched_status(b)==RC::RETCODE_OK&&
+                pw->get_publication_matched_status(a)==RC::RETCODE_OK);return b.current_count==1&&a.current_count==1;},10000);
+            barrier(16);
+            auto v=layer(local.run+13,1);need(pw->write(&v));
+            unsigned got_right=0,got_wrong=0;
+            (void)waitp([&]{for(;;){LayerSample x;fd::SampleInfo i;if(right->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(i.valid_data&&x.run==local.run+13&&x.side==peer)++got_right;}return got_right>=1;},3000);
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            for(;;){LayerSample x;fd::SampleInfo i;if(wrong->take_next_sample(&x,&i)!=RC::RETCODE_OK)break;if(i.valid_data)++got_wrong;}
+            fd::SubscriptionMatchedStatus ws;need(wrong->get_subscription_matched_status(ws)==RC::RETCODE_OK);
+            report("partitions",m&&got_right==1&&got_wrong==0&&ws.total_count==0,"matched="+std::to_string(m)+" same_partition_delivered="+std::to_string(got_right)+
+                " other_partition_matches="+std::to_string(ws.total_count)+" other_partition_delivered="+std::to_string(got_wrong));
+        }
+        barrier(17);
+        std::printf("QOS_MATRIX side=%u test=content_filtered_topic pass=SKIPPED reason=test_types_have_no_type_object\n",me);
+        std::printf("QOS_MATRIX side=%u summary all_pass=%d\n",me,int(all));std::fflush(stdout);
+        need(all,NS_STATE);
     }
     const auto left=q.deadline_ns-ticks();need(h.live(),NS_CANCELLED);need(left<=uint64_t(INT32_MAX)*1000000000u,NS_CONTEXT);
     need(s.writer->wait_for_acknowledgments(eprosima::fastrtps::Duration_t(static_cast<int32_t>(left/1000000000u),static_cast<uint32_t>(left%1000000000u)))==RC::RETCODE_OK);

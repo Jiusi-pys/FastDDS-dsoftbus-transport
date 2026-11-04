@@ -269,9 +269,42 @@ void RouteRenewal(){
     f.Finish();set_online(false);
     std::cout<<"ROUTE_RENEWAL link_down=4 offline_redial=0 fresh_socket_bind=1/side reaccept=1 dds_after=2_cycles same_participants=1 close_residue=0\n";
 }
+// Peer process gone while its node stays online: the redial Bind fails. The
+// failed renewal must not wedge teardown: Runtime close stays clean, no residue.
+void RenewalBindFailure(){
+    T2LifecycleFixture f;f.Pair(0);f.Traffic(0,1);
+    public_socket_fake::EnableFreshReplacementIds();
+    {std::lock_guard<std::mutex> lock(fake_node::gate);fake_node::nodes.clear();fake_node::nodes["model.net.A"]="udid.A";fake_node::nodes["model.net.B"]="udid.B";}
+    const auto before=public_socket_fake::Observe();
+    public_socket_fake::FailNext(public_socket_fake::InjectedOperation::Bind,-426115007);
+    T2Check(public_socket_fake::LinkDown(SHUTDOWN_REASON_PEER)==4,"peer death ends all circuit connections");
+    const auto deadline=std::chrono::steady_clock::now()+10s;
+    for(;;){const auto s=public_socket_fake::Observe();if(s.sockets[0]+s.sockets[1]>before.sockets[0]+before.sockets[1])break;
+        T2Check(std::chrono::steady_clock::now()<deadline,"no redial attempted");std::this_thread::sleep_for(50ms);}
+    // One side's first redial Bind failed (peer unreachable). It must retry with
+    // backoff instead of latching, reconnect, and carry DDS traffic again.
+    const auto retry_deadline=std::chrono::steady_clock::now()+15s;
+    // One fresh Socket per side plus one retried Socket on the failed side (the
+    // Fake's injected Bind failure returns before it counts a Bind), all six live.
+    for(;;){const auto s=public_socket_fake::Observe();if(s.live==6&&s.sockets[0]+s.sockets[1]>=before.sockets[0]+before.sockets[1]+3)break;
+        if(std::chrono::steady_clock::now()>=retry_deadline)std::cout<<"RETRY_TIMEOUT binds="<<s.binds[0]<<','<<s.binds[1]<<" sockets="<<s.sockets[0]<<','<<s.sockets[1]
+            <<" rejected="<<s.rejected_candidates<<" invalid="<<s.invalid<<" live="<<s.live<<std::endl;
+        T2Check(std::chrono::steady_clock::now()<retry_deadline,"failed redial was not retried");std::this_thread::sleep_for(50ms);}
+    f.Traffic(0,2);
+    const auto after=public_socket_fake::Observe();
+    std::cout<<"RENEWAL_BIND_FAILURE sockets="<<before.sockets[0]<<','<<before.sockets[1]<<"->"<<after.sockets[0]<<','<<after.sockets[1]
+        <<" binds="<<before.binds[0]<<','<<before.binds[1]<<"->"<<after.binds[0]<<','<<after.binds[1]<<std::endl;
+    for(unsigned group=0;group<2;++group)for(unsigned side=0;side<2;++side)f.Remove(side,group);
+    for(unsigned side=0;side<2;++side){const bool closed=f.runtimes[side]->Close();const auto r=phase0::RuntimeProbeAccess::ObserveRuntime(*f.runtimes[side]);
+        std::cout<<"RENEWAL_CLOSE side="<<side<<" ok="<<closed<<" status="<<unsigned(r.close.status)<<" cleanup="<<unsigned(r.close.cleanup_status)<<std::endl;
+        T2Check(closed,"failed-then-retried renewal made Runtime close report failure");}
+    f.Finish();
+    {std::lock_guard<std::mutex> lock(fake_node::gate);fake_node::nodes.clear();}
+    std::cout<<"RENEWAL_BIND_FAILURE retry_reconnect=1 dds_after=1 close_clean=1 residue=0\n";
+}
 int main(int argc,char** argv){try{
     T2LoadedDll();T2Check(argc==2,"one circuit case");const std::string c=argv[1];
     if(c=="names")CircuitNames();else if(c=="default-remote")DefaultRemote();else if(c=="identity")CircuitIdentity();
-    else if(c=="socket-collision")SocketIdCollision();else if(c=="raw")CircuitRaw();else if(c=="route-renewal")RouteRenewal();else throw std::runtime_error("unknown circuit case");
+    else if(c=="socket-collision")SocketIdCollision();else if(c=="raw")CircuitRaw();else if(c=="route-renewal")RouteRenewal();else if(c=="renewal-bind-failure")RenewalBindFailure();else throw std::runtime_error("unknown circuit case");
     std::cout<<"PASS domain_circuit "<<c<<" HOST_FAKE_SOCKET_ONLY DEVICE_TESTED=0\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL domain_circuit "<<e.what()<<'\n';return 1;}}
