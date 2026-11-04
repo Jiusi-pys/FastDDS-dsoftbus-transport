@@ -43,6 +43,8 @@ friend class ::fastdds_dsoftbus::dsoftbus::ProcessReceiveInvocation;
     static NativeResult<ProcessReceiveInvocation> TryEnter(ApplicationAttachments&,NativeOwnerTable&,
             ReceiveWork&,const ProcessClock&);
     static NativeResult<ProcessReceiveInvocation> Next(ApplicationAttachments&,NativeOwnerTable&,const ProcessClock&);
+    static NativeResult<ProcessReceiveInvocation> NextAuthorized(ApplicationAttachments&,
+            const std::array<NativeOwnerTable*,2>&,const ProcessClock&);
     static InputDeliveryResult Invoke(ProcessReceiveExecution&);
     // Arms the delivery context of one already-admitted invocation. Only the
     // composition that issued it may arm it, and the hooks must be callable without

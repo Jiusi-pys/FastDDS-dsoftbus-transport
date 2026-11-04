@@ -13,6 +13,7 @@ struct LinkConfiguration {
     std::string peer_udid;
     // Explicit Host negative fixture only; empty keeps opaque forwarding.
     std::string fragment_control;
+    bool io_observation=false; // explicit, Host-only diagnostic opt-in
 };
 void ConfigureLink(LinkConfiguration);
 bool WaitPeerListener(unsigned milliseconds);

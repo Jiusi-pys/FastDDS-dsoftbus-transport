@@ -592,6 +592,8 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
     RecordControl* control = nullptr;
     BindingPhase phase = BindingPhase::Empty;
     bool created_record = false;
+    bool metadata_anchor = false;
+    bool deferred_callback_publication = false;
     RecordReservation reservation;
     RecordEntrance entrance;          // the role this binding serves
     RecordEntrance sibling_entrance;  // the record's other role, when created here
@@ -789,10 +791,24 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
         return RecordEntrance{};
     }
 
-    NativeStatus Prepare() noexcept
+    NativeStatus ExposeCallbackRecordLocked() noexcept
     {
-        std::lock_guard<std::mutex> lock(gate);
-        if (phase != BindingPhase::Empty) return NativeStatus::WrongState;
+        if (entrance && sibling_entrance) return NativeStatus::None;
+        if (entrance || sibling_entrance || !created_record || !reservation || !control)
+            return NativeStatus::WrongState; // partial exposure is never undone
+        auto exposed = records.Expose(reservation, request.role, *control);
+        if (!exposed) return FromRecordStatus(exposed.status);
+        entrance = std::move(*exposed.value);
+        control->Bind(entrance.record_incarnation_);
+        const auto sibling = request.role == RecordRole::Client ? RecordRole::Server : RecordRole::Client;
+        auto other = records.Expose(reservation, sibling, *control);
+        if (!other) return FromRecordStatus(other.status);
+        sibling_entrance = std::move(*other.value);
+        return NativeStatus::None;
+    }
+
+    NativeStatus PrepareRecordLocked(bool anchor) noexcept
+    {
         const bool joining = static_cast<bool>(request.existing);
         if(request.defer_accepted_ownership&&(!request.is_accepted||!joining||request.role!=RecordRole::Server))
             return NativeStatus::InvalidConfiguration;
@@ -835,17 +851,29 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             }
             control = &ControlForSlot(reservation.slot_);
             if (hooks.after_record_reserve) hooks.after_record_reserve();
-            // Both roles are exposed here, before anything can reach the SDK. The
-            // sibling entrance leaves this object only through RoleEntrance().
-            auto exposed = records.Expose(reservation, request.role, *control);
-            if (!exposed) { phase = BindingPhase::Failed; return FromRecordStatus(exposed.status); }
-            entrance = std::move(*exposed.value);
-            control->Bind(entrance.record_incarnation_);
-            const auto sibling = request.role == RecordRole::Client ? RecordRole::Server : RecordRole::Client;
-            auto other = records.Expose(reservation, sibling, *control);
-            if (!other) { phase = BindingPhase::Failed; return FromRecordStatus(other.status); }
-            sibling_entrance = std::move(*other.value);
+            // Only a fresh public Socket-only attempt can stay unexposed.
+            // Join/accepted and every default provider keep permanent early exposure.
+            deferred_callback_publication = !anchor && !request.is_accepted && provider.CanCreateBeforeExposure();
+            if (!deferred_callback_publication) {
+                const auto exposed = ExposeCallbackRecordLocked();
+                if (exposed != NativeStatus::None) { phase = BindingPhase::Failed; return exposed; }
+            }
         }
+        return NativeStatus::None;
+    }
+    NativeStatus PrepareRecordAnchor() noexcept {
+        std::lock_guard<std::mutex> lock(gate);
+        if(phase!=BindingPhase::Empty||request.existing||request.is_accepted)return NativeStatus::WrongState;
+        const auto result=PrepareRecordLocked(true);
+        if(result==NativeStatus::None){phase=BindingPhase::Prepared;metadata_anchor=true;}
+        return result; // Project record/entrances only: no native reservation or SDK call.
+    }
+    NativeStatus Prepare() noexcept
+    {
+        std::lock_guard<std::mutex> lock(gate);
+        if (phase != BindingPhase::Empty) return NativeStatus::WrongState;
+        const auto record=PrepareRecordLocked(false);
+        if(record!=NativeStatus::None)return record;
         auto namespace_lease = native.AcquireNamespace(request.local, request.config);
         if (!namespace_lease) {
             phase = BindingPhase::Failed;
@@ -909,11 +937,13 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
         return NativeStatus::None;
     }
 
-    NativeStatus Connect() noexcept
+    NativeStatus Connect(std::optional<std::chrono::steady_clock::time_point> deadline = {},bool* attempt_entered=nullptr) noexcept
     {
+        if(attempt_entered)*attempt_entered=false;
         std::unique_lock<std::mutex> lock(gate);
         if (phase != BindingPhase::Prepared) return NativeStatus::WrongState;
         if(provider_terminal)return NativeStatus::OwnerUnavailable;
+        if(deadline&&std::chrono::duration_cast<std::chrono::milliseconds>(*deadline-std::chrono::steady_clock::now()).count()<=0)return NativeStatus::NotReady;
         if (request.is_accepted) {
             if(socket<0)return NativeStatus::NotReady;
             // The accepted socket already exists; its owner was adopted whole.
@@ -923,11 +953,34 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
         if (!socket_call || !owner) { phase = BindingPhase::Failed; return NativeStatus::WrongState; }
         auto entered = socket_call->CallEntered();
         if (entered != NativeStatus::None) { phase = BindingPhase::Failed; return entered; }
+        if(attempt_entered)*attempt_entered=true; // Original Socket ticket entered; not an SDK-return claim.
         lock.unlock(); // Original ticket remains owned; controls are externally serialized.
-        const auto created = provider.CreateSocket();
+        PreExposureSocketResult evidence;
+        const auto created = deferred_callback_publication
+                ? (evidence = provider.CreateSocketBeforeExposure(), evidence.native)
+                : provider.CreateSocket();
         lock.lock();
         const auto socket_completion = socket_call->Complete(created);
         socket_call.reset();
+        // A valid positive completion adopts the actual id before any callback
+        // commit can fail. The original owner remains the sole Shutdown authority.
+        if (socket_completion.status == NativeStatus::None &&
+                created.kind == NativeSocketResult::Kind::Id) socket = created.value;
+        if (deferred_callback_publication) {
+            const bool known_no_handle = socket_completion.status == NativeStatus::None &&
+                    !entrance && !sibling_entrance && evidence.KnownNegativeNoHandle();
+            if (!known_no_handle) {
+                const auto exposed = ExposeCallbackRecordLocked();
+                if (exposed != NativeStatus::None) { phase = BindingPhase::Failed; return exposed; }
+                const auto original_entrance = entrance;
+                lock.unlock(); // provider ports never run under the binding gate
+                const auto configured = provider.ConfigureCallbackEntrance(original_entrance);
+                lock.lock();
+                if (configured != NativeStatus::None) { phase = BindingPhase::Failed; return configured; }
+            }
+            // Unknown/exception/partial facts are permanently exposed above.
+            // Only the exact returned negative can leave this reservation FREE.
+        }
         if (socket_completion.status != NativeStatus::None) {
             phase = BindingPhase::Failed;
             return socket_completion.status;
@@ -958,7 +1011,7 @@ struct ServiceRecordBinding::State final : std::enable_shared_from_this<ServiceR
             entered = bind_call->CallEntered();
             if (entered != NativeStatus::None) { phase = BindingPhase::Failed; return entered; }
             lock.unlock();
-            const auto result = provider.Bind(socket);
+            const auto result = deadline ? provider.Bind(socket,*deadline) : provider.Bind(socket);
             lock.lock();
             const auto completion = bind_call->Complete(result);
             bind_call.reset();
@@ -1414,7 +1467,8 @@ NativeResult<BindingInput> ServiceRecordBinding::AttachSharedInput(InputChannels
     if(!state_||!receiver||IsCallbackContext())return {std::nullopt,{NativeStatus::WrongState}};
     auto& s=*state_;
     {std::lock_guard<std::mutex> lock(s.gate);
-        if(!s.request.shared_input_channel||s.phase!=BindingPhase::Published||s.provider_terminal)
+        const bool live_anchor=s.metadata_anchor&&s.phase==BindingPhase::Prepared&&s.control&&s.entrance&&s.sibling_entrance;
+        if(!s.request.shared_input_channel||(!live_anchor&&s.phase!=BindingPhase::Published)||s.provider_terminal)
             return {std::nullopt,{NativeStatus::WrongState}};
     }
     ApplicationClaim claim;
@@ -1505,8 +1559,20 @@ NativeStatus ServiceRecordBinding::RequestNormalConnectionEnd() noexcept
 }
 NativeStatus ServiceRecordBinding::Connect() noexcept
 { return state_ ? state_->Connect() : NativeStatus::InvalidHandle; }
+NativeStatus ServiceRecordBinding::Connect(std::chrono::steady_clock::time_point deadline,bool& attempt_entered) noexcept
+{ attempt_entered=false;return state_ ? state_->Connect(deadline,&attempt_entered) : NativeStatus::InvalidHandle; }
+NativeStatus ServiceRecordBinding::PrepareRecordAnchor() noexcept {
+    return state_?state_->PrepareRecordAnchor():NativeStatus::InvalidHandle;
+}
 NativeStatus ServiceRecordBinding::Publish() noexcept
-{ return state_ ? state_->Publish() : NativeStatus::InvalidHandle; }
+{
+    if(!state_)return NativeStatus::InvalidHandle;
+    const auto result=state_->Publish();
+    // Publish released binding/native/attachment gates. A pending receive can
+    // now become runnable without another byte arriving.
+    if(result==NativeStatus::None)state_->attachments.NotifyWork();
+    return result;
+}
 NativeStatus ServiceRecordBinding::Abandon() noexcept
 { return state_ ? state_->Abandon() : NativeStatus::InvalidHandle; }
 NativeStatus ServiceRecordBinding::CloseInput() noexcept
@@ -1550,6 +1616,12 @@ RecordEntrance ServiceRecordBinding::RoleEntrance(RecordRole role) const noexcep
     std::lock_guard<std::mutex> lock(state_->gate);
     return state_->EntranceFor(role);
 }
+bool ServiceRecordBinding::CallbackPublicationDeferred() const noexcept
+{
+    if (!state_) return false;
+    std::lock_guard<std::mutex> lock(state_->gate);
+    return state_->deferred_callback_publication;
+}
 NativeResult<BindingDelivery> ServiceRecordBinding::NextAdmitted() noexcept
 {
     if (!state_) return {std::nullopt, {NativeStatus::InvalidHandle}};
@@ -1567,6 +1639,31 @@ NativeResult<BindingDelivery> ServiceRecordBinding::NextAdmitted() noexcept
     }
     State::ReceiveActivity activity{*state_, true};
     auto next = detail::ProcessReceiveBridge::Next(*owner, state_->native, clock);
+    if (!next) return {std::nullopt, next.issue};
+    // Mark the delivery context on the execution itself, so the context is entered by
+    // whichever thread runs it and through whichever entry point. The hooks read the
+    // application the delivery runs under from that execution.
+    detail::ProcessReceiveBridge::ArmDeliveryContext(*next.value, &EnterDeliveryContext,
+            &ExitDeliveryContext);
+    return {BindingDelivery(std::move(*next.value), std::weak_ptr<void>(state_)), {}};
+}
+NativeResult<BindingDelivery> ServiceRecordBinding::NextAdmittedAuthorized(const std::array<NativeOwnerTable*,2>& tables) noexcept
+{
+    if (!state_) return {std::nullopt, {NativeStatus::InvalidHandle}};
+    ApplicationAttachments* owner = nullptr;
+    ProcessClock clock;
+    {
+        std::lock_guard<std::mutex> lock(state_->gate);
+        if (state_->phase != BindingPhase::Published && state_->phase != BindingPhase::Closing) {
+            return {std::nullopt, {NativeStatus::WrongState}};
+        }
+        if (!state_->group&&!state_->request.shared_input_channel) return {std::nullopt, {NativeStatus::NotReady}};
+        owner = state_->request.shared_input_channel?&state_->attachments:&state_->group->attachments;
+        clock = state_->clock;
+        ++state_->receive_dispatches;
+    }
+    State::ReceiveActivity activity{*state_, true};
+    auto next = detail::ProcessReceiveBridge::NextAuthorized(*owner, tables, clock);
     if (!next) return {std::nullopt, next.issue};
     // Mark the delivery context on the execution itself, so the context is entered by
     // whichever thread runs it and through whichever entry point. The hooks read the

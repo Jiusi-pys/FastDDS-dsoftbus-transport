@@ -15,7 +15,7 @@ enum class FacadeError {
     None, InvalidLimits, DirectoryRejected, EgressRejected, InvalidDefaultLocal,
     UnsupportedNoFragmentRequest, NativeBackendUnavailable, AllocationFailure,
     InvalidState, InvalidLocator, InsufficientReceiverCapacity, InputConflict,
-    InputClosing, SenderAttachRejected
+    InputClosing, SenderAttachRejected, DomainRefused, DomainClosed
 #if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
     , UnsupportedHostOperation
 #endif
@@ -45,6 +45,9 @@ public:
     FacadeMode mode() const noexcept;
     FacadeState state() const;
     FacadeDiagnostic last_error() const;
+    ViewDomainSnapshot domain_snapshot() const noexcept {
+        return domain_guard_ ? domain_guard_->Snapshot() : ViewDomainSnapshot{};
+    }
     bool IsInputChannelOpen(const Locator&) const override;
     bool IsLocatorSupported(const Locator&) const override;
     bool is_locator_allowed(const Locator&) const override;
@@ -97,11 +100,23 @@ private:
     DSoftBusTransport(const DSoftBusTransportDescriptor&, HostBackendTag, std::shared_ptr<HostFacadeBackend>);
 #endif
     struct HostModelTag {};
+    class GuardedReceiver final : public Receiver {
+    public:
+        GuardedReceiver(Receiver* target, std::shared_ptr<ViewDomainGuard> guard)
+            : target_(target), guard_(std::move(guard)) {}
+        Receiver* target() const noexcept { return target_; }
+        void OnDataReceived(const std::uint8_t*, std::uint32_t,
+                const Locator&, const Locator&) override;
+    private:
+        Receiver* const target_;
+        const std::shared_ptr<ViewDomainGuard> guard_;
+    };
     struct LocalSlot {
         explicit LocalSlot(const Locator& value) : local(value) {}
         const Locator local;
         std::mutex control;
         std::atomic<bool> committed_open{false};
+        std::unique_ptr<GuardedReceiver> receiver_proxy; // Retire only after the existing input barrier.
     };
     struct Ready {
         Ready(EgressPlan::Snapshot, const DSoftBusTransportDescriptor&,
@@ -132,6 +147,8 @@ private:
     bool AppendDefaults(LocatorList&, const std::vector<Locator>&) const;
     const DSoftBusTransportDescriptor frozen_;
     DSoftBusTransportDescriptor report_;
+    const std::shared_ptr<ViewDomainGuard> domain_guard_ = frozen_.expected_domain_id ?
+        ViewDomainGuard::Create(*frozen_.expected_domain_id) : nullptr;
     const FacadeMode mode_;
     const std::shared_ptr<const ConnectionGenerationSource> generations_;
     mutable std::mutex lifecycle_;

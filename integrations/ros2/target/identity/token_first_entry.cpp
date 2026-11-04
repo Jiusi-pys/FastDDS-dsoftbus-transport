@@ -1,4 +1,5 @@
 #include "token_first_entry.hpp"
+#include "actionbag_identity.hpp"
 
 #include <charconv>
 #include <limits>
@@ -18,6 +19,7 @@ bool ParseTokenArgument(std::string_view text, std::uint64_t& token) noexcept
 
 bool AdmitTokenEntry(const TokenAdmission& admission) noexcept
 {
+    if (admission.identity != TokenIdentity::LegacyProbe && admission.identity != TokenIdentity::ActionBag) return false;
     if (!admission.cli_valid || !admission.preflight_asserted || admission.target == 0 ||
             admission.target > std::numeric_limits<std::uint32_t>::max()) return false;
     if (admission.mode == TokenEntryMode::ListNodes) return true;
@@ -34,10 +36,12 @@ bool IsSingleMainTask(const TaskCheckpoint& checkpoint) noexcept
            checkpoint.sole_tid == checkpoint.current_tid;
 }
 
-bool IsOwnedNormalGranted(std::uint64_t target, const OwnedTokenObservation& observation) noexcept
+bool IsOwnedNormalGranted(std::uint64_t target, const OwnedTokenObservation& observation, TokenIdentity identity) noexcept
 {
+    const char* name = identity == TokenIdentity::LegacyProbe ? "fastdds_dsoftbus_probe" :
+        identity == TokenIdentity::ActionBag ? mdds_actionbag::identity_name : nullptr;
     return observation.lookup == target && observation.type == observation.native_type &&
-           observation.info_rc == 0 && observation.process_name == "fastdds_dsoftbus_probe" &&
+           name && observation.info_rc == 0 && observation.process_name == name &&
            observation.apl == observation.normal_apl && observation.query_rc == 0 &&
            observation.states.size() == 1 && observation.states[0] == observation.permission_granted;
 }
@@ -55,14 +59,14 @@ bool TokenFirstEntry::Initialize(const TokenAdmission& admission)
     // Only the preserved manager mode may explicitly initialize manager IPC
     // before selection. Record mode first selects and checks the main token.
     if (admission.mode == TokenEntryMode::ListNodes &&
-            !IsOwnedNormalGranted(admission.target, operations_.VerifyOwned(admission.target, "before_select")))
+            !IsOwnedNormalGranted(admission.target, operations_.VerifyOwned(admission.target, "before_select"), admission.identity))
         return false;
     attempted_ = true;
     const int rc = operations_.SetSelf(admission.target);
     const auto readback = operations_.GetSelf();
     operations_.Diagnostic("select_token", admission.target, readback, rc);
     if (rc != 0 || readback != admission.target) return false;
-    return IsOwnedNormalGranted(admission.target, operations_.VerifyOwned(admission.target, "after_select"));
+    return IsOwnedNormalGranted(admission.target, operations_.VerifyOwned(admission.target, "after_select"), admission.identity);
 }
 
 bool TokenFirstEntry::Restore() noexcept

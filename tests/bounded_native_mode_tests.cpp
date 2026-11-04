@@ -26,6 +26,19 @@ int main(){
     if(requested.BoundedReacceptExperiment())return 3;
 #endif
     if(requested.ResetBoundedConnection(RecordRole::Client,{})!=BackendStatus::InvalidState)return 4;
+    c.bounded_native_reset_limit=2;PublicSocketBackend repeated(c);
+#ifdef EXPECT_NATIVE_MODE
+    if(!repeated.BoundedReacceptExperiment())return 7;
+#else
+    if(repeated.BoundedReacceptExperiment())return 8;
+#endif
+    for(unsigned invalid:{0u,3u}){c.bounded_native_reset_limit=invalid;PublicSocketBackend rejected(c);
+        if(rejected.BoundedReacceptExperiment())return 9;}
+    c.bounded_native_reset_limit=2;c.bounded_native_reaccept_experiment=false;PublicSocketBackend unrequested(c);
+    if(unrequested.BoundedReacceptExperiment())return 10;
+    c.bounded_native_reaccept_experiment=true;c.route_lifecycle=true;PublicSocketBackend route(c);
+    if(route.BoundedReacceptExperiment())return 11;
+    c.route_lifecycle=false;
     c.bounded_reaccept_host=true;PublicSocketBackend mixed(c);
     if(mixed.BoundedReacceptExperiment()||mixed.BoundedReacceptHost())return 5;
     if(calls)return 6;

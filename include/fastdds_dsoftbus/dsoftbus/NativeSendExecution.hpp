@@ -38,6 +38,7 @@ struct NativeSendRunResult
     NativeSendOutcome outcome = NativeSendOutcome::NotEntered;
     std::optional<std::int32_t> actual_return_code;
     std::optional<NativeOwnerObservation> original_owner;
+    std::optional<DomainAdmission> domain_denial; // No SDK call or return is implied.
 };
 struct NativeEgressUsage
 {
@@ -124,16 +125,19 @@ class NativeSendExecution final
 {
 public:
     explicit NativeSendExecution(NativeOwnerTable&) noexcept;
+    bool BindPendingSender(EgressRegistration,const std::shared_ptr<RuntimeSenderBinding>&) const;
     NativeSendExecution(const NativeSendExecution&) = delete;
     NativeSendExecution& operator=(const NativeSendExecution&) = delete;
     NativeSendExecution(NativeSendExecution&&) = delete;
     NativeSendExecution& operator=(NativeSendExecution&&) = delete;
     // Destruction drops only the original State lease, never closes owners.
     NativeResult<EgressRegistration> CreateRuntime(const NativeTableConfiguration&,
-            const std::vector<EgressSelection>&, SendQueueLimits) const noexcept;
+            const std::vector<EgressSelection>&, SendQueueLimits, std::shared_ptr<RuntimeWorkSignal> work = {}) const noexcept;
     // Registration value pins its lifetime across concurrent control calls.
     // Caller must serialize every access to its SendResourceList.
     SenderAttachResult Attach(EgressRegistration, eprosima::fastdds::rtps::SendResourceList&) const;
+    SenderAttachResult Attach(EgressRegistration, eprosima::fastdds::rtps::SendResourceList&,
+            const std::shared_ptr<ViewDomainGuard>&) const;
     NativeResult<NativeSendWork> Take(EgressRegistration) const noexcept;
     // Failure preserves work, bytes and original deadline, including Busy.
     NativeResult<NativeSendInvocation> TryAdmit(NativeSendWork&,
@@ -149,9 +153,11 @@ private:
     // Coordinator supplies only its already-reserved application local set.
     // The unchanged full native configuration is validated before projection.
     NativeResult<EgressRegistration> CreateRuntimeForLocals(const NativeTableConfiguration&,
-            const std::vector<Locator>&,const std::vector<EgressSelection>&,SendQueueLimits) const noexcept;
+            const std::vector<Locator>&,const std::vector<EgressSelection>&,SendQueueLimits,
+            std::shared_ptr<RuntimeWorkSignal> work = {}) const noexcept;
     NativeResult<EgressRegistration> CreateRuntimeImpl(const NativeTableConfiguration&,
-            const std::vector<Locator>*,const std::vector<EgressSelection>&,SendQueueLimits) const noexcept;
+            const std::vector<Locator>*,const std::vector<EgressSelection>&,SendQueueLimits,
+            std::shared_ptr<RuntimeWorkSignal> work) const noexcept;
     std::shared_ptr<detail::NativeState> state_;
 };
 } // namespace fastdds_dsoftbus::dsoftbus

@@ -5,6 +5,8 @@
 #include <fastdds_dsoftbus/dsoftbus/NativeSendExecution.hpp>
 #include <fastdds_dsoftbus/dsoftbus/ProviderAdapter.hpp>
 #include <functional>
+#include <array>
+#include <optional>
 #include <fastdds_dsoftbus/dsoftbus/HostRuntimeShutdownPoint.hpp>
 namespace fastdds_dsoftbus::dsoftbus::host_test {
 // Observation of the work actually selected by a shared runtime pump. It grants
@@ -44,6 +46,20 @@ struct HostLoopObservation {
     ReceiverIdentity receiver_identity{};
     ReceiverIdentity retired_receiver_identity{};
 };
+// Diagnostic values only: no owner/lease/entrance or mutating capability.
+// Available means metadata was sampled, never that communication is ready.
+enum class DomainCircuitObservationStatus { Disabled, NotStarted, Available };
+struct DomainCircuitObservation {
+    std::uint32_t domain=0; // Zero is valid; optional entry presence identifies absence.
+    std::optional<phase0::AdapterObservation> adapter;
+    std::optional<NativeUsageSnapshot> native;
+};
+struct DomainCircuitObservations {
+    DomainCircuitObservationStatus status=DomainCircuitObservationStatus::Disabled;
+    bool root_closed=false, terminal_adapters_available=false;
+    std::size_t count=0;
+    std::array<std::optional<DomainCircuitObservation>,2> entries{};
+};
 // Owns the same table for Binding and NativeSendExecution; no table/execution/
 // raw provider pointer is exposed. Driver joins pump threads before destruction.
 class HostProviderLoop final : public HostFacadeBackend {
@@ -53,23 +69,45 @@ public:
     // Explicit same-channel assembly. Ordinary constructor remains exclusive.
     static std::shared_ptr<HostProviderLoop> CreateShared(std::shared_ptr<phase0::NativeBackend>,
             std::shared_ptr<ProcessReceiveObserver> = {});
-    std::shared_ptr<HostProviderLoop> Join() noexcept;
+    // The explicit owner is not a Participant/receiver. Start it before joining
+    // views; it retains live native anchors even when there are no views.
+    static std::shared_ptr<HostProviderLoop> CreateOwnedShared(std::shared_ptr<phase0::NativeBackend>);
+    // Exact assembly owner without a native lifetime pin. Start prepares only
+    // metadata. Failed initial reservations can refund an unused seed; after a
+    // facade is published, the last view/reservation permanently closes it.
+    static std::shared_ptr<HostProviderLoop> CreateParticipantShared(std::shared_ptr<phase0::NativeBackend>,
+            std::shared_ptr<ProcessReceiveObserver> = {});
+    // Persistent views retain their exact owner, so dropping a descriptor/Runtime
+    // cannot destroy the native owner while a borrowed view still exists.
+    // A process-pinned owner admits at most two active or borrowed Participant
+    // views, sharing its native channel through independent receiver leases.
+    // Ordinary CreateShared assembly keeps the same existing two-view bound.
+    std::shared_ptr<HostProviderLoop> Join(std::shared_ptr<HostProviderLoop> owner = {}) noexcept;
+    // Internal factory transaction commit: complete facade construction, then
+    // commit before returning its original owned pointer. No init/SDK claim.
+    bool PublishFacade() noexcept;
     // Internal assembly seam, not installed. The owning Runtime supplies its
     // optional coordination gate here; the loop arms it for exactly one
     // Initialize() call on the calling thread. Refused once the loop has started.
     bool SetPreConnectGate(std::function<bool()>);
     // Single-thread assembly only, before Start. Immutable once installed;
-    // shared runtimes and replacement are refused. Not an installed public API.
+    // ordinary shared/pinned runtimes and replacement are refused. The exact
+    // normal Participant owner retains this pre-start observer contract.
     bool SetBeforeNativeClose(std::function<void(const RuntimeShutdownPoint&)>);
     bool Start(const DSoftBusTransportDescriptor&) noexcept override;
     InputOpenResult Open(const Locator&, InputChannels::Receiver*) noexcept override;
     bool InputCloseAllowedOnThisThread() const noexcept override;
     bool CloseInput(const Locator&) noexcept override;
     SenderAttachResult Attach(eprosima::fastdds::rtps::SendResourceList&) override;
+    SenderAttachResult AttachWithDomainGuard(eprosima::fastdds::rtps::SendResourceList&,
+            const std::shared_ptr<ViewDomainGuard>&) override;
     bool Shutdown() noexcept override;
     NativeSendRunResult PumpSend() noexcept;
     NativeSendRunResult PumpSendObserved(HostSendObservation&) noexcept;
     phase0::BackendStatus PumpReceive() noexcept;
+    std::uint64_t WorkGeneration() const noexcept;
+    WorkWaitResult WaitForWork(std::uint64_t& generation);
+    void RequestPumpStop() noexcept;
     phase0::BackendStatus CloseAccepted() noexcept;
     phase0::BackendStatus RequestNormalEnd(RecordRole) noexcept;
     NativeStatus ObserveNodeOffline(const std::string& network_id) noexcept;
@@ -77,6 +115,13 @@ public:
     bool SetBoundedReplacementGate(std::function<bool()>);
     void SealBoundedAdmission() noexcept;
     HostLoopObservation Observe() const noexcept;
+    // Non-atomic across groups. Adapter values are available only after a
+    // successful root close/drain; active or failed close leaves them nullopt.
+    // Pins metadata briefly; never calls SDK or takes a native-control mutex.
+    DomainCircuitObservations ObserveDomainCircuits() const noexcept;
+    bool EnableDomainCircuits();
+    bool RequiresDomainBinding() const noexcept override;
+    bool BindDomain(std::uint32_t,const std::shared_ptr<ViewDomainGuard>&) noexcept override;
     bool WaitSealed(std::chrono::steady_clock::time_point) const;
     bool WaitInputClosing(std::chrono::steady_clock::time_point) const;
 private:
@@ -87,6 +132,8 @@ private:
 #endif
     void SetSharedControlHooks(std::function<void()> before_publish,std::function<void()> after_seal);
     struct State;
+    struct Circuit;
+    static std::shared_ptr<Circuit> EnsureCircuit(const std::shared_ptr<State>&,std::uint32_t);
     struct View;
     HostProviderLoop(std::shared_ptr<State>,std::shared_ptr<View>);
     bool StartRuntime(const DSoftBusTransportDescriptor&) noexcept;
@@ -96,8 +143,10 @@ private:
     InputOpenResult OpenShared(const Locator&,InputChannels::Receiver*) noexcept;
     bool CloseSharedInput(const Locator&) noexcept;
     bool ShutdownShared() noexcept;
+    bool ShutdownOwner() noexcept;
     std::shared_ptr<State> state_;
     std::shared_ptr<View> view_;
+    std::shared_ptr<HostProviderLoop> owner_keepalive_;
 };
 }
 namespace fastdds_dsoftbus::dsoftbus {

@@ -23,6 +23,14 @@ public:
     virtual bool InputCloseAllowedOnThisThread() const noexcept = 0;
     virtual bool CloseInput(const Locator&) noexcept = 0;
     virtual SenderAttachResult Attach(eprosima::fastdds::rtps::SendResourceList&) = 0;
+    virtual SenderAttachResult AttachWithDomainGuard(eprosima::fastdds::rtps::SendResourceList& list,
+            const std::shared_ptr<ViewDomainGuard>& guard) {
+        return guard ? SenderAttachResult{SenderAttachStatus::DomainGuardUnsupported} : Attach(list);
+    }
+    // Optional Runtime-owned native circuit binding. No capability is inferred
+    // from a backend kind or a null guard; unsupported backends fail closed.
+    virtual bool RequiresDomainBinding() const noexcept { return false; }
+    virtual bool BindDomain(std::uint32_t,const std::shared_ptr<ViewDomainGuard>&) noexcept { return false; }
     virtual bool Shutdown() noexcept = 0;
 };
 }

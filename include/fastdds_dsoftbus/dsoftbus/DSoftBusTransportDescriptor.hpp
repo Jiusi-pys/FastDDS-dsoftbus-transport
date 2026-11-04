@@ -36,6 +36,9 @@ struct DSoftBusTransportDescriptor final : eprosima::fastdds::rtps::TransportDes
     SendQueueLimits send_limits;
     v1::Profile profile = v1::Profile::BytesNative;
     v1::NativeNameScope native_name_scope;
+    // Absent preserves the legacy unscoped Transport. Stock assembly opts in
+    // from the validated IdentityBinding primitive, never a locator inversion.
+    std::optional<std::uint32_t> expected_domain_id;
     // Atomic pre-publication setup. Inputs are explicit deployment identities;
     // this operation does not acquire permissions or authenticate the digest.
     DirectoryIssue ConfigureV1(const V1Deployment&);

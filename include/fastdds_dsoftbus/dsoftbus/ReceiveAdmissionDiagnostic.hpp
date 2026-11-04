@@ -36,6 +36,9 @@ inline const char* RxAdmissionReasonName(RxAdmissionReason value) noexcept {
     const auto i=static_cast<std::size_t>(value);return i<sizeof(names)/sizeof(*names)?names[i]:"UNOBSERVED";
 }
 struct ReceiveAdmissionDiagnostic {
+#ifdef FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION
+    std::uint64_t observation_scope=0,observation_record=0,observation_gate=0;
+#endif
     RxAdmissionStage stage=RxAdmissionStage::Unobserved;
     RxAdmissionReason reason=RxAdmissionReason::Unobserved;
     bool result_known=false,native_status_known=false,native_known=false;

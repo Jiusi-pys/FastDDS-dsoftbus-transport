@@ -1,5 +1,1883 @@
+## Stage 1 direct-goal dual-board DDS (2026-11-04)
+
+**DEVICE_TESTED (bounded) / NOT_PRODUCTION_QUALIFIED.** Root cause of the earlier A `NS_STATE` / B exit:
+the direct-goal runner never set `max_msg_size_no_frag`, so `DSoftBusTransport::init` rejected its 65536-byte
+maximum against Fast DDS 2.14's default 65500 limit and the Participant was null on both boards. With a one-line
+runner config fix, fresh-process A↔B passed 3 writes / 3 takes per side with clean destroy, exit and entry restore.
+Host stock ctest on this branch: FAIL 53/64 (11 candidate-tree fake-socket tests). A 150000-byte fragmented sample per direction also passed (m3). Same-name Participant hot rebuild PASS on device (m4, m7). Route outage (15 s IP drop) now recovers on device with the circuit route-renewal transport fix (m21, m22: redial plus re-accept after SHUTDOWN_REASON_LINK_DOWN). Before the fix it did not (m5, m6). Host stock ctest is 65/65 PASS. This includes the new `circuit.route-renewal` case (mutation-checked) and 11 historical oracles updated from eager dial to the 2026-10-26 lazy-TX contract, with no production change. ROS 2 on this build is NOT_RUN. Details:
+[STAGE1_DIRECT_GOAL_DEVICE_20261104.md](STAGE1_DIRECT_GOAL_DEVICE_20261104.md).
+
+## 2026-10-31 evaluator rejection evidence — COMPLETE LOCAL / SYNTHETIC ONLY
+
+UTC 2026-10-30T16:57:12.512168+00:00. Bounded offline repair COMPLETE_LOCAL: source-owned safe rejection reason plus durable pre-rethrow checkpoint. FINAL_TEST_RESULT_D01.json SHA2565d23e1aa5428020f1c3a897d7bd1625a3f99d80309ba57703a9856cbae7cc073 is distinct final7 targeted synthetic/native outer0,12pins matched. Formal review finds no actionable issue. Six original parser/evaluator ASTs and58 guards remain unchanged; command/predicates did not receive a syntax fix. This does not identify historical readonly2 rejection cause, which remains UNKNOWN without serialized predicate.
+
+Exact source schema EVIDENCE_REJECTION1 records fixed step/stage EVIDENCE_EVALUATION/predicate/reason/acceptedfalse only; enum-controlled reasons, STRICT_TEXT/TEXT_DECODE_FAILED and generic unclassified exception categories never recover exception text/input/class details. Journal fsync precedes rethrow of original exception, then existing cleanup alone writes exclusive one RESULT. Record failure still rejects, no early RESULT/self-collision/accept/close bypass. Errors before evaluator and actual remote facts remain UNKNOWN.
+
+REDexit1 and initial7/native1 (wrong expected exact original exception type in test oracle) remain preserved; corrected oracle retains reason/privacy/durability assertions, affected7PASS then distinct final7PASS. Source catalog/slash/helper failures retained as offline evidence-processing failures. New final does not rerun or promote historical17 lifecycle/combination7 into whole-current-backend PASS. Olde6b actualHOLD consumed, unaccepted resource and NativeSDKDDS NOT_RUN remain unchanged. No new execution package/AUTH/once/real approval; HDC0 and no ordinary fix decision is needed. Future actual needs separately prepared corrected package and specific approval, no card request now.
+
+Only goal_evidence.py, goal_windows_backend.py and test_evidence_rejections.py form this increment; exact hashes in LOCAL_SOURCE_MANIFEST and docs receipt. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. All prior raw body/BOM/EOL/user dirt preserved below. Docs performs no tests/HDC/process/private-body/hash/production source/Git modification or successor dispatch.
+
+---
+
+## 2026-10-31 actual same-scope attempt — HOLD_CONSUMED / NO RETRY
+
+Docs UTC 2026-10-30T16:22:04.913447+00:00. Original time was subsequently supplied as2026-10-30T15:44:49.285817+00:00, precisionsecond with fraction preserved, for same Sentinel request35a/replydff. Earlier execution-d01 missing-time HOLD/entry0/unconsumed remains exact history. New truthful AUTH/MDI/fresh/once then permitted unique entry1; this approved opportunity is now CONSUMED, never reset. Current actual HOLD is not runtime PASS. MAIN_ACTUAL_FACTS_D01 SHA25692a0f7e01e2a7a0fdcab7b9e5c0797629645c7727c4f7a622610d828b08bdc73 / ACTUAL_RECEIPT_REVIEW_D01 SHA2560d463c78c6218f3e56961b583f074c9c93a32028b2d55eb231af4b1022f4b8f1 / distinct ACTUAL_FINAL_RECEIPT_RESULT_D02 SHA256529aff7764f8d162ca6260bb4ef0aef1bed4e444329fbc55a4959ef2a7ef3339 establish receipt consistency ONLY.
+
+Four HDC roots actually ran: server plus three clients. Accepted server, exactA/B targets and A-provider readonly1 remoteRC0/Linux6.6.101aarch64/two aliases resolving systemlib/sameinode2799/exact cached interpreter SHA d3c3. A-resource readonly2 local0/terminalEOFtrue/strong original-handle proof true was NOT accepted. Generic OBSERVATION_OR_RECEIPT_UNKNOWN / GOAL_FAILED_OR_UNKNOWN has no serialized specific parser predicate; do not read restricted resource raw or infer memory/disk/ENOENT/permissions/ABI/format cause. No false identity31 observed in root API; repaired Win32 path achieved limited real targets/provider acceptance, not whole-goal success.
+
+ServerPID37924/h692 ownstop1/native125/terminalEOFtrue/drainEOFcleanup empty; clients natural0/stop0/EOF/prooftrue/signalfalse. Fourteen resource samples/eighteen epochs within recorded limits. Three key candidate paths before/after NOT_FOUND metadata-only. One safe server AUTH_CONTEXT_UNKNOWN continued under explicit scoped approval, not DIAGNOSTIC or real request proof. UI/USB/device/SDK/full-tree quiet remain UNKNOWN despite EOF/CIM empty.
+
+All B queries, deployment/11payloads/ELF0700/OWN/probe/data/SetSelf selection/restoration/GUID-SN-payload-ACK/DONE/TEARDOWN NOT_RUN/0. No further HDC/entry/fix or frozen source changes after failure. Original D01 final BLOCKED checker wrongly treated used sorted-set order as execution order; additive D02 reconciles matched set plus actual INTENT creation times, preserving D01 and performing no actual rerun. Tests/build N/A for actual receipt closeout, not PASS.
+
+All frozen31/canonical7 remain unchanged; prior card/Manifest/Binding/seals and user dirt retained. Possible next ordinary local acceptance-grammar/controlled-reason investigation is not dispatched; no blind actual retry or new profile. Any future actual needs corrected package qualification and new scoped approval. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical raw body follows unchanged. Docs runs no tests/process/HDC/SDK/private-content/hash/schema/Git operations.
+
+---
+
+## 2026-10-30 approved scope / original-time provenance stop — NOT STARTED
+
+Documentation UTC 2026-10-30T15:54:27.368974+00:00, never asserted as user-send time. Trusted full-card scope APPROVED: requestID Sentinel_35a63cff819c8191a542a3b09d91823e / directreplyID Sentinel_dff2f1dac6888191891906e12ec578d5. No original user timestamp or precision was provided. This is not user scope denial, tool/model approval denial, Native exit/permission finding or card/source change.
+
+Independent AUTH_TIME_PROVENANCE_REVIEW_D01 SHA256052c2dd161ef1def29a20fd659ffffdef5fb8ba9823f4a390bdb9732e2795731: PASS_TRUSTED_NEW_SCOPE_APPROVAL / HOLD_MISSING_ORIGINAL_MESSAGE_TIME_PROVENANCE. Frozen goal_authorization.py requires source.sent_time_original (nonempty original time) and source.time_precision (minute/second). No supported UNKNOWN representation exists in that immutable contract. NOT_PROVIDED plus minute would exploit truthiness, not honestly represent evidence. Queue/local current time must not substitute for original user time. No re-request of already-approved scope or contract redesign is performed.
+
+INITIAL_PROVENANCE_CHECK_D01 SHA256cc2eedece8805585b26a73664d9e428ac8a17b8ce30bd443e5b021d8435e66fe confirms frozen card/manifestebe31a0ac1cff8855fbcec7957e8f8ed71fa10bbbd2e842639c6706809e62333 / bindinge055d089e31f80acf06505ec2b9b95b43ec7b60a80b29dac24558175468376c5 / seal and31pins/989/26/69 MATCH. AUTH/MAIN_ADMISSION/FRESH/ONCE/newrune6b are absent. No tester dispatch/JIT preflight/INTENT/actualentry/HDC/Native/Token/SDK action; this once remains UNCONSUMED. All provider/deploy/probe/data/GUID-SN-payload-ACK/restore NOT_RUN. Tests/build/device are N/A for this zero-action closeout, not PASS.
+
+Old consumed actual scope/5c7 HOLD stays historical. Canonical card/Manifest/Binding/source/schema/seals unchanged; necessary docs only report inability to truthfully form runtime admission. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical body follows byte-identically. No private-body/hash/PNP/HDC/Native/Token/Job/Git operation or subsequent dispatch; stop after docs.
+
+---
+
+## 2026-10-30 terminal-repair composed packet — LOCAL COMPLETE / NEW APPROVAL CANDIDATE
+
+UTC 2026-10-30T14:26:21.086260+00:00. New complete local offline packet READY_FOR_NEW_SCOPED_APPROVAL / EXECUTION_NOT_AUTHORIZED. FINAL_PACKET_REVIEW_D01.json SHA25622ee65c4704d631406905500bfc99ab31452261593982419a9febf202929a3f5 qualifies current manifestebe31a0ac1cff8855fbcec7957e8f8ed71fa10bbbd2e842639c6706809e62333 / bindinge055d089e31f80acf06505ec2b9b95b43ec7b60a80b29dac24558175468376c5. Production verify_package returned0 in pure verification; this is package integrity, not actual execution. No new AUTH/Main/fresh/once/run. Old actual consumed HOLD and authorization history are not reset.
+
+Distinct FINAL_TEST_RESULT_D01.json SHA2562043afdd0c3ae0e57604e2f4c80683cd5760e41b49481cdba0043e08e7817de0 reports7 pure metadata/Fake-AST checks/native outer0, no WinDLL/backend/child/Goalentry/Grantloader. FORMAL_COMBINATION_REVIEW_D01.md SHA256b6f46eac70f94dc43eb471750b7c6861519b11a78d7cf5d98743bd055f8fac65 finds no blocking local composition issue. Reused exact seven-pin local terminal/EOF repair previously passed17 Host tests; those real CPython fixtures were NOT rerun here. Local natural31 reproduction does not diagnose historical HDC31 cause.
+
+31 project roles/14 source copies include fresh canonical-seven repair reuse; twelve exact literal-only migrations across three files, other eleven copies exact canonical. Registry123steps/121clients/115normal/max5roots is planned only. Eleven Native/tool/controller references unchanged, no new Native build/action or policy expansion. Conservative active charge23,768,086B fits unchanged32MiB active/64MiB total model; project static closure is not full platform loader/ABI/SDK attestation.
+
+CURRENT_EXECUTION_CARD_D01.md SHA2565e88de399115d577586c4d3a8deee318a17cdb4e5c15e8d40ebffdd5bf0e6a9c has new scope ONE_NEW_CURRENT_STOCK_DDS_AB_TERMINAL_REPAIR_D03 / noncee6b3148f-directdds-d03/new run-device paths. Any actual240s/121client/max5root/max8setter plan needs new explicit scoped approval with unchanged full risks; package readiness is no sensitive grant. Real data/Token/SDK/A-B DDS/normal exit NOT_RUN/NOT_VERIFIED. Old EOFfalse/unaccepted targets/HOLD remain intact.
+
+Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical raw body preserved below. Documentation changes no source/schema/active package/config/rules/old seals/Git, and runs no tests/HDC/Native/private content operation or successor dispatch.
+
+---
+
+## 2026-10-30 bounded Windows terminal/drain repair — LOCAL FIX / HOST PASS ONLY
+
+UTC 2026-10-30T13:22:18.161488+00:00. Local lifecycle implementation repaired and Host-tested; real A/B stock DDS/normal exit remains NOT_VERIFIED. Distinct FINAL_TEST_RESULT_D01.json SHA25654468586d1f160caa006d1e68ba062e9246c37c505e594173df74373e4d8f421 reports17 PASS/native outer0:13pureFake (only two affected older methods) plus four fixed directly owned CPython children. Final natural post-exit image error31 was actually observed PID27920 (initial45168/retest2956), not injected. Three local observations reproduce this Windows condition only; they do NOT diagnose historical HDC Query31 cause, still UNKNOWN.
+
+Immutable original handle/PID-birth/live-image/FileID anchors distinguish strict LIVE from terminal same-handle proof; terminal state revokes signal authority. UNKNOWN remains sticky. Same2s/root and global absolute bounded drain distinguish TRUE0 from EOF, never send empty observer chunks, recognize broken109 exactly and preserve lateEOF/deadline/cancel/closed-repeat blocked status. Observer-before-capture, lateclose and critical-record failures retained. Real held-writer50ms deadline/EOFfalse remains evidence; late-tail/drain EOFtrue and only owned live-child stop1/exit125 are local fixture results, not descendant/SDK cleanup proof.
+
+Actual formal two-P2 review and focused FINAL_REVIEW_RESOLUTION_D01.md SHA2568e328ae9c35db66beaf9b350e82411c393900947179bee9f29e21e1592bea943 close local corrections before distinct final. Seven current source pins match RETEST_INPUT_D02. RED1ERROR+1FAIL,13initial, older17/current-pure retest histories, resourceBLOCK and withdrawn missing-import candidate remain preserved. No Native build, GoalBackend construction/actual permit/Goal entry, Job manager, HDC/Native/Token/SDK or broad old suite execution. No source above Transport semantics changed.
+
+Frozen goal-active-d02, D05card/AUTH/consumed once/run/actual HOLD63 seal unchanged. Old serverEOFfalse and unaccepted targets remain historical; local fix is not retroactive success. New actual experiment NOT_AUTHORIZED; old once not reset. A corrected complete execution package and new explicit approval are still required before any future actual; no new execution package prepared this round. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical raw body follows unchanged; docs performs no test/process/private-body/hash/Git operation or successor dispatch.
+
+---
+
+## 2026-10-30 actual Goal attempt — HOLD_CONSUMED / NOT READY FOR REPLAY
+
+UTC 2026-10-30T12:06:30.452735+00:00. One approved Goal attempt was actually invoked and consumed: entry1/outer1. Current packet HOLD_CONSUMED, not execution PASS or replay-ready. Distinct ACTUAL_FINAL_RECEIPT_RESULT_D01.json SHA25646cc60270c9c4b19e8de3119315554ad12892c2bcec10b4f1cb4d76403c846de is PASS_RECEIPT_CONSISTENCY_ONLY. ACTUAL_TESTER_RESULT_D01.json SHA2561b85e30f6867e67a386765ebc09bf81ad63e0c4283c3da5237d5a566ecf75632 and ACTUAL_RECEIPT_REVIEW_D01.json SHA25648149ca87c0fe6b22e30834ccbbfccb13367ca539796a79924279c73d98b1072 remain authoritative historical receipts.
+
+Only serverPID672/h680 stop1/exit125/terminal/EOFfalse and targetsPID57868/h724 natural0/EOFtrue were created. Targets output was NOT accepted. Controlled API JSON line340 records QueryFullProcessImageNameW return0/immediate error31 after terminal ExitCode/Times success; root.identity revoked authority and threw before targets parse/accept. OS31 cause UNKNOWN, not demonstrated permission/ABI/disconnection. No notice events is not UI quiet; passive PnP2OK is not HDC target acceptance.
+
+Other120 client opportunities, controller/deployment/readonly4/OWN/probe/data/SetSelf selection/restoration/GUID-SN-payload-ACK are NOT_RUN/0. Seven memory samples were within limits; three default key paths NOT_FOUND metadata-only. Approved USB/automatic effects remain unknown. Both roots terminal is not complete cleanup: serverEOFfalse explicitly remains, full-tree/remote/USB recovery unproved; CIM empty is narrow snapshot only. No further entry/HDC; once stays consumed, no new scope/approval.
+
+Initial tester manual GBK JSON precheck failure entry0 remains TESTER_UTF8_PREFLIGHT_FAILURE. Explicit utf8-sig recovery, preserved old fresh/MDI backups and Main publicationD02 used same authorization before the single entry; do not erase that local failure or label it Native failure. No source/build/Fake test change or rerun by docs. Frozenactive/CardD05/Manifest/Binding/prior review cards/seals untouched. Ordinary future local terminal-original-handle identity repair and NONHDC fixture work may be planned; any future actual requires a new scoped approval, not automatically requested here.
+
+Goal real A/B stock DDS pub/sub plus normal exit remains NOT_VERIFIED. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical body follows byte-identically, including prior candidate qualification and all failures/UNKNOWN. This sync performs no source/tests/config/AGENTS/Git/private-content/Native/HDC operations or successor dispatch.
+
+---
+
+## 2026-10-30 FSIZE1MiB successor — NEW SCOPED APPROVAL CANDIDATE / NOT AUTHORIZED
+
+UTC 2026-10-30T10:15:49.883692+00:00. Old64KiB packet is HOLD: inherited FSIZE65536 could not accommodate302104-byte sealed memfd before SetSelf. This later cross-artifact blocker supersedes prior candidate status without rewriting earlier docs/reviews. Ordinary1MiB successor is implemented and locally qualified, not Native-executed. Initial one C compile/one link retained strict CFI; distinct FSIZE_NEW_FINAL_RESULT_D01.json SHA256c4345c270982f2976a86eb3d2756e7eeb913d745b0f9f44b49309c01d2bd72b6 reports metadata/static proof plus22 pure-Fake tests/Windows-native Python-wrapper-outer0,16source/432proof closure. FSIZE_FORMAL_REVIEW_D01.md SHA25684a74d76da1c67a44fe3c42f49557e500ef888ced02cd56f4f32a9b154b89eae supports local closure only. Supervisor nowa392ea9eda1368436b6389e73b4eab4f46f6e895e4a557a8cef273330e255e0f.
+
+Current complete goal-active-d02 manifest8ece786b5510df86982ead8258603a0c697427a3393ea484b1ed6045232b0b14 / bindinga2cee6342516a20adb0181824c76b2338bdca7149bfcc0c64dbb7082072357df is READY_FOR_NEW_SCOPED_APPROVAL / EXECUTION_NOT_AUTHORIZED under COMPOSED_PACKET_REVIEW_D02.json SHA2565340541581f7cfcb93668c72bab0e3a9d41af9ce2d0cc5eb60abef484ae54fcd. It binds30roles/13bytecopies/123steps/121clients/115normal/5roots plan and23,593,592 charged bytes below32MiB, not executed steps. Correct substantive candidate is CURRENT_OWN_GOAL_EXECUTION_CARD_D04.md SHA256e6965a4153439753cda37b136eabbf6783993995191abed1ae9612692e179319; D03 wrong-backslash entry remains historical, not a source bug. Additive D05 only prepends final status to D04 unchanged.
+
+No HDC/Native/realSDK/Token, actual new AUTH/admission/fresh/once/run or sensitive approval. Local22 and build/static proof are not DDS/A-B/normal-exit/runtime/fullABI proof. Old8/11/18/20/21 results, capacity/failures/UNKNOWN and previous docs remain historical. Early basename-collision backup failure remains preserved, with no source edit. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical body follows unchanged; no tests/private content/Git transition or further dispatch by this docs sync.
+
+---
+
+## 2026-10-30 composed Goal executor — READY FOR NEW SCOPED APPROVAL / NOT AUTHORIZED
+
+UTC 2026-10-30T09:40:12.495623+00:00. Local executor implementation PRESENT and composed packet READY_FOR_NEW_SCOPED_APPROVAL; execution remains EXECUTION_NOT_AUTHORIZED. Real A/B stock DDS publish/subscribe plus normal exit remains NOT_VERIFIED. Global/PRE_COMMIT FAIL; Ready for commit NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. New AUTH/admission/fresh/once/run absent; HDC/Native actual NONE.
+
+recovery-d03/ADAPTER_NEW_FINAL_RESULT_D02.json SHA256a607ef12665b47a8be9f9016a9bf210b8fa308fc9c9ef65bb822a443a5f17810 is distinct final21 pure-Fake tests, native Python/monitor wrapper/outer0 and15pins matched. ADAPTER_FINAL_REVIEW_D02.md SHA256c92fc774c7f614824d4abd1707cc986dc88735ab2787252ae32251336821ad75 closes source review including lateclose/record-success finalization, typed workflow/permissions/byte gates, exact providerSHA and board-resource predicates. This is Fake control evidence, not DDS/Native proof. Core C++/four artifacts reuse exact old final a5ab85ed428342c80aa035dee23f6b9ac87ffab00cf94c1a90d8abb12af55ae0 qualification without rebuild or Native run.
+
+COMPOSED_PACKET_REVIEW_D01.json SHA2566a23c5f5457dab61c0babf7960d3d1abf886e97eb45d0ec2cff2d9de9061fb85 qualifies full composition: manifest520b6daeaa54efdb3a5bdf234fc017bd1edec28e1a20cf4c24e069be44e6c3e0 / bindingfab3a739a773c90635e78d2cb84a4ab431cc2d5c61fffd5247446eaa732f7822;13 exact byte-copied executor sources,30 roles,123 registered steps/121clients,115 normal/5roots plan, activity charged23,583,721B below32MiB. This is a qualified proposed execution packet, not evidence those steps ran. Reusable direct_goal entry defaults NONE without new scoped authorization; future invocation must follow bound current card and gates.
+
+Old8/11/18/20 results, BLOCKED/capacity and historical failures/UNKNOWN remain unchanged; final21 does not retroactively promote them. Real SDK/identity/board/source-image/full mixed ABI/normal exit remain unverified. No tests/HDC/Native/private body/hash/Git transition occurs in this documentation sync. Historical entire raw body follows unchanged.
+
+---
+
+## 2026-10-30 direct stock DDS mainpath — LOCAL SOURCE / BUILD / MARKED HOST ONLY
+
+Current evidence recorded UTC 2026-10-30T05:35:25.756505+00:00. Goal remains real A/B stock DDS publish/subscribe with normal exit; it is NOT_VERIFIED. Local implementation is PRESENT, Native artifacts BUILDS/static-ELF only, marked Host control path tested. No new HDC/Native/Token/SDK business authorization or execution. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD.
+
+Evidence root E:/Codex-FastDDS-stage1-directdds-mainpath-20261030-d01/recovery-d02. Canonical FINAL_TESTER_RESULT_D01.json SHA256 a5ab85ed428342c80aa035dee23f6b9ac87ffab00cf94c1a90d8abb12af55ae0 is distinct final; nested final-d01/RESULT.json SHA256 b061fd26ab9a2919cf6e98dbde227a14620cec30e787d7d19ea5525dc0c55033 is a different artifact. Actual final four metadata checks plus one marked file-control case: current CLI childPID3372 exit0, releases1,2,4,3, eleven events each side, both DONE/TEARDOWN, fixture1/native_attestationfalse. All8444 pins matched. This is no Native runtime or real DDS/board proof; prior45/65 Host assertions do not replace device acceptance.
+
+Independent initial testing, actual formal four-P2 review, Main fixes/affected retest, same-reviewer focused resolution and distinct final completed in order. FORMAL_REVIEW_RESOLUTION_D01.md SHA2564633513d8e1cecf80a43312d1b27473e2dd96e2bf03577bea9f2840566f7764e closes findings within source/build/marked-Host boundary. Native app a4d0104a7f9b0a1cf9cefc9f3a6e8f4683cc293036ac4aac4f8c5181262375b1; launcher59a5d7fd8e6bb4026dac14e5bff73e6d4f123f6a186762301ee0598414d4fa82; supervisor4133d3934d70efb709df3176e137b855367d431072df0b5fd59de05e363c6cf0 build/static evidence only. Private336B/public V2 48-byte contracts unchanged. BOOT UID/group, pure wall freshness guard, unknown query withdrawing signal authority and fixed phase return codes are code/marked-Host bounded closure.
+
+Raw GetSelf/SetSelf behavior, SDK callbacks, A/B traffic, full ABI/source-image association and normal/mixed-ABI runtime remain unverified. Existing syntaxfail/ODR/launcher-o/CRLF82/resource-capacity03:13:50 turn01a18acc and reviewfix01 syntaxfail remain preserved; later successful same-actor resource recovery does not rewrite those failures/UNKNOWNs. DOCS_PREFLIGHT_HELPER_FAILURE remains historical (canonical-vs-nested hash confusion), not execution evidence. Historical P1 corrections and every previous body byte remain intact below.
+
+Future execution-card drafts (including HDC240/parallel clients/paired setters) are not qualified approvals and do not change current authorization. Only local evidence is synchronized here; no additional development or execution follows this update.
+
+---
+
+## 2026-10-29 direct-child supervisor repair — LOCAL BUILD / HOST ONLY
+
+Small C four-operation core has no group-signal capability. It requires positive creation/PPID/birth/nonconsuming wait/exclusive ownership checks; EINTR needs fresh evidence. Other wait/identity/generation/time/signal/reap uncertainty seals the state against late operations. First terminal timing/raw status and shared2s budget remain stable, with near-MAX arithmetic guarded. Normal terminal exit never signals; timeout may signal one exact owned root. Native handlers do not kill/log; alarm precedes fork/capture and ordinary context emits CREATED/UNKNOWN receipts. Root-only is not descendant cleanup, SDK quiet, restoration or Native PID/kernel proof. Descendants remain UNKNOWN; all ten Native cases HOLD.
+
+Evidence root `E:/Codex-FastDDS-stage1-supervisor-directchild-20261029-d01`: six-file formal review's two P2 findings (initial alarm/UNKNOWN receipt and explicit C11/C++17 CMake contract) were fixed, freshly retested and formally closed. CMake was not configured. Old C Native helper profile/CFI unchanged, strict zdefs/now and ARM64 ABI statically checked. Native ELF c48d98539be440c544245a003a818e37e86761348a26f7d3e11f0b5ae18bf1d8 BUILDS_NOT_RUN. Distinct prep/FINAL_RESULT_D01.json SHA256 `f7be7933f7a443b54c40cb90144cb0ca1aad1c00f7ddbe5efb8deb58b1e1f96c` records fresh ELF/Host evidence: actual Windows47152 exit0/signals0 and56512 exit201/one owned-handle signal/reaped, Jobsactive0;951 sources/9687 pins unchanged. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-supervisor-directchild-20261029-d01/final_once.py`. Cumulative6 compiles/4 links/3 Host commands; zero configure/Native/HDC/identity. Host scripted failures and actual finite Windows child handles prove Host behavior only. Prestatic D01/D02 blocks preserved; no compiler/test FAIL this phase.
+
+The exact five READONLY_SCOPE_D03 HDC commands ARE explicitly user-authorized. Eligibility is BLOCKED because no positively identified existing safe client/server channel could be established without forbidden autostart. All five (RO1, ROA provider/resource, ROB provider/resource) remain NOT_RUN, exitNone, HDC0. No server start/restart/kill, device signal or Native helper occurred. Original eligibility receipt's incorrect .md/S reference is additively corrected by hdc/ELIGIBILITY_BINDING_ADDENDUM_D02.json; missing file is not the blocker. This authorized-readonly blockage neither makes HDC generally unapproved nor contributes Native PASS.
+
+UPDATED_NATIVE_PROPOSAL_D01.json/.md replace only the supervisor reference in the five-artifact bundle; no copies or argv execution/reuse. DIRECT_SUP_* root-only protocol cannot simply replace the old wrapper in old argv. Native wait/proc/alarm/runtime and safe exact descendant contract remain unqualified. Frozen dangerous0f9c/6168 and P595/Q40 unchanged/unexecuted; current consumer88/product14878/original299 unchanged/not loaded. Current docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md separates authorized five-readonly eligibility from out-of-scope Native OS execution and unapproved sensitive selection. Stage1 NOT_VERIFIED; all37 Stage2 HELD; global/PRE_COMMIT FAIL; Ready NO. Historical bodies/failures/UNKNOWN preserved. No cleanup, successor or publication.
+
+---
+
+## 2026-10-29 Native parent / reusable V2 increment — BUILD / STATIC / HOST MECHANICAL SUBSET
+
+Native parent code now implements fork/fixed-FD remap/CLOEXEC/fexecve of sealed frontend, gate and sealed manifest after actual child PIDs; owned WNOHANG/PID-only kill/wait4, shared2s cleanup/status and positive RSS accounting. Separate OS-purpose same-target logical children do not create a business Channel/Window. Kernel proc/self/exe/hash preparation and normal Native policy remain distinct. Post-LTO real parent flow is present; Native parent/child syscalls/runtime remain NOT_RUN. Host tests cover bootstrap/FD/policy and actual Windows Pipe/Port/Client built-in fixture only.
+
+Reusable48-byte GetRunApi/provider-owner/Port/Client route is genuinely linked to CLI; static CFI create/execute/destroy and folded getter table are evidenced. Actual getter CALL, cancel execution and cross-DSO ABI remain UNPROVEN. Native Port AUTH hard-denies; synthetic run/PID/token1 fixture result-8 is local policy, not a service or permission query. Currentconsumer88/product14878/original299 unchanged/not loaded. Business loader/positive Port/real consumer route remain BLOCKED; this is not completed Native V2/Transport.
+
+Evidence root `E:/Codex-FastDDS-stage1-native-parent-v2-20261029-d01`: loader report prep/LOADER_CONTRACT_D01.md finds matched cached dlopen_ext/constructor implementation and current INIT arrays; private FD ABI/name/SONAME/dependency/preloaded-provider guarantees remain UNKNOWN, not system unsupported. CLOCK_CONTRACT_D01.md identifies selected SDK clock_gettime(1), not live Native provider/epoch proof. Formal14-file review P2 gate/data alias and mode issue was fixed, freshly rebuilt (8 compile attempts/3 links/Host) and manually post-LTO resolved. D01 static-policy BLOCK3, unexecuted D02 and first C4996/ELAPSED failures remain preserved; no root warning policy weakening.
+
+Distinct prep/FINAL_RESULT_D01.json SHA256 `897c54c3b7ede097c652b9140fc90d94b57875f34cb06707f52d5715bc2152e4` records fresh final Host/static/manual-path subset PASS and unchanged945-source/9722-pin/artifact closure. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-native-parent-v2-20261029-d01/final_once.py`. Current Native frontend d4e5d829c8ed5fe406c525e410f68599012ebac1e46bded57b2de3770cec4015; Native parent eb2113af1749429106c99a959bcb9c5422335936e2c1f039af3eca5b99308f07; Host c306d244ad514ec9404b598fa3e3ef6458503a5b922ceeb84f71ec661e28dd52. Cumulative22 compile attempts/7 links/3 Host commands; zero Native/HDC/identity execution.
+
+NATIVE_OS_PACKAGE_D01.json is a five-artifact reference bundle, not deployed copies. NATIVE_OS_ARGV_D01.json contains exact10 A/B proposed cases. prep/OS_PROPOSAL_REVIEW_D01.md conditionally admits data FOR REVIEW only; NATIVE_OS_PROPOSAL_ADDENDUM_D02.md clarifies external denial nonce versus synthetic context, timeout124 acceptance requiring SUP_RESULT timeout0/internal_error0/child_exit124 and actual owned-child records, and future tree/group cleanup qualification. No case executed; optional own-DSO constructor/destructor case remains conditional NOT_READY. Same-child live dual-clock probe is absent. Current docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md separates reviewable OS data from business NOT_READY and records mandatory remaining work. Stage1 NOT_VERIFIED; all37 Stage2 HELD; global/PRE_COMMIT FAIL; Ready NO. Historical403/797/439/359/871/G612 and all FAIL/UNKNOWN preserved. No cleanup or successor.
+
+---
+
+## 2026-10-29 Native FD preparation subset — BUILDS / STATIC REACHABILITY / HOST CONTRACT ONLY
+
+Partial closure only: --native-fd-prepare is real linked Native preparation code for four FDs plus parent PID/start, side and hash. It validates a canonical27-field Native-purpose approval0 request, own PID/image/manifest/module-FD same-file association, immutable memfd/all seals/hash, fresh exclusive caller/one-shot ownership and validation before adoption. Parent identity is sampled, not pidfd-bound. Exact sampled regular-file size bounds allocation; cooperative poll0 checkpoints reject peer EOF/error/invalid descriptors or early queued bytes. They consume no frame, validate no Abort and establish no SDK READY. Synchronous VFS calls are not hard-interruptible.
+
+Evidence root `E:/Codex-FastDDS-stage1-native-fd-v2-20261029-d01`: original D01 static3 BLOCK/D02 superseded and D03 length-audit FAIL remain preserved. CFI real-path correction, fresh Host GREEN, two formal P2 fixes (single exact stat-size guard and cooperative external-close checks), postreview rebuild and formal resolution CLOSED precede distinct final. `prep/FINAL_RESULT_D01.json` SHA256 `3364aa551a072052d94b46ff929ef0a257ee2f6affbcdbc3cab5de92765bfa8c` records actual new Host contract0/refusal78 and unchanged938-source/9412-pin closure. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-native-fd-v2-20261029-d01/final_once.py`. Cumulative10 compiles/4 links/6 Host commands, zero configure/Native execution/HDC/identity. Native8c8a1a7c7f242617a9e30f75268ba0da89fc210de9284b65f16637bc9b035aee BUILDS with static CFI preparation reachability; Host52eff0bbfa61bb0df029c886b2f49519ad1883683d74b3da1f2fefd7bb7654fb tests metadata/mapper/allocation logic and FAKE journal only, not POSIX syscalls.
+
+Native FD/POSIX/memfd/poll/cancel runtime remains NOT_RUN. Journal records observations, invokes no identity API; Native EntryReadbackOnly cannot prove worker/kernel restoration or SIGKILL/exec recovery. Product/current consumer88/original299 were not rebuilt; exact88 export evidence is static only. Protected business loader remains UNSUPPORTED_PRECONSTRUCTOR_AND_DEPENDENCY_BINDING; full Native Port/Client/getter route remains disabled or pruned. This is not completed Native V2. SDK __n1/platform bridge __h and CFI remain unchanged; SDK23 .32 versus board .31 source association is UNKNOWN, not proven incompatibility.
+
+Mandatory gaps and exact approval boundaries are in docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md (NOT_READY / NOT_AUTHORIZED): preconstructor root/dependency byte contract, actual Native supervisor/FD/request wiring, fully linked current-consumer48-byte API/provider ownership and Port/Client, preparation OS/deadline/EOF runtime verification, current route-specific permissions/OWN/ACL/sole-main facts, precise identity/last-use evidence and real Socket/DDS closed loop. DATASYNC is not assumed universally required. No new service/full firmware pack is requested. Stage1 NOT_VERIFIED; all37 Stage2 HELD; global/PRE_COMMIT FAIL; Ready NO. Old797/439/359/871/G612 and every historical body byte remain preserved. No further cleanup or successor execution.
+
+---
+
+## 2026-10-29 handoff/loader increment — WINDOWS NONBUSINESS FIXTURE ONLY
+
+External Windows two-child pipe handoff is now implemented and tested: canonical27-field full deployment request, PID/image/manifest binding, locked ancestor/file handling and same-handle SHA/provider verification, C/POD exception containment and one-shot handle ownership. Frontend /MT and origin-contained /MD fixture use no BCRYPT dependency. This supersedes earlier Windows-handoff deferral only. Native FD/protected business-loader integration remains unverified. Strict sole-main count1 gate is unchanged; historical count4 startup/capacity failures remain failures, and the earlier thread creator remains UNKNOWN. No Native identity-safety conclusion follows.
+
+Evidence root `E:/Codex-FastDDS-stage1-handoff-loader-20261028-d01`: formal review found one P2 (owning parent handle before validation); current code validates PID/birth/liveness before adoption. Fresh reviewfix and formal resolution close it with eighth bad_parent_handle negative proving unrelated handle remains valid. Distinct `prep/FINAL_RESULT_D01.json` SHA256 `bd6ea90c1fe58ef888353e623aa4b50df454c41d2ebdc527aaadcd0c32504074` records two PE inspections0, fresh eight-case suite0, locked guard78, all16 children reaped, Jobsactive0/cleanup empty. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-handoff-loader-20261028-d01/final_once.py`. Current934-source/144-pin closure remained unchanged after final. Cumulative28 compiles/8 links/8 Host commands/52 created children includes failures and diagnostics; it is not an all-PASS tally.
+
+Current Host EXE `2f3f9a2efc510ed2f93ad987033ddf688f351e65ed2176dc427d10f0dd0d9aac`; fixture DLL `a196d3781c1956da84006b73cc60d882909d035032f0f70d175a945945e9a5d8`; Native frontend `a81466cec994ed0261deae7baaf8dd3d9657088ebfef4815844b5c5ec918b017` is crosscompiled/unexecuted. Full Native V2 may be LTO-pruned; POSIX compiled only. Product14878/original299 unchanged. --handoff-run returns78 before parse/getter/load/identity; record/env/fixture grants no approval.
+
+Mandatory remaining work: Native FD handoff and protected load-byte binding, actual current-consumer V2 fully linked, fresh security/permission and specific approval prerequisites, real READY/DATA_DONE plus DDS traffic with no alternate transport, and wrapped lifecycle/last-use evidence. Controller carries control/evidence, not DDS payload. Actual SDK quiet and boards remain NOT_VERIFIED. Current phase card: docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md, NOT_READY / NOT_AUTHORIZED. Stage1 NOT_VERIFIED; all37 Stage2 HELD; global/PRE_COMMIT FAIL; Ready NO. Historical failures and entire old body remain preserved. No automatic next development.
+
+---
+
+## 2026-10-29 bounded control-IO increment — CROSSBUILD / STATIC / REAL WINDOWS FIXTURE ONLY
+
+This update supersedes the earlier statement that the shared control adapter was undelivered: wire/Channel/Port/Client code is now PRESENT and actually exercised across a marked Windows fixture DLL. Native business getter/loader integration, external FD/channel handoff and cross-process board coordination remain NOT WIRED. Stage1 NOT_VERIFIED; all 37 Stage2 items HELD; global/PRE_COMMIT FAIL; Ready for commit NO. No automatic next development or sensitive execution is authorized.
+
+Implemented: explicit big-endian wire version1 with direction, length, sequence, run nonce and complete envelope; semantic reconstruction into native C/POD V2, never raw padded C structs. Bounds: 24-byte header, body<=896 bytes, <=64 frames and <=65536 bytes per direction; strict identity/sequence/truncation/EOF/limit checks, local deadline and cancellation. Real Win32 overlapped local named pipes and shared V2 Port/Client reached getter/create/execute/cancel/destroy across a real fixture DLL. Tests exercised blocked reads/writes, partial cancellation, stale/late capsule callbacks, drop-ack races and cancellation completing after wrapper destruction. POSIX nonblocking poll/thread-local SIGPIPE branch is CROSSCOMPILED ONLY. Control evidence/releases are not a DDS payload transport.
+
+Default --control-run returns fixed78 before observations, pipe open, module load, getter or SDK activity; --control-codec-selftest only handles bytes. execution_enabled=false remains unchanged. Native/default Port authorization always returns NS_AUTH; only the separately compiled marked Windows fixture has fixture authorization. Environment or record booleans confer no OS grant. Every admitted Client method holds shared heap State; uncertain completion retains complete State/module/Port via a preallocated pin. Caller must keep wrapper alive through method admission and never start a method after destruction. Native callback capsules/modules remain process-lifetime pinned. Controlled fixture alone acknowledges drop after execute/live-handle/copied-late/cancel references are all zero; this is not SDK callback quiescence or an unload/restore guarantee.
+
+Evidence root `E:/Codex-FastDDS-stage1-controlio-20261028-d01`: prep/INITIAL_RESULT_D01.json records actual12 compiles/3 links/3 Host executions (suite0 and expected guard78). Formal review raised two P1 lifetime findings: cancellation bookkeeping outliving wrapper, and copied-late callback references omitted from drop acknowledgement. Heap State retention and producer reference accounting plus controlled-CV regression tests corrected them. review/FORMAL_RESOLUTION_D01.md reports no actionable findings remaining within the source/Windows fixture boundary after fresh reviewfix7 compiles/3 links/1 Host0. Distinct prep/FINAL_RESULT_D01.json SHA256 `686b0bfaeecd921a360252f753b4aa214cec6123709645e5e0c90e048085cda7` records actual ELF/COFF tool exit0, fresh suite0 and locked78, naturally drained Jobs0/no cleanup errors, all42 pins unchanged. Final command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-controlio-20261028-d01/final.py`. Cumulative19 project compiles/6 links/6 Host executions; zero configure/HDC/identity/Native business operations. Source924/code and consumed headers were freshly bound/audited.
+
+Native frontend SHA256 `b2f2d9a1a60b7475112054e9aa7231e7c7269df00faa0b86e7bda6501f271984`: actual SDK23 __n1/CFI crossbuild and guard/codec linkage only. Unreachable full V2 paths may be LTO-pruned; this is not full Native adapter linkage/runtime proof. Current Host EXE SHA256 `58a936400a2f81ccc386a1105eae092f9c8531fef2c96ca1b5387948c112d2a8`, actual fixture DLL `759a4950944ee4d6ccce998418ee07268e2078194ff2ca1e670acae075c8d57c`. True consumer88b20, product14878, original299 and frozen historical359/871/G612 remain unchanged. Native SDK/Socket/DDS/device/business/identity: NOT_RUN; full ABI/Shutdown quiet: UNPROVEN.
+
+Current sensitive-window status is docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md: NOT_READY / NOT_AUTHORIZED, with current hashes, fixed A/B targets, project OWN and com.kaihong.mdds. Dated G grants are historical, not fresh permission proof. Native loader/getter and deployment bindings, external channel handoff, startup/caller checks and specific approval remain prerequisites. No Set/GetAccess/Reload/profile actions occurred, and no existing service/new profile requirement is asserted. Same160MiB E plan remains24 prep/32 initial/48 fix/32 final/2 docs/22 reserve; no cleanup or transfer of old budget. All previous BLOCK/FAIL evidence and historical body bytes remain unchanged.
+
+Historical document body follows unchanged.
+
+---
+
+## 2026-10-28 consumer run-entry increment — BUILD / STATIC / PORTABLE HOST ONLY
+
+This update supersedes historical deferral statements only for the new, separately compiled consumer run entry. Overall Stage1 remains NOT_VERIFIED; all 37 Stage2 items remain HELD. Global / PRE_COMMIT: FAIL. Ready for commit: NO. No subsequent development or sensitive execution is automatically authorized.
+
+Implementation PRESENT in `tests/stage1_native_successor`: separate V2 C/POD create/execute/cancel/destroy API; genuine root Listen/Publish witness hook followed by external CONNECT wait; stock Fast DDS 2.14.5 public Participant/endpoints/QoS with built-in transports, intraprocess and DataSharing disabled; three exact run/side/payload/GUID/sequence-number samples and acknowledgement; cross-log DATA_CHECK / DATA_DONE / DELETE_RELEASE ordering. Strict extra-take NO_DATA check precedes local DATA_DONE. Existing legacy prepare/frontend/product299 remain unchanged. The frontend remains compilation-locked and does not call the new run API. Native cross-process bounded control-IO adapter and frontend wiring are not delivered.
+
+Evidence root: `E:/Codex-FastDDS-stage1-consumer-entry-20261028-d01`. Initial `prep/INITIAL_RESULT_D05.json`: bounded composite PASS (Native build and first actual Host04 execution). `review/FORMAL_REVIEW_D01.md` raised one P2; `review/FORMAL_RESOLUTION_D01.md` closes it after readiness-promise/failure-cleanup correction and records the extra-take ordering correction. `prep/REVIEWFIX_RESULT_D01.json`: two fresh C++ compiles, two links, one actual Host execution PASS. Distinct final `prep/FINAL_RESULT_D01.json` SHA256 `dcc60d88dae843bfec15daa5586c3ee22340b4bb828653f10cf5ac825dc04b78`: fresh actual protocol.exe exit0, wrapper0, owned processes drained0, cleanup errors empty, all39 pins unchanged. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-consumer-entry-20261028-d01/final_once.py final`; actual child `reviewfix01/protocol.exe` reports `HOST_FIXTURE_ONLY noDDS noSDK noIdentity`. These marked portable C++ Window events are actual Host test evidence, not Native runtime evidence.
+
+Current Native DSO SHA256 `88b20c2a17c0ff65829babd7673b881ca258b211f7466f68a2f55bbadc83e466`; Host EXE SHA256 `db992abd2ccd0d838eede60aa5230dd350dd808ff0c40fabbf610c4257f12700`. True Native build uses SDK23 __n1 / strict CFI, public2.14.5 and current product14878; unchanged C TU and legacy C++ objects are provenance/header-bound reuse (713 headers), not fresh compiles. Cumulative actual work: 10 project compiles, 5 links, 3 new Host executions, zero configure/HDC/identity operations. NativeSession, SDK/Socket/DDS traffic, device/cross-device/business and identity execution: NOT_RUN / UNVERIFIED. Full ABI behavior and Shutdown callback quiescence: UNPROVEN.
+
+Business DSO must remain mapped until process exit. Failure retains owners behind a terminal process fence. Callback deadlines are cooperative; synchronous SDK/DDS/delete/join calls are not guaranteed interruptible. Root shared-listener witness does not establish per-domain input publication, connection generation or lease. Delete/Close/process exit does not prove SDK quiet.
+
+All historical FAIL/BLOCKED records remain evidence: missing TopicDataType pre-pin failure, prep8MiB guard refusal, Host warnings and unattributed GLOBAL_C_DROP, Host link0 followed by Job ELAPSED/VCTIP, static D03/D09/D11 BLOCK and template-parse failure. No retroactive PASS. Resource accounting remains new144MiB on E with the same pools (final32MiB/reserve22MiB); prep corrected24MiB explicitly adds16MiB after actual guard refusal. No cleanup or cap-floor weakening.
+
+Current owned-window prerequisite/approval status is solely `docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md`: NOT_READY / NOT_AUTHORIZED. Fixed A/B boards, named project OWN and com.kaihong.mdds remain scoped deployment constraints; dated permission/OWN observations were not freshly queried. Future paired SetSelf selection/restoration remains unapproved; fresh sole-main caller, live permission/profile checks, actual new frontend binding/hash and thread/kernel/restore unknowns remain prerequisites. No new service/profile is asserted or required here. Documentation sync does not grant identity or traffic execution approval.
+
+Historical document body follows unchanged.
+
+---
+
+<!-- CURRENT_ADMISSION_ENTRY_DOC_SYNC_D01; raw historical body preserved below. -->
+# Current structured input validation entry — 2026-10-27T05:59:29.120624+00:00
+
+**Selected fallback scope closes ONE item: input-validation entry IMPLEMENTED / BUILDS / bounded A+B DEVICE_TESTED PASS. Actual Participant/Reader/Writer/pubsub and Native READY/DATA_DONE remain NOT_IMPLEMENTED/deferred. Stage1 NOT_VERIFIED; Stage2 all37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.**
+
+Five paths in `tests/stage1_native_successor` changed: frontend, CMake, README and private `entry_admission.hpp/.cpp`. Retained RED shows old image's unsupported new CLI returned78 where0 was required. Initial compiled 2 new CPP TUs and 1 strict CFI link (599+597 actual headers; frozen C layout reused). Formal agentic-review0.1.1 found no actionable blocker; NEW independent final reused exact frontend SHA256 `085b6d7c276fc556d589f902e79c5a7c88fc45d9ec6ee91ea838a0e0599cd56c`. Command `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-admission-entry-20261027-d01/execute_final_d01.py final` passed10 fresh A/B cases: SHA/parser0, valid input0, always-locked78, badhash78 before getter, wrongcaller78 after stable getter phase. The getter-phase flag does not mean exactly one call; source reads twice. Historical `target_execution_yet:false` is pre-test artifact metadata, not current execution status.
+
+35 HDC clients + 1 ELF tool returned0; all36 jobs drained, owned children reaped and recorded PIDs absent. Peak observed RSS4352KiB; AS2684354560 bytes is virtual-address policy, not RSS. Source907/root26/native69/G612/Git barriers matched; old failures and evidence retained. No old Host/G suite replay, standard-layer/production Transport modification or consumer/bridge rebuild/business-load occurred. The older 5-TU static driver was not updated or relabelled PASS for this new 2-CPP profile.
+
+`--admission-check A|B <record>` conveys input by argv through unchanged token-free supervisor6168, resolving the earlier environment-transport gap. Private same-executable __n1 parser checks exactly20 ordered ASCII/LF fields, <=4096 bytes, <=300-second interval, code-image anchor, canonical regular-file/same-FD hashes and stable declared/current caller. Consumer20ac/bridge3ed bytes are DATA only. Scalar GetSelf is the only token API in this round; no manager/vector query or fresh OWN profile lookup. Board is external explicit-HDC attestation; OWN target is a dated G declaration. `INPUT_VALID_ONLY` establishes neither OS grant, signature/trusted producer, user approval, replay protection nor Native READY; hash-time correspondence does not solve future pathname-load TOCTOU.
+
+`--admitted-run` always refuses78 before business load/setters. Legacy `--approved-owned-window` is compile-locked in this image, even with environment flags. No SetSelf(target or restore), GetAccessTokenId, Reload/Delete, Socket/DDS business or privileged execution adapter is implemented/qualified here. Fresh caller conditions were checked; prior G OWN Native/APL/DATASYNC facts remain dated, not re-queried. No new profile/account/service is requested.
+
+Runtime/old299 source mapping informs future work only: after-listener-publication hook holds outer pins and must not wait for DDS match/Close; old `_Exit90` must not be copied into a DSO. A finite coordinator and genuine SDK lifecycle/traffic acceptance remain future engineering. Remaining boundaries include armed input/execution artifact, exact image-to-load binding, kernel Set/Restore effect/recovery scope and specific approval, actual pubsub/READY/DATA_DONE and callback quiet.
+
+Evidence root `E:/Codex-FastDDS-stage1-admission-entry-20261027-d01`: canonical `prep/FINAL_RESULT_D01.json` SHA256 `a0d1145eaa1403a2be993ee6bc0e55ee852c97fb2c489192f960eeb81e17a1e0`; current `docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md` SHA256 `392b2fe0a2319df42643516bb84a5de7457b03efee79d14a6f3452202738deac` is **NOT_READY**, not an approval request. No next sensitive or business phase starts automatically.
+
+Transition: structured record entry missing (retained RED) → implemented/builds/A+B validation PASS. Privileged execution and full Native transport integration remain NOT_VERIFIED.
+
+---
+
+<!-- CURRENT_NATIVE_GUARD_READONLY_DOC_SYNC_D01; raw historical body preserved below. -->
+# Current Native guard and OWN metadata checkpoint — 2026-10-27T05:05:56.340115+00:00
+
+**Bounded Native DEVICE_TESTED=true / PASS for guards, local pthread selftest, tiny loader and fixed OWN metadata only. Stage1 NOT_VERIFIED; Stage2 all 37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.** Prior NOT_RUN statements below describe earlier checkpoints.
+
+Two-file frontend/README increment adds read-only fixed OWN query, task/symbol observations, normal-stop worker flow and fixture ownership/cookie/duplicate negatives. Initial crossbuild compiled 1 fresh TU/linked frontend with 598 consumed headers; NEW final reused exact immutable frontend SHA256 `4193950f88d366f1e266332f9c9d8c50e1bdedeec5e8adf9107220e0f8629f81`. Formal agentic-review0.1.1 found no actionable blocker. Final command `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-native-guard-readonly-20261027-d01/execute_final_d01.py final` executed 10 fresh nonce-bound children on A/B: default/`--real` deliberate refusal78; normal+cancel pthread selftest0 (tasks2→joined1); libc fixture0 (ctor/dtor1, timing/version/size/ownership/cookie/duplicate checks); OWN query0 on each. Artifact receipt `target_execution_yet:false` is historical pre-test metadata; actual final cases prove execution.
+
+27 HDC clients + 1 ELF tool returned0; all28 host jobs drained; recorded owned parent/child PIDs were reaped/absent. Peak observed child RSS was7680KiB; AS limit2684354560 bytes is virtual-address policy, not physical RSS. Source905/protected26/native69/oldseal664/Git barriers matched. Existing product14878/current299/consumer20ac were neither loaded nor rebuilt; no Host suite replay.
+
+Both queried profiles were exactly `mdds_actionbag_2e107f51cd7b40218b01437d1e5c4e16`: A lookup672006291, B lookup672042405; NativeType1/APLnormal1/infoRC0/vectorRC0/count1/state0/granted1. These are dated queried-profile facts, not caller grants or full permission inventory. Caller self A806246851 / B806017503 stayed unchanged before/bridge/after; UID/EUID0 does not prove token authority. Metadata IPC is local permission-service work, not cross-board DSoftBus business/Socket/DDS data. No SetSelf(target or restore), creation/reload/delete/grants/credential/security/network configuration occurred; `--approved-owned-window` was NEVER_RUN.
+
+Tasks were1 before provider and after bridge load, then3 after query on both boards. Worker/parent token effects, restoration and SDK callback quiet remain UNKNOWN. Existing __h bridge with __n1 frontend passed the covered C/POD query/normal-process-exit path; full source-image ABI/CFI/global allocator/GOT binding remains UNKNOWN. Global-vs-bridge-handle new/delete symbol results are LOOKUP_ONLY, not allocator execution proof. Manager handles stayed until process exit; fixture unload does not qualify SDK quiescence.
+
+Evidence root `E:/Codex-FastDDS-stage1-native-guard-readonly-20261027-d01`: canonical `prep/FINAL_RESULT_D01.json` SHA256 `2f4cb3144e9847b87a74dd59820655752b95d125e058944be2f7602bdc36d27e`. Current future card `docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md` SHA256 `72d5544e75b01c3a984d1df419e86c392641bf35c07b40ed9ab14813c612fd66` is **NOT_READY**, not an approval request. Fresh OWN facts and covered query ABI are resolved; future paired setters still need approval, kernel effect/recovery scope and a qualified admitted-input artifact (current controller environment omits admission variables). No new profile/service is requested. Real Participant/traffic entry and Native READY/DATA_DONE remain next engineering, outside this checkpoint.
+
+Transition: Native guard/fixture/OWN metadata NOT_RUN → bounded DEVICE_TESTED PASS on A/B. Full transport/device-integration acceptance remains UNVERIFIED.
+
+---
+
+<!-- CURRENT_NATIVE_SUCCESSOR_DOC_SYNC_D01; raw historical body preserved below. -->
+# Current ARM64 Native successor — 2026-10-27T04:15:31.092975+00:00
+
+**IMPLEMENTED + BUILDS + LOCAL STATIC/CODEGEN PASS only. Stage1 NOT_VERIFIED; Stage2 all 37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.**
+
+Nine new files in `tests/stage1_native_successor` provide a genuine frontend PIE, identity bridge, consumer DSO and libc-only loader fixture. Independent final tester ran `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-native-successor-20261027-d01/validate_final_d01.py final`: real configure, 5 fresh project TUs, 4 AArch64 ELF links, 13 commands exit 0, 5 static tests PASS, 1286 actual headers and 2 before/after LLVM IR outputs. All owned jobs drained with zero exits and no cleanup errors; protected source/tool/runtime378 and Git state matched. Compiler-probe count remains UNKNOWN. This increment ran no Windows Host fixture suite, product D06/current299 rebuild, ARM executable, HDC, identity or SDK business call.
+
+Formal agentic review found one P2: preparation needed cancellation/time checks after external allow returned. Three added source lines recheck cancellation and a single monotonic timestamp against the original deadline before preparation. Final independent IR/CFG inspection confirms those branches dominate Runtime construction; this proves source/codegen ordering only. Earlier real SONAME failure was corrected with explicit SONAMEs on all 3 DSOs. Original FAIL/classifier/metadata records and pre-fix review remain historical evidence.
+
+Actual selected SDK23 libcxx namespace is `__n1`, platform bridge `__h` (actual include traces and symbols); alternate SDK `__1` was not selected. This additive clarification supersedes overbroad historical SDK labels below, without rewriting their evidence. LTO/CFI, strict links and C/POD boundaries do not qualify allocator/interposition, NativeTokenInfo source-image ABI or native behavior.
+
+Consumer exposes guarded Runtime/descriptor/public stock QoS preparation only: no Participant, input/output/pump or traffic entry. Native listener/DATA_DONE control provider is NOT_IMPLEMENTED. Default/`--real` source refuses with 78 before optional loads/query/setters. Latent paired OWN identity window remains UNAPPROVED/NOT_RUN; no provisioning/reload/delete/new profile/account/init/package exists. Native callbacks/Shutdown quiet, bridge/runtime ABI and full Stage1 remain UNVERIFIED; DEVICE_TESTED=false.
+
+Evidence root: `E:/Codex-FastDDS-stage1-native-successor-20261027-d01`. Canonical `prep/FINAL_TESTER_RESULT_D01.json` SHA256 `ecefbf5b586fc3a9482d4f6e1166cf34f07c7df68209d78faaeff0bc18388b2b`; exact final artifact hashes and link/header/codegen bindings are in `final/ELF_AUDIT.json`, `OBJECTS.json`, `ACTUAL_HEADER_CLOSURE.json` and the tester result. Future `docs-gate/FUTURE_OWN_WINDOW_CARD_D01.md` SHA256 `7a9ecbb2b21a3161a12beb17a594d66457e11cacffde7b7fc09354ddc5311cfa` is **NOT_EXECUTION_READY**, not an approval request or permission grant.
+
+Status transition: Native successor PLANNED → IMPLEMENTED/BUILDS/local STATIC+CODEGEN PASS; Native HOST/DEVICE/INTEGRATION execution remains NOT_RUN. Review source finding resolved and final IR condition satisfied; global commit gate remains FAIL.
+
+---
+
+<!-- CURRENT_DELAYED_HOST_DOC_SYNC_D01; historical body preserved below. -->
+# Current delayed-module Host fixture — 2026-10-27T02:31:16.325366+00:00
+
+Eight project test files implement Windows-only HostFakeIdentity/real-DLL loading; no production/stock/native adapter change. **Host fixture PASS; Stage1 NOT VERIFIED; Stage2 all37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.** Distinct NEW final fresh VS17 Release/MD C+CXX configure/build/PE/suite commands returned native0:4 project TUs/4 AMD64 COFF objects,3 AMD64 PE images (1EXE+2DLL), small import libraries;9 methods/18 child cases matched expected exits0,77/78/79/80/51/52/53/54/55/43/42/90. Compiler-check invocation count UNKNOWN/raw configure logs separate from project TUs.
+
+Real Windows DLL attach/detach/witness ordering, exports/function-pointer ownership, type-size-version/canary/reentry/cancel-after-OPEN/lifecycle were tested with fake identity only. Default/--real refuse before DLL load; actionbag/com.kaihong labels grant nothing. Controlled worker entry is not OpenHarmony single-task proof; OS thread count is diagnostic. No real identity/provider API, HDC or SDK compilation; offline SDK llvm-readobj inspected Host PE only. Native __h/__1 ABI/profile/kernel/workers/parent/Shutdown quiescence/real DDS boards remain UNKNOWN/NOT VERIFIED. Hard exit90 intentionally provides no fake restoration; no SIGTERM/KILL/exec-restore promise.
+
+Configure/build native0 was followed by intentional0xE002 termination of only exact pinned current-job vctip handles with job/image identity; PE/suite drained naturally. Not all descendant exits were0 and not all jobs drained naturally. Final post-run GBK display diagnostic failed separately; no actual command retry.
+
+Evidence root `E:/Codex-FastDDS-stage1-delayed-host-20261027-d01`: NEW `FINAL_RESULT_D01.json` SHA256 `4b7d10935163377c9c62edf5550e2457a0857dfb8be3df781de911764b282df5`; `final-execution/TESTER_EXECUTION_FINAL_D01.json` SHA256 `0fa26a2c6612edb5f622819886eaeddd3a62ac99075367d291616a972014e7c8`; independent `review/FORMAL_REVIEW_D01.md` SHA256 `691dc9b95c7ec42ec97f13d843199e384287b06236111478a1354332c5f55362` found no actionable findings in pinned Tier2 fixture scope. Initial recovery from original tester/offline byte oracle reran no native command.
+
+Preserved history: static-path BLOCKED; unsupported-T configure failure/job cap; default VS configure0/vctip drain cap; C4127/WX first frontend failure then one C11 static-assert-line fix; D05 four command0/9+18 tests but localized UTF8 log postprocessing failure. No warning/oracle/timeout weakening or failed-stage relabeling. Future real SetSelf would need a qualified ARM64 successor/bridge hashes/fixedA-B/own-profile binding/paired select-and-restore authorization; this fixture grants none. No new package/profile/account/init or candidate revival. All previous history/P1 corrections/37 rows remain byte-identical below; docs role runs no build/test/native/HDC/Git action.
+
+---
+
+<!-- CURRENT_HOST_COORDINATOR_DOC_SYNC_D01; full historical body retained below. -->
+# Current Host coordination control fixture — 2026-10-26T22:45:00.020693+00:00
+
+Reusable Python-stdlib coordination subset PRESENT/HOST_TESTED at its bounded fixture contract. **Stage1 NOT VERIFIED; Stage2 all37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.** Distinct NEW final fresh LANGUAGES NONE CMake configure, syntax target and one CTest passed:32 named methods/OK,25s suite timeout, native/wrapper exits0 and natural owned-job drain. C++ compilation/SDK/HDC/board/current-consumer actions0. Fixtures are not native facts; current299 consumer/product bytes unchanged.
+
+Initial28-method PASS, actual RED four methods/five assertion failures, GREEN32 PASS and NEW final32 PASS are separate evidence. RED DELETE subcase stopped at earlier SEND snapshot; no deeper DELETE RED execution is claimed. Three P2 findings were fixed: read-only absolute deadline, per-side issued CONNECT/SEND/DELETE release credit, and one-shot hook/lifecycle admission. Four new methods and explicit fixture releases retain the original28 assertions. Original D01 temp BLOCKED/D02 Ninja-dollar failure remain; VERBATIM fixed the latter. Historical stale inventory28 field is retained with an additive actual32 correction.
+
+Component enforces strict envelopes, CV cancellation without Close, cross-side GUID/sequence/payload/DataDone checks and weak hook/strong opaque owner retention. Project CMake/CTest entry exercises pure control/lifetime fixtures only. Native C++/SDK listener observer/real Runtime hook/IPC IO/authorized startup/full callback quiescence remain unimplemented or unverified. Real Socket/DDS traffic, native listener coordination and positive two-board acceptance are not established.
+
+Evidence root `E:/Codex-FastDDS-stage1-coordinator-host-20261027-d01`: `FINAL_RESULT_D01.json` SHA256 `b6af145212b64e6449158131a74c1e32db7217d427c02017c40ec02526d0bc5c`; `final-execution/TESTER_EXECUTION_FINAL_D01.json` SHA256 `d839e26634f545ac00fc14b6066fee3f2f112f2dad5e657c6cb3bbba3b40539f`; independent `review/FORMAL_RESOLUTION_D01.md` SHA256 `c7186da22a0265a14f65be501026798870da76986e834d2f644b8a313de90d9a` resolves all three scoped P2 findings. `prep/TEST_INVENTORY_CORRECTION_D01.json` preserves the28-to32 inventory history. No old test result is substituted for the NEW final.
+
+Existing read-only startup evidence remains sealed; no supported native launcher is known. Minimum missing project information: exact service/bundle and owner, manifest/formal startup documentation, and who configured current299's supported startup/permission/path namespace/DAC/SELinux relationship. No new scan, native adapter, identity grant/selection or security/network operation is authorized or implemented here. This documentation step runs no build/test/native/HDC/Git action and preserves all prior caller/CFI/P1/failure history and37 capability rows byte-for-byte below.
+
+---
+
+<!-- CURRENT_DIRECTDDS_OWN_GUARD_DOC_SYNC_D06; historical body preserved below. -->
+# Current consumer own-guard evidence — 2026-10-26T20:38:37.730892+00:00
+
+Build PRESENT/PASS; A/B module/permission negative guard PASS only. **Data branch PREPARED/BUILDS, NOT_RUN; Stage1 NOT VERIFIED; Stage2 all37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.** Public C OH_AT_CheckSelfPermission takes a const-char permission string and returns bool: false has no query_rc and means **NOT_GRANTED_OR_QUERY_UNAVAILABLE**, never newly measured DENIED. Earlier vector-query DENIED remains historical for its own children. No identity selection/grant/security/network action occurred; SetSelf necessity remains unproved and unauthorized.
+
+Current ELF `299e487da02d664e34c07b993e5eb4a04ad50fc63966f655021f28d046bc0f2b` (393264B) uses reused qualified main plus fresh guard, strict cached-libc CFI closure/BIND_NOW/no RPATH. Local history3 real configurations/6 project compile attempts/3 link attempts (2 linked ELFs); current2TU closure/0 project archives. Compiler-check exact invocation count UNKNOWN/raw records retained. No rebuild during the initial-guard or NEW final executions. Source prepares current Runtime.MakeStockDescriptor/stock2.14 public per-participant QoS/XML, builtins off/one user transport/unicast/intraprocess off/DataSharing off/three unique payloads and DDS sequence/GUID checks. This is not runtime no-fallback qualification.
+
+Initial115 HDC exits0 included2 EXE uploads/expected native77 A+B. NEW independent final109 HDC exits0/no upload/build/mkdir/retry: A29647 native77/self806246851 unchanged/RSS21076KiB/71ms; B23533 native77/self806017503 unchanged/RSS21112KiB/51ms. Exact reap/known-PID absence and57 selected closure/current-binary pre/post hashes passed. Each child had exactly one expected SDK libc++_shared/current product14878/stockfastrtps2.14 module family plus2 matching C API owners. Lower-priority system libc++_shared discovery is NOT_SELECTED; module identity is not GOT/allocator/fullABI proof. Existing helper6168/childAS2.5GiB/8+2s unchanged; constructors may execute. Guard-only had no DATA_ENTER or explicit Runtime/DDS/Socket entry.
+
+Evidence root `E:/Codex-FastDDS-stage1-directdds-20261027-d01`: initial SHA256 `9ef2a5b3f7740be83cfdc537614c3119ea97386107acff1727b2f060f1dcf9d2`; formal `prep/FORMAL_DIRECTDDS_CONSUMER_REVIEW_D06.md` SHA256 `feb7492b8478ed7fbc65bc2230a2ef775345b10d1070be82b7144f21f84bc76e` found no additional guard-scope findings; NEW `final-package/FINAL_RESULT_D06.json` SHA256 `2ecdbeab5a83dff91597ed4f799dee46bed8459a6cf376f37247a306fb0c41b8`. Real Socket/directDDS/different-domain/discovery/QoS, listener coordination/positive peer/data, native Shutdown deadline/quiescence and broader applicable TransportInterface coverage and full source/image ABI remain NOT VERIFIED. SDK23(6.1.0.32)/board6.1.0.31 association UNKNOWN, not presumed incompatible; legitimate service/HAP startup unverified.
+
+Legacy3.6 static draft, D02 LocatorList compile failure, D03 strict CFI/601-unbound-header failures, metadata framing/alias STOP and file-size/lower-priority-classifier BLOCKED records retain their scope. Earlier512/driver-warning/old-binding/capacity/A139/caller/CFI/P1/Host history and all37 capability rows remain byte-identical below. This docs step runs no source/test/config/build/native/HDC/Git action.
+
+---
+
+<!-- CURRENT_INHERITED_CALLER_DOC_SYNC_20261027; entire historical body retained below. -->
+# Current inherited-caller permission measurement — 2026-10-26T17:32:19.599871+00:00
+
+Canonical synchronization after actual INITIAL → independent formal review → NEW independent final: **measurement PASS on A/B; DISTRIBUTED_DATASYNC prerequisite BLOCKED_DENIED in those measured fresh-child startup contexts**. Full Stage 1 remains UNVERIFIED; Stage 2 all 37 capability IDs HELD; global/PRE_COMMIT FAIL; Ready for commit NO. uid0 does not imply permission grant.
+
+NEW final A child9269 and B child3893 exited0. Each vector query returned query_rc0, exactly one state, raw_state-1 (DENIED), type2 TOKEN_SHELL. Full inherited self tokens A806246851/B806017503 were unchanged before/after. This is a valid permission result, not a query error classified as denial. wait4 peak RSS6516/6396KiB and elapsed41/31ms, confirmed owned group/exact-child reap/known-PID absence, and all47 HDC client exits0 support only this bounded measurement. GetSelfTokenID lookup owner is exact platformsdk; VerifyAccessToken.vector/GetTokenTypeFlag.u32 resolve via the byte-matched platformsdk path canonicalized to chipset-sdk.
+
+Probe source only queries its own inherited context: no GetNativeTokenId/named lookup, identity selection/provision, Grant/Reload/revoke, Socket or DDS invocation. Successful measurement is not successful communication. A future SDK consumer must check its own actual startup context; these observations neither grant future traffic nor prove SetSelfTokenID indispensable. Current metadata/provider-query evidence does not establish full SDK ABI/source association, Shutdown/callback quiescence, real Socket behavior or direct two-board DDS traffic.
+
+Evidence root `E:/Codex-FastDDS-stage1-caller-20261027-d01`: resumed initial SHA256 `f825f7f45ded177677b440f8b54ad6bd8c57caadf188318b88ef0d4d15d3f6c0`; NEW `FINAL_RESULT.json` SHA256 `41b979b16b03aa2efba955d7650a82ac5bc9107437690463fbff91d218ad3ae4`; `prep/FINAL_TESTER_EXECUTION_D01.json` SHA256 `b5461b4d789577991fbbed5064441fb4cc56ad7c61cd405aaa35708cd894a11f`; `prep/FORMAL_CALLER_REVIEW_D01.md` SHA256 `e9b75f7de56aeb66027fd2d744b3ac694aa66c73cefd427cac3f5e8ddb5326be` found no actionable findings within inherited-caller measurement and command-length correction. Four prior local compile/link/ELF/nm tools exited0 with609 dependency records; resumed/final phases reused the compiled probe without rebuilding. The deterministic162-candidate/six-chunk runner (max6954 serialized UTF16 code units including full HDC argv/wrapper) preserves exact search coverage.
+
+Original whole INITIAL_RESULT remains BLOCKED/UNKNOWN (actual overall FAIL_OR_BLOCKED_CALLER_INITIAL_UNKNOWN; tester terminal BLOCKED), with failed CreateProcess WinError206 before the A client launch and its original result `43390a5ca4e467cedf6f57975e4a3e2574688d7bfbd0aea840457c3870e00da8`. Old512MiB failure, first SDK-driver warning failure, old-document-binding static BLOCKED, capacity stops and older distinct-root A139 remain preserved. Current production product/loader are unchanged; sealed Host/D06 suites were not rerun. This documentation step changes no source/config/test, performs no build/HDC/native operation, and makes no Git state transition. All previous CFI/P1 evidence, historical bodies and capability rows remain byte-identical below.
+
+---
+
+<!-- CURRENT_CFI_METADATA_DOC_SYNC_D01; historical body preserved byte-for-byte below. -->
+# Current A/B metadata-load evidence — canonical sync 2026-10-27T00:55:26.663689+08:00
+
+This canonical documentation synchronization is newly authorized and applied at `2026-10-26T16:55:26.663689+00:00`. Earlier E-only evidence and its `NOT_APPLIED_USER_SCOPE` result remain unchanged historical records; their scope/status is not retroactively rewritten. **Current module metadata load/provider lookup/dlclose/process exit: PASS on A/B. Full Stage 1: UNVERIFIED. Stage 2 all 37 capability IDs: HELD. Global/PRE_COMMIT: FAIL. Ready for commit: NO.**
+
+The original whole-process512MiB AS cap could not accommodate the byte-matched interpreter's2GiB CFI PROT_NONE/MAP_NORESERVE virtual reservation. The admitted fresh helper preserves the original512MiB normal allowance with child AS2684354560 bytes and wait4 peak-RSS telemetry. This is reserved virtual address space, not2GiB physical allocation; peak RSS is not VmPeak or an instantaneous RSS enforcement limit. No CFI/ASLR/security/identity/network setting was changed. Original ownership, bounded logs, core/file/time/parent-death guards remain.
+
+Actual initial A/B current loads exited0; the intentional A `_ZdlPv` negative exited1 because dlsym lookup identified owned `lib/libc++_shared.so` instead of the expected product, followed by dlclose0. This is lookup-owner rejection, not GOT/IAT binding proof or allocator execution. NEW independent final A/B loads exited0 with wait4 peak RSS20032/20288KiB respectively, exact five system Socket lookup owners plus two current-product lookup owners, dlclose0, confirmed process-group ownership and exact-child reap/known-PID absence. Final11 HDC client exits and reported remote codes were0;56 pre/post hashes matched per board. This documentation step ran no native/build/test/HDC action and made no source/config/Git transition.
+
+Current product `14878b1ce5ef5d490ac332e0df95886fd6b89da90547fb9813f3975d3bea533c` and loader `0225a138175d14e10844d18ad357f78ee8ed5b4c540e91070ab05c2d56b30751` are unchanged. Evidence under `E:/Codex-FastDDS-stage1-device-20261026-d01`: initial `REMOTE_CFI_INITIAL_RESULT.json` SHA256 `bd9b92f6040a394410c142e9a3c34c682fc0bef4b00d8e59028d78a6982003cf`; final `prep/cfi-static-d01/FINAL_CFI_RESULT.json` SHA256 `71e5638fe65300d280efb11d592bf938d27bcb3165ec24d3d9c513b7f16ccd9b`; independent formal review `prep/cfi-static-d01/FORMAL_CFI_REVIEW_D01.md` SHA256 `d72d847744b2b386169687df49212ef32ac734d1665a4a6d6093872cddcc31e7` found no additional actionable findings within this metadata-load increment. This does not qualify wider runtime behavior.
+
+No resolved SDK/Runtime/Socket/DDS API was explicitly invoked and no communication traffic was exercised; dependency constructors/destructors can execute. Inherited caller permission, real SDK/Socket behavior, callback/parameter last-use, Shutdown quiescence, full image/source/runtime ABI association and direct two-board DDS remain UNVERIFIED. Named-identity evidence does not establish inherited caller permission or SetSelfTokenID indispensability. Those remain separate prerequisites, not authorization granted by this update. Host/D06 sealed suites were not rerun.
+
+Original512MiB native failure, first SDK-driver warning failure, old-document-binding static BLOCKED, capacity stops and older distinct-root A139 remain historical failures with their original scope. No old result is converted to PASS. Prior P1 corrections, all capability rows and the complete historical body below are retained byte-for-byte.
+
+---
+
+<!-- CURRENT_NATIVE_SDK_BUILD_LINK_20261026; historical body below preserved byte-for-byte. -->
+# Current native SDK build/link evidence — 2026-10-26
+
+Step 1 native candidate: implementation PRESENT; SDK23 AArch64 build, install and installed-consumer link PASS. This increment changed no production source. Host/P1 status is unchanged; sealed Host suites were not rerun. Full Stage 1 Transport/runtime acceptance remains NOT VERIFIED. **PRE_COMMIT FAIL; Ready for commit NO; Stage 2 all 37 capability IDs HELD.**
+
+Current product SHA256 `14878b1ce5ef5d490ac332e0df95886fd6b89da90547fb9813f3975d3bea533c` binds the current 22-TU Transport, including HostProviderLoop `b7df7183…`, PublicSocketBackend `119fc151…`, ExperimentalRuntime `30ba5c7a…`. Actual compilation uses native SDK23 clang 15, ARM64/shared libc++, native Fast DDS 2.14.5 and fastcdr 2.2.5, rather than the repository-root DDS 3.6 or a Host/Fake SDK substitute. Five public Socket imports at `@1.0`, no Session API, loader direct `NEEDED libc++_shared.so`, 40 installed files, and installed public macros/layout/link contract passed static audits. Official Socket headers come from the repository, not shipped SDK headers. The 51 cached provider DSOs are hash-bound link inputs; image/source/toolchain ABI association is UNKNOWN.
+
+Initial evidence: `E:/Codex-FastDDS-stage1-native-20261026-d01/CURRENT_NATIVE_INITIAL_D06_RESULT.json`, SHA256 `a63679cef48ed192a31f9169cbbf0fdb96bf4f6226f9a5b18ce49cc2c4f5b4aa`: product22 + bootstrap1 + C-source/CXX-linked loader1 + installed consumer1 = 25 TUs, three ELF links, one one-TU archive, two real configurations. Formal source/artifact-bound review `prep/FORMAL_ARTIFACT_REVIEW_D06.md`, SHA256 `d8d7abe200b94bc447373a8df0b51f638aa83c6c1f48e161e4ded59c4c4064a4`, found no actionable findings within this build/link increment; runtime qualification is outside that verdict.
+
+Fresh final evidence: `final/FINAL_RESULT.json`, SHA256 `1cda2e14205a5dd1dd8bb1fea5b95a2e458a48cd6b6e57c68f1a1d3405807443`: a real installed-consumer configure, one-TU build/link, and readelf audit (three commands, native/wrapper exits 0; jobs clean). Initial product/build/install were not repeated. Final evidence binds 69 direct artifact pins. Cumulative actual scope is **26 project TUs, four ELF links, three real configurations, one one-TU archive**. Compiler-check artifacts are 62 + 48 + 48; these are not invocation counts, and exact compiler invocation count remains UNKNOWN with raw logs retained. Final consumer SHA256 is `d55065e80adc5295d93351c173f5ee3894939c589667e718db523b8e3315e448`.
+
+CURRENT ARM execution, SDK initialization, loader execution, Socket/BYTES transfer, DomainParticipantFactory/Participant, Writer/Reader, and dual-board DDS are NOT_RUN / NOT VERIFIED. SDK .32 versus board .31 ABI remains UNKNOWN. The current product differs from historical `91456513…`; loader `0225a138…` matching an older C++ root is not current runtime evidence. Historical board A Signal11/139 and board B skipped, followed by older C++ loader A/B load0/dlclose0, retain their original dated scope below.
+
+Static lifecycle evidence copies a listener adapter under lock and later invokes OnBytes. Void Shutdown/local deletion neither proves callback drain nor guarantees local OnShutdown. Current process slots retain state and report SdkDrainUnproven / NativeRetainedNotQuiescent. Temporary timed-QoS last-use is UNKNOWN; no new production defect or observed runtime race is established. Default8/opt-in12 prerequisites, two views/two circuits, FailedRetained/drain/full recreation and real failure lifecycle remain open acceptance gaps. The separate Shim25 Host variant is not a native build prerequisite and remains a later gap.
+
+D02 shadowing BLOCKED, D03 configure-success/output-classification FAIL, and D05 product/install PASS then unknown consumer phony STOP remain historical failures. D06 adds one exact read-only CMakeFindDependencyMacro pin; unknown/changed external inputs and material external targets remain rejected. Capacity stops and later additive public turn-UUID correction preserve earlier UNKNOWN records. Final D02 root derivation was corrected before native execution. No guard weakening or sealed Host rerun is claimed.
+
+This uses a separate 128 MiB allowance (prep4 / initial64 / review-fix32 / final16 / docs2 / reserve10), not spare historical 416 MiB. Outputs/temp/cache/logs remain on E with original single-job guards; C-write attribution and transient category peaks remain UNKNOWN. Next native Socket/BYTES and current direct stock-DDS dual-board work require their own immutable package, provider/image ABI, device and identity approval prerequisites, independently of Host/P1 and its budget. This document grants no device/security/identity action and no SetSelfTokenID use.
+
+---
+
+<!-- CURRENT_LAZY_TX_RX_ONLY_D07_20261026; entire preceding historical document body preserved below. -->
+# Current lazy-TX / RX-only Host closure - 2026-10-26
+
+**Implementation PRESENT; qualified Host build PASS; bounded Windows HostFake/Mock final40 PASS. Overall NOT_VERIFIED; global PRE_COMMIT / Commit gate FAIL; Ready for commit: NO. Current native SDK, direct DDS, RK3588A and cross-device tests NOT_RUN / NOT_VERIFIED; DEVICE_TESTED=false. Stage2 original Jazzy RMW and all37 CLI IDs remain HELD.**
+
+This current supplement supersedes earlier shared36 missing-oracle/deferral wording only within the new Host scope. Every prior body, failure and37-ID history below is retained verbatim as dated evidence. Current initial36 uses the revised lazy-TX/domain contract; it is not proof that every unchanged historical oracle passes. Entire pending stage covers five production CPPs/five headers plus test support; the bounded review repair changes only HostProviderLoop.cpp and the existing-friend test helper. Normal first Send prepares lazy outgoing TX only after genuine Ready; weak ownership, deadline checks, setup pins, ordering and close remain. Tested first-TX Bind failure and known client-shutdown HostFake paths preserve RX with their asserted sticky refusal; the separate internal error-model path qualifies RX admission only, not application dispatch or an SDK ISocketListener OnError callback; no automatic reconnect, eager TX, synthetic generation, artificial wake or upper DDS/RTPS workaround is claimed.
+
+The initial P1 payload marker160 is the first B TX: exactly +1 B Socket and +1 B Bind, with A unchanged. Recovery payload marker161 reaches the replacement receiver once while native counters and observed Socket IDs remain stable; 160/161 are payload markers, not domain IDs or new guards. Live native owner/generation remains UNKNOWN. Empty/unsupported/unconfirmed admission produces no extra A DID/send; exact A-negative and B-positive observations qualify validated Fake Send entry, not SDK return or application dispatch. Original WaitNone, restoration and cleanup remain. Strict201 keeps A never-open; strict202/204 retain the same A. Four new A/B x view-order cases use genuine151/152 Ready guards and actual queued records=1/queued=1/bytes=4/native_admitted=0 before first PumpSend. They prove same-call progress past an RX-only circuit, exact peer delivery in Fake, settled queue and natural close. Stable public WaitForWork generation boundary is observed; execution inside the internal CV sleep is not established. Helper snapshots are synchronized/read-only through an existing friend, not injected work.
+
+Evidence root: `E:/Codex-FastDDS-r39-p1-20261025-d01/noopen-incremental-d01/b-domain-full-d01`. Initial revised36: `unconfirmed-lazy-prereq-d01/INITIAL_NATIVE_RESULT.json` SHA256 `422dfd877da2ad0929c9d954857e09f2ee75f261df6f6d62a40a08463ca6337b`. Entire-stage formal review `review/FORMAL_LAZY_TX_REVIEW_D01.md` SHA256 `92fef375ccf51a9f04cf667eee1900baee7640191991fb8c1af03bc9ec4a5676` found one P1: null lazy outgoing provider aborted scanning before another domain queued TX. Valid `review-fix/RED_D07/RESULT.json` SHA256 `cfae085f6a219e15928d5a0c6131459e2a337dc838c037cdf5148e18221bdace`: compile/link/identity0, CTest8 / child1 after the exact queued prerequisite. D04 CL2/C2664, D05 CL1/missing parent and D06 CTest8/child1 with wrong queue precondition remain failures, not valid production RED.
+
+Minimal Host fix skips the valid RX-only circuit before Take, preserving real invalid-execution/non-circuit closing errors and releasing scoped pins/credits. Current Host SHA256 `b7df7183a2f3735fc36052ae3daa2c8ebda474d6f7350d1c8373418bdbdf6763`; helper SHA256 `d830a00f1200efcc9461b134db5b21c746e5e27d63680bcf870c2731d82cd07f`. Independent GREEN_D07:2 Host CL,4 links,12 affected cases,19 commands exit0. `review-fix/prep/FORMAL_RESOLUTION_D07.md` SHA256 `aaae2f903239b7ec3be3515baa4c0bbf6f5b4b55c99355011183f9ee875f9198` closes the P1 with no additional actionable blocker in that bounded repair; it does not replace the entire-stage review.
+
+Canonical NEW final: `final/FINAL_RESULT.json` SHA256 `ac34fd3c13786ea194e8f1b7892d4c69cdf1bb4287b6962465873f5d6977a77e`. Actual identity+40 isolated fresh singleton CTests =41 commands/native+wrapper exits0,40 fresh passed XMLs; jobs drained/no stop. Child0 where raw absent is derived from passed XML, not GetExitCodeProcess. Final performs0 CL/link/configure/archive: exact current GREEN49 objects/four EXEs are qualified reuse, not a fresh build. Final command is `C:/Users/17715/anaconda3/python.exe -B <evidence-root>/final/validate_final.py`; raw argv/receipts/XML/source closure remain in that directory. Documentation inspection reads those records; it does not rerun them. All execution stages are closed; no native job is pending.
+
+Cumulative actual CL/link/CTest/configure =79/14/103/6 against unchanged maxima197/17/145/8. Resource authorization remains task416MiB/N224/shared5/prefinal155/reviewfix48/final64/docs1/additional2; final8 is inside reserved64, and map24 uses unused4 within48, not an added reservation. Boundary checks do not establish transient category peaks (UNKNOWN); ordinary CLI/system C-write attribution remains UNKNOWN. No cleanup, reserve reduction or zero-C-write claim. Docs evidence cap1MiB includes680662B existing before-backups.
+
+SDK/ABI6.1.0.32 versus6.1.0.31, hard native deadlines, void Shutdown completion, NotQuiescent/FailedRetained, callback/parameter last-use, native drain/name cleanup/fullclose-recreate and live owner/generation remain unqualified. Default8 / explicit opt-in12 prerequisites and our max2 views/2 circuits persist. Historical SDK loader/static-build PASS belongs to its old artifact and does not qualify current native source. Root exact3.6 legacy guards are retained, not revalidated; stock2.14 public five-argument contiguous calls do not establish3.6 scatter/priority behavior. Stale graph/UNKNOWN boundaries are unresolved; no clean graph claim or commit/push.
+
+Next documented substantive Stage1 gaps remain shim25 frontend/version/runtime-variant mapping and current native SDK acceptance, then all applicable stock2.14 -> custom Transport -> real DSoftBus Socket interfaces/lifecycle/failure/recovery and direct DDS across both RK3588A boards. This is a remaining gap, not a new executed plan. Standalone SDK BYTES needs its own immutable package/provider ABI/device and identity approval independently of Host P1/resource closure, and proves neither DDS nor ROS2. SetSelfTokenID remains PENDING/FORBIDDEN. Security/identity approval alone cannot close the broader Stage1 gaps. Stage2 all37 remain HELD.
+
+---
+
+<!-- CURRENT_STOCK214_SHARED36_20261026_D01; entire prior body retained below. -->
+# Current stock 2.14 shared36 Host qualification — 2026-10-26
+
+**IMPLEMENTED / BUILDS / HOST_TESTED only within bounded Windows HostMock scope. Overall NOT_VERIFIED; PRE_COMMIT / Commit gate FAIL; Ready for commit NO. Native SDK, direct DDS and boards NOT_RUN; DEVICE_TESTED=false. Stage2 Jazzy original RMW and all37 CLI capabilities remain HELD.**
+
+Stage1 FIRST remains stock Fast DDS2.14.5 -> custom Transport -> real Socket, full applicable interfaces/lifecycle/failure/recovery and direct DDS on both RK3588A boards. Historical rows and all37 original IDs below remain byte-preserved. This supplement supersedes the earlier shared-driver deferral only for these36 Host cases.
+
+Three-path increment: stock parent CMake, new Stock214SharedRegressions.cmake and original shared driver. Default-OFF BUILD_STOCK_214_SHARED_REGRESSIONS reuses unchanged21-TU HostBackendTesting assembly; aggregate stock_214_shared_regressions owns only the original shared driver. Old34 Host registrations configure but were NOT_BUILT/NOT_RUN/NOT_COUNTED; old19/P1/56/shim25 were not rerun. Four conditional blocks preserve inverse legacy bytes, all36 args/assertions and TIMEOUT20/outer27. Three owned-send sites adapt legacy ONE slice/priority0 to stock five-argument contiguous API without priority. This does not qualify3.6 scatter/priority propagation. Unchanged HPTS unused two-slice/priority23 F.Send is not newly exercised. Root exact3.6.2 guards/legacy regressions remain preserved, not revalidated.
+
+Evidence: [initial D02](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-shared-shim-d01/initial/INITIAL_D02_RESULT.json) -> [formal Tier2 review](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-shared-shim-d01/formal-review-d01/FORMAL_REVIEW.json), no actionable findings/no fix -> [NEW final](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-shared-shim-d01/final/FINAL_RESULT.json). Final SHA256 `65f48f38fd28e2854ecd5a78d17c881a2157645df8407f137275da72c53fc18f`. Fresh configure/path audit verifies actual21+1 tree,214/HBT/C-seam macros, MD/link/C-symbol ownership, no ExperimentalRuntime/probe/fake SDK. Cold build and36 exact singleton CTests PASS;39 primary/wrapper exits0, no resource stop, active0. Only36 runtime Jobs naturally drained; configure/build separately retain approved current-Job vctip intentional57346, not natural ancillary exits. Full argv/stdout/stderr/raw XML/receipts remain under final/positive; XML metadata truncation does not replace full stdout oracles. Direct numeric child exit UNKNOWN; semantic0 derives from pinned CTest3.28.3. Loaded DLL absolute path UNKNOWN despite PE imports.
+
+Initial cold21+1 build and36 singleton results remain evidence. Original initial checker FAIL from full-path shim substring is preserved; independently reviewed basename D02 correction retains all banned-path oracles/counterexamples. No source/config fix or negative rerun: initial negative evidence REUSED_NOT_RERUN. Historical UTF8/reader failures and both proposal readbacks remain preserved. Corrected admission:48MiB phase cap INSIDE unchanged64MiB inclusive reserve, not additive; task256MiB. Initial24MiB guard/refused historical full48 remain historical. Current sampled peak19584361B, peak Job commit362733568B, max sample gap0.2503s; retained final17874226B/task184723772B before docs. Global C free snapshot2467475456B is NOT task attribution; normal CLI C writes unknown, no zero-C claim; E swap does not prove C paging. No cap increase/reservation reduction.
+
+[Case scope](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-shared-shim-d01/CASE_SCOPE.md) separates pure project predicates/control, private accounting/Mock and public contiguous-call evidence; none proves native SDK behavior. Surviving Q qualifies view isolation, not WholeRuntimeNoOpenTX or SDK recreation. Next shim25 needs a different FakeSDK/C-symbol variant. MAPPING_NO_OPEN_TX records a missing oracle, not an established bug: future Host oracle needs single A never-open/no sibling/no anchor, B receiving/public DID actual path, then first input open/close/reopen/final Shutdown; no runtime resurrection promise.
+
+SDK source/ABI6.1.0.32 versus6.1.0.31 UNKNOWN; void Shutdown, NotQuiescent and callback drain unqualified. Retained IDs default8/opt-in12 retain strong prerequisites; max2 views/2 circuits are OUR limits, not SDK totals. SetSelfTokenID PENDING/FORBIDDEN; no device action. Standalone SDK BYTES requires its own immutable package/provider ABI/device identity approval, independent of Host evidence; it proves neither DDS nor ROS2. Project gaps extend beyond identity. Another cold24+64+2 may not fit remaining task256 after closure: use genuinely smaller work, reviewed verified-artifact reuse or separately authorized path; no cleanup. Graph staleness/UNKNOWN remains unresolved; this docs-only supplement makes no clean graph claim.
+
+---
+
+<!-- CURRENT_STOCK214_HOSTLOOP_20261026_D01; entire prior body retained below. -->
+# Current stock 2.14 HostLoop qualification — 2026-10-26
+
+**IMPLEMENTED / BUILDS / HOST_TESTED within the bounded Windows HostMock scope only. Overall NOT_VERIFIED; global PRE_COMMIT and Commit gate FAIL; Ready for commit NO. Current native/SDK Socket, direct DDS and device tests NOT_RUN; DEVICE_TESTED=false.**
+
+Stage1 FIRST remains stock Fast DDS 2.14.5 -> custom Transport -> real DSoftBus Socket, all applicable interface/lifecycle/failure/recovery behavior and direct DDS across both RK3588A boards. Stage2 original Jazzy RMW and all 37 native CLI capability IDs remain HELD; their historical rows below are unchanged.
+
+The four-path increment adds default-OFF BUILD_STOCK_214_HOST_LOOP_REGRESSIONS and stock_214_host_loop_regressions. It rejects explicit BUILD_TESTING=OFF before compiler work and cross compilation. An isolated 21-TU HostBackendTesting library consistently publishes FASTDDS_DSOFTBUS_FASTDDS_214 / HOST_BACKEND_TESTING / PUBLIC_SOCKET_HOST_C_SEAM definitions to both original drivers; it excludes ExperimentalRuntime and links no experiment/probe archive or fake SDK. Stock uses the five-argument contiguous SenderResource API without priority. The legacy 3.6 two-slice/priority-23 branch remains byte-preserved; stock coverage does not establish equivalent scatter/priority coverage, and no original priority assertion exists.
+
+Original owned-copy/stack-mutation, cancellation/drain, RX-gap, safe-reopen, allocation and callback oracles remain. Root exact 3.6.2 guard and legacy tests are preserved but NOT revalidated by these 34 cases. The single original shared-init case does not qualify the wider shared/shim suites. Next substantive gap: map original shared/shim regression frontends and consistent runtime variants, then close applicable interfaces/native behavior; that work is deferred, with no executable claim.
+
+[Initial D02](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-hostloop-d01/initial/INITIAL_D02_RESULT.json) -> [formal Tier2 review, no actionable findings/no fixes](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-hostloop-d01/formal-review-d01/REVIEW.md) -> [NEW final canonical JSON](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-hostloop-d01/final/FINAL_RESULT.json) / [report](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-hostloop-d01/final/FINAL_RESULT.md) records fresh configure, actual path/variant audits and aggregate Release build native0; all 20 HostLoop plus 14 input-close original singleton arguments/assertions PASS with original TIMEOUT20/outer27. All37 primary command/wrapper exits0, active0/no resource stop; all34 runtime Jobs naturally drained. Configure/build separately retain approved current-Job vctip ancillary intentional exit57346; this is not a natural ancillary exit. Raw argv/stdout/stderr/XML/receipts remain in final. Final JSON SHA256: `eab64c8a0debfbb0dcc1b84e4111ff79bad9997d91caf4bf9df0c78a4add43ae`.
+
+Actual loaded DLL paths and direct numeric child exit remain UNKNOWN; semantic child0 is SOURCE_DERIVED from pinned CTest passed/Completed plus original stdout oracles. Expected negative native1/wrapper1/compiler NOT_REACHED is initial evidence REUSED_NOT_RERUN after unchanged guard binding. Original reader KeyError BLOCKED, reviewed D02 schema recovery, optional metadata ModuleNotFoundError exit1 before writing, and original overbroad static inverse failure remain preserved. No source fix, timeout/assertion weakening or old19/P1/56 rerun is implied. Sampled final phase about18.50MB/task147.11MB and peak Job369598464B are bounded receipts, not zero-C-write or general peak guarantees.
+
+[Pre-doc graph evidence](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-hostloop-d01/GRAPH_CHANGE_PRE_DOC.json) covers historical dirty state (521 symbols/41 files/MEDIUM); index staleness and UNKNOWN coverage remain unresolved. This documentation supplement edits no function and makes no clean graph claim.
+
+WholeRuntimeNoOpenTX remains open. Default8 versus opt-in12 retains strong deployment prerequisites; maximum2 views/2 circuits are our limits, not SDK totals. SDK source association and SDK6.1.0.32 versus board6.1.0.31 ABI remain UNKNOWN; NotQuiescent/void Shutdown and native callback-drain remain UNKNOWN. SetSelfTokenID stays PENDING/FORBIDDEN; this phase performs no device action. Standalone prepared-SDK BYTES requires its own package/provider ABI/device/identity approval and would not qualify DDS/ROS2. Full prior history is retained below; newer bounded HostLoop evidence supersedes only prior deferral of these exact two drivers.
+
+---
+
+<!-- CURRENT_STOCK214_LOWER_20261025_D02; prior raw body byte-preserved below. -->
+# Current lower-regression qualification — 2026-10-25
+
+**Stage1 FIRST:** stock Fast DDS2.14.5 -> custom Transport -> real DSoftBus Socket, full applicable interface/lifecycle/failure/recovery and direct DDS across both RK3588A boards. **Stage2 HELD:** original Jazzy rmw_fastrtps and all37 native CLI capability IDs await accepted Stage1. **Overall NOT_VERIFIED; global PRE_COMMIT/Commit gate FAIL; Ready for commit NO.**
+
+Lower entry IMPLEMENTED; scoped Windows Host/Mock configure/build/final19 PASS. [Canonical final D02 JSON](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-regression-d01/FINAL_D02_RESULT.json) SHA256 `f1697967d240d1696d06f552947f46f6c65778765320875fe5a1cd411ce2c1fc` / [report](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-regression-d01/FINAL_D02_RESULT.md) retain literal commands/argv/cwd/env/exits/stdout/XML/receipts/resources. Actual sequence: frozen3-path implementation -> [initial D02 independent PASS](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-regression-d01/INITIAL_D02_RESULT.json) -> [formal Tier2 review COMPLETE/no actionable findings/no fixes](E:/Codex-FastDDS-r39-p1-20261025-d01/stock214-regression-d01/formal-review-d01/FORMAL_REVIEW.md) -> NEW independent final D02 PASS -> documentation sync. Review is not global acceptance.
+
+| Dimension | Current evidence and limit |
+| --- | --- |
+| Implementation | Stock CMake default-OFF BUILD_STOCK_214_LOWER_REGRESSIONS, pre-project explicit BUILD_TESTING=OFF rejection/cross guard; new Stock214LowerRegressions.cmake reuses2 original drivers/aggregate. Provider driver only cstdint/const std::uint8_t* spelling; input driver/original assertions/dispatch unchanged. |
+| Binding | Separate exact fastrtps2.14.5 target, no incompatible alias. Root FastddsBinding.cmake exact3.6.2/Release CRT/import/prefix guards byte-unchanged. Static alias compatibility is not root3.6 execution; root3.6 rebuild NOT_RUN. |
+| Final configure/build | Fresh real compiler/ABI configure native0; actual new-tree D03 byte-aware path audit PASS including semicolon Custom Outputs before one stock_214_lower_regressions aggregate build native0. E reader UTF8/raw ABI/macro/output repairs change evidence handling, not native behavior proof. |
+| Final runtime | All19 singleton CTest commands native0/wrapper0: original no-argument input driver16 internal cases plus provider18 original arguments/oracles. Provider P1 is unit scope, not sealed P1 domain input-publication. Original TIMEOUT15/outer22/no inversion retained. Complete stdout supplies original oracles; XML may truncate and serves status/version metadata. Numeric child exit UNKNOWN when absent; semantic0 separately SOURCE_DERIVED from pinned CTest3.28.3 passed/Completed and original oracles. All runtime Jobs naturally drained active0/no resource stops. |
+| Receipts | 21 native Job commands; peak Job commit384106496B, sampled phase21456824B; final tree466files/19214980B before report. Approved configure/build ancillary57346 separate from native0. Sampling is not hard filesystem peaks/global C attribution/zero-C-write proof. Source878/dependency32/Git/staged-empty/P1 seal/initial SHA passed before/after final. |
+| Negative/history | Initial invalid-option guard native1/wrapper1/compiler NOT_REACHED is REUSED_NOT_RERUN after final unchanged-guard hash match, not final execution or compilation. Original INITIAL_RESULT BLOCKED/BOM reader failure, first final MD-vs-JSON preflight BLOCKED/no build and capacity-stop/formal interruption remain preserved with separately admitted recovery. Assertions/resource caps unchanged. |
+| Qualification | Package/header/importlib/DLL hashes and PE import fastrtps-2.14.dll are metadata; actual loaded DLL paths UNKNOWN. Host/Mock unit proof does not qualify real SDK Socket traffic/direct DDS/ABI/source association/native Shutdown-drain/two boards. Current native NOT_RUN; DEVICE_TESTED=false. |
+
+New19 replaces none of root3.6 broader regressions, dated Host56, sealed P1 Host7/negative, product22 or loader A/B evidence. No reruns/upgrades of those historical scopes. SDK6.1.0.32 versus dated board6.1.0.31 strict ABI and deployed-source association remain UNKNOWN; historical40-file delivery/product91456513/loader0225a138 metadata scope unchanged.
+
+Original host_loop/input_close/shared/public_socket_shim/runtime/DDS oracles remain DEFERRED/NOT_RUN, not removed/disabled/excluded N/A or permanently unsupported. Barriers: stock2.14 contiguous send versus3.6 scatter/gather base API; consistent HOST_BACKEND_TESTING/runtime variant; fake-provider C definitions, throw configuration/generated types. Next substantive Stage1 gap: version-specific test frontend plus consistent HostBackendTesting runtime variant to port original HostLoop/shared/shim oracles with explicit send compatibility design. This is PLANNED, not implemented/executed. WholeRuntimeNoOpenTX gap remains; sibling-anchored target-view-no-input is not whole-Runtime-no-input TX proof.
+
+Default8 retained records versus opt-in12 native IDs remain distinct. Strong immutable deployment/name/identity/domain/peer/package/QoS mapping and pre-listener no-handle failure remain required. Two views/circuits is an implementation bound. NotQuiescent/FailedRetained preserve ownership; void Shutdown/OnShutdown cannot establish SDK global drain/reclamation. Frozen standalone BX06 BYTES keeps independent immutable package/provider/header/C++ ABI/device/identity prerequisites independent of P1/C reserve; BYTES is not Transport/DDS/ROS proof. Pending SetSelfTokenID stays FORBIDDEN; no device/security/identity/network action here. Parser PASS does not prove named-role autoload (UNKNOWN); manual original constraints/explicit Sol apply.
+
+---
+
+<!-- CURRENT_R39_P1_20261025_D04; original dated body below is byte-preserved. -->
+# Current qualification and execution order — 2026-10-25
+
+**Stage1 FIRST:** unmodified stock Fast DDS 2.14.5 -> custom Transport -> real native DSoftBus Socket; qualify the complete applicable interface, lifecycle, failure/recovery and direct DDS on both RK3588A boards. **Stage2 HELD:** ROS2 Jazzy with original rmw_fastrtps, service/action and all 37 native CLI capability IDs waits for accepted Stage1. P1 HostFake PASS does not complete Stage1.
+
+**P1 IMPLEMENTED / targeted BUILDS PASS / SCOPED_FINAL_HOSTFAKE_PASS. Overall NOT_VERIFIED; global Commit gate FAIL; Ready for commit NO.**
+
+| Dimension | Current evidenced state and limit |
+| --- | --- |
+| Implementation | Four frozen P1 files add a private opt-in thread-local post-Attach/pre-publication seam, owned worker cleanup, input-publication oracle and registration. No upper DDS/RTPS semantics change. |
+| Affected Host build | Final target build native0, real CMake compiler checks and E output-path proof PASS. Configure actually0 but REUSED_NOT_RERUN, with separately allowed current-Job vctip intentional57346 disclosed; configure natural quiescence NOT_CLAIMED. Original V1 admission deviation stays BLOCKED; D02 prospective policy permits disclosed reuse only. |
+| Post-review HostFake | Seven actual cases PASS once each: input-publication, input-reopen, input-early-cycles, input-reentry, transport, positive, empty-peers. D04 retains first two actual post-review runs and freshly executes remaining five. Separate seven offline reader fixtures PASS, NO_NATIVE_EXECUTION; no additional transport runs. |
+| SDK build/package | Historical 40-file delivery and product22 build/link scope unchanged; product91456513 and loader0225a138 retained. No P1 product rebuild/load or Host56 rerun. |
+| SDK metadata load | Historical A/B normal load/dlclose/exit PASS only in declared executable-root shared-SDK-C++ host. Original C-only native139 stays FAIL. No Socket communication/general unload proof. |
+| Native / direct DDS / two boards | Current P1 NOT_RUN; DEVICE_TESTED=false. Strict ABI and local-source/deployed-binary association UNKNOWN; SDK6.1.0.32 vs dated board6.1.0.31 unresolved. |
+| ROS2 / integration | Current original-RMW/native CLI37 Stage2 HELD/NOT_RUN. Dated Host56 and patched R38 results retain their original artifact/source scope. |
+
+Canonical [FINAL_D04_RESULT.md](E:/Codex-FastDDS-r39-p1-20261025-d01/final-tester-d01/FINAL_D04_RESULT.md) / [JSON](E:/Codex-FastDDS-r39-p1-20261025-d01/final-tester-d01/FINAL_D04_RESULT.json) binds exact argv/env/cwd/exits/XML/stdout/receipt hashes and resources. Platform Windows x64/VS2022/CMake-CTest3.28.3/pinned stock2.14 DLL/HostFake Socket C seam. Actual receipts record configure, one `stock_transport_domain_tests` target build and anchored singleton `stock_transport.domain.<case>` CTest with `--no-tests=error`; original TIMEOUT25/outer32 retained. Seven CTest/wrapper exits0; direct numeric child exit UNKNOWN_FIELD_ABSENT, semantic0 SOURCE_DERIVED from pinned passed/Completed/no inversion. All runtime Jobs naturally drained active0, strict tool_completion_mode=false, clean closure/no resource stop.
+
+Exact-window HELD: gate_hits1/active1/public_close_atomic1/close_finished0/live_lease1; controls0 is recorded-only. Public observation proves committed_open.exchange(false), not a private mutex-wait entry. RELEASE close1/active0/detaching0/old_calls0; legitimate binding cancellation allowed (actual callback1). RECOVERY marker160 dropped/161 once/oldreceiver0/native_recreation0. Receiver-isolated reopen without Socket recreation is HostFake evidence, not native close/recreate or SDK drain.
+
+Sequence evidenced: independent initial HostFake PASS -> [formal four-file review COMPLETE/no actionable findings/no source fixes](E:/Codex-FastDDS-r39-p1-20261025-d01/formal-review-d01/RESULT.json) -> new final tester scoped D04 PASS -> this docs sync. [Initial safe partial-reversal negative](E:/Codex-FastDDS-r39-p1-20261025-d01/owned-monitor-d01/NEGATIVE_TEST_RESULT.md) is REUSED_NOT_RERUN with exact source/overlay/exe/XML/DLL bindings: historical CTest8/directchild1/earlyclose1/livelease1/cleanup_complete1/stale_RX_pumped0. No post-review negative, full historical checkout reproduction or UAF claim.
+
+V1/D02/D03 BLOCKED failures remain immutable. [Reader review](E:/Codex-FastDDS-r39-p1-20261025-d01/formal-review-d01/FINAL_READER_REVIEW.md) removes invented HELD controls=1 and permits callback cancellation; [XML truncation review](E:/Codex-FastDDS-r39-p1-20261025-d01/formal-review-d01/XML_TRUNCATION_REVIEW.md) / [D04 readback](E:/Codex-FastDDS-r39-p1-20261025-d01/formal-review-d01/D04_READER_READBACK.md) use complete same-command stdout for runtime oracles and original XML for selection/status/version metadata. Only E diagnostic reader changed; core assertions, source expectations, CTest output caps and timeouts were unchanged.
+
+Finite reviewed admission: Job1GiB/12 processes, E phase48MiB/task256MiB/final allowance64MiB, relative global C-drop stop8MiB, fresh physical/commit headroom checked. Old 2GiB C reserve was coordinator/Main conservative policy, not numeric AGENTS or compiler minimum; old refusal remains BLOCKED and later evidence-based reevaluation/admission is separately recorded. No zero-C-write, per-process attribution or absent-C-paging claim. Source877 frozen through final except authorized five-slash syntax-only tester TOML CONFIG_REPAIR SHA bdf75fd33c4c09a22c33519e44ea571ae79f7253bda737e698643252a5355db8. Parser PASS is not automatic-loading proof; manual role constraints/explicit Sol apply, automatic named-role loading UNKNOWN.
+
+Two views/two circuits is an implementation bound, not SDK domain necessity. Default8 retained callback records and family12 native IDs are separate limits. Opt-in immutable-deployment/no-listener record reuse requires complete immutable name/deployment/identity/domain/peer/package/QoS mapping, no-handle failure before listener exposure; no Listen/Bind reuse/unlimited retries. NotQuiescent/FailedRetained preserve ownership; void Shutdown/OnShutdown, project drain and metadata load do not prove SDK global drain/reclamation. WholeRuntimeNoOpenTX gap remains; a target-view-no-input test with sibling anchor does not close it. Root CONFIG3.6.2 regression mismatch stays BLOCKED/UNKNOWN; stock2.14 receipts do not substitute.
+
+[Dependency D02 clarification](E:/Codex-FastDDS-r39-p1-20261025-d01/dependency-d02-addendum/D02_DEPENDENCY_ADDENDUM.md): frozen standalone BX06 SDK BYTES has its own package/provider/header/C++ ABI/device/identity/admission prerequisites, independent of current P1 and its C-build reserve. No execution here; BYTES cannot prove current Transport/DDS/ROS2. Subsequent CURRENT Transport/direct DDS acceptance requires applicable current-code/Host/build/native gates. Exact SetSelfTokenID selection remains PENDING/FORBIDDEN without specific approval; no device/identity/security/network action follows from this prefix.
+
+---
+
+<!-- Preserved dated history follows; current prefix governs present-tense interpretation. -->
+
+<!-- R39_DOMAIN_CANONICAL_20261024; this current addendum supersedes current-state claims in the preserved dated body below. -->
+# Current R39 domain circuits: canonical Host scope (2026-10-24)
+
+**Implementation: PRESENT. Fresh Host configure/build: PASS. Canonical selected Stock Host tests: 56/56 PASS, each registered case executed exactly once. SDK23 product22 build/install/relocated-consumer link: PASS; canonical A/B loader metadata: PASS in the declared shared-C++ host only; strict ABI: UNKNOWN. SDK_COMMUNICATION_TESTED=false; CROSS_DEVICE_COMMUNICATION_TESTED=false; ROS2_INTEGRATION_TESTED=false. Overall: NOT_VERIFIED. Normal Commit gate: FAIL. Ready for commit: NO.**
+
+The independent final batch is [domain-canonical-final-d02/TEST_RESULT.json](../../recovery-20261023/domain-canonical-final-d02/TEST_RESULT.json), with [receipts and manifest](../../recovery-20261023/domain-canonical-final-d02/MANIFEST.json) (SHA256 `6e958084407f188c314073943d86d4a1f5c5438d908aacc8d4e92c73cac9d867`). Tested source dictionary: 873 files, SHA256 `8922c3a8f819ed118b44d79e48bee6df9cbda6e73c57f96efb58495936b01ab0`. This remains the canonical Host execution provenance, not a new Host rerun. Current post-product source inventory is877 (pre-doc SHA256 `1fff45b332d69a64db603e24e86f4e157cf7d4ef64c89b8cde8ac62d09036303`); the five product source paths legitimately differ/add to that older Host inventory. This documentation sync changes only five Markdown files, leaving all872 other current files identical to the final877 snapshot.
+
+## Current delivery directory (composite package, 2026-10-24)
+
+Use the [current delivery directory](../../../r39-stock-product-delivery-20261024-d01), `build/r39-stock-product-delivery-20261024-d01`, for this artifact set. Independent [delivery validation](../../recovery-20261024/tester-product-delivery-d01/RESULT.json) confirms exactly40 files:39 byte-identical files from the preserved earlier package plus the final canonical `bin/stock_transport_loader` (SHA256 `0225a138175d14e10844d18ad357f78ee8ed5b4c540e91070ab05c2d56b30751`). The product library remains SHA256 `91456513c56dcef49b87ec18fd0211d6b15bd7ad3f051118b064d1ac2d0a8883`; this is reused product22 output, not a new product rebuild/full CMake install. Exact source/destination hashes are in the [composite package manifest](../../recovery-20261024/tester-product-delivery-d01/COMPOSITE_PACKAGE_MANIFEST.json); stage manifest SHA256 `7d6a10c0f7537226acc5bd6cac8a65fac51a4eb9d10d60e4d1c7d611b51d42d4`.
+
+The old `build/r39-stock-product-fixed-initial-d01/install` remains historical and unchanged: its library is correct but its loader is the earlier C-driver `0dae3d66...`, so that prefix is not the complete current package. The new directory explicitly combines that immutable package with the canonical loader. Its standalone Bootstrap archive was rebuilt from current source during the original product phase despite matching historical hash40f95; product22 compiled Bootstrap directly. A fresh separate installed-consumer configure/one-TU compile+link against the new prefix passed (consumer not executed), with SONAME/`$ORIGIN`/root C++ dependency checks. Platform/vendor dependencies remain external and were not packaged. No product22 rebuild, device run or communication acceptance was added; prior final A/B metadata-only results, original C-only139 FAIL, ABI UNKNOWN, communication/cross-device/ROS2 false and exact SetSelfTokenID PENDING remain unchanged. Normal Commit gate FAIL; Ready for commit:NO.
+
+## Current product package and canonical loader metadata (2026-10-24)
+
+`BUILD_STOCK_TRANSPORT_OHOS_PRODUCT` is implemented, default OFF. It requires the real OHOS toolchain, shared SDK C++ runtime, exact Fast DDS2.14.5/FastCDR2.2.5 and explicit hash/ELF-qualified real Socket provider; this build option does not enable the native quota opt-in. Current Runtime20/Observation/Bootstrap and old tests are unchanged by the five-path product increment (stock CMake, package config, pure-C loader and two consumer files).
+
+[Corrected product initial execution](../../recovery-20261024/tester-product-fixed-initial-d01/RESULT.json) and the [first product final](../../recovery-20261024/tester-product-final-d01/RESULT.json) built all22 current product TUs including Bootstrap, performed native strict link (`-z defs`, `--no-undefined`, `--no-allow-shlib-undefined`), installed and compiled/linked the relocated installed consumer. Product SHA256 `91456513c56dcef49b87ec18fd0211d6b15bd7ad3f051118b064d1ac2d0a8883`; actual unversioned SONAME `libfastdds_dsoftbus_stock_214.so`, RUNPATH `$ORIGIN`, seven direct dependencies. This advances product build/package/link evidence; the consumer was not executed. The original initial consumer literal-newline failure and absent SONAME/RPATH remain FAIL. Seven intended negative guards passed; unsupported-host guard was NOT_REACHED after an earlier toolchain-control failure, not PASS.
+
+The first product-final pure-C-linked metadata loader on A (PID15157) printed dlclose0 then exited139/SIGSEGV; B was skipped. [Read-only teardown diagnosis](../../recovery-20261024/developer/product-teardown-diagnosis-d01/REPORT.md) correlates IPC registry teardown through `_ZdlPv` with three stale SDK allocator GOT entries. This is a loader C++ provider/lifetime failure, not an observed Socket/domain-traffic failure; general SDK unload safety remains UNKNOWN. Old LP02 eight normal exits retained dlopen handles and do not prove current unload safety. A separate same-C-object executable-root SDK C++ control exited0; it is diagnostic support, not the canonical fix or unique-cause proof.
+
+The [four-line CMake correction](../../recovery-20261024/developer/loader-abi-owner-fix-d01/) selects ordinary `LINKER_LANGUAGE CXX` for the loader while preserving pure-C compilation, main/dlopen/dlsym/dladdr/dlclose/normal return. This models the declared shared-SDK-C++ consumer host: no forced runtime retention, NODELETE, skipped close, `_Exit`, allocator wrapper or higher-layer change. Actual executable root NEEDED `libc++_shared.so` and `libc.so` was checked. [Canonical initial A/B PASS](../../recovery-20261024/tester-loader-owner-initial-d01/RESULT.json) was followed by [independent review with no actionable findings](../../recovery-20261024/reviewer-loader-owner-d01/REPORT.md) and then the authoritative [post-review final](../../recovery-20261024/tester-loader-owner-final-d01/RESULT.json), manifest SHA256 `b567d2d6acda101a87f7042f14c753ee3ebc643311b416c2e0a9a6ea5140d81f`.
+
+Final execution freshly compiled only the C loader and linked via the standard C++ driver (native0), producing loader SHA256 `0225a138175d14e10844d18ad357f78ee8ed5b4c540e91070ab05c2d56b30751`. Product91456513 and its22 source/flags/generated-rule inputs were revalidated and REUSED, not rebuilt; no new install, consumer execution or Host56 rerun. A PID19232 and B PID27151 each launched exactly once, completed real provider-address/current-product checks, dlclose0 and native exit0; postflight file/system hashes matched and diagnostic processes were absent. Remote metadata-only directory: `/data/local/tmp/fastdds-r39-product-loader-20261024-owner-final-72c71618b56e`. Exact commands, environment, logs and native receipts are in [final local receipts](../../recovery-20261024/tester-loader-owner-final-d01/RECEIPTS.json) and [board receipts](../../recovery-20261024/tester-loader-owner-final-d01/BOARD_RECEIPTS.json).
+
+`TARGET_LOADER_METADATA_TESTED=true` only in this declared shared-SDK-C++ host contract. `SDK_COMMUNICATION_TESTED=false`, `CROSS_DEVICE_COMMUNICATION_TESTED=false`, `ROS2_INTEGRATION_TESTED=false`; strict ABI remains UNKNOWN. No explicit Runtime/Participant/Socket/BX06/consumer execution, token selection, chmod or security/network configuration change occurred; dependency-initializer side effects are not proven absent. SDK23 reports6.1.0.32 versus board6.1.0.31. dlsym addresses do not prove GOT bindings, C++ object ABI, native close/recreate or SDK drain; static weak gaps169/C++ overlaps464 remain incomplete ABI evidence. Runtime lifetime and global lookup order changed together and before/after maps were not observed; do not infer a unique cause or universal C-only embedding ban. Original C-only native139 remains FAIL. Exact SetSelfTokenID confirmation stays PENDING, untouched. This loader ABI build contract does not fix default native-ID capacity.
+
+Earlier [runtime21 compile](../../recovery-20261023/domain-runtime-sdk23-compile-d01/RESULT.json) and [standalone strict diagnostic link](../../recovery-20261023/domain-runtime-strict-link-d01/RESULT.json) remain dated build evidence. The product/canonical loader stages above supersede their old no-product-link/no-loader-execution status only within the stated scopes. Normal project Commit gate remains FAIL; Overall NOT_VERIFIED; Ready for commit:NO.
+
+Generic ordinary/Persistent `MakeDescriptor` with absent expected domain now waits for a usable real public actual-DID callback to bind each view's bounded circuit. Explicit expected domain, including engaged zero, and `MakeStockDescriptor` remain NativeBound; a genuine wrong actual domain becomes sticky Refused and denies actual Sender/provider traffic. Missing/unsupported callbacks remain Await and fail closed. `ScopedTransportBootstrap` still calls MakeStockDescriptor with fixed explicit configuration: automatic natural ROS_DOMAIN_ID operation without extra configuration is not established. Current capacity is two views/two domain circuits per Runtime; this is an implementation bound, not a necessary SDK single-domain restriction or complete ROS2 multi-Participant support.
+
+The older dated sections below are historical evidence. In particular their configured-domain default policy and original failures are not the latest generic policy, and no historical FAIL is retrospectively changed to PASS. R38 board successes retain their original provenance; they are not new R39 communication acceptance.
+
+| Current dimension | Evidence-supported state |
+| --- | --- |
+| Domain/lifecycle/Work implementation | PRESENT; bounded per-view actual-DID policy; explicit stock remains fixed configuration |
+| Canonical Host build/tests | PASS: fresh configure/build, selected56 native exits0 each once |
+| Lifecycle and observation reviews | Completed; P1/P2 source fixes and unchanged P2 repro re-tested; exact P1 race window NOT_EXECUTED |
+| Supplemental models | Prior68 PASS inputs revalidated; not new execution or DDS implementation integration |
+| Required legacy root CONFIG regression | BLOCKED by3.6.2 versus mandated Stock2.14 binding |
+| Current SDK / metadata / communication / ROS2 | Product22 build/install/consumer link PASS; canonical loader-only A/B PASS in declared C++ host / SDK communication false / cross-board communication false / ROS2 false |
+| Normal project gate | FAIL; Overall NOT_VERIFIED; Ready for commit:NO |
+
+## Canonical execution boundary
+
+The 56 selected cases cover domain9, Work7, default-domain11, views6, normal5, circuit5, multi3, default9 and process-receive1. Fresh configure/build native exits were zero; every selected test native exit was zero. Children were ordinary Windows processes (AppContainer0, elevated0). Actual `fastrtps-2.14.dll` module path/hash was captured for 55/56 (SHA256 `68ed01951f54dd19907f05821be21341b6384750847845baf8aa3c68dc4660cf`); process-receive has no loader-helper print and is N/A for module-path proof. Selected CMake package files/hashes identify Fast DDS2.14.5 and FastCDR2.2.5; no actual FastCDR runtime module path was captured.
+
+Exact executed argv, cwd, environment allowlist, PIDs, timestamps, native exits and logs are in [configure.start.json](../../recovery-20261023/domain-canonical-final-d02/configure.start.json), [build.start.json](../../recovery-20261023/domain-canonical-final-d02/build.start.json), per-case `*.start.json`/`*.receipt.json`/stdout/stderr, [registered selection](../../recovery-20261023/domain-canonical-final-d02/REGISTERED_SELECTION.json) and [artifacts](../../recovery-20261023/domain-canonical-final-d02/ARTIFACTS.json). These are executed commands, not examples or a claim that docs_updater ran tests.
+
+The supplemental [remaining-regression record](../../recovery-20261023/domain-remaining-regression-d01/TEST_RESULT.json) is historical source7109: 44 Stock cases, 43 PASS/one held original Root-predicate FAIL, plus 68 pure-model PASS. [Final input revalidation](../../recovery-20261023/domain-canonical-final-d02/SUPPLEMENTAL_MODEL_REVALIDATION.json) confirms unchanged model inputs/artifacts/options/header/link identities on current source8922; it is not a new model execution. The models consume 31 headers/20 project-source closure from an existing interface fixture (HEAD `343f155c36b561db3d9f047a65d866ce0f3da300`, version3.6.2.0), zero Fast DDS implementation C++ and no DDS implementation binary. They do not establish Stock DDS integration or a patched DDS binary.
+
+Root CONFIG HostLoop/shared/input-close/provider/public-shim regressions remain BLOCKED: root requires exact3.6.2.0 whereas this Stock project uses mandated2.14 and does not add the root project. No version check was weakened, no3.6 binary fallback was used, and SOURCE_PROBE models are separate. Real SDK/DSoftBus communication, dual-board, ROS2 Jazzy services/actions/QoS/serialization/large-payload/concurrency acceptance remain outside this new execution scope. Preserving upper protocol code is not an automatic feature test.
+
+## Remaining required gates
+
+Default quota8 no-handle-failure exhaustion/9th no-SDK-call remains unchanged; opt-in twelve loops require full immutable deployment/name/identity/collision prerequisites and do not solve default capacity. Retained slots/entrances/IDs and void native Shutdown do not establish silence. New exact SDK23 SetSelfTokenID `mdds` profile confirmation is PENDING: prior read-only permission/package/GetSelf evidence is not current identity selection or a board Socket BYTES run. BX06 prepared SDK BYTES package remains HostBuild-only with confirmation card pending. No new identity selection, deployment or board communication acceptance is claimed.
+
+GitNexus cached impact remains stale/UNKNOWN with historical CRITICAL110 not waived. New getter lookup is unresolved; text/source confirmation supports documentation only. No clean-index or detect_changes claim is made; no commit gate is passed. Required root regressions, SDK/native communication, RK3588A/cross-board and full ROS2 validation remain incomplete.
+
+---
+
+Historical dated record (preserved verbatim below):
+
+<!-- R39_STOCK_FOUNDATION_CURRENT_PREFIX; all older dated status bodies remain byte-preserved. -->
+# R39 current stock foundation evidence (2026-10-22)
+
+**Implementation PRESENT for a six-file foundation; bounded Host execution PASS; SDK23 stock build audited PASS; new stock DEVICE_TESTED=false / CROSS_DEVICE_TESTED=false. Overall NOT_VERIFIED. Normal project Commit gate: BLOCKED; Ready for commit: NO.**
+
+| Dimension | Evidence-supported current status | Boundary |
+| --- | --- | --- |
+| Implementation | PRESENT, frozen six new files | Stock archive builder, public-QoS Bootstrap and Host/integrity tests; new target entry/package NOT_IMPLEMENTED |
+| Independent final Host execution | PASS, fresh configure/build; CTest 3/3; Python 4/4 | Real imported Factory API with project Transport through explicit Fake Socket seam; no device/data-plane proof |
+| Stock SDK23 build | BUILDS / independent existing-build audit PASS | 3771 raw-equal upstream files; 229 AArch64 objects / VALID deps; 2644 classified dependency paths; final tester did not rebuild the 229 TUs |
+| SDK23 Bootstrap | Fresh AArch64 static compile PASS | One TU/archive member, BUILD_TESTING=OFF; runtime linkage/execution NOT_RUN |
+| Independent review | Tier 2, zero blocking findings; no source fixes | Joined forced-include parser hardening deferred for fixed measured inputs; arbitrary configuration qualification NOT_PROVEN |
+| Final evidence | 436/436 members hash-match in Main audit and docs read-only audit | Canonical final RESULT a471cc12...; initial seal has 285/287 matches and 2 disclosed generated CTest changes; no restoration or manifest rewrite |
+| RK3588A availability | Two USB Connected; nonempty uname/version/device-tree reads | Linux 6.6.101 aarch64 / OpenHarmony-6.1.0.31 / Rockchip RK3588 EVB1 LP4 V10 Board; environment only |
+| New-stock device / cross-device / integration | BLOCKED_NOT_RUN; DEVICE_TESTED=false; CROSS_DEVICE_TESTED=false | No new target package, deployment or Socket functional run; required tests are not N/A |
+| Current-stock Jazzy capability matrix | All 37 without current-stock acceptance | 17 old scenes require new artifact binding; 20 missing device runners; individual security/configuration blocks retained |
+| Full ROS2 / lifecycle / resource guarantees | NOT_VERIFIED | Runtime pump/single-create limitations, original Host/target dependency lineage and global native drain/leak freedom remain open |
+| GitNexus / Main PRE_COMMIT | BLOCKED / pending Main-owned assessment | 43 historical UNKNOWN unresolved; global process extraction truncated; Release lower-bound; all=0 with six untracked files is not clean |
+| Documentation / publication / CI | SYNCED for blocked handoff / R39 NOT_COMMITTED / CI NOT_REPORTED | Ready for commit:NO; no R39 stage/commit/push; exact published R38 HEAD has zero runs/checks/statuses |
+
+[R39 scope, actual command/evidence entrances, retained failures and gates](ROS2_STOCK_FOUNDATION_20261022.md) / [current matrix](ROS2_CAPABILITY_MATRIX.md). R38's selected dual-board PASS and actual publication `123051e6abcc55db0712befd71eca0c7670f681f` remain valid for the historical patched artifact; they do not qualify the new stock path. Older pending-publication/"current" claims below retain their original dates.
+
+---
+
+<!-- R38_CURRENT_SCOPED_PASS_PREFIX; the complete prior body below remains byte-preserved historical evidence. -->
+# R38 finite dual-board endurance and durable capture: scoped PASS (2026-10-20)
+
+**Implementation PRESENT; native BUILDS; HOST_TESTED PASS; DEVICE_TESTED / CROSS_DEVICE_TESTED / INTEGRATION_TESTED PASS for the selected case; VERIFIED_CURRENT_SCOPE=true. Full ROS2 remains NOT_VERIFIED.** Independent final tester D03 accepts new run `940f4e9c10a29830`: 1801 String roundtrips, 7204 complete 33-byte CDR stage records, zero loss/duplicates/reordering/foreign payload, spans A1811.239383904s / B1811.244691655s. Both original complete-stream oracle modes (`final=False` and `final=True`) PASS. Both boards have RuntimeClose0, observation_complete1, public deletion0, interpreter0 and device-child0; four owned PIDs are absent and tokens restored, with zero forced cleanup.
+
+The Windows x64 durable worker owns a finite kill-on-close Job for its executor/runner/SDK descendants, checks exact source13/job/process/one-shot identities before SDK dispatch, and writes bounded append-only state. An independent observer retained the exact live worker/child objects, then recorded actual OS exit0 for both; runner and original CLI Popen exits and external short-helper exit are0. The observer's own OS exit is explicitly **UNOBSERVED_NONBUSINESS_AUXILIARY**; exact identity absence, closed handles, complete bounded output and two stable hash snapshots satisfy the reviewed final conditions. This does not claim every host process had an observed OS exit0.
+
+D07's real 68 Python methods/0 skips and fresh 13-case Host CTest build remain PASS; D03 final testing revalidates those sealed bytes rather than rerunning them. Four new post-review Windows lifecycle controls PASS separately with model admission/runner, not DSoftBus. The genuine SDK23/AArch64 native bridge build has 23 TU/objects and 1037 inputs; final testing revalidates it, with no new D07 SDK compile. Exact ordered SPDP batches share the original 256 observation slots; this is observation bookkeeping, not DDS per-payload wire causality. Fast DDS DDS/RTPS/QoS semantics and the DSoftBus Socket API boundary remain unchanged.
+
+[R38 commands, artifact/target identities, sealed evidence and limitations](ROS2_DURABLE_CAPTURE_ACCEPTANCE.md) / [capability matrix](ROS2_CAPABILITY_MATRIX.md). Canonical tester seal: `9d8dbe9e15813da1fad73dbc213dfd505d871868e69e24a765d711a3d2f97459` (730 members). Tester Commit gate:PASS covers its technical scope only. Documentation is synchronized for Main's remaining gates; **Main PRE_COMMIT / final all+staged graph analysis / commit / push are PENDING, CI NOT_RUN_NO_NEW_COMMIT**. No new publication SHA is asserted. Historical R37 FAIL, initial/review failures and old R38 run `efa7336e7ca4b78b` BLOCKED/tool24208 exit UNKNOWN retain their original verdicts and bytes below.
+
+---
+
+<!-- R37_BLOCKED_CURRENT_PREFIX; all following R36/R35/R26 bodies remain byte-preserved historical snapshots. -->
+# R37 source-bound native observation and close: FAIL / BLOCKED (2026-10-20T03:08:59.634827+00:00)
+
+**Implementation PRESENT; native BUILDS; HOST_TESTED PASS; DEVICE_TESTED=true; CROSS_DEVICE_TESTED=true with failed acceptance; INTEGRATION_NOT_QUALIFIED; VERIFIED=false. Commit gate: BLOCKED; Ready for commit: NO.** The single real run `5f28247d2fc3258a` has 1801 ordered String exchanges and 7204 complete matching 33-byte CDR stage observations, established by separate read-only extraction. Both unchanged original oracle invocations (`final=False` and `final=True`) reject the full streams, which retain the fixed1910s probe-deadline FAIL. This component observation is not an accepted endurance-and-normal-close run.
+
+R37 built a source-bound SDK23/AArch64 native bridge from 23 translation units, 1037 compiler/link inputs and 23 objects; final testing revalidated that D01 build, without a new final SDK build or full Fast DDS rebuild. Final HOST results are **46 Python methods, 0 skips**, and a **fresh 13-case C++ CTest build**, reported separately. Exact complete ordered SPDP batches now share the original 256 observation slots; both observers report captured1/faults0/adverts4 and all seven fatal counters0. This attempt did not reproduce the original capacity overflow; normal close still failed.
+
+Both boards report OriginalDeleteParticipant0, RuntimeClose2, observation_complete1, public deletion1 and child exit71; stderr includes `CONTROL_MISSING_OR_INVALID` and `Failed to delete participant`. Host progress ended at A385/B385; the original `BUSINESS_COMMAND.json` remains RUNNING, and original host exit/capture-loss cause are **UNKNOWN**. The original PROBE_FINISH/normal-close controls and runner RESULT/CLEANUP/ANALYSIS are absent. Eleven read-only recovery commands recovered six original raw files with equal before/local/after hashes; all four owned device PIDs are absent and tokens restored (matches1/rc0), with zero signals, replay, restart, manual close or cleanup mutation. These facts do not qualify close.
+
+[R37 build, actual commands, results and limits](ROS2_NATIVE_CLOSE_ACCEPTANCE.md) / [current matrix](ROS2_CAPABILITY_MATRIX.md). **Full ROS2 NOT_VERIFIED**; wider QoS, large-message/concurrency/longer soak, strong DDS/wire provenance, SDK epoch/global drain and leak freedom remain open; default automatic reconnect is NOT_PROVIDED by this configuration. Loan/recorder-internal take remain UNOBSERVABLE; third observer unsupported, selected-client status/feedback ordering OPEN; R22 STOPPED/excluded. R36 FAIL and all original failures remain historical. No new commit or push; CI NOT_RUN_NO_NEW_COMMIT. Detached `e27b7e9d1be7e72944108655a62f9753bfa99448` is the historical R35 baseline. Documentation is synchronized for blocked handoff only; all older “current”/PASS/publication text below belongs to its own dated snapshot and does not qualify the R37 library.
+
+---
+
+<!-- R36_BLOCKED_CURRENT_PREFIX; original body below is byte-preserved. -->
+# R36 finite endurance: FAIL / BLOCKED (2026-10-20T00:34:50.480663+00:00)
+
+**Implementation PRESENT; HOST PASS; DEVICE_TESTED / CROSS_DEVICE_TESTED executed and FAIL; INTEGRATION_NOT_QUALIFIED; Overall NOT_VERIFIED.** Run `f048d4650806d520` completed 1801 String application echo roundtrips (7204 matching 33-byte CDR stage records), then both native close paths failed and both child processes exited 71. Content-only PASS is a separate component result; final tester **Commit gate: BLOCKED; Ready for commit: NO**.
+
+The native package is BUILD_QUALIFIED_REUSED_NATIVE, with 3236 members/220 unchanged R26 ELFs and no new native compilation. Final HOST evidence is 52 test methods (14 new + 18 R26 + 15 independent + 5 Q2 schema methods containing 27 controls). [R36 commands, retained failures and limits](ROS2_FINITE_ENDURANCE_ACCEPTANCE.md) / [capability matrix](ROS2_CAPABILITY_MATRIX.md).
+
+Normal close returned `INTEGRATION_CLOSE_RESULT=2`, public participant deletion returned 1, and additional stderr reports `FDDST_CLOSE_RESOURCE_COMPLETE_WITH_RUNTIME_ERROR` and `Failed to delete participant`. Unmodified strict native/diagnostic checks reject this run. Four owned PIDs absent, zero forced signals and restored tokens do not establish successful close. Current-source observation-capacity analysis is a sufficient failure-condition inference only; it is not a confirmed sole root cause or evidence that current C++ was compiled into this reused artifact.
+
+**Full ROS2 NOT_VERIFIED; leak freedom/SDK epoch/global drain NOT_PROVEN; strong DDS BLOCKED_PROVENANCE_GAP; loan UNOBSERVABLE.** Selected RELIABLE/VOLATILE, one outstanding request/no application retry or dedupe only. Broader QoS, large messages, concurrency and longer soak remain unverified. Default automatic reconnect is NOT_PROVIDED by the accepted configuration; the current two-Participant/one-peer configuration does not support a third observer. R22 remains STOPPED/excluded.
+
+This is a blocked handoff. A separately reviewed source-bound native observation/close contract and new build are required before repeating the original complete dual-board acceptance. No post-failure device rerun, cap/timeout/assertion/return-code workaround or source change was made. R36 has no new commit/push; CI is NOT_RUN_NO_NEW_COMMIT. Checkout baseline `e27b7e9d1be7e72944108655a62f9753bfa99448` identifies the historical R35 state, not a new R36 commit or fresh remote verification.
+
+The entire original body below is retained as dated historical evidence. In particular, R35's three bounded RECORD/DEFAULT/NO_LOAN PASS cases and R26's 200-roundtrip PASS retain their original scope; this failed R36 run neither extends nor removes those results. Older uses of “current”, PASS, pending publication or CI describe their own dated snapshots.
+
+---
+
+<!-- R35_CURRENT_STATUS_PREFIX; historical body below is byte-preserved. -->
+# R35 current bounded serialized bag evidence (2026-10-19T22:45:38.910915+00:00)
+
+**Implementation PRESENT; bounded DEVICE_TESTED / CROSS_DEVICE_TESTED PASS** for three fixed cases: RECORD `995d57d79617477a`, DEFAULT `f1037096c37e5b3b`, NO_LOAN `128ed56c0766fce3`. Four topics/two types/two indexes produced eight immutable SQLite CDR rows, then sixteen typed/raw callbacks and eight full-buffer matches in each playback. [R35 acceptance, original commands and limits](ROS2_SERIALIZED_BAG_ACCEPTANCE.md) / [current matrix](ROS2_CAPABILITY_MATRIX.md).
+
+Native package qualification is REUSED_HASH_VERIFIED_NOT_REBUILT. Final agentic-review has zero findings/source fixes; the final tester reports Commit gate: PASS for the finite R35 technical test scope. Existing device/host results were REUSED_NOT_RERUN with unchanged source hashes; only two readonly public-admission checks were newly executed by that final tester. This documentation sync makes no device or SDK call.
+
+| Current fact | Qualification |
+| --- | --- |
+| Record | PASS: eight rows/four topics/two definitions, schema4/metadata9, immutable two-file closed bag. |
+| Default and no-loan play | PASS per fixed case: paused zero counts, one real empty Resume response, four lanes each [2,2], quiet0.25s, sixteen callbacks/eight full CDR matches. |
+| CDR suffix | Serialized ParameterEvent148/consumed140/suffix8 with three nonzero suffix bytes per sample is retained without trimming; String40/suffix0. |
+| Lifecycle | Two child rc0/four owned PIDs absent/identity restored/forced0 per case; record normal TERM1, both players exit naturally. |
+| Retained failure | DEFAULT D01 expiry240.291205s before deployment remains FAIL/no CONSUMED; earlier FAIL/PARTIAL/UNKNOWN entries remain historical. |
+
+**Full ROS2 NOT_VERIFIED.** General serialized compatibility remains OPEN; strong DDS payload/wire proof is BLOCKED_PROVENANCE_GAP. Recorder-internal take and effective can-loan are UNOBSERVABLE; SDK epoch/global drain are NOT_PROVEN. The accepted configuration has two Participants/one peer; its third-observer topology remains unsupported. Selected RELIABLE/VOLATILE only; broad QoS, large-message/concurrency/soak/leak freedom and default automatic reconnect are not newly qualified. R22 remains STOPPED/excluded.
+
+DEFAULT D01 expired before deployment and remains FAIL/no CONSUMED. Serialized ParameterEvent nonzero suffix bytes are retained, not normalized or treated as proven padding. Git publication outcomes are maintained separately by Main; this technical record does not invent a future commit/CI result. Earlier sections below are dated historical evidence, including their original failures and publication snapshots.
+
+---
+
 # Project status
 
+## Current R34 stage1: diagnostic typed/serialized impact (2026-10-19T06:28:09.313739+00:00)
+
+[Canonical evidence and commands](ROS2_SERIALIZED_IMPACT_ACCEPTANCE.md) / [central capability matrix](ROS2_CAPABILITY_MATRIX.md). The four diagnostic candidates are PRESENT; independent final host81 repository tests plus constructor/workflow controls and one fresh paired RK3588A window PASS. Native3239-file package/220 ELF/897 dependencies are REUSED_HASH_VERIFIED_NOT_REBUILT. Documentation readiness applies only to this stage1 scope.
+
+| Capability / gate | Actual qualification |
+| --- | --- |
+| Fixed typed/bytes publication with typed+raw reception | Bounded DEVICE/CROSS_DEVICE PASS, A-to-B:4 topics,2 types,2 indexes,8 publications,16 callbacks,16 full buffers; all fields/native full-buffer decode agree. |
+| ParameterEvent diagnostic buffers | Local148/consumed140/suffix8; typed raw140/suffix0; bytes raw148/suffix8,full sent/receive equal. These are observed values, not required outcomes. |
+| String controls | Four cases,40-byte complete buffers/no suffix. |
+| Strong DDS payload/wire boundary | BLOCKED_PROVENANCE_GAP; accepted evidence is native raw callback only. |
+| General serialized APIs/publication/bag compatibility | OPEN / NOT_VERIFIED; stock RMW/native unchanged. R34 suffix nonzero0 does not supersede R33's22 suffix/11 nonzero samples. |
+| R34 bag follow-up | NOT_TESTED. Original third-Participant/recorder-internal-input goal BLOCKED; separate two-process staged candidate NOT_IMPLEMENTED/NOT_TESTED, with internal input unobservable. |
+| Normal lifecycle | Two child rc0,interpreter/finalize/native teardown0,four owned PIDs absent,tokens restored,zero forced signals. |
+| Independent review / final tester | PASS for this bounded stage1; final technical Commit gate PASS. Host stubs are not device serialization evidence. |
+| Retained failures | R34 query1 FAIL/zero business; constructor shadowing repaired as R34-D01. Initial auxiliary receipt overwrite PARTIAL/times UNKNOWN; canonical fresh final evidence does not repair it retroactively. |
+| General ROS2 | NOT_VERIFIED; QoS/concurrency/large messages/soak,default automatic reconnect and SDK epoch/drain remain unverified. Unique-flow NOT_PROVIDED/strict UNTESTED; R22 STOPPED. |
+
+R33 functional V2 is published as `bb007f39d3d5224d44ed5bcfa8294a68b337b32e` (2026-10-19 02:50:54.316289 UTC; exact-SHA CI NOT_RUN, zero runs/checks/statuses), confirmed by root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`. At this 2026-10-19T06:28:09.313739+00:00 pre-commit documentation snapshot, R34 Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual later outcomes belong in `build/r34-serialized-impact/main-publication/POST_PUBLISH.json`; no future SHA or PASS is prefilled.
+
+Earlier dated status sections below retain their historical scopes.
+
+## Current R30: finite coordinated Action replacement PASS (2026-10-18 19:28 UTC)
+
+[Actual evidence and compatibility entry](ROS2_ACTION_RESTART_ACCEPTANCE.md). Four-file implementation and
+reviewed host checks PASS; DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for one
+normal server replacement under explicit coordination. Native API23 ON/OFF
+artifacts/897 dependencies REUSED, not rebuilt. Tester gate PASS; documentation
+Ready for commit YES. R30 pending gate/publication/CI statements describe the 2026-10-18 19:28 UTC pre-commit documentation snapshot. Actual commit, remote and CI outcomes are recorded separately in root-relative `build/r30-action-restart/main-action-restart-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
+| Capability | Current qualification |
+| --- | --- |
+| Persistent A / fresh B1 Action server | Partial support, bounded PASS:26 stable endpoints including8 Action endpoints; PRE5feedback/SUCCEEDED, NEW7feedback/SUCCEEDED. |
+| OLD goal | Accepted/executing,1feedback, no result; independent GetResult Future locally cancelled only. Not recovered, not remotely cancelled. |
+| Natural cross-channel ordering | Not established: START_OLD and two COMPLETE permissions coordinate this experiment without carrying business payload. |
+| COMPAT_RCLPY_STATUS_BEFORE_GOAL_RESPONSE | **OPEN / UNCOORDINATED_NOT_FIXED** in selected rclpy local revision; status-before-response counterexample still leaves public status0. No project ActionClient patch. |
+| Lifecycle | Three child/interpreter exit0, identities restored, six PIDs absent, no forced signals; B0 absence precedes B1 launch. |
+| CDR / CancelGoal | Goal/Feedback/Result application CDR witnesses PASS; protocol-wrapper CDR and remote CancelGoal not qualified by capsule presence. |
+| General ROS2 | Default reconnect, SDK epoch/drain, broad QoS, soak/leak freedom and old-goal recovery remain unverified. Unique-flow NOT_PROVIDED/strict UNTESTED, dedicated SEDP NOT_QUALIFIED; no direct per-payload RTPS mapping. |
+
+R29 published `b5b8fbcfa7ab1de7dd6cb24297967e1181b8372b` / CI NOT_RUN. Previous native C++ Action cancellation,
+CLI Action, service and rosbag results retain their own scopes; none is upgraded
+by R30 coordination. Overall ROS2 NOT_VERIFIED; R22 STOPPED. Older action-recovery
+gaps below describe earlier stage snapshots, not an unrestricted current claim.
+
+## EOF qualification addendum (2026-10-18 18:06 UTC pre-commit snapshot)
+
+Current host runner SHA-256 is
+`508ab7ca158a2cff2f2bd95810a95897419ed3def45162f7a5125d790c385e5f`.
+The original real Q1 executed
+`8c6fea0114614c5d81e70c813bc9c44579ee388a8067511ce1e7c7ba43bf279f`.
+Only one terminal LF was removed after staged whitespace checking failed;
+the failure and original bytes remain preserved. **The new runner hash was not
+device-tested.** The original finite service facts remain bound to the old hash.
+
+Independent initial, review and final stages passed. AST including positions,
+all47 recursive code objects and compiled marshal bytes match. Post-review
+host execution passed43 repository methods,12 workflow deadline cases,9 runner
+methods including execute/self-hash controls, and4 constructor admissions.
+The old receipt correctly rejects the current source hash. A new immutable
+BUILD_RECEIPT was accepted by checked_bridge and real compose/checked_package;
+all3,236 newly derived payload files are byte-identical to the original deployed
+package. API23 ON/OFF artifacts and897 dependencies were reused, not rebuilt.
+These establish limited evidence inheritance, not a new device run. The original
+2,092 raw files and295-member device audit remain unchanged.
+
+Technical tester gate PASS now includes this EOF equivalence qualification.
+Documentation Ready for commit YES; Main restage/graph/PRE_COMMIT/publication
+remain pending **at this 18:06 UTC snapshot**. Actual final commit/remote/CI is
+recorded separately in root-relative
+`build/r29-service-restart/main-service-restart-publication/POST_PUBLISH.json`.
+Main's current four-source manifest is
+`build/r29-service-restart/main-service-restart-publication/IMPLEMENTATION_FILES_EOF.json`;
+the original IMPLEMENTATION_FILES.json and source hashes below describe the
+original real-device revision. No future manifest or publication result is
+assumed before Main writes it. Default reconnect, SDK epoch/drain, action
+recovery, soak/leak freedom and full ROS2 remain unqualified.
+
+[EOF evidence and exact hashes](ROS2_SERVICE_RESTART_ACCEPTANCE.md).
+
+## Current R29: finite real service recovery PASS (2026-10-18 17:51 UTC)
+
+[Acceptance evidence](ROS2_SERVICE_RESTART_ACCEPTANCE.md). IMPLEMENTED / HOST_TESTED / DEVICE_TESTED /
+CROSS_DEVICE_TESTED PASS for one normal B server replacement and three distinct
+AddTwoInts requests. API23 native ON/OFF build qualification reused by hash;
+no native rebuild in R29. Tester gate PASS, docs Ready for commit YES.
+R29 gate/publication/CI pending below means the 2026-10-18 17:51 UTC pre-commit documentation snapshot. Final commit, remote and CI results are recorded separately at root-relative `build/r29-service-restart/main-service-restart-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
+| Capability | Support / evidence / boundary |
+| --- | --- |
+| One explicit normal service-server replacement | Supported within this tested finite path: true rclpy/rmw_fastrtps service and native DSoftBus; PRE/NEW each complete with exact peer CDR. |
+| Persistent client and pending request | Same A client/Node/Runtime/Participant/request-writer/reply-reader; OLD no response, local remove_pending_request/cancel only. Remote cancellation unsupported by this evidence. |
+| General service recovery | Partial: one AddTwoInts server replacement, RELIABLE/VOLATILE depth10 only; arbitrary types/QoS/concurrent load/repeated failures not tested. |
+| Lifecycle | Three child/finalize rc0, identities restored, six PIDs absent, no signals. B0 absence precedes B1 launch. |
+| Action recovery / default automatic reconnect | Not tested / not enabled by R29. Earlier bounded native Action/CLI/rosbag qualifications retained without recovery generalization. |
+| SDK epoch/drain / soak / leak freedom | NOT_PROVEN / NOT_TESTED / NOT_PROVEN. Unique flow NOT_PROVIDED, strict UNTESTED; dedicated SEDP NOT_QUALIFIED; no direct payload-to-RTPS sequence mapping. |
+
+R28 is published as `65ec59cffdd0ad4b0d9991b713a0a2741522f5e3`; recorded CI NOT_RUN. R29 only adds four files and
+does not change RTPS/DDS/native safety behavior. Overall ROS 2 NOT VERIFIED;
+R22 STOPPED. Older service-recovery gaps below are historical stage snapshots.
+
+> **Publication-state timestamp:** Any R28 Main gate/publication/CI pending statement in this document describes the **2026-10-18 16:41 UTC pre-commit documentation snapshot**, not a permanent current-state assertion. The finite scene evidence is PASS; Main records the actual commit, remote branch and CI outcome separately in root-relative `build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json` when publication completes. No future commit SHA or CI success is prefilled.
+
+## Current R28: two finite replacements PASS (2026-10-18 16:41 UTC)
+
+[Acceptance and preserved failures](ROS2_REPEATED_RESTART_ACCEPTANCE.md). Implementation/build/host review and
+DEVICE_TESTED / CROSS_DEVICE_TESTED PASS are limited to explicit bounded A,
+two normal B replacements and 15 String application echo roundtrips. Tester
+gate PASS; documentation Ready for commit YES; Main PRE_COMMIT and R28
+commit/push/CI pending. Published R27 HEAD is `46ef5523fdee66421dc29b23aaeae9e095d8fa0d`, recorded CI NOT_RUN.
+
+| Capability | Qualification / remaining limit |
+| --- | --- |
+| Continuous A, normal B0 -> B1 -> B2 | Finite real-device PASS: one Runtime/Participant, 20 endpoints, seven continuity anchors; 60 side payloads match four CDR copies per exchange. |
+| Normal lifecycle | Four child/finalize rc0, tokens restored, eight owned PIDs absent, no forced signals. Q1's historical B0 restore remains NOT_PROVEN. |
+| Resource observations | Three native/five OS samples PASS; owners 3/5/7, FD 19/17/19/17/19, threads 23, RSS 82872 -> 83464 KiB. Leak freedom NOT_PROVEN. |
+| Default reconnect / SDK epoch-drain | Not established; default reset limit remains 1, explicit non-route native A alone permits 2. No unbounded or default automatic recovery claim. |
+| General ROS 2 recovery | Service/action recovery, long-duration/load, general types/large messages/broad QoS remain NOT_TESTED by R28; earlier bounded Action/CLI/rosbag qualifications retained. |
+| Transport qualification | Unique flow NOT_PROVIDED / strict UNTESTED; dedicated SEDP NOT_QUALIFIED; no direct per-payload RTPS sequence mapping. |
+
+Overall ROS 2 NOT VERIFIED; R22 STOPPED. Q1 FAIL, Q2 expected production-entry
+rejection and Q3 BLOCKED remain their original results; Q4 does not rewrite them.
+Older sections below are historical snapshots, including R27's former pending gate.
+
+## Current R27 acceptance: bounded PASS (2026-10-18 13:52 UTC)
+
+[Independent Q3 evidence and limits](ROS2_PROCESS_RESTART_ACCEPTANCE.md): implementation, OFF/ON build,
+reviewed host tests and explicit ON cross-device single B replacement PASS.
+Tester commit gate PASS; documentation Ready for commit YES. Main graph and
+PRE_COMMIT are still pending; R27 is uncommitted, unpublished and has no new CI
+result. Latest published S1 remains `9cdbc84ed1371d53f4ee53b88dad5b3e5f1612ab` (exact-SHA CI NOT_RUN).
+
+| Capability | Current qualification |
+| --- | --- |
+| S1 bounded sustained echo | Prior 200 roundtrips PASS, published; not a long-duration/leak-freedom claim. |
+| S2 explicit ON one normal B replacement | DEVICE_TESTED / INTEGRATION_TESTED PASS; A continuity, PRE5/POST5, 40 identical side CDR records, three normal exits, six PID absences and tokens restored. |
+| Default automatic reconnect | Not enabled/supported by this qualification; NO_REACCEPT protection unchanged outside the opt-in experiment. |
+| S3 / repeated recovery / services/actions / broad QoS | NOT_RUN in this stage; historical bounded action/CLI/rosbag qualifications unchanged. |
+| SDK epoch/drain / payload-to-RTPS mapping | NOT_PROVEN / NOT_DIRECTLY_MAPPED; unique-flow NOT_PROVIDED, strict UNTESTED; dedicated SEDP NOT_QUALIFIED. |
+| Capture anomaly | Root cause unresolved; reviewed one-shot read-only resample exists, unused in Q3. Both earlier BLOCKED runs remain failures. |
+
+Overall ROS 2 NOT VERIFIED. The 13:08 stop below is retained history, superseded
+for the newly authorized and executed Q3 only; it is not the current stage gate.
+
+## Current R27 process restart: BLOCKED (2026-10-18 13:08 UTC)
+
+**Implementation PRESENT / BUILDS PASS / HOST_TESTED PASS; DEVICE restart
+acceptance BLOCKED. Ready for commit: NO.** Ten candidate source files remain
+uncommitted. Device-dependent actions are paused; no third window or normal
+R27 commit is permitted by this status. [Actual failures and evidence](ROS2_PROCESS_RESTART_ACCEPTANCE.md).
+
+| Capability / gate | Current evidence and limit |
+| --- | --- |
+| Candidate build and independent review | Fresh OFF/ON bridge builds, 23 TUs each; implementation review and canonical post-ACK host tests passed. Host/fake results do not qualify native replacement. |
+| Window1 `5180c04d159faad2` | Five echo roundtrips / 20 identical 32-byte side CDRs, then both ACK failures. No PHASE_COMPLETE/PRE/ARM/B1. Later tail-budget HDC timeout surfaced BLOCKED; not offline-board proof. |
+| Reviewed ACK repair | Probe-only cap 2 to 5 s, clamped by 40 s lifetime, early failure visibility; business/probe/close remain 35/40/50 s. Exact original heartbeat cause unproven. |
+| Window2 `6124a63b48af7b87` | Both raw PRE phase completions and five echo roundtrips, no ACK false; A0050 host0 but stdout/stderr empty and remote marker missing. Remote UNKNOWN; no host PRE.json, no ARM, no B1 launch. Not 35 s exhaustion or proof of offline boards. |
+| Failure cleanup | Both windows: child71, four owned PIDs absent, tokens restored, no forced signals. This is failure cleanup, not normal scenario completion. |
+| Process restart / default reconnect | Experimental restart NOT VERIFIED / BLOCKED. Default automatic reconnect remains unsupported/not enabled; no claim of permanent impossibility. |
+| Earlier capabilities | Published S1 and prior bounded native Action/ordinary CLI/rosbag results retained. General QoS/service/action coverage, long tests, SDK epoch/quiescence and full ROS 2 remain NOT VERIFIED; R22 STOPPED. |
+| Graph / publication | Prior graph check only four tracked files including R22; untracked scope incomplete and ACK postdates index. PRE_COMMIT NOT_RUN/BLOCKED, not PASS. Current R27 has no commit/push/CI result. |
+
+Latest published S1 HEAD is `9cdbc84ed1371d53f4ee53b88dad5b3e5f1612ab` on
+existing `origin/codex/flow-encoding-published-20261014`; exact-SHA CI at
+11:45:04.427145 UTC was NOT_RUN. All original failed windows and host evidence
+remain preserved. The retained host HDC log excerpt is auxiliary only; root
+cause remains unresolved. Older sections below are dated acceptance snapshots.
+
+## Current R26 S1 sustained application roundtrips (2026-10-18 11:35 UTC)
+
+**DEVICE_TESTED / INTEGRATION_TESTED PASS for 200 fixed String pub/sub echo
+roundtrips.** Run `f31ef86f8ed07cf2`: 400 logical publications, 800 side-local
+payload records, each sequence's four 33-byte CDRs identical. This is not ROS
+service/action traffic. [Commands, environment, failures and evidence](ROS2_SUSTAINED_ROUNDTRIP_ACCEPTANCE.md).
+
+| Capability | Status and reason |
+| --- | --- |
+| S1 fixed sustained String echo | SUPPORTED within this bounded two-board case, RELIABLE/VOLATILE depth 10, one outstanding request, at most 10 Hz, no application retries. 200 exact ordered roundtrips PASS. |
+| Normal exit / identity | Both children exit 0, four owned PIDs absent, both identity tokens restored, zero signals. Query 40 and execution 404 commands passed; 388 zero remote markers. |
+| Timing/resource observations | Local spans A/B 21.267501/21.265880 s; five samples per side. RSS +28/+40 KiB, threads 24/23 and FDs 20 stable at samples. Leak freedom NOT_PROVEN. Business upper bound 28.438 s is not an exact BUSINESS duration; close releases 34.547/35.000 s are below 50 s. |
+| S2 surviving-A / B process restart | BLOCKED_CURRENT_DEFAULT_NO_REACCEPT. Default package does not enable the separately gated replacement experiment; independent architecture/experiment decision required. No claim of permanent impossibility. |
+| S3 both-process cold start | NOT_RUN; cannot substitute for surviving-peer recovery. |
+| Same-process Participant recreation | NOT_PROVEN; SDK callback epoch/quiescence contract remains missing. |
+| Native coverage limits | Unique flow NOT_PROVIDED / strict UNTESTED; dedicated SEDP NOT_QUALIFIED; no direct per-payload RTPS mapping. Both diagnostic pairs retained. |
+| Build / other capabilities | 3,235-file script derivative, zero native payload changes; no full native rebuild/ABI rerun. Prior bounded Action/CLI/rosbag PASS retained. General QoS/types, long-duration/concurrent/large-message/stress behavior UNVERIFIED; R22 STOPPED; overall ROS 2 NOT VERIFIED. |
+
+SR-01 initial FAIL and SR-02 review FAIL were fixed, independently reviewed and
+retested; originals remain. Original sandbox postquery command 0 also remains
+FAIL (WinError 5, exit 1). Main's explicit normal-user/elevated recovery ran the
+same four local commands with exit 0, preserving the original query anchor;
+there was no requery or security/network change. Full details are in the acceptance document.
+
+Prior record/play commit `6d025da0efd088be46fb59fdadfd18755f5cc31e` is published
+on existing `origin/codex/flow-encoding-published-20261014`; CI at 10:45:07.955187
+UTC was NOT_RUN. Current S1 tester gate PASS is limited to four sources; Main
+graph/PRE_COMMIT/publication remain pending. Earlier sections retain historical scope.
+
+## Current bounded rosbag record/play (2026-10-18 10:33 UTC)
+
+**DEVICE_TESTED / INTEGRATION_TESTED PASS for one fixed ten-String chain.**
+Record5 `1403cdfc8beb937b` recorded A-to-B; play1 `5ca772d545190a98`
+replayed B-to-A, with one actual Resume response and all ten original 36-byte
+CDR payloads received byte-for-byte in order. [Commands, failures and seals](ROS2_ROSBAG_RECORDPLAY_ACCEPTANCE.md).
+
+| Capability | Current status and reason |
+| --- | --- |
+| String pub/sub, stock SQLite record/play | SUPPORTED within this fixed two-board chain; 10 publications/acks, closed SQLite/metadata/CDR verification, then 10 exact received payloads. Actual native Socket-path evidence, not host stubs. |
+| Resume service and selected QoS/type support | PARTIAL: one real Resume call/response, selected QoS and String CDR passed. Arbitrary services/actions, types and QoS combinations remain unverified here. |
+| Lifecycle/resources | Bounded normal recorder SIGTERM (one), natural player return, both child exit codes 0, four owned PIDs absent and both tokens restored per window. Playback signals=0. SDK epoch/quiescence NOT_PROVEN. |
+| Discovery/native transport | Paired native path and provider bindings observed. Dedicated SEDP NOT_QUALIFIED; no direct per-payload/Resume-to-RTPS mapping. Unique flow NOT_PROVIDED; strict mode UNTESTED; diagnostics retained. |
+| Build / host verification | Existing native artifacts reused; combined package 3,234 files/220 ELF. Current source initial/review/final host gates passed. No fresh full native rebuild or ABI rerun; whole-build reproducibility is not claimed. |
+| Earlier Action/node/topic scopes | Prior native C++ Action and ordinary CLI PASS retain their existing bounded evidence, unchanged by this stage. |
+| General rosbag / full ROS 2 | PARTIAL / NOT VERIFIED: general types/QoS, reconnect, large/fragmented messages, concurrent/stress and other storage modes not covered. R22 STOPPED. |
+
+Record2/3 FAIL and record4 BLOCKED remain preserved; only record5 was admitted
+as playback source. Latest prior publication is `ee04d945b993b4e7b4cdc96f9773afa3a18817ff`
+on existing `origin/codex/flow-encoding-published-20261014`; CI at 05:52:42 UTC
+was NOT_RUN. ABI `06e5917abd8906a5d17066b87223d239109c5374` is also published.
+Final tester Commit gate PASS covers exactly seven new/changed source files.
+Main graph/PRE_COMMIT/publication remain pending for record/play. Historical
+sections below retain their original dates, NOT_RUN states and publication scope.
+
+## Current offline rosbag SQLite/CDR helper (2026-10-18 05:45 UTC)
+
+**HOST_TESTED PASS for a standalone offline helper; real record/play NOT_RUN.**
+The no-Node ABI prerequisite was published as
+`06e5917abd8906a5d17066b87223d239109c5374` to existing
+`origin/codex/flow-encoding-published-20261014`. Exact-SHA CI at
+2026-10-18 05:23:02 UTC: NOT_RUN (zero runs/checks/status contexts).
+[Oracle contract, commands and evidence](ROS2_ROSBAG_SQLITE_ORACLE.md).
+
+| Capability | Current status and evidence boundary |
+| --- | --- |
+| Closed SQLite/CDR content oracle | SUPPORTED within the fixed ten-String offline contract; implementation PRESENT, HOST_TESTED PASS: 23 tests and 63 independent controls. Inputs are host-generated fixtures, not recorder-produced bags. |
+| Scalar metadata/QoS fidelity and resource release | HOST_TESTED PASS; 45 independent type-corruption controls rejected; all 63 controls preserve input files/expectations and release fixture roots normally. BSI-01/BSO-01 resolved with failed evidence retained. |
+| Native build and real no-Node ABI | Prior published bounded PASS retained; not rerun for this helper. Existing reproducibility and Transport-close limitations remain unchanged. |
+| Recorder close, device collection, native reader, replay and received payloads | UNVERIFIED, NOT_RUN; helper not connected to the record/play runner. Native compilation and device/integration tests are N/A for the standalone Python helper, not PASS for the system. |
+| Device availability | Read-only observation at 05:42:32 UTC: both registered RK3588A devices USB Connected. Sandbox empty listings did not establish offline status. No new communication evidence. |
+| Broader ROS 2 / QoS / reconnect | Overall NOT VERIFIED; R22 STOPPED. No DDS/RTPS/RMW/Transport semantic changes. |
+
+Independent final tester Commit gate PASS is restricted to the two-file helper.
+Main graph/PRE_COMMIT/publication remain pending for this stage. Historical ABI
+and earlier sections below retain their original dates and publication state.
+
+## Current rosbag native ABI prerequisite (2026-10-18 02:06 UTC)
+
+**Build/composition and real no-Node ABI PASS on both RK3588A boards.**
+Run `daf356bea873e640` passed native imports, three fixed CDR checks, two native
+QoS conversions and actual stock record/play parser checks. It created no Node,
+Recorder or Player. `communication_verified=false`; record/play NOT_RUN.
+[Commands, provenance, failures and limits](ROS2_ROSBAG_ABI_ACCEPTANCE.md).
+
+| Capability | Current status and evidence boundary |
+| --- | --- |
+| Native rosbag build and combined package | SUPPORTED within the pinned SDK23/AArch64/CPython 3.12.7 package; BUILDS PASS. Existing 293-command native build and exact package were revalidated, not rebuilt during final aggregation; `whole_build_reproducible=false`, with earlier output/resource/DSO differences retained. |
+| rosbag2_py ABI / selected type support | SUPPORTED within this no-Node probe on A/B: eight native extensions, String and Resume request/response CDR, exact package origins/providers. DEVICE_TESTED PASS for ABI only. |
+| QoS conversion / CLI parsing | PARTIAL: two native conversion roundtrips and stock SQLite presets/options parse correctly. Network QoS interoperability and actual record/play behavior UNVERIFIED. |
+| Native cross-board record / persisted SQLite oracle / replay | UNVERIFIED, NOT_RUN; not executable cases in the current finite ABI runner. Earlier R19/R20 offline local persistence remains separate. |
+| Lifecycle / resources | Interpreter execution/finalize=0, identity restored=1, four owned processes absent, signals=0. `teardown_observed=0`, rc=-1; Transport close and SDK callback quiescence not established by ABI success. |
+| Node/topic/Action communication | Prior bounded published evidence retains its exact source/package/run scope. The combined rosbag package has no new ROS communication qualification. |
+| Larger/general types, concurrent record/play, cache/crash recovery, compression, MCAP, split bags | UNVERIFIED by this stage; the selected artifact scope is SQLite and does not establish these capabilities. |
+| Broader QoS/reconnect/load and full ROS 2 parity | UNVERIFIED; R22 STOPPED. No DDS/RTPS/RMW/Transport semantic changes. |
+
+Independent stage aggregation rehashed the 753-file target seal and the reviewed,
+post-review-tested source/package bytes, then replayed the canonical raw-log audit
+without HDC. Tester Commit gate PASS covers only five new files. Documentation is
+synchronized here; Main graph/PRE_COMMIT/publication remain pending. This is not
+full-project VERIFIED. Original UNKNOWN_START, entry-expired and local audit
+failures remain preserved, including the aggregation helper's failed first attempt.
+
+Last confirmed publication is ordinary Action evidence
+`a0a4fcdbe0b1e2ae7c4f32abbe0f5c08074f17c3` on existing
+`origin/codex/flow-encoding-published-20261014`; exact-SHA CI at
+2026-10-17 23:41:04.775 UTC was NOT_RUN (zero runs/checks/status contexts).
+Earlier sections below retain their historical publication and capability state.
+
+
+## Current ordinary Action CLI evidence (2026-10-17 23:34 UTC)
+
+**Stock `ros2 action send_goal` AB/BA PASS for one positive Fibonacci order=6
+goal per direction on the real RK3588A pair.** Each CLI received an accepted
+nonzero UUID, five ordered feedback prefixes, exact result `[0,1,1,2,3,5,8]`
+and SUCCEEDED, correlated with the opposite public rclpy server before close.
+[Actual commands, artifacts, raw evidence and limits](ROS2_ORDINARY_CLI_ACTION_ACCEPTANCE.md).
+
+| Capability | Status and evidence boundary |
+| --- | --- |
+| Ordinary Action CLI AB/BA | SUPPORTED within two fresh fixed order=6 windows; DEVICE_TESTED PASS. One Node/context and one successful goal per process. |
+| Native C++ Action | Earlier independently published bounded cancellation/rejection/abort/concurrent-goal evidence remains separate; it does not qualify those ordinary CLI behaviors. |
+| Native path / local lifecycle | Actual Socket, project RMW/DDS and exact providers verified. Public delete/RuntimeClose/finalize=0, restore=1, all four owned PIDs absent and signals=0 in each window. SDK global callback quiescence NOT PROVEN. |
+| Python/node/topic/echo | Prior dated evidence retains its exact source/run scope, including old-runner topic/pub limitation. No fresh topic or general service test is claimed by Action success. |
+| Ordinary CLI cancel/reject/abort/preemption/concurrent goals | UNVERIFIED: not executed in the two positive-goal windows. Status-topic behavior is not separately qualified. |
+| Serialization / QoS / size / recovery | Fixed Fibonacci payload only. Broader QoS, large messages, reconnect and stress remain UNVERIFIED; R22 remains STOPPED. |
+| Optional unique flows / wire attribution | Unique flows NOT_PROVIDED; known optional retry retained, strict mode NOT_TESTED. Dedicated SEDP and direct Action UUID-to-RTPS mapping not qualified. |
+| rosbag / complete ROS 2 parity | Bag excluded / UNVERIFIED; full ROS 2 parity NOT VERIFIED. |
+
+This stage changes documentation only. Published source bytes, post-review Host
+tests and qualified native build/package were revalidated; no new compile,
+product suite or native rebuild is claimed. Independent final execution Commit
+gate PASS applies to this fixed Action evidence; Main documentation/graph/
+PRE_COMMIT/publication remain separate. Original failures and local errata are
+retained. R22 five files and bag builder remain excluded.
+
+Last confirmed publication is echo repair
+`cb9c54dc6564362b52dc652e55ae9f7b5559749e` on existing
+`origin/codex/flow-encoding-published-20261014`; its 22:49:05 UTC CI snapshot is
+NOT_RUN (zero runs/checks/status contexts), not PASS. Historical sections below
+retain their earlier publication and capability state.
+
+
+## Earlier ordinary topic/echo evidence (2026-10-17 22:34 UTC)
+
+**Fresh stock topic echo AB/BA PASS on the real RK3588A pair after a four-file
+Host readiness repair.** In BA, successive snapshots show publisher matched=0,
+then the CLI's exact YAML, then publisher matched=1 before normal close. The
+repair waits only for incomplete live evidence within the original deadline;
+incorrect data, malformed matches and final missing matches still fail.
+[Commands, artifacts and retained evidence](ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md).
+
+| Capability | Status and evidence boundary |
+| --- | --- |
+| Python entry / single Node / stock no-daemon node discovery | Previously DEVICE_TESTED PASS and published as `471d344050dccae6cb10396d3432fc9f88a92ff7`; selected single-lifetime scope only. |
+| Topic graph AB/BA and stock topic pub AB/BA | PARTIAL: original real pre-repair source/run evidence reverified. Not rerun with this four-file patch. Historical pub AB preparation receipt discrepancy retains its independent disposition and missing outer-raw limitation. |
+| Stock topic echo AB/BA | SUPPORTED for exact String payload, reliable/volatile/depth10, one Node/context per process, no-daemon/once/timeout20. Fresh AB `c67a4d427026c670` and BA `a039923ab6958e31` PASS. |
+| Host echo readiness / consumer binding | HOST_TESTED and used in fresh target windows. Synthetic negative fixtures remain Host-only; actual device metadata was independently constructed and checked. |
+| Native package/build | Reused unchanged qualified package: 2,811 members / 167 ELF. Python compile PASS; new C++ build N/A for this four Host-file change. |
+| Public/native close and owned process exit | PARTIAL: both windows delete/close/finalize return 0, restore=1, all four owned PIDs absent, signals=0. SDK global callback drain/quiescence NOT PROVEN. |
+| Native C++ Action | Earlier bounded published evidence unchanged. Ordinary Action CLI AB/BA are NOT_RUN, not inferred from topic results. |
+| Optional unique flows | PARTIAL: known failed first Reader attempt/retry retained; unique flows NOT_PROVIDED, strict mode NOT_TESTED. |
+| QoS breadth, reconnect, large messages, concurrent applications | UNVERIFIED beyond prior separately dated scopes. Fixed String delivery is not general load/recovery acceptance; R22 STOPPED. |
+| rosbag / complete ROS 2 parity | Bag NOT_INCLUDED / UNVERIFIED; full ROS 2 parity NOT VERIFIED. Dedicated SEDP wire qualification remains absent. |
+
+Final execution Commit gate PASS applies only to the four changed Host files.
+Independent final tester reverified 15 seals / 9,341 files and the current
+source freeze; old echo FAIL/BLOCKED windows and local audit errors remain
+unchanged. Main documentation/graph/PRE_COMMIT/publication are separate gates.
+R22 five files and bag builder are excluded. Last confirmed publication is
+`471d344050dccae6cb10396d3432fc9f88a92ff7` on existing
+`origin/codex/flow-encoding-published-20261014`; its 20:30:40 UTC CI snapshot is
+NOT_RUN (zero runs/checks/status contexts), not CI PASS. Earlier sections below
+retain their historical publication and capability states.
+
+
+## Earlier ordinary Python/CLI node-discovery evidence (2026-10-17 20:11 UTC)
+
+**Bounded real RK3588A AB/BA node-discovery PASS.** Stock
+`ros2 node list --no-daemon --spin-time 3` found the opposite public rclpy Node
+in runs `ad29a5b4d0d83169` and `becffc43fccc35dc`. Both host runs and all recorded
+remote exits were 0; public/native close, Python finalization, token restoration
+and all four owned-PID absence checks passed per window without forced signals.
+This uses the exact qualified 89-provider package and real DSoftBus Socket
+with fake_sdk=0 / builtin=0. [Commands, artifacts and sealed evidence](ROS2_ORDINARY_CLI_NODE_DISCOVERY_ACCEPTANCE.md).
+
+| Capability | Status and evidence boundary |
+| --- | --- |
+| Owned project Python entry / single public Node | SUPPORTED within tested single-lifetime scope: target no-Node entry cases, single-Node window and AB/BA lifecycle. Full Python/NumPy/ROS ABI is UNVERIFIED. |
+| Ordinary no-daemon node listing | SUPPORTED for the exact A-to-B and B-to-A fixtures; DEVICE_TESTED PASS. Dedicated SEDP wire attribution and general reconnect remain UNVERIFIED. |
+| CLI/types/rosgraph package | BUILD and HOST_TESTED PASS; stock node command target-tested. Presence of other CLI commands or generated Action types is not their runtime acceptance. |
+| Native C++ Action | PARTIAL, separately published: bounded goal/feedback/cancel/reject/abort/concurrency evidence below remains applicable. Ordinary Action CLI is UNVERIFIED. |
+| Topic graph, ordinary pub/echo, services and QoS | NOT VERIFIED BY THIS STAGE. Topic graph/pub/echo are next frozen cases; prior dated native/Host results keep their own scope. R22 remains STOPPED. |
+| Serialization / sizes / load / recovery | Fixed CDR and prior native Action evidence retain their scopes; large native payloads, broad types, stress, reconnect and failure recovery are not qualified by node listing. |
+| Resource lifecycle | PARTIAL: process-local public/native close, finalization, restoration and exit pass. SDK global callback drain/quiescence and same-process repeated Participant lifetimes remain NOT PROVEN. |
+| Unique network flows | PARTIAL: known optional first-Reader failure and existing RMW original-QoS retry are retained. Unique flows NOT_PROVIDED; strict mode NOT_TESTED. |
+| rosbag record/play / remote replay | UNVERIFIED; bag builder/package excluded from this stage. Earlier local SQLite evidence is unchanged. |
+| Unsupported choices / overall status | Session API, builtin fallback and provider substitution excluded. Daemon mode is not qualified. Full ROS 2 parity: NOT VERIFIED. |
+
+The independent final tester reports execution Commit gate PASS for the exact
+11 source files; six component initial/review/post-review chains and the actual
+AB/BA runs were revalidated. Main graph/PRE_COMMIT and publication for this
+stage remain pending. R22 five files, bag and unrelated worktrees are excluded.
+Original failed/blocked windows and the two historical CLI preservation FAIL
+assertions remain intact; their separately reviewed launcherfix2 disposition
+does not relabel old evidence as PASS.
+
+Last confirmed publication is native C++ Action
+`4794ffb08d2d1cf49e758a0a4627f4aa2c87de92` on existing
+`origin/codex/flow-encoding-published-20261014`; its 08:31:44 UTC CI snapshot is
+NOT_RUN (zero runs/checks/status contexts). Dated sections below retain the
+state known at their time; they are superseded only within the scope above.
+
+
+## Earlier R25 native Action evidence (2026-10-17 08:25 UTC)
+
+## Current R33 functional V2 on stock RMW (2026-10-19T02:39:39.888997+00:00)
+
+**IMPLEMENTED / HOST_TESTED / DEVICE_TESTED / CROSS_DEVICE_TESTED PASS within the finite V2 scope.** [Detailed acceptance](ROS2_NATIVE_PARAMETER_ACCEPTANCE.md) and [central capability matrix](ROS2_CAPABILITY_MATRIX.md). Stock RMW is selected; no RMW/native Transport patch was applied. The original two V1 device failures remain FAIL; their blocked/undecided documentation snapshot is superseded only for current direction and this new V2 qualification.
+
+| Account | Current qualification |
+| --- | --- |
+| Six parameter services/events | V2 bounded PASS:14 ordered RPCs,nine types,3 atomic refusals/unchanged readback,12 mutation events and dynamic deletion; no-extra-event observation250ms only. |
+| Local native serialization roundtrip |40 complete original samples deserialized natively and matched typed fields;18 exact-length samples,22 suffixes (11 nonzero,4..72 bytes). No trimming or normalization. |
+| Standalone serialization | OPEN `COMPAT_RMW_FASTRTPS_STANDALONE_LENGTH`; strict V1 still fails even on this new run. Canonical/minimal/deterministic serialization, general serialized publish/API and general rosbag compatibility unverified. |
+| Normal lifecycle/native path | Two child/finalizer rc0,4 PIDs absent,tokens restored,zero forced signals; package/endpoint/native Socket/RTPS proof. Local samples are not captured wire payloads or per-RPC-to-RTPS mapping. |
+| Providers | Actual80 mapped external objects are hash-matched members of89-object allowlist; every required provider present. Auditor equality/function-identity mistakes were corrected in audit helpers, not production. |
+| Remaining scope | Type-description endpoints only, not RPC; broad QoS/concurrency/large messages/soak/reconnect not added. Existing finite Action/service/bag scopes preserved; default automatic reconnect NOT_PROVIDED, SDK epoch/drain UNPROVEN, strict unique-flow unprovided/UNTESTED, rclpy ordering OPEN. Full ROS 2 NOT_VERIFIED; R22 STOPPED. |
+
+R32 is published as `5585ce7ffde6a1191b1a2b49dd5d2abdfb581484` (2026-10-18 23:35:56 UTC exact-SHA CI NOT_RUN). At this 2026-10-19T02:39:39.888997+00:00 pre-commit documentation snapshot, the technical tester gate is PASS only for functional V2; Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual publication outcomes are recorded separately in root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
+
+## Current R32: autonomous Action business, one guarded replacement (2026-10-18T23:26:38.723843+00:00)
+
+**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS, finite two-board scene.** [Exact commands, repaired failures and evidence](ROS2_NATURAL_ACTION_RESTART_ACCEPTANCE.md). R31 current-stack natural Action AB/BA is published as `f14e57c9e5e94558a66a0f028cf99801f37ccd84` on the existing branch (2026-10-18 22:16:35 UTC exact-SHA CI NOT_RUN).
+
+| Capability | Current qualification |
+| --- | --- |
+| Natural application business after replacement | SUPPORTED within one finite explicit experiment: same live A Node/Context/Participant/ActionClient, autonomous PRE6 then OLD7, observed readiness false-to-true then NEW8; PRE5/NEW7 exact feedbacks and SUCCEEDED peer CDR. No host Action permissions or required EXECUTING status. |
+| Native process replacement | PARTIAL: one normal B0 exit/identity restoration/absence before fresh B1, continuous A26 anchors (8 Action), existing bounded outgoing-first A and ARM/REPLACE once each. This is not default automatic reconnect or unrestricted natural lifecycle support. |
+| OLD / cancellation | OLD7 had six feedbacks and SUCCEEDED before disappearance: normal completion only. OLD recovery and remote CancelGoal NOT_VERIFIED; capsule/endpoint presence is not executed cancellation. |
+| Selected rclpy ordering | OPEN `COMPAT_RCLPY_STATUS_BEFORE_GOAL_RESPONSE` / UNCOORDINATED_NOT_FIXED. Intermediate client status is observation-only; early status and result-time late-feedback cleanup boundaries persist. Fixed-fixture PASS is not an arbitrary-scheduling guarantee. |
+| Build / host / package | Four new test-side files, independent review and final host PASS. 3,237-file package adds one probe and manifest delta to R30/R31 payload; native `9db2a35c` / API23 ON/OFF / 897 dependencies REUSED_HASH_VERIFIED_NOT_REBUILT. |
+| Exit / native transport | Three rc0/finalize0/token restorations, six PIDs absent, zero signals; native Socket/RTPS records and matched loaded providers. No direct per-application-payload RTPS mapping; dedicated SEDP NOT_QUALIFIED. SDK epoch/global drain and leak freedom NOT_PROVEN. |
+| Optional unique flow | NOT_PROVIDED; known failed optional attempt/original-QoS custom-Transport fallback retained; strict UNTESTED. |
+| Remaining scope | Repeated/soak/failure-injection/wide QoS/types/concurrency/large-message acceptance not added here. Existing native Action/service/rosbag qualifications retain their dated scopes. Full ROS 2 NOT_VERIFIED; R22 STOPPED. |
+
+At this 2026-10-18T23:26:38.723843+00:00 pre-commit documentation snapshot, the R32 finite technical tester gate is PASS; Main graph/PRE_COMMIT/commit/push/CI are PENDING. Final publication outcomes are recorded separately in root-relative `build/r32-action-natural-restart/main-natural-restart-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled. Historical sections below are not retroactively upgraded.
+
+## Current R31 natural Action AB/BA (2026-10-18T22:06:34.620832+00:00)
+
+**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for the current R30 package and fixed single-goal fixture.** [Commands, exact build lineage, failures and seals](ROS2_NATURAL_ACTION_ACCEPTANCE.md). R30 coordinated replacement is published as `a8945d4520af23f476ac93f9c376668b4d397481` on the existing branch (2026-10-18 19:36:28 UTC exact-SHA CI NOT_RUN).
+
+| Capability | Current status and boundary |
+| --- | --- |
+| Natural stock Action send_goal | SUPPORTED within two finite directional windows: order=6, five exact feedback prefixes each, exact SUCCEEDED result; original five 0.2-second fixture steps, no START_OLD/COMPLETE business permissions. |
+| Backend/native path | PARTIAL qualification: physical A bounded/outgoing-first/process observation=1, B ordinary in both directions; current `9db2a35c` bridge, native peer writer sequences/V1 SPDP, eight Action endpoints per process. No direct UUID-to-RTPS or application/protocol CDR mapping; dedicated SEDP NOT_QUALIFIED. |
+| Client ordering compatibility | OPEN `COMPAT_RCLPY_STATUS_BEFORE_GOAL_RESPONSE` / UNCOORDINATED_NOT_FIXED. Selected client can accept/GetResult while local goal status stays UNKNOWN/stale; late feedback after result callback removal is not recovered by waiting. These fixed fixture passes do not guarantee all schedules/statuses/feedback. |
+| Replacement/recovery | Earlier R27/R28 pub/sub, R29 service and R30 coordinated Action remain qualified only in their dated scopes. R31 does not qualify natural restart, default automatic reconnect, old-goal recovery or remote CancelGoal. |
+| Native build / host | REUSED_HASH_VERIFIED_NOT_REBUILT: unchanged R30 payload, API23 ON/OFF build and 897 dependencies. Two new test-side files; initial fixes, independent repair review and final host PASS. No native or rclpy patch. |
+| Lifecycle/resources | Four normal child exits/finalizers, four token restorations, eight owned PID absences, zero signals across the two windows. SDK global drain/epoch, long duration, leak freedom, broader types/QoS/concurrency/large messages remain NOT_PROVEN/UNVERIFIED. |
+| Optional unique flow | NOT_PROVIDED; failed optional Reader attempt retained, original-QoS custom-Transport fallback; strict UNTESTED. Startup is not described as error-free. |
+| Overall | Full ROS 2 NOT_VERIFIED. R22 STOPPED and unchanged. |
+
+At this 2026-10-18T22:06:34.620832+00:00 pre-commit documentation snapshot, the R31 finite technical tester gate is PASS; Main graph/PRE_COMMIT/commit/push/CI are pending. Actual publication results are recorded separately in root-relative `build/r31-action-natural/main-current-action-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled. The dated sections below remain historical evidence, not expanded qualifications.
+
+**Bounded native C++ Action business/path PASS on both RK3588A boards, with
+a recorded optional unique-flow retry.** Run `484675d3f084d757` used fresh peer
+run `fe7c9c0cb93d52df`, the new dedicated normal/DATASYNC-only identity and
+actual project Fast DDS/RMW with native SoftBus. Five requests produced four
+acceptances, one rejection, two successes, one cancellation and one abort.
+Both children restored tokens and exited 0 without forced signals.
+
+Both A and B logged `No unicast locators to create unique flows` and
+`Problem creating associated Reader`; independent post-run review traced the
+existing RMW's OPTIONALLY_REQUIRED retry to the original QoS on the same
+Participant/custom Transport. Unique flows were not provided; STRICTLY_REQUIRED
+was not tested. This is neither builtin fallback nor an error-free startup.
+The sealed tester report remains unchanged. The 08:25 UTC additive final tester
+supplement restores scoped PASS after the temporary log-triage hold; Main's full
+graph/PRE_COMMIT/publication gate is separate. See
+[native Action artifacts, commands, limitations and evidence](ROS2_NATIVE_ACTION_ACCEPTANCE.md).
+
+| Capability | Status and evidence boundary |
+| --- | --- |
+| Fixed native identity and peer directory | SUPPORTED for the exact R25 identity on A/B: native/normal APL, DATASYNC only, token restoration, one local/online directory query per fresh run, SDK buffer release and private local UDID export. Old probe identity remains DENIED. |
+| Native C++ Action | PARTIAL: five requests, four accepted, one rejected; two succeeded, one canceled, one aborted; UUID correlation, feedback and concurrent server goals pass in one actual paired window with application readiness barriers. The recorded optional unique-flow failure recovers through the existing RMW original-QoS retry; it is not an error-free startup. |
+| Native transport path | SUPPORTED for that bounded run: actual project RMW/Fast DDS maps and real SoftBus provider, fake_sdk=0, builtin/intraprocess=0, DataSharing OFF; bidirectional SDK send/ingress and writer/sequence matches. This is not production qualification. |
+| Discovery | PARTIAL: actual V1 metatraffic/user locators in the same SPDP DATA and peer ingress pass; successful Action functionally exercises endpoint discovery. No dedicated SEDP wire oracle, general graph or reconnect test in R25. |
+| Pub/sub and service | PARTIAL: Action feedback/results and PAIR/TAIL Trigger readiness service work in this scenario. Prior dated general pub/sub/service results retain their own scope; R25 adds no general CLI topic/service acceptance. |
+| Serialization and message size | PARTIAL: fixed Fibonacci Action payloads in R25 and fixed String CDR on A/B in R24. R21 small/66k/burst String remains Host TCP-backed fake-DSoftBus evidence, not native large-message acceptance. |
+| Unique network flow endpoints | PARTIAL: this OPTIONALLY_REQUIRED attempt does not provide unique flows; the existing RMW retries with original QoS on the same custom Transport. STRICTLY_REQUIRED is UNVERIFIED / not executed, not a claim of permanent incompatibility. |
+| QoS and failure recovery | UNVERIFIED beyond the scenario's existing profile. No all-QoS, status-topic, unbarriered Action, reconnect, packet-loss or crash-recovery claim. R22 remains STOPPED / UNVERIFIED. |
+| Resource lifecycle | PARTIAL: public Participant deletion, pump join, local runtime close, original token restore, child exit 0 and owned Action directory cleanup pass without forced signals. SDK global callback drain/epoch/quiescence and same-process repeated Participant lifetimes are not established here. |
+| Project Python ABI | SUPPORTED only for R24 no-Node imports, fixed String CDR and help/resource queries. Full ABI and NumPy API coverage remain UNVERIFIED. |
+| Project Python Node / ordinary CLI Action | UNVERIFIED on target. Separate token-first Python launcher repair has Host evidence/review only; CLI overlay CLI-01 repair passed independent Host retesting and awaits formal review; Action Python types have build evidence only. These ongoing changes are excluded from this native 14-file stage. |
+| rosbag | PARTIAL only for earlier R19/R20 offline local String SQLite persistence. Ordinary record/play over native DSoftBus, rosbag2_py and remote replay remain UNVERIFIED. |
+| Unsupported execution choices in this stage | Session API, builtin UDP/TCP fallback and generic ROS provider substitution are excluded. Daemon mode and multiple successful Participant lifetimes per process are not qualified. |
+
+The new identity readiness PASS supersedes the earlier blanket permission
+block only for this exact identity and scenario. Old probe DENIED and earlier
+failed/blocked runs remain historical facts. No registry-wide access occurred.
+R25 publication is PENDING Main's full gate. Last confirmed publication is
+R24 `d8b0fdfecaa654183c57d4b973cc936234080667` on existing
+`origin/codex/flow-encoding-published-20261014`; 06:12:24 UTC CI NOT_RUN
+(zero runs/checks/status contexts). Earlier dated snapshots below are retained.
+
+## Earlier R24 capability overview (2026-10-17 06:02 UTC)
+
+**PROJECT_LINKED_PYTHON_ABI_NO_NODE: PASS on both RK3588A boards.** The isolated
+slice selects project Fast DDS 2.14.5/Fast CDR 2.2.5 and project RMW libraries
+before importing the measured rclpy candidate. Actual imports, exact String CDR
+and three CLI commands pass. This is bounded ABI execution evidence, not full
+ROS ABI qualification or native DSoftBus communication acceptance.
+
+| Capability | Current evidence and boundary |
+| --- | --- |
+| Project-linked CPython/rclpy/native imports | SUPPORTED, bounded: unchanged CPython 3.12.7, reused exact rclpy candidate, actual native NumPy core and 115 PROJECT_SLICE loaded native files per board with matching A/B/package hashes. Full NumPy APIs remain UNVERIFIED. |
+| String serialization/deserialization | SUPPORTED for fixed `project-python-ABI-中文`: exact independent CDR bytes and unchanged round-trip on A/B, without a Node or Participant. Other types/ABI paths remain UNVERIFIED. |
+| Isolated CLI help/resource queries | SUPPORTED: help, `pkg prefix rclpy` resolves to the fresh slice, `interface show std_msgs/msg/String` passes. Global Python and generic wrapper remain unchanged; R23 generic CLI evidence remains separately scoped. |
+| CLI Node/daemon; native DSoftBus and cross-board communication | UNVERIFIED / BLOCKED. No rclpy.init, Context initialization, Node, Participant, daemon, DSoftBus call or message exchange in R24. |
+| Pub/sub, large messages and bursts | R21 earlier bounded Host PASS: typed String small/66k/burst, Reliable 30/30 and Best Effort 30/30 over TCP fake DSoftBus. General types/sizes/load/concurrency remain UNVERIFIED; R14 failures remain open. |
+| Service, action, discovery/graph | Earlier dated evidence retains its exact scope; [Host integration](ROS2_HOST_INTEGRATION.md) and [R18 action acceptance](ROS2_ACTION_ACCEPTANCE.md) are not upgraded by R24's imports. No current project Python Node/CLI service/action/discovery acceptance. |
+| QoS and reconnect | Existing bounded QoS results unchanged; broader QoS, reconnect and failure/recovery acceptance remain UNVERIFIED. R22 Host QoS expansion is STOPPED / UNVERIFIED with five files retained uncommitted. |
+| Resource lifecycle | R24 owned build-process cleanup and exact scratch/archive removal PASS; bounded snapshots show no remaining visible owned processes. This does not establish global daemon absence, SDK drain/quiescence or concurrent DDS resource lifecycle. Earlier lifecycle limits remain. |
+| Offline persistence / POSIX entry | R20 earlier local String persistence and entry PASS unchanged; no recording/replay or cross-board persistence claim added. |
+
+Implementation PRESENT; fresh build PASS (35 commands, 769 AArch64 compile
+units including 98 generated Python units, 2,342 installed artifacts); package
+PASS (2,058 recorded files, 141 ELF members). Formal Tier 2 review found one P2
+build-timeout process-ownership defect; it was fixed, focused review passed 23
+cases/controls, then final tester rebuilt and re-ran A/B. Final ownership checks
+passed 21 cases plus sibling-survival and handle-stability controls. All 38
+device checks passed, task host/remote exits were 0 and task stderr was empty.
+Build, HOST_TESTED and DEVICE_TESTED are PASS only for this no-node scope;
+broader Transport integration is N/A to these four additive Python/CMake tools.
+DSoftBus integration remains BLOCKED / NOT_VERIFIED. Tester Commit gate PASS
+is scoped to R24; original failures and the tester counting correction remain.
+
+The next unresolved integration boundary is project Python Node/CLI lifecycle
+with the required identity and native communication validation. The successful
+candidate reuse does not require a new RMW, prove all rclpy APIs, or authorize
+permission work. Project DATASYNC remained denied at the last 2026-10-16 query;
+new persistent identity is NOT_APPROVED / NOT_EXECUTED. Prior whole-registry
+access was rejected by automatic approval review and not retried. No security,
+permission, network or global installation change occurred in R24.
+
+Last confirmed publication is R23 `9d5d70c5e8c90fb3d33c2a34c5ed8132d1ce293c` on
+existing `origin/codex/flow-encoding-published-20261014`; its CI is NOT_RUN
+(zero runs/checks/status contexts). R24 Main graph/PRE_COMMIT, commit, push and
+CI remain PENDING. See [R24 reproduction and sealed evidence](ROS2_PROJECT_PYTHON_ABI.md).
+Local ignored build inputs/evidence are not uploaded by these documentation
+references. Dated snapshots below retain their historical scope and status.
+
+## Earlier R23 capability overview (2026-10-17 04:42 UTC)
+
+**Native CLI startup is SUPPORTED within the existing generic UDPv4 deployment
+on both RK3588A boards. Project-linked Python and native DSoftBus communication
+remain UNVERIFIED / BLOCKED.**
+
+| Capability | Current evidence and boundary |
+| --- | --- |
+| Generic native Python/CLI entry and imports | SUPPORTED, bounded: real CPython 3.12.7/AArch64 OHOS, native rclpy extension, CLI help on A/B; no Node initialization or daemon command. |
+| Generic CLI resource queries | SUPPORTED, bounded: `ros2 pkg prefix rclpy` and `ros2 interface show std_msgs/msg/String`, independently on A/B. |
+| Project-linked Python/rclpy/CLI | UNVERIFIED: generic Fast DDS 2.14.6 / Fast CDR 2.2.7 differs from project 2.14.5 / 2.2.5. Loaded-library provenance does not qualify substituting the project stack. |
+| Project DSoftBus CLI Node/daemon, pub/sub, service, action, QoS, cross-board delivery | UNVERIFIED / BLOCKED; R23 creates no Node, starts no daemon and exchanges no messages. Earlier R18/R20/R21 results retain their exact separate scopes. |
+| R21 typed String Host delivery | Earlier bounded PASS: Reliable 30/30 and Best Effort 30/30 over the TCP fake DSoftBus seam; not native communication. R14 old failures remain open. |
+| R20 POSIX entry/local String persistence; R18 action evidence | Earlier bounded results unchanged; see their dated records and [target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) / [action acceptance](ROS2_ACTION_ACCEPTANCE.md). No broader claim follows from R23. |
+| R22 Host QoS boundary expansion | STOPPED / UNVERIFIED by user correction. Five uncommitted files retained unchanged; no further Host expansion is underway. |
+
+Implementation PRESENT; Python AST checks PASS; fresh C++ build N/A (two additive
+Python scripts, no Transport/DDS/RTPS changes). Initial help-oracle failure is
+retained; corrected initial testing PASS, independent Tier 2 agentic review
+completed with no findings and 14 local fault controls, then final independent
+testing PASS with 34 checks. Fresh A/B probe/help/two-query tasks all returned
+host 0/remote 0 with empty task stderr. Owned scratch cleanup and process
+snapshots passed; those snapshots do not establish global daemon absence.
+DEVICE_TESTED=PASS only for this CLI/import/resource scope. DSoftBus integration
+and cross-device communication are NOT_TESTED; overall native ROS 2/DSoftBus
+remains NOT VERIFIED. Tester Commit gate PASS is R23 scoped.
+
+The next small step is an isolated project Python/library prefix selected before
+the first rclpy import, reusing the existing CPython and suitable R18 rcl_action
+artifacts. Complete the measured dependency closure and determine extension
+compatibility there; neither compatibility nor a mandatory rclpy rebuild is
+established. No new RMW or broad ROS rebuild is justified by this evidence.
+
+Project DATASYNC remained denied at the last 2026-10-16 query. A new persistent
+identity is NOT_APPROVED / NOT_EXECUTED; prior whole-registry access was rejected
+by automatic approval review and not retried. No security/global changes occurred.
+Last confirmed publication before R23 is R21
+`ed7e26c413d0f5a7553f69b0df7aad58d65908a3` on the existing
+`origin/codex/flow-encoding-published-20261014`. R23 publication and Main's final
+graph/PRE_COMMIT gates are PENDING; no R23 SHA or CI success is predicted.
+
+See [R23 reproduction, exact artifacts and local evidence seals](ROS2_NATIVE_CLI_STARTUP.md).
+Evidence under the original workspace's ignored `build/r23-native-cli` is local,
+not uploaded by these documentation references. Dated snapshots below retain
+their historical scope and publication state.
+
+## Earlier R21 capability overview (2026-10-16 16:56 UTC)
+
+**Scoped Windows Host delivery PASS:** typed String small/66k/burst in Reliable
+30/30 and strict Best Effort 30/30; R17 serialized regression 4/4. These are
+actual ROS processes over the TCP-backed fake DSoftBus Host seam.
+
+| Completed / current | Remaining / next |
+| --- | --- |
+| 68 controls, independent Tier 2 review with no code findings/fixes, final three actual windows once each, all six exit0/no forced kill/orphans/six port rebinds | Native/cross-device remains BLOCKED; general types/sizes/load/QoS and fragment/drop causality remain NOT VERIFIED. R14 old failures are not closed. |
+| Initial fresh MSVC x64 /MD build; final reuses source/compiler/dependency/artifact-verified outputs, no final recompile | R22 reliability offered/requested boundary is PLANNED read-only triage, not implemented/tested. |
+| R20 POSIX entry + local String storage on A/B retains earlier bounded device PASS | Those independent local runs do not establish native cross-device delivery. |
+
+Original queue limits are unchanged; no capacity refusal occurred. Final Reliable
+B has one AdapterPhase/InvalidState pre-Bridge decision during Closing; initial
+Reliable A's two decisions remain a separate observation. Full charge/refund and
+capture passed; business success does not mean zero rejected callbacks. Final
+testing completed across an infrastructure interruption without repeating a
+completed case: first tester ran controls/Reliable, finisher Best Effort/R17.
+The fixture impact-after-creation omission is preserved as a real process
+deviation with Main disposition, not a retroactive pre-edit PASS.
+
+See [R21 acceptance, commands and matrix](ROS2_FRAGMENT_HOST_ACCEPTANCE.md).
+Tester Commit gate PASS is Host scoped; Main graph/PRE_COMMIT/publication remain.
+Last confirmed publication is R20 `ab97486d814e58023f7d4f00c8bed7a945852b1a`,
+existing origin/codex/flow-encoding-published-20261014, exact-SHA 16:12:11 UTC CI
+NOT_RUN (zero runs/checks/status contexts). No R21 commit/CI is predicted.
+Missing project-only token-state/lossless restore material still blocks native
+communication; no registry retry/security action. Overall native ROS 2/DSoftBus
+NOT VERIFIED. No new major direction decision is required for this Host stage.
+
+## Earlier R20 capability snapshot (2026-10-16 15:54 UTC)
+
+**Generated `bundle/run` now starts the offline String fixture directly from an
+unrelated cwd on each RK3588A board, including a relocated path with spaces.**
+
+- Completed: fresh target compile/link/readelf/package; exact four-message
+  SQLite raw/typed persistence, definition/metadata/time/order checks and cleanup;
+  both review path defects fixed and verified on A/B.
+- Current boundary: declared executable/resource entry, unchanged argv/cwd/child
+  exit, only AMENT_PREFIX_PATH/LD_LIBRARY_PATH replaced. Actual ROS fixture
+  qualification is still offline String; A/B are independent local runs.
+- Remaining: full ROS setup/CLI/record/replay/general types/QoS/concurrency/cache/
+  crash/native cross-device remain NOT VERIFIED. R21 bounded Host delivery
+  diagnostic is PLANNED, not implemented.
+- Major decisions: use generated run with no manual prefix exports, preserve
+  Transport/Socket-only boundaries and keep native permission work separate.
+
+Final post-review tester Commit gate PASS is POSIX-entry/local-String scoped:
+20 legacy controls PASS; 15 entry methods yield **11 PASS and 4 Windows SKIP**.
+Fresh r19baglocal5 build at 15:49 UTC passed; direct A/B entry returned HDC 0 /
+remote 0 with fds=0/tasks=2 after all three close/destruction phases and PID/hash
+checks PASS. Actual physical LF/sibling/alias cases rejected before any child;
+explicit-shell and `./` leading-dash cases preserved exact values/exit. Earlier
+failures and final sandbox infrastructure failure remain; unchanged normal-user
+retry PASS does not rewrite them. DEVICE_TESTED applies to this bounded entry +
+offline persistence; overall native ROS 2/DSoftBus remains NOT VERIFIED.
+
+Last published P023 is `e13696ed6a5d185ae29e3cf1ddf5a574cf27f4c5` on existing
+origin/codex/flow-encoding-published-20261014; exact-SHA CI 14:53:27 UTC NOT_RUN
+(zero workflows/checks/status contexts). R20 graph/PRE_COMMIT/publication/CI
+remain Main gates. Missing full current project-only token-state/lossless restore
+material still blocks native communication; no registry retry or security action.
+See [current preparation/evidence](ROS2_ROSBAG_TARGET_PREPARATION.md) and
+[direct entry usage](../tests/ros2_host/rosbag_string/README.md). Historical dated
+snapshots below retain their own scope and publication state.
+
+## Earlier R19 offline capability snapshot (2026-10-16 14:38 UTC)
+
+**Offline String persistence now passes on each RK3588A board independently:**
+actual SQLite write-close-reopen, exact raw CDR and separate typed readback.
+
+- Completed: storage/SQLite/cpp artifact preparation, local consumer/bundle,
+  20 host controls, fresh local A/B runs with four fixed messages, original
+  definition/metadata/time/order checks and resource release.
+- Current boundary: direct rosbag2 Writer/Reader, sqlite3/CDR, cache disabled;
+  two independent local runs do not establish communication between boards.
+- Remaining: general CLI/record/replay/types/sizes/concurrency/crash recovery
+  and native ROS 2/DSoftBus cross-board acceptance remain unverified.
+- Major decisions: retain the offline/native separation, original ROS/Fast DDS
+  semantics and Socket-only policy. No new major direction decision is needed.
+  Native communication still requires full current project-only token-state
+  and supported lossless restoration material.
+
+Initial testing passed; formal Tier 2 review found no actionable findings and
+required no fixes; final independent tester Commit gate PASS is scoped to offline
+String persistence. Original actual 14:19:01 UTC compile/link/readelf/package
+artifacts in build/r19baglocal3 were reused unchanged by explicit Main decision,
+with full current source/header/link/resource/provenance/artifact checks before
+and after; final testing did not recompile. All 20 host controls reran, and A/B
+device runs were fresh. Host controls are mocked ELF/pure byte checks; actual
+device execution supplies the local persistence evidence.
+
+At 14:37:29 UTC board A and 14:37:41 UTC board B each returned HDC 0/remote 0.
+Four exact raw CDR rows and nanosecond receive timestamps/order, String.msg
+definition, topic/type/CDR/count/file metadata, distinct typed Reader reopen and
+independent SQLite integrity_check=ok passed. Both 28,672-byte databases share
+SHA256 `ec0dc919934f7e66ba67f975d44067757e2e0fda88158d1755013cec7cc618f6`.
+All three close/destruction phases report bag_fds=0/task_count=2 with baseline
+thread IDs restored; all six supervised PIDs were absent afterward. Deployment
+and retrieved-file hashes passed. Device evidence is local-only; no native
+transport or identity operation occurred.
+
+Implementation/build/local integration PASS; DEVICE_TESTED=PASS for this exact
+offline fixture on A/B. Native DSoftBus INTEGRATION_TESTED=false, cross-device
+NOT_EXECUTED; overall ROS 2 over native DSoftBus NOT VERIFIED. ROS_DISTRO was
+unset (warning retained), optional ros_distro/type_description_hash are empty,
+and offered_qos_profiles=[]. No endpoint QoS, independent send-time persistence,
+full CLI/record/replay, large/concurrent/cache/crash-durability or general ABI
+claim is made. Upstream rosbag gmock tests remain NOT_RUN. Earlier CRLF-index,
+missing-libyaml packaging and missing-package.xml device failures remain FAIL;
+review/final harness failures are retained separately.
+
+Last confirmed publication remains cpp static-stage commit
+`57311e0f45aae5bdaae3b4578ef917d2e3682c27` on existing
+`origin/codex/flow-encoding-published-20261014`; exact-SHA CI at 13:42:47 UTC was
+NOT_RUN (zero workflows/checks/status contexts). Main graph/PRE_COMMIT and this
+stage's publication/CI remain separate pending receipts. Earlier whole-registry
+access was rejected by automatic approval review and was not retried; no new
+security change occurred. See [current target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md)
+and [fixture usage](../tests/ros2_host/rosbag_string/README.md) for bounded
+reproduction, exact device receipts and initial/review/final evidence seals.
+
+## Earlier R19 static-stage capability snapshot (2026-10-16 13:29 UTC)
+
+**Storage, the SQLite plugin and rosbag2_cpp have qualified target build/install
+artifacts. Local String write/read and native ROS 2/DSoftBus cross-board
+recording remain unverified.**
+
+- Completed: rosbag2_storage original objects, DSO and installation; complete
+  original SQLite plugin and rosbag2_cpp 0.26.11 cross-builds/static installs.
+  Storage's individual receipts do not establish its complete Ninja package run.
+- Current next stage: implement/package a minimal local C++ std_msgs/msg/String
+  consumer with explicit sqlite3/CDR, then verify actual board write-close-reopen,
+  raw/typed count/topic/type/format/order/receive-time/payload/definition checks
+  and resource release. This consumer is still source-only planning.
+- Remaining: actual plugin loading and runtime ABI, CLI/record/replay, then
+  native ROS 2/DSoftBus and cross-board acceptance. No new major direction
+  decision is needed; preserve original package sources/metadata, the Transport
+  boundary, Socket-only policy and legacy transport packager behavior.
+
+Canonical rosbag2_cpp final **ROSBAG2_CPP_0.26.11_BUILT_STATICALLY_INSTALLED**
+has tester Commit gate PASS for BUILDS/static installation only. Initial testing
+passed; independent Tier 2 agentic review found no actionable findings and
+requested no implementation changes; post-review final testing passed. Main's
+graph/PRE_COMMIT/publication gates remain separate. **HOST_TESTED=false,
+HOST_RUNTIME=false, DEVICE_TESTED=false, INTEGRATION_TESTED=false; overall
+NOT VERIFIED.** Upstream gmock tests remain NOT_RUN under the authorized
+BUILD_TESTING=OFF artifact scope. Device/runtime are N/A to this static stage,
+but required for subsequent runtime claims.
+
+The unchanged original cpp target has 20 source entries/19 unique TUs. Full
+Ninja all executed 19 compiles and one shared link; original installation made
+54 exact-byte copies. Final tree: 176 files/247 members/71 directories.
+Built/installed DSOs are distinct files with identical 1,151,400 bytes, SHA256
+`63d04394abffea6176b7a2b7f88dea7cd8fed578d06b30f458bccf0ab92e27c4`,
+AArch64 ELF64 ET_DYN, SONAME librosbag2_cpp.so, 79 NEEDED and no RPATH/RUNPATH.
+This does not qualify physical loading, provider ABI or runtime closure.
+The five original configure/build/build-readelf/install/installed-readelf
+commands (PIDs 40932/60496/60592/26556/75768) each ran once, exit 0. No target
+command was repeated to correct an audit.
+
+Final tester PID 44840 at 13:27:18.887705–13:27:53.105293 UTC exited 0 with
+empty stderr, refreshing 7,763 finite inputs, 718 W3 tracked raw files plus
+two gitlinks, target membership, 13 seals, 17 read-only Git commands, 54 copies,
+five original receipt/chronology joins and final-compatible install/ELF audits.
+All 134 negative controls and symmetric positive comparison passed. Broader
+unrelated historical guards remain sealed provenance, not freshly retraversed.
+Original 18-versus-17 configure-child, class_loader physical-alias and tuple/list
+audit STOPs remain historical; new source-backed audit versions changed no
+source/tool/environment/configuration flags. Final tester PID 2464's W3-relative
+path harness STOP and narrow V2 correction are also preserved. No failure was
+retroactively marked PASS.
+
+SDK23/.32 versus board .31, Windows absolute metadata/POSIX setup/relocation,
+transitive constructors and plugin loading remain unqualified. The inspected
+local APIs need no Node/Participant; unexpected Transport/identity activity
+must stop the future run. Independent SQLite send-time persistence remains
+source-unsupported, runtime-unmeasured. Source-only acceptance/bundle notes
+do not establish implementation or device execution.
+
+Normal-user read-only HDC at 12:10:08 UTC observed both known USB boards
+Connected, client exit 0 and empty stderr, after an empty sandbox discovery.
+No deployment/runtime/permission operation occurred; connectivity is not
+DEVICE_TESTED. Native communication remains BLOCKED only on the full current
+project-specific token record and supported lossless restoration material.
+Earlier whole-registry automatic approval rejection was not retried; no new
+security write occurred. Windows fake TCP/stubs remain separate evidence.
+
+Last confirmed publication is SQLite documentation commit
+`a946e9e5e3e8e6d2442f3ac81ac00da23f8595ad` on existing
+`origin/codex/flow-encoding-published-20261014` (11:57:42 UTC commit receipt).
+Its 11:59:02 UTC exact-SHA CI snapshot is NOT_RUN: zero workflows/checks/status
+contexts. No cpp commit or future CI result is predicted. See
+[target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for exact phase times,
+current capability matrix, canonical initial/review/final seals and retained
+historical evidence. Local ignored artifacts/evidence are not remotely included.
+
+## Earlier R19 SQLite plugin original-package static qualification (2026-10-16 11:42 UTC pre-publication snapshot)
+
+Final **SQLITE_PLUGIN_PACKAGE_BUILT_INSTALLED_STATICALLY_QUALIFIED** has
+bounded Commit gate PASS for the original rosbag2_storage_sqlite3 0.26.11
+package build/static install, with **STOP_BEFORE_CONSUMER_RUNTIME_OR_DEVICE**.
+All three original C++ TUs, Python two-copy/setup.cfg/egg_info/compileall actions
+were retained for OHOS SDK23 arm64-v8a/c++_shared. Configure/Ninja/build-readelf/
+install/installed-readelf each ran once, exit 0 without timeout (PIDs
+71444/58952/73712/43516/65388). Seven Ninja actions gave 97/139 build files/
+members; original installation's 23 operations/33 copies plus manifest/pyc
+gave 132 files/194 members/62 directories. Built/installed DSO bytes match:
+879,024 bytes, AArch64 ET_DYN, expected SONAME, 80 NEEDED, no RPATH/RUNPATH.
+
+FIX2 binds both original metadata generators in function and root scopes,
+correcting the old 18-child candidate to exact 19 without changing upstream
+source. FIX1 remains BLOCKED. Initial parser STOPs and alias corrections stay
+historical. Formal Tier 2 agentic review found no actionable issue or required
+code change. Final tester PID 50752 at 11:33:01-11:36:14 UTC exited 0, empty
+stderr/no timeout: historical receipts/snapshots/canonical audits, fresh live
+install/installed-ELF and immutable configure/build checks passed. Complete
+guards matched 26,278 protected records, 41 seals, four Git states, old SQLite
+79/119 and storage 138/194. No target command or historical full-stage API was
+rerun. Three final harness platform/argv/tuple-JSON failures remain retained
+with narrow tooling fixes; they were not package-command failures.
+
+Only **BUILDS/static_install PASS** is qualified. HOST_TESTED/HOST_RUNTIME,
+DEVICE_TESTED and INTEGRATION_TESTED remain false; overall **NOT VERIFIED**.
+Pre-authorized BUILD_TESTING=OFF leaves upstream unit/gmock/lint NOT_RUN.
+Windows Lib/lib native alias does not qualify case-sensitive board layout;
+host Python 3.12.3 fresh pyc static checks do not qualify board Python/CLI.
+Compileall child exit is NOT_CAPTURED. Original host hooks/absolute metadata,
+POSIX setup/relocation, target ABI/loader and transitive constructor gaps
+remain; 80 NEEDED is not runtime closure. No plugin load or raw/typed SQLite
+write-close-reopen-read ran. Independent send-timestamp persistence remains
+source-unsupported and runtime-untested.
+
+Next is the complete original rosbag2_cpp package, then a fixed String local
+SQLite consumer. Source-only readiness found 13 existing dependency Configs
+and 20 original source entries/19 unique TUs; no cpp build/runtime has run.
+Native ROS 2/Actions/cross-board still need the complete project-specific
+fastdds_dsoftbus_probe original token record and supported lossless restore.
+Existing temporary authorization remains conditional; whole-registry automatic
+approval rejection was not retried. No permission/security change or new device
+test occurred. Host fake-TCP/stubs do not prove real DSoftBus communication.
+The separate 09:34:08 UTC two-board USB/platform/space observations were
+read-only: seven HDC client exits 0/empty stderr, independent remote exit
+uncaptured, no deployment/runtime/permission query or change. They do not
+establish current connectivity or device acceptance.
+
+Last confirmed publication: `a8afcba30f27a358172f24b19c6fbc465ce327fc` on existing
+`origin/codex/flow-encoding-published-20261014`; its 09:30:56.023975 UTC CI was
+NOT_RUN in `storage-install-main-publication`. Main's later graph/PRE_COMMIT/
+publication receipt owns this stage's commit and CI. See
+[target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for the current matrix,
+artifact/evidence hashes and retained historical snapshots.
+
+## Earlier R19 original installation qualification (2026-10-16 09:25 UTC pre-publication snapshot)
+
+Final **ORIGINAL_STORAGE_INSTALL_AND_STATIC_QUALIFICATION** has bounded Commit
+gate PASS, with **STOP_BEFORE_CONSUMER_OR_RUNTIME**. The original install script
+ran once at 09:11:59 UTC (PID 54060), exit 0 and empty stderr. Its 42 exact
+copies, manifest and 16 directories give 138 files/194 members; the old 95 files
+and installed DSO bytes are unchanged. All 65 trace events, 20 INSTALL operations
+and the sole final WRITE passed. Formal review found no actionable findings;
+final replay/fresh guards at 09:21:01–09:21:57 UTC passed with no failure or
+reinstall, including 18,572 file records and all four protected Git states.
+
+POSIX setup remains incomplete: no local_setup.sh, original bat plus empty dsv,
+and absolute Windows parent prefixes. Separate shell hooks do not constitute
+a target setup entry. This does not prove the library is uncallable. Complete
+Ninja package build, consumer/loader, SQLite/cpp/local I/O, runtime and device
+checks remain NOT_RUN. Native project-only permission recovery/restore remains
+BLOCKED; earlier failures and the whole-registry approval rejection are retained.
+No new board test or permission change occurred. Overall NOT VERIFIED.
+
+Last confirmed publication: `069aa7a64188172d3c1b160d9ffc15cf212452e8` on existing
+`origin/codex/flow-encoding-published-20261014`, with 08:34:30.710397 UTC CI NOT_RUN
+in `storage-link-main-publication`. Main's later receipt records this stage's
+publication/CI. See [target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for
+capabilities, limits and canonical hashes; earlier dated sections preserve history.
+
+## Earlier R19 storage DSO static qualification (2026-10-16 08:27 UTC pre-publication snapshot)
+
+Final **ORIGINAL_STORAGE_DSO_LINKED_AND_STATICALLY_INSPECTED** has bounded
+Commit gate PASS with **STOP_BEFORE_INSTALL**. The original link ran once at
+08:04:21 UTC and static readelf once at 08:04:54–08:04:55 UTC, both exit 0
+with empty stderr. All 97 actual inputs, 181 response tokens and 121 trace
+lines were qualified. The 985,840-byte AArch64 ET_DYN has the expected SONAME,
+78 statically explained NEEDED entries, no RPATH/RUNPATH and 252 named dynamic
+imports. This is not proof of loader, ABI or runtime compatibility.
+
+Formal post-test review found no blocking issue. Final verification at
+08:20:48–08:24:51 UTC replayed evidence and refreshed all guards without another
+toolchain execution. The three planned rsp/DSO/tar outputs give 95 files/135
+members; old 92 files are unchanged. Fresh 18,507 file records, 173 memberships,
+29 seals, 215 absences and four Git states passed. The archive parser preparation
+failure, reviewer read/syntax errors and final Windows audit-argv collector
+exit 1 remain recorded with narrow fixes; none was a real link failure.
+Protection remains sampled, not continuous filesystem/process/OS closure.
+
+Complete Ninja package build, installation, SQLite/cpp/local I/O, plugin
+runtime and device tests remain NOT_RUN. Next is a separately reviewed install
+oracle derived from the real DSO/generated scripts. Native project-only
+permission recovery and lossless restore remain BLOCKED; the whole-registry
+automatic-approval rejection was not retried. SQLite's independent send-timestamp
+source limitation and SDK/board compatibility gaps remain. Overall NOT VERIFIED.
+
+The last confirmed publication is `0e493f839fec66b4c85a1fd22559b7dbade17661`
+on existing `origin/codex/flow-encoding-published-20261014`; its 07:25:32 UTC
+CI snapshot was NOT_RUN, recorded in `storage-objects-main-publication`.
+Main's subsequent publication receipt records this stage's commit/push and CI.
+See [target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for exact artifact
+and evidence hashes, current capabilities and retained historical snapshots.
+
+## Earlier R19 seven storage objects (2026-10-16 07:19 UTC pre-publication snapshot)
+
+Final **ORIGINAL_GENERATED_7_OBJECTS_COMPILED_AND_STATICALLY_CHECKED** has
+bounded Commit gate PASS, with **STOP_BEFORE_DSO_LINK**. Seven original expanded
+Ninja compiler argv ran directly and serially at 06:52:51–06:53:17 UTC, once
+each, all exit 0. The original flags remain unchanged; every stdout is empty
+and each job has the exact newly authorized unused `--gcc-toolchain` warning.
+Actual depfiles select 846 distinct dependencies, and all seven outputs pass
+bounded AArch64 ET_REL checks. This does not establish a complete Ninja package
+BUILDS or HOST_TESTED result.
+
+Formal post-test review found no blocking finding or required source fix.
+Final testing at 07:11:59–07:13:06 UTC replayed the unchanged objects/dependencies
+and refreshed guards, with no new compile/configure/Ninja/link/readelf/install/
+device command or final failure. The old 78 files remain unchanged; fourteen
+object/depfile additions give 92 files/132 members. Fresh 18,383 file records,
+173 memberships, 24 seals, 154 absences and full four-tree Git guards passed.
+These are per-job terminal snapshots and before/after protection, not realtime
+filesystem or complete child-process/OS closure.
+
+The original private-header pretest P2 BLOCKED record remains; FIX1 added its
+exact binding, actually consumed by object-05. The general `ilog2.hpp` search
+case remains UNKNOWN despite non-consumption in all seven jobs. The failed
+relative-root preparation probe, original collector sources, precise pre-run
+V2 Git-warning/full-diff correction, two reviewer representation errors and
+all earlier configuration failures remain retained in local evidence.
+
+**Final DSO link, actual final link inputs, install/RPATH, plugin runtime,
+local Writer/Reader and device acceptance remain NOT_RUN.** SDK .32/board .31
+and generator 4.6.7/target runtime 4.6.9 compatibility remain unverified; bare
+`-lrt` final selection is untested. Next is a separate bounded final DSO link
+and installation oracle, then SQLite/cpp/local I/O. Native communication remains
+BLOCKED by the missing complete project-only recovery record and lossless
+restore route; the automatic approval rejection of the whole-registry route
+was not retried. DATASYNC remains NOT_QUERIED and permissions unchanged.
+Overall R19/native ROS 2 remains NOT VERIFIED.
+
+The preceding stage was published as `b94fa6f6375c541b3170e7fc73fea1633a5ac1cb`
+on existing `origin/codex/flow-encoding-published-20261014`; its 06:02:41 UTC
+CI observation was NOT_RUN (zero workflows/checks/status contexts), recorded
+in `storage-configure-main-publication`. Main's subsequent publication receipt
+records this stage's graph/PRE_COMMIT, commit/push and CI outcome. See
+[target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for the capability matrix
+and exact local evidence hashes. Earlier dated sections retain their history.
+
+## Earlier R19 storage configuration evidence (2026-10-16 05:53 UTC snapshot)
+
+Independent final testing reports **CONFIGURE_INPUTS_AND_ID_ABI_STATIC_QUALIFIED**,
+with mandatory terminal **STOP_BEFORE_ORDINARY_OBJECTS**. The one FIX2A
+configure ran 05:19:53–05:19:55 UTC, exit 0, followed by two ABI dependency
+queries, one Ninja command inventory and the input audit. Post-test review
+found no actionable findings. Final testing at 05:49–05:51 UTC replayed the
+unchanged evidence and refreshed guards; it ran no new configure or compiler.
+Seven ordinary objects, the storage DSO, install, readelf and runtime/device
+tests remain NOT_RUN. This is not storage BUILDS or HOST_TESTED.
+
+The 4,129 bound inputs include actual SDK 6.1.0.32 metadata and the selected
+unversioned RMW library. Both ament generated inputs are real outputs.
+The 59 source-bound dev diagnostics and 17 explicit child calls were audited;
+independent child stdout/exit remains UNOBSERVED. Original storage1's missing
+generator failure, storage2's new helper diagnostics/unbound RMW STOP, FIX2's
+exact Python-argument P2 and all collector failures remain preserved. FIX2A
+corrects only five contract path strings; it does not relax parser matching.
+
+Host rosidl generator 4.6.7 versus target runtime 4.6.9, and SDK 6.1.0.32 versus
+observed boards 6.1.0.31, have no compatibility qualification. Future `-lrt`
+has a known export source but no proven linker selection; FindFastRTPS cache
+hints prove neither API/ABI nor version compatibility. Next is separately
+gated ordinary compilation, then link/install and SQLite/cpp/local I/O.
+SQLite source does not persist an independent send timestamp; runtime
+reproduction remains unrun. Overall R19/native ROS 2 remains NOT VERIFIED.
+
+Both boards were observed online during the 03:36–03:37 UTC read-only resource
+baseline; no storage artifact was deployed or tested. DATASYNC was not queried
+and permissions were not changed. Native communication remains BLOCKED by the
+missing complete project-only recovery record and lossless restore route;
+automatic approval review's whole-registry rejection was not retried.
+
+At this snapshot the preceding stage was published as
+`7e5dd899f34a6b019ead41b328c79263e41de6bf` on the existing
+`origin/codex/flow-encoding-published-20261014`; its 03:32:38 UTC CI snapshot
+was NOT_RUN. This stage's subsequent graph/PRE_COMMIT, publication and CI
+outcome belong to Main's publication receipt, not this pre-publication snapshot.
+See [target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for current scope
+and evidence; earlier dated sections retain their historical state.
+
+## R19 fresh pluginlib configuration (2026-10-16 03:23 UTC)
+
+The new root-scope **ament → pluginlib → TinyXML2** configuration has final
+**PASS_FOR_BOUNDED_FRESH_PLUGINLIB_CONFIGURATION_EVIDENCE_ONLY**. TinyXML2
+is absent before pluginlib; the original vendor/module, CONFIG adapter and
+imported targets then load in the required order. The sole FIX1 configure ran
+at 02:58:26 UTC, exit 0. Independent post-test review required no source fix;
+final read-only replay at 03:20:35–03:21:40 UTC passed, with no new configure,
+compiler, link, install, readelf or device execution.
+
+The original missing-dl STOP and pretest coverage gap remain unchanged. FIX1
+adds one exact SDK CMAKE_LIBRARY_PATH to the isolated harness and proves the
+unchanged rcutils helper's real lookup and complete two-library legacy export;
+the modern interface remains literal `dl`. The selected `libdl.a` is an
+eight-byte empty archive, not runtime loader code. This closes the named
+harness search-context P2 only. Collector failures and the broader Python/DLL/
+OS-observation limits remain in the evidence; no warning was waived.
+
+Next is the original seven-source rosbag2_storage build with its own full
+compiler/link/install qualification, then SQLite/cpp and local Writer/Reader
+acceptance. Those steps, runtime plugin loading and native ROS/DSoftBus remain
+**UNVERIFIED**; R19-PT1 stays **OPEN overall**. Local component preparation can
+proceed without token writes, subject to unverified transitive DSO behavior.
+The latest HDC snapshot (02:47:09 UTC) showed both boards USB Connected only.
+DATASYNC remains NOT_QUERIED, no permissions changed, and native communication
+still needs a complete current project-only record and lossless restore route.
+The rejected whole-token-registry route was not retried.
+
+The preceding consumer/wiring documentation stage was pushed as
+`53a13dfc5af752c03538a990bb0ae253238cfdd7` to the existing
+`origin/codex/flow-encoding-published-20261014`; its 02:23:05 UTC CI snapshot
+was NOT_RUN. This update is not yet committed/pushed; Main's graph/PRE_COMMIT
+and publication gates remain pending. See [target preparation and evidence](ROS2_ROSBAG_TARGET_PREPARATION.md).
+Earlier dated sections preserve their then-current scope and failures.
+
+## R19 static consumers and host-aware ament wiring (2026-10-16 02:06 UTC)
+
+Independent post-review final testing qualifies **13 static consumer cases
+(4 positive, 9 expected negative)**, five ordinary AArch64 object/link pairs
+and 15 metadata-only installed files. Seven fresh readelf commands passed;
+final testing did not reconfigure, rebuild, reinstall or execute a target.
+The installed-pluginlib case preloads TinyXML2. It does **not** establish
+pluginlib-first discovery, actual plugin loading or ClassLoader lifecycle.
+The plugin XML deliberately names `not_a_runtime_plugin`.
+
+A private ament prefix helper changes only `NOT WIN32` to
+`NOT CMAKE_HOST_WIN32`; the installed host helper is unchanged. Four isolated
+script cases passed final testing (the non-Windows branch is a Windows-hosted
+model, not Linux testing). The private Config shim then passed two positive
+real-ament dummy configurations and one exact-version rejection case, each
+executed once with LANGUAGES NONE. Independent post-test review found no
+required source fix; final testing completely replayed their unchanged raw
+records without reconfiguration. This qualifies the measured Windows-host /
+OHOS-target prefix and directory-scope behavior, not a ROS package build.
+Full Python-import/native-DLL/OS-I/O closure remains NOT_PROVEN.
+
+B and pluginlib A originally omitted C ABI warning classification. The exact
+15 existing C jobs now have a reviewed retrospective decision and independent
+initial/final replay. This supplements current static assurance; it does not
+make the earlier gates compliant at execution time. Old STOP results,
+withdrawn CASE PASS labels, collector failures and uncertain loaded-source
+bytes from the failed overlapping collector remain preserved. Class_loader
+had a different original contract and receives only its named assurance
+supplement. No general or future warning exemption follows.
+
+R19-PT1 remains **OPEN**; ROS 2 over native DSoftBus remains **NOT VERIFIED**.
+Next is a separate fresh pluginlib-first LANGUAGES NONE acceptance, then the
+unchanged seven-source rosbag2_storage build with complete new input bindings.
+Storage, SQLite plugin loading and local Writer/Reader are still unbuilt or
+unverified in R19. Source inspection supports local component tests without
+native-token writes; their transitive runtime behavior still needs testing.
+Native cross-board communication independently remains BLOCKED by the missing
+complete current project-only token record and supported lossless restore
+route. DATASYNC is NOT_QUERIED; no security writes occurred. Automatic approval
+review's full-token-registry rejection was not retried. The last HDC visibility
+snapshot was 2026-10-15 23:35:14 UTC, both boards USB Connected, not a new device
+test. R14's original strict failures and R18 Action's bounded Host/fake-Socket
+scope remain unchanged.
+
+The preceding documentation stage was published as
+`770d3e8b75b6bd7168acbc7a23f175ed7e51b7b1` to
+`origin/codex/flow-encoding-published-20261014`; its 23:33:09 UTC CI snapshot
+was **NOT_RUN** (zero workflows/checks/status contexts). This two-document
+update is not yet committed/pushed. Final tester gates cover only static
+consumer evidence and bounded wiring evidence; Main graph/PRE_COMMIT and
+publication gates remain separate. See [the current capability matrix and
+local evidence ledger](ROS2_ROSBAG_TARGET_PREPARATION.md). Earlier dated
+sections below are historical snapshots, including then-unexecuted consumers
+and original A diagnostic conclusions.
+
+## R19 pluginlib target build and static installation (2026-10-15 23:19 UTC)
+
+The fresh SDK23 AArch64 `c++_shared` `pluginlib-sdk-closure-fix1` build has
+**PASS_POST_REVIEW_FINAL_STATIC_PLUGINLIB_A**. The successful continuation
+ran seven authorized commands (all exit 0), including one ordinary compilation,
+one link and one install. Independent agentic review found no blocking finding
+or required source fix. Final testing replayed the immutable raw evidence and
+ran two fresh readelf inspections of built/installed `list_plugins` (both exit
+0, outputs identical to the initial inspection); it did not rebuild, reinstall
+or execute the target. All 29 installed files and 15 directories match the
+source/generated-byte contract. **BUILDS=true; HOST_TESTED=false,
+DEVICE_TESTED=false, INTEGRATION_TESTED=false, VERIFIED=false** for runtime or
+transport behavior. R19-PT1 remains **OPEN overall**.
+
+pluginlib is an INTERFACE target plus `list_plugins`, not `libpluginlib.so`;
+no real test-plugin DSO was built or loaded. The original `pluginlib-next-test`
+A_BLOCKED result remains immutable. The reviewed continuation corrected the
+export expectation to CMake 3.28.3's original imported-target spelling:
+source/build ends in `tinyxml2::tinyxml2`, generated/installed export in
+`tinyxml2`. Exact target identity/location/hash checks were retained. Collector
+failures and the classified known gcc-toolchain warning remain recorded.
+See [R19 target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md) for the exact
+artifact, input closure, correction boundaries and local evidence hashes.
+
+class_loader's earlier static qualification remains valid. The planned four
+positive/nine negative consumer cases, pluginlib-first directory scope, real
+plugin loading/unloading, fixed String SQLite Writer/Reader and all DDS
+recording behavior remain **UNVERIFIED / NOT_RUN**. Compiling `list_plugins`
+does not establish general TinyXML2 6 alias/API compatibility or a full ROS 2
+runtime result.
+
+The preceding class_loader documentation stage was committed and pushed as
+`5e96a3aba1af8185a05ed195f114128557344ac8` to
+`origin/codex/flow-encoding-published-20261014`. Its 21:47:50 UTC CI observation
+had zero workflow/check runs/status contexts: **CI NOT_RUN**. Main's 23:18:07 UTC
+identity precheck found that same remote SHA. This pluginlib documentation
+stage has not been committed or pushed; Main graph/staging/PRE_COMMIT and
+publication/CI gates remain pending. Final tester gate is
+**PASS_FOR_DOCS_ONLY_PLUGINLIB_STATIC_EVIDENCE**. Referenced raw evidence is
+local ignored build content and is not included in the remote repository.
+
+At 21:51:22 UTC HDC listed both RK3588A boards USB Connected; that establishes
+visibility only, not new device testing. Native permission restoration remains
+**BLOCKED** pending a complete current project-only token record and supported
+lossless restore route, despite conditional authorization. Current DATASYNC is
+**NOT_QUERIED**. Automatic approval review's full-token-registry rejection was
+not retried; no security changes occurred. R18's bounded native-load/rejection
+and historical cross-board evidence retain their original limits. Overall ROS 2
+over native DSoftBus remains **NOT VERIFIED**. Earlier dated sections below are
+historical snapshots, including their then-unexecuted pluginlib status.
+
+## R19 class_loader target build and static installation (2026-10-15 21:37 UTC)
+
+The fresh SDK23 AArch64 `c++_shared` build `class_loader-sdk-closure-fix1`
+has **CLASS_LOADER_TARGET_INPUT_BUILD_INSTALL_FINAL_STATIC_PASS** after initial
+execution, independent agentic review with no actionable findings, and fresh
+final static checks. Final testing reused the unchanged successful build and
+ran one new `llvm-readelf -h -d` (exit 0); it performed zero new configure,
+compile, link or install commands. Four objects, three actual link archives,
+112 outputs and 27 installed files are bound. Public exports are exactly
+`console_bridge;rcpputils`. **R19-PT1 is closed only for this named fresh
+class_loader build/static-install subset; R19-PT1 remains OPEN overall.**
+
+For this scope BUILDS=true; HOST_TESTED=false, DEVICE_TESTED=false,
+INTEGRATION_TESTED=false and VERIFIED=false. pluginlib, consumer probes,
+rosbag I/O, native ROS activation and device/cross-board execution were not run.
+The older class_loader implicit-header/link-input BLOCKED result, first
+configure setup failure, collector corrections and review/final checker
+failures remain preserved. Complete canonical argument comparisons use
+44/48/53 tokens. See [R19 target preparation](ROS2_ROSBAG_TARGET_PREPARATION.md)
+for precise scope, artifact identity, retained failures and sealed evidence.
+
+The preceding documentation stage was published as
+`473312f2ab3c6bf9edcad65e4504c82226f41ee3` on
+`origin/codex/flow-encoding-published-20261014`. Its 20:30:59 UTC snapshot
+observed zero workflow/check runs/status contexts: **CI NOT_RUN**. Main's
+precheck receipt at 21:34:47 UTC records the same remote SHA. This update
+does not claim a subsequent commit, push or CI result. Final tester gate is
+**PASS_FOR_DOCS_ONLY_CLASS_LOADER_STATIC_EVIDENCE**; Main's graph, staging,
+pre-commit and publication gates remain separate.
+
+Native permission restoration remains **BLOCKED**: conditional permission
+authorization exists, but a complete current project-only native-token record
+and supported lossless restore route remain unavailable for either board.
+No grant/revoke/token switch/reload/security write occurred; current DATASYNC
+state is **NOT_QUERIED**. The full-token-registry route was rejected by
+automatic approval review and was not retried. R18's two-board native-main
+load/missing-identity rejection PASS remains a separate diagnostic claim,
+not communication acceptance. Overall ROS 2 over native DSoftBus remains
+**NOT VERIFIED**. Earlier dated sections retain their historical scope.
+
+## Windows Host connection/receive diagnostics (2026-10-15 04:41:11 UTC)
+
+R11 independent final testing qualifies the 22-file Host diagnostic candidate
+after both P2 review findings were repaired: fresh build/install, 31 CTest,
+60 Python cases and an installed C++17 consumer PASS. Macro-off core first ran
+131/132 with one original 90-second timeout; one original-limit rerun passed in
+30.04 seconds. Concurrent work and sandbox context both changed; cause remains
+UNATTRIBUTED. SDK23 ARM64 compile/link/ELF PASS is compile-only.
+
+Actual Windows TCP connection fixtures and bounded receive occupancy/release
+passed. The latter observed six callbacks, five charges/refunds, one LocalBytes
+refusal and an explicit accepted resend. A fresh two-process ROS service run
+passed 14 requests/response calls, 12 accepted responses, two timeout removals
+and two recreations, with strict full_host callback/connection/lifecycle joins.
+All 23 focused strict mutations were rejected. Retained compiler/timeout failures and negative-control forced cleanup
+remain explicit in the evidence.
+
+See [Host connection and receive observation](HOST_RECEIVE_OBSERVATION.md).
+Tester Commit gate PASS and documentation readiness are scoped to this diagnostic
+change; Main graph/pre-commit/publication/CI gates remain separate. Parameter
+stage `41cdcd13a791eb1e32b9a02f0fac8363f3d5def5` was already published separately.
+V1-05/V1-07 remain PARTIAL Host; denominator 30 and unknown aggregate completion
+are unchanged. No new full ROS feature is qualified. Historical A/04 was not
+rerun: current security-OFF 2.14.5 is not a qualified substitute for original
+security-ON 2.14.7, and DATA_FRAG identity is absent. Real callback overtaking
+and reconnect budget competition remain unverified. DEVICE_TESTED=false; both
+boards' permission is last-known DENIED at 2026-10-14T21:51:07Z, not refreshed.
+Native/cross-device acceptance remains BLOCKED and overall NOT VERIFIED.
+Earlier sections, including parameter evidence and R10 plans, remain historical.
+
+
+## Windows Host ROS parameter acceptance (2026-10-15 03:34:47 UTC)
+
+The additive parameter acceptance target passed an independent fresh final build
+and one actual ROS Windows Host pair after review repair: 17 completed remote
+operations, three accepted mutations, four rejected batches with readback, and
+three change events. RPC 17 verifies the exact final name set; the server also
+asserts that the rejected undeclared parameter is absent. Complete captures are
+A 1030 / B 1085; both processes and driver exit 0. A's six rejected callbacks
+remain unexplained (B zero). Final declaration events were zero, so replay is
+not verified. The original failed compile and corrected 16-call initial run are
+preserved separately; 19 final synthetic log checks are not business runs.
+
+V1-07 is PARTIAL for this bounded Host scenario; full parameters, action and
+native/cross-device acceptance remain NOT VERIFIED. The 30-row denominator is
+unchanged, with no aggregate completion percentage. Testing used the immutable
+R8 W2 bridge, not the unfinished concurrent R11 diagnostics. This stage performs
+no historical A/04 rerun and makes no diagnostic qualification claim. Device
+permission remains last-known DENIED (2026-10-14T21:51:07Z), not freshly queried.
+See [ROS parameter acceptance](ROS2_PARAMETER_ACCEPTANCE.md) for scenario,
+commands, review/final evidence, hashes and remaining gaps. Tester commit gate
+PASS is scoped to these additive parameter files; Main's documentation, graph,
+pre-commit, publication and CI gates remain separate. Earlier sections below,
+including the R10 statement about parameters, retain their historical scope.
+
+## Windows Host ROS service acceptance (2026-10-15)
+
+The additive service acceptance target passed independent initial and post-review
+fresh builds and one real ROS Windows Host pair at each stage: 14 server response
+calls, 12 verified accepted responses and two explicitly removed timeout requests.
+The scope covers four outstanding requests per direction, reverse replies,
+request/writer/value correlation, 250 ms application wait, recovery, client
+recreation and absent service. Final captures are complete (A 983/B 985), with
+zero rejected callbacks; initial B's two rejected callbacks remain in evidence.
+The exact response-send timeout warning now fails the gate, and the removed
+future must report the exact broken-promise code. Independent RMW late-response
+discard was not observed. Final testing used the R8 W2 final bridge DLL; this is
+new service evidence, not a rerun of the earlier pub/sub or historical A/04 cases.
+
+V1-05 remains PARTIAL; full service/action/parameters and native/cross-device
+acceptance remain NOT VERIFIED. The frozen 30-row capability denominator is
+unchanged, with no aggregate completion percentage. Failed startup/connect runs
+are retained; failed-connect abnormal teardown remains unqualified. Device
+permission was last known DENIED, with no fresh device/security changes. The
+parallel A/04 diagnostic lane produced a design only: peer endpoint identity and
+collision-safe refusal/release/budget evidence remain PLANNED. See
+[ROS service acceptance](ROS2_SERVICE_ACCEPTANCE.md) for exact scope, commands,
+initial/final evidence, review closure, retained failures and diagnostic priorities.
+Main's pre-commit/publication gate remains separate.
+
+## Windows Host IO diagnostic scope (2026-10-15)
+
+The independently reviewed, default-off Windows Host Socket diagnostic patch
+has a fresh post-review build/install and scoped final tester PASS: 27 CTest,
+29 Python checks, 7 actual DLL invalid-configuration cases and 4 synthetic
+runner replays. The one initial ordinary ROS Host reliable pair delivered
+10 writes/10 takes with complete A/B captures; B recorded one rejected
+callback. Final testing revalidated those same-source logs; the final DLL did
+not rerun the business pair. Native/RK3588A/cross-device tests are N/A for this
+Windows-only patch; broader product acceptance remains BLOCKED/unverified.
+Historical A/04 failures and device permission/deployment gates remain open.
+See [Host IO diagnostics](HOST_IO_DIAGNOSTICS.md) for usage, exact local evidence,
+retained failures and limitations. Main's pre-commit/publish gate is separate.
 ## Failed-construction module-lifetime Host closeout (2026-10-09)
 
 From baseline `bfcd1af9e4a1306b36f234822af39883c6d8b524`, the frozen Host closeout is
@@ -616,3 +2494,383 @@ N3-1 已在限定范围完成：既有 N2 `NativeSendExecution.cpp` 通过根 `C
 最终 tester 证据见 [.artifacts/verification/20260914T005000Z-permission-lifecycle-final](../.artifacts/verification/20260914T005000Z-permission-lifecycle-final)：Host CTest 10/10 PASS（权限流程 10 groups、快照守卫 158 checks）；官方平台 clang 路径下 OHOS probe 构建/链接 PASS。A/B 均完成同一已归属 native token 的 regrant、服务 GRANTED 验证、独立 Socket 创建并 Shutdown 恰好一次、revoke 后服务 DENIED 与 self 还原。A token `controlled A token reference`、B token `controlled B token reference`；最终项目记录保留为空权限身份，origin/transition JSON guard、外部记录结构及 provider hashes 均 PASS。
 
 既有 `com.kaihong.mdds` allowlist 未被替换；本次仅使用用户授权的新 `fastdds_dsoftbus_probe` 身份，最终保留空权限记录。权限 lifecycle review `.artifacts/review/20260914T004622Z-permission-lifecycle/REVIEW.md` 无 blocking finding。该证据只覆盖本机 Socket 生命周期和权限闭环，不覆盖 Listen/Bind/SendBytes、跨设备记录、SPDP/SEDP、用户数据或 RMW。该历史权限切片不证明完整 Transport 就绪；N1 限定提交门槛另见 N1_COMPLETION.md。
+
+
+## Windows Host ROS Action acceptance (2026-10-15 05:34:11 UTC)
+
+R12 adds a bounded ordinary ROS Action acceptance executable and oracle. After
+independent review repaired feedback-before-SENT acceptance, the final fresh
+VS2022 x64 Release /MD build, 61 synthetic model/helper cases and one actual
+Windows Host pair `c6a401090f2ecab8` passed: five requests, four accepted, one
+rejected, two succeeded, one canceled and one aborted. UUID/result ownership,
+actual feedback before targeted cancellation, exact cancel response and two
+concurrent executing goals are checked. Both processes exit 0 and ports
+50922/50923 allow exclusive rebind. Strict full_host reconciliation covers
+A 102/B 112 callbacks and equal charges/refunds, with zero final adapter/capacity
+refusals or send errors. Seventeen final actual-log mutants are rejected;
+synthetic replays are separate from actual ROS execution.
+
+V1-06 is PARTIAL for this Windows Host scenario only. Startup Reader errors on
+both sides remain recorded; OPTIONAL unique-flow fallback is a supported
+inference, not direct dynamic parameter/pointer proof. Strict unique-flow
+capability remains UNVERIFIED. Initial A's two Closing/InvalidState pre-bridge
+refusals retain UNKNOWN payload causality; final zeros do not erase them.
+See [ROS Action acceptance](ROS2_ACTION_ACCEPTANCE.md) for exact scenarios,
+review/final receipts, artifact hashes, command records and remaining gaps.
+
+The unchanged R11 bridge uses Fast DDS 2.14.5 SECURITY OFF / STATISTICS OFF;
+this is no original 2.14.7 SECURITY ON historical qualification. Full Action
+QoS/status delivery/replay/result retention/restart/reconnect/cancel-all/time
+cancel/natural cancellation race/large-message acceptance remain UNVERIFIED.
+Native SDK/core regressions are not newly claimed for these additive files.
+DEVICE_TESTED=false; native/cross-device acceptance remains BLOCKED and overall
+NOT VERIFIED. The last device permission observation remains DENIED on both
+boards at 2026-10-14T21:51:07Z, not refreshed. The 30-row reference remains a
+draft, with no approved aggregate or completion percentage. Tester Commit gate
+PASS and documentation readiness are scoped; Main graph/pre-commit/publication
+and CI receipts remain separate. Earlier sections are preserved verbatim as
+historical snapshots.
+
+
+## Historical Windows Host profile P1 (2026-10-15)
+
+R13 adds the explicit `historical-2147-security-statistics` selector while
+preserving `default-2145`. The historical package binds original Fast DDS
+2.14.7 SECURITY ON / STATISTICS ON, Fast CDR 2.2.8 compile inputs and a separately
+declared original runtime CDR DLL; MSVC x64 Release /MD is required. Before
+factory QoS access, the Bridge checks the actual factory module, hook ABI and
+security mode. The historical descriptor uses 65535 bytes; the default and SDK
+envelope remain 65536. No DDS/RTPS/QoS semantic or native-source change is made.
+The package is prefix-bound, not relocatable; its checks do not prove the full
+statistics ABI or runtime protection against same-path byte replacement.
+
+Independent review's R13-A1 Windows junction install-guard finding is CLOSED.
+The final independent tester reports SCOPE_QUALIFIED_FINAL_HOST_P1_PASS and
+Commit gate PASS: fresh default/historical builds and installs, 37 CTests each,
+60 parser tests, 16 synthetic module controls, four matcher models, 13 actual
+project-entry configurations with synthetic packages, real dependency/header/
+installed-package negatives, and a separate 3.6.2.0 core regression (21 groups).
+These categories are separate; the core run is not historical ABI evidence.
+
+One actual historical ROS pair (A 54928 / B 38840, both exit 0) established
+entity matching/service readiness with zero business samples/requests/callbacks.
+Live modules were captured on both sides. Strict full_host reconciliation
+passed with A 96 / B 94 ingress callbacks, equal admissions/charges/refunds and
+zero final refusals. One actual direct-DDS duplicate-ID failed-construction
+probe (68416, exit 0) verified exact failure-frame retention and cleanup with
+zero SDK entries. It does not prove Listen or ROS-node-construction failure.
+Initial FIX3's two Closing refusals retain unknown payload causality.
+
+Canonical evidence is build/r13-profile/final-test-port-qualified. The older
+final-test result remains BLOCKED: Windows excluded its planned ports before
+any ROS/DDS children started. Main accepted new ports after an exclusive-bind
+diagnostic, changing only ports/output paths; sources, binaries, policy,
+timeouts and oracles stayed unchanged. Both runtime scenarios then ran once.
+No network permission/settings were changed. Earlier initial FAIL rounds and
+fixture preparation errors remain preserved. See
+[historical Host profile qualification](ROS2_HISTORICAL_HOST_PROFILE.md) for
+configuration, capability matrix, exact command records, hashes and limits.
+
+Implementation PRESENT; build PASS; HOST_TESTED and INTEGRATION_TESTED apply
+only to bounded real ROS/DDS over the Host opaque-byte simulated lower layer.
+DEVICE_TESTED=false; native/cross-device BLOCKED; overall NOT VERIFIED. Last
+DISTRIBUTED_DATASYNC observation remains DENIED on both boards at
+2026-10-14T21:51:07Z, not refreshed. Original A/04, DATA_FRAG, historical business
+workloads and broad QoS/reconnect acceptance remain NOT_RUN or UNVERIFIED.
+SECURITY ON is not a payload-encryption claim. Main graph/PRE_COMMIT,
+commit/push and CI remain separate pending receipts at this documentation
+snapshot. Earlier sections are retained verbatim; no aggregate percentage is
+claimed.
+
+
+## Windows Host lifecycle acceptance (R15, 2026-10-15)
+
+R15 adds a standalone ordinary ROS lifecycle acceptance consumer and strict
+runner/oracle on the existing default-2145 SECURITY OFF / STATISTICS OFF Host
+package. Two OS processes exercise real ChangeState/GetState/
+GetAvailableTransitions services and TransitionEvent delivery, including callback
+FAILURE then SUCCESS, configure/activate/deactivate/cleanup, ERROR recovery
+success/failure, inactive shutdown and two finalized nodes. The lower layer is
+the TCP-backed Host fake DSoftBus Socket seam; no Transport/DDS/RTPS/RMW/native
+implementation or policy is changed.
+
+Independent review's P2 R15-C1 is CLOSED: START now requires a complete current
+module snapshot and both children still live (poll None), rather than historical
+module accumulation. This sequential observation is not an atomic liveness or
+tamper guarantee. Final fresh MSVC x64 Release /MD C++17 build, nine model
+methods (including eleven synthetic barrier controls), sixty related parser
+cases and one final real Host window passed. Canonical receipt is
+build/r15-lifecycle/final-test/FINAL_TEST_RESULT.json; tester Commit gate PASS
+is scoped to Host acceptance tooling.
+
+Final run 1fc377841d9c9a77: A 77236 / B 73444 exit 0, ten ChangeState responses,
+twelve state and twelve available-transition snapshots, twenty transition
+events, eleven callbacks and two finalized nodes. Current START module snapshots
+contain A twelve / B ten selected exact module bindings, both polls None.
+No forced kill or timeout; ports 61361/61362 allow exclusive rebind. A admits,
+charges and refunds all 148 ingress callbacks. B has 194 ingress, 177 admitted/
+charged/refunded and seventeen Adapter Closing/InvalidState pre-Bridge refusals.
+A retains two WSA10004 receive terminations and B two EOFs; both have zero send
+errors. Complete full_host accounting does not mean zero refusals/errors or
+known payload causality, which remains NOT_OBSERVED.
+
+The initial Host PASS and CRLF/LF provenance-seal failure/resolution remain
+preserved, along with all review/final evidence. See
+[ROS lifecycle Host acceptance](ROS2_LIFECYCLE_HOST_ACCEPTANCE.md) for exact
+scenario, commands, module/artifact hashes, test categories and capability
+matrix. Managed publisher gating, thrown-exception transitions, all shutdown
+origins, concurrent transitions, restart/reconnect, security-enabled lifecycle
+and native/cross-device lifecycle remain UNVERIFIED or BLOCKED.
+
+R14's strict 20 writes / 19 takes FAIL and ten opaque frames per side FAIL remain
+unchanged. Independently reviewed metadata research can associate callbacks,
+accounting and visible publishers, not encrypted inner endpoint/sample contents
+or the missing-take cause. A cross-security-layer observer would require a
+separately approved architecture exception and has not been implemented.
+DEVICE_TESTED=false; last known owner permission blocker remains DENIED on both
+boards at 2026-10-14T21:51:07Z, without a new check. ROS over native DSoftBus is
+NOT VERIFIED. Main graph/PRE_COMMIT, commit/push and CI are pending separate
+receipts at this snapshot. No aggregate completion percentage is claimed.
+
+
+## Managed lifecycle publisher Host acceptance (R16, 2026-10-15)
+
+R16 adds a standalone managed-publisher consumer and analyzer and extends the
+existing runner with a fixed managed-publisher scenario. The default R15 oracle
+and consumer remain unchanged and received full regression. Both use the existing
+default-2145 SECURITY OFF / STATISTICS OFF Windows Host fake Socket seam; no
+Transport/DDS/RTPS/RMW/security-policy or dependency source is changed.
+
+Independent review reports NO_ACTIONABLE_FINDINGS_FOUND. Final independent tests
+passed two fresh MSVC x64 Release /MD C++17 builds, seventeen model methods
+(including twenty-four barrier subcontrols), sixty related parser cases and one
+actual final window per scenario. R15 regression 4175433b256a6647 passed its
+10 changes / 12 states / 12 available snapshots / 20 events / 11 callbacks.
+R16 run 8925f9c43e172686 (A 39624 / B 74132) passed six changes, seven states,
+four probes, eight publish attempts, four deliveries, twelve events and six
+callbacks. Both publish overloads (const reference and moved unique pointer)
+were called in inactive and active phases. Actual QoS is reliable, volatile,
+KeepLast(10); stable publisher/received GID is
+010f6944c89ac1190000000000001303, implementation rmw_fastrtps_cpp.
+
+The four specified inactive attempts were not observed in remote subscriber
+callbacks during the matched finite window. This is not indefinite non-delivery,
+all-cache absence or an RTPS sequence fence. Both windows exited 0 without
+forced kill/timeout and all ports allowed exclusive rebind. Strict full_host
+reconciliation passed while retaining real pre-Bridge Closing/InvalidState
+adapter refusals: R15 A 149/149/0 and B 203/185/18; R16 A 92/78/14 and B
+134/134/0 (ingress/admitted/rejected). Callback identity and entered/returned
+records remain intact; payload causality is NOT_OBSERVED. Each process retains
+two DDS Error lines. Closing I/O records include R15 A two WSA10004 / B two EOF,
+and R16 A two EOF / B one WSA10004 plus one EOF. PASS is not zero-error proof.
+
+See [managed lifecycle publisher Host acceptance](ROS2_LIFECYCLE_PUBLISHER_HOST_ACCEPTANCE.md)
+for the capability matrix, exact commands/module and artifact hashes, canonical
+final 106-entry seal plus separate recheck receipt, and preserved initial/review/
+R15 publication evidence. Tester Commit gate PASS is limited to this Host
+acceptance-tooling stage. Main graph/PRE_COMMIT, commit/push and CI remain
+separate pending receipts at this snapshot.
+
+Main's read-only hdc list targets -v at 2026-10-15T12:24:23.860820Z exited 0 with
+empty stdout/stderr and no observed target entries; this is not a physical
+connection diagnosis. No board or permission operation occurred. The prior
+2026-10-14T21:51:07Z DENIED permission observation was not rechecked.
+DEVICE_TESTED=false; native/cross-device BLOCKED; ROS 2 over native DSoftBus
+remains NOT VERIFIED. Security-enabled publication, loaned/serialized/generic
+APIs, concurrent transition/publication, restart/reconnect remain UNVERIFIED.
+R14 strict 20 writes / 19 takes and ten opaque frames per side remain FAIL.
+No aggregate completion percentage is claimed.
+
+
+## Typed serialized publication Host acceptance (R17 FIX1, 2026-10-15)
+
+R17 adds a standalone typed serialized consumer/oracle and fixed serialized
+scenario in the shared runner. The existing default-2145 SECURITY OFF /
+STATISTICS OFF Host package is unchanged. Two sequential request/reply exchanges
+use the SerializedMessage wrapper then raw rcl_serialized_message_t publish
+overload in both directions, with 17/4096-byte bodies and exact full application
+payload checks. Each process has one application publisher/subscription, plus
+ROS auxiliary endpoints. The TCP-backed Host fake Socket seam is not native
+OpenHarmony DSoftBus; no production Transport/DDS/RTPS/RMW change is present.
+
+The original R17 run c5d261aa51080285 remains FAIL: both children exited 4,
+A serialized_bounds and B bounded_wait_expired, zero serialization/attempt/
+return/receive business records. Numeric bounds and the exact failed conjunct
+were NOT_CAPTURED; later values cannot be backfilled. FIX1 follows the pinned
+rmw_fastrtps_cpp 8.4.3 source assigning both exposed length/capacity fields to
+data_length. Before remains 8192; after must equal length with full application
+payload bytes < length <=8192. This is an implementation-specific field contract,
+not physical heap shrinking or a general ROS capacity promise.
+
+Independent FIX1 initial testing passed; agentic review found no actionable
+findings. Final independent testing passed three fresh MSVC x64 Release /MD
+C++17 builds, twenty-five model methods (including 36 barrier subcontrols),
+sixty parser cases and one final actual window per R15/R16/R17 scenario.
+R17 final f9333cf6b0dc4fd7 (A 24196 / B 53532) passed two exchanges and four each
+serializations/attempts/returns/typed receives. New numeric diagnostics measured
+A 70/4149 and B 68/4147 after-capacity=length, before 8192. Both exited 0, no kill or
+timeout, ports 65508/65510 allow exclusive rebind; current modules are 10/10 with
+both polls None. R15/R16 regressions also passed all original business oracles.
+
+Strict full_host/counter reconciliation retains real shutdown observations:
+R15 B has 5 adapter Closing/InvalidState pre-Bridge rejections; R16 A has 14;
+R17 has 0. Final R17 A 52 / B 53 ingress are all admitted/charged/refunded. Each final
+process retains two DDS Error lines; EOF/WSA10004 remain recorded. Complete
+accounting and business PASS do not imply zero errors, payload causality, or an
+explanation for earlier failures. Payload causality remains NOT_OBSERVED.
+
+See [typed serialized Host acceptance](ROS2_SERIALIZED_HOST_ACCEPTANCE.md) for
+exact commands/environment, artifact/module hashes, initial FAIL/FIX1/final
+receipts and capability matrix. Generic dynamic-loader prerequisites were
+identified in planning, not as an observed runtime failure. Loan capability was
+not measured; DataSharing OFF does not prove all publisher loans unsupported.
+Only the inspected exact-version GenericSubscription handle_loaned_message is
+not implemented; generic serialized delivery is a distinct unverified path.
+Lifecycle-serialized APIs, arbitrary sizes/fragmentation, zero-copy, security,
+concurrency and restart/reconnect remain UNVERIFIED.
+
+Main's read-only hdc list targets -v at 14:12 UTC exited 0 with empty output and
+no target entries, not a physical-disconnection diagnosis. No board/permission
+operation occurred; the last DENIED permission evidence is still 2026-10-14 and was
+not rechecked. DEVICE_TESTED=false; native/cross-device BLOCKED; overall ROS2
+over native DSoftBus NOT VERIFIED. R14's 20 writes/19 takes and ten opaque frames
+per side remain FAIL. Tester Commit gate PASS is Host-scoped; Main graph/
+PRE_COMMIT, commit/push and CI remain pending separate receipts at this snapshot.
+No aggregate completion percentage is claimed.
+
+
+## R18 Action acceptance with application readiness precondition (2026-10-15)
+
+R18's post-review final result is PASS_WITH_APPLICATION_READINESS_PRECONDITION.
+The example CMake supports the selected Windows Host/OHOS Target packages; its
+application-only Trigger handshake binds PAIR and TAIL to run/accepted UUIDs.
+This controls acceptance scheduling, not production Action/Transport semantics.
+Ordinary ROS-legal early-feedback risk remains. The original no-barrier run
+eb7af94cc32edb89 stays FAIL (both exit 4, bounded_wait_expired); cause NOT_PROVEN.
+The separate mechanism run stays PASS_MECHANISM_ONLY, not proof of that cause.
+
+Readiness initial FIX1 passed fresh native/Host builds, 70 model methods and 17
+synthetic controls. Original configure/map-path/classifier failures are retained.
+Formal review found no blocking findings and required no source change. Final
+validation reused hash-bound artifacts with zero new configure/build, reran 70
+models plus 17 synthetic controls, then executed one new readiness window:
+fe87b82ecd794c7e, A54800/B79508 exit 0; five requests, four accepted, one rejected,
+two succeeded, one canceled, one aborted, two readiness requests/grants/replies.
+Canonical 12 and independent 13 runtime modules per process were cumulatively
+observed, not checked by a pre-START module barrier. No kill/timeout; ports
+55602/55603 rebound simultaneously. A sends132/ingress121 and B sends121/ingress132,
+all ingress admitted/charged/refunded, zero adapter rejections in this final
+window. A two EOF and B two WSA10004 I/O terminations remain recorded. Complete
+accounting does not establish all-frame payload causality (NOT_OBSERVED).
+
+See [Action acceptance and R18 capability matrix](ROS2_ACTION_ACCEPTANCE.md#r18-current-evidence-action-acceptance-with-application-readiness-precondition)
+for exact command/environment receipts, artifact/module hashes, preserved history
+and limits. Canonical final result SHA256:
+f3801cea755215356ac97d9120c49e96e12ee29b017903633e07debafc9ad9a8;
+98-file manifest SHA256:
+5a5c30d905249c5ea5a61335eafcce6d13b3fe3c5ec0344601af721959b3a24a.
+
+Native dependency/bridge/consumer builds and static inspection pass; native
+loader/runtime, RK3588A Action and cross-device Action were not executed.
+Host28.1.16/native28.1.22 relevant source correspondence is not native proof.
+The temporary project permission window is conditionally authorized, but a
+complete project-only original record and lossless restoration route remain
+unavailable. No grant/revoke/token switch/reload/security write occurred. The
+R18 read-only board/platform observations do not establish permission or Action
+qualification. Historical V1 real cross-board pub/sub/service evidence remains
+separate and valid for its own artifacts; it does not qualify this change.
+
+R19's three standalone vendor libraries have BUILDS/static PASS and scoped
+independent review without blocking findings; R19-V1 remains OPEN. Wrappers,
+plugin, consumer, runtime record/replay and device are unverified. R14 strict
+20/19 and opaque-frame failures remain unchanged. DEVICE_TESTED=false for R18;
+native/cross-device BLOCKED; overall ROS 2 over native DSoftBus NOT VERIFIED.
+Documentation may be ready as a truthful record, but R18 normal Ready for commit
+is NO: required device/cross-device and applicable Main gates remain unmet.
+Main graph/PRE_COMMIT, commit/push and CI receipts are pending, not preclaimed.
+
+
+## R18_SOURCE_BUILD_HOST_STAGE scoped publication readiness (2026-10-15)
+
+A new prospective Main scope decision and independent technical/policy review
+retain the exact six-file candidate as OHOS Action consumer build enablement
+plus Windows readiness-constrained Action acceptance. No source split or
+production Transport/RMW/identity change occurred. Existing native startup is
+newly reachable from the example; absence of native runtime impact is not claimed.
+
+Independent tester Commit gate is PASS_FOR_EXACT_SOURCE_BUILD_HOST_STAGE:
+31,000 unique paths rechecked with zero drift; the recorded native build/static
+artifacts and canonical post-review Windows evidence remain bound. The scope
+assessment reused 70 model methods, 17 synthetic controls and run
+fe87b82ecd794c7e; new model/build/business executions are zero. This is not a
+second runtime success. Tester result SHA256:
+4ffa2d84f7a45006ee18df33a1cfee0be1915ab13f30049b4b36003ae4011f7a;
+20-entry manifest SHA256:
+fca510e0f2dfe57c795f42a2157f7cc6ac9190b781cd09b1ac9451afbe3547b7.
+
+Scoped documentation Ready for commit: YES only for R18_SOURCE_BUILD_HOST_STAGE.
+Main graph, staged-identity and applicable PRE_COMMIT remain separate pending
+gates; no commit/push/CI success is claimed. This supplements the preceding
+broader NO/BLOCKED snapshot without rewriting it. See the appended
+[Action scope matrix](ROS2_ACTION_ACCEPTANCE.md#r18-bounded-sourcebuildhost-stage-prospective-publication-qualification)
+and separate publication-scope-docs receipt.
+
+Native loader/symbol resolution, missing-identity rejection, identity selection/
+restoration, actual DSoftBus Socket/Action and cross-board discovery/readiness/
+lifecycle remain RequiredForNativeQualification: NOT_RUN/BLOCKED, not N/A.
+The 17:55 loader diagnostic stopped after one HDC discovery with exit 0 and empty
+output: zero remote commands/deployment/runtime. This is not proof of a physical
+board disconnection. Complete project-only permission-record recovery remains
+unestablished; no security write occurred. DEVICE_TESTED=false; overall native
+ROS 2 qualification remains NOT VERIFIED. Original no-barrier FAIL/cause
+NOT_PROVEN, PASS_MECHANISM_ONLY and R14 failures remain unchanged.
+
+
+## 2026-10-15 current bounded update: R18 published, loader diagnostic and R19 preparation
+
+This update supplements the earlier dated snapshots. R18_SOURCE_BUILD_HOST_STAGE
+was committed and pushed as `48c01f2597bf16db1ed35fbd79cc5c32826f0ab8` to existing
+origin branch `codex/flow-encoding-published-20261014`. Main PRE_COMMIT passed
+45 checks; graph HIGH risk was retained. At 18:27:04 UTC the SHA had zero GitHub
+workflow runs/check runs/status contexts: **CI NOT_RUN**, not PASS. No later CI
+state is inferred. Local receipts: `build/r18-action-native/main-publication/`.
+
+Each RK3588A subsequently ran the native main once and returned expected exit 3
+with exact missing-identity stderr (HDC exit 0). Both passed 104 before/after
+artifact hashes, quiescence, 106 exact-file cleanup and absence checks. This is
+**DEVICE_TESTED PASS only for native main load and missing-identity rejection**;
+it is not Action, target-bridge loading, accepted identity, Socket or cross-board
+communication evidence. The independent recovered-evidence review accepted that
+limited claim and required no repeat window. See the
+[Action update and current capability matrix](ROS2_ACTION_ACCEPTANCE.md#2026-10-15-update-publication-and-bounded-native-loader-evidence).
+
+The original empty HDC discovery remains recorded. Later normal-environment HDC
+discovery recovered both boards without establishing its unique historical cause.
+The sentinel fixture failure, corrected full-line parser and unexecuted
+pre-impact draft deviation are preserved in the recovered diagnostic evidence.
+
+R19's yaml-cpp, console_bridge and SQLite standalone target libraries have
+**BUILDS / static PASS** after independent review and final recheck. Wrapper
+canonical final is **PASS_SCOPED_CONFIGURATION_CONTRACT_FINAL**: three positive
+and sixteen negative configuration receipts were independently replayed, 4799
+current bindings passed, with zero new configure/build/install/target/device
+execution in that final check. **R19-V1 is CLOSED only for the frozen four-prefix
+and actual imported-target identity contract**. The 99-file aggregate is a bound
+input for later work; vendor opt/loader hooks, full relocatability, setup-only
+runtime and rosbag read/write are not established.
+
+R19-N1 is **CLOSED_FOR_DESIGN** after the next-dependency FIX1 review. Actual
+TinyXML2 alias/class_loader/pluginlib implementation preparation is in progress;
+its compilation, probes and runtime are not yet qualified. The next planned
+acceptance is fixed `std_msgs/msg/String` typed Writer/Reader with SQLite and no
+compression. See [R19 target preparation and capability matrix](ROS2_ROSBAG_TARGET_PREPARATION.md)
+for exact boundaries and evidence hashes. Local ignored build evidence is not
+included in the remote repository by these documentation links.
+
+Actual native Action/Socket/cross-board tests remain **NOT_RUN/BLOCKED**. Temporary
+permission authorization remains conditional on a complete current project-only
+original record and a supported lossless restoration route; neither is available.
+No grant/revoke/token switch/reload/security write occurred. Current permission
+state was NOT_QUERIED. Original unbarriered Action FAIL/cause NOT_PROVEN,
+mechanism-only PASS and R14 failures remain unchanged. Overall ROS 2 over native
+DSoftBus remains **NOT VERIFIED**; this documentation sync is not a product gate.

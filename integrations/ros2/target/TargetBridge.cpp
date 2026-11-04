@@ -39,7 +39,7 @@ Values read(const char* path) {
     while (std::getline(input, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         const auto equals = line.find('=');
-        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release"&&line.substr(0,equals)!="native_reaccept_order"&&line.substr(0,equals)!="native_reaccept_control"&&line.substr(0,equals)!="route_lifecycle"&&!fastdds_dsoftbus::payload_resource::config_key(line.substr(0,equals))) ||
+        if (equals == std::string::npos || (!keys.count(line.substr(0, equals))&&line.substr(0,equals)!="runtime_close_release"&&line.substr(0,equals)!="native_reaccept_order"&&line.substr(0,equals)!="native_reaccept_control"&&line.substr(0,equals)!="route_lifecycle"&&line.substr(0,equals)!="process_restart_observation"&&line.substr(0,equals)!="process_restart_cycles") ||
                 !values.emplace(line.substr(0, equals), line.substr(equals + 1)).second)
             throw std::runtime_error("configuration syntax/duplicate/unknown key");
     }
@@ -156,6 +156,13 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
                 !std::regex_match(values.at("peer_network_id"), std::regex("[0-9a-f]{64}")))
             throw std::runtime_error("run/peer identity");
         const auto side = integer(values, "side", 1);
+        const bool process_observation=values.count("process_restart_observation")&&integer(values,"process_restart_observation",1)!=0;
+        if(values.count("process_restart_observation")&&(!bounded_native||routes||side))
+            throw std::runtime_error("process observation requires non-route bounded A");
+        const unsigned restart_cycles=values.count("process_restart_cycles")?integer(values,"process_restart_cycles",2):1;
+        if(values.count("process_restart_cycles")&&
+                (restart_cycles!=2||!process_observation||!bounded_native||routes||side))
+            throw std::runtime_error("two process restarts require explicit non-route bounded A observation");
         if (integer(values, "domain", 232) != domain) throw std::runtime_error("domain mismatch");
         for (const auto* key : {"fastdds_module", "fastcdr_module", "softbus_module", "connect_release"})
             if (!std::filesystem::path(values.at(key)).is_absolute()) throw std::runtime_error("absolute input required");
@@ -178,11 +185,12 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCreate(
         backend.peer_name = config.directory.routes.front().fields.remote_listen_name; backend.max_message_size = 65536;
         backend.bind_qos = {{0,80},{1,2000}}; backend.listen_qos = backend.bind_qos;
         backend.bounded_native_reaccept_experiment=bounded_native;backend.route_lifecycle=routes;
+        backend.bounded_native_reset_limit=restart_cycles;
         owner->runtime = std::make_unique<experimental::Runtime>(backend);
         if(bounded_native){
             const auto expected="/data/local/tmp/mdds_dds_"+owner->run+"_"+(side?"B":"A")+"/control.NATIVE_REACCEPT";
             if(values.at("native_reaccept_control")!=expected)throw std::runtime_error("native control window path");
-            auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,values.at("native_reaccept_order")=="outgoing-first",expected,false,routes);
+            auto control=std::make_shared<fastdds_dsoftbus::ros2_integration::BoundedNativeControl>(*owner,domain,values.at("native_reaccept_order")=="outgoing-first",expected,false,routes,process_observation,restart_cycles);
             if(routes)owner->node_diagnostic_close=[control]{if(!control->ExportNodeDiagnostics())throw std::runtime_error("incomplete node diagnostic capture");};
             if(!phase0::RuntimeProbeAccess::BoundedReplacementGate(*owner->runtime,[control]{return control->PermitReplacement();}))throw std::runtime_error("native replacement gate installation");
             owner->before_pump=[control]{try{return control->Step();}catch(const std::exception& error){control->Refuse(error.what());return true;}catch(...){control->Refuse();return true;}};
@@ -234,15 +242,19 @@ extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusClose(void* value)
     // The normal final summary remains separate from pre-delete value prefixes.
     auto* owner = static_cast<Owner*>(value); if (!owner) return 1;
     const auto result = owner->CloseLocal();
-    if (result == 1) { std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr); return 1; }
+    if (result == 1) {
+        std::fprintf(stdout,"ROS_CLOSE_COMPONENTS schema=1 run=%s side=%c runtime_result=1 observation_complete=NOT_RUN\n",owner->run.c_str(),owner->side?'B':'A');std::fflush(stdout);
+        std::fputs("FDDST_RUNTIME_CLOSE_INCOMPLETE\n",stderr); return 1;
+    }
     const auto native = owner->runtime->ObserveSocket();
     const bool observation_complete = fastdds_dsoftbus::ros2_target_observation::Flush();
+    const bool close_reported=std::fprintf(stdout,"ROS_CLOSE_COMPONENTS schema=1 run=%s side=%c runtime_result=%d observation_complete=%u\n",owner->run.c_str(),owner->side?'B':'A',result,unsigned(observation_complete))>=0&&std::fflush(stdout)==0;
     std::fprintf(stderr,"FDDST_REAL_SOCKET run=%s side=%u fake_sdk=%d rejected_callbacks=%llu\n",owner->run.c_str(),owner->side,
         int(native.fake_sdk),static_cast<unsigned long long>(native.rejected_callbacks));
     owner->descriptor.reset(); owner->runtime.reset();
     std::fprintf(stderr,"FDDST_ROS_CLOSED run=%s side=%u pump_joined=1 runtime_closed=1 local_only=1\n",owner->run.c_str(),owner->side);
-    if(result==0&&observation_complete&&owner->public_delete_completed){std::fprintf(stdout,"ROS_STAGE run=%s side=%c pid=%ld stage=DDS_DELETED\n",owner->run.c_str(),owner->side?'B':'A',static_cast<long>(getpid()));std::fflush(stdout);}
-    std::fflush(stderr); delete owner; return observation_complete ? result : 2;
+    if(result==0&&observation_complete&&close_reported&&owner->public_delete_completed){std::fprintf(stdout,"ROS_STAGE run=%s side=%c pid=%ld stage=DDS_DELETED\n",owner->run.c_str(),owner->side?'B':'A',static_cast<long>(getpid()));std::fflush(stdout);}
+    std::fflush(stderr); delete owner; return observation_complete&&close_reported ? result : 2;
 }
 extern "C" FASTDDS_DSOFTBUS_FACTORY_EXPORT int FastddsDsoftbusCaptureNativePrefix(
         fastdds_dsoftbus::ros2_diagnostics::NativePrefix* output) noexcept {

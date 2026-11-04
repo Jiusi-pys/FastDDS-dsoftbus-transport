@@ -90,6 +90,7 @@ friend class ::fastdds_dsoftbus::dsoftbus::NativeSendInvocation;
     // Sole operational owner; moved under original native gate, never copied.
     std::shared_ptr<NativeSendResources> resources_;
     SendQueue::Clock::time_point deadline_{};
+    std::shared_ptr<ViewDomainGuard> domain_guard_; // Original registration view, never a lookup.
     Phase phase_=Phase::Created;
     std::size_t slot_=0;
 };

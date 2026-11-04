@@ -90,6 +90,8 @@ DirectoryIssue DSoftBusTransportDescriptor::ValidateV1() const
     LocatorCodec::Decode(directory.locals.front().local_locator, local_key);
     const auto local_identity = std::find_if(directory.identities.begin(), directory.identities.end(),
         [&](const DirectoryConfiguration::IdentityBinding& value) { return value.key == local_key; });
+    if (expected_domain_id && *expected_domain_id != local_identity->domain)
+        return {DirectoryError::InvalidIdentity};
     for (const auto& identity : directory.identities)
         if (identity.name_space != local_identity->name_space || identity.domain != local_identity->domain)
             return {DirectoryError::InvalidIdentity};

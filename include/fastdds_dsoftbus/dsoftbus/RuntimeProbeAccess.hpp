@@ -6,7 +6,7 @@
 #include <functional>
 #include <fastdds_dsoftbus/dsoftbus/HostRuntimeShutdownPoint.hpp>
 namespace fastdds_dsoftbus::dsoftbus::experimental { class Runtime; }
-namespace fastdds_dsoftbus::dsoftbus::host_test { struct HostLoopObservation; }
+namespace fastdds_dsoftbus::dsoftbus::host_test { struct HostLoopObservation; struct DomainCircuitObservations; }
 namespace fastdds_dsoftbus::dsoftbus::phase0 {
 struct BoundedConnectionSnapshot {
     AdapterObservation adapter;
@@ -30,8 +30,23 @@ public:
     static bool BoundedReplacementGate(experimental::Runtime&,std::function<bool()>);
     static BackendStatus RequestNormalEnd(experimental::Runtime&,RecordRole) noexcept;
     static BoundedConnectionSnapshot ObserveConnection(const experimental::Runtime&) noexcept;
+    static host_test::HostLoopObservation ObserveRuntime(const experimental::Runtime&) noexcept;
+    static host_test::DomainCircuitObservations ObserveDomainCircuits(const experimental::Runtime&) noexcept;
     static NativeRouteSnapshot ObserveRoute(const experimental::Runtime&) noexcept;
     static void SealBoundedAdmission(experimental::Runtime&) noexcept;
+};
+// Private opt-in scheduling seam. Scope-owned callable and thread-local
+// restoration; only the arming thread's successful domain input attachment
+// invokes it. No native capability, installed API, or production setter.
+class ArmedDomainInputPublicationGate final {
+public:
+    explicit ArmedDomainInputPublicationGate(std::function<void()>) noexcept;
+    ~ArmedDomainInputPublicationGate();
+    ArmedDomainInputPublicationGate(const ArmedDomainInputPublicationGate&) = delete;
+    ArmedDomainInputPublicationGate& operator=(const ArmedDomainInputPublicationGate&) = delete;
+private:
+    std::function<void()> gate_;
+    const std::function<void()>* previous_;
 };
 bool RuntimeProbeBeforeConnect() noexcept;
 bool InvokeArmedPreConnectGate() noexcept;

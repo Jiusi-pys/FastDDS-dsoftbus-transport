@@ -4,7 +4,7 @@ struct Audit {std::atomic<int> calls{0},deaths{0},late{0};std::atomic<bool> aliv
 struct AuditedReceiver final:InputChannels::Receiver {
     std::shared_ptr<Audit> audit;std::function<void()> pause;explicit AuditedReceiver(std::shared_ptr<Audit> a):audit(std::move(a)){audit->alive=true;}
     ~AuditedReceiver(){audit->alive=false;++audit->deaths;}
-    void OnDataReceived(const rtps::octet*p,std::uint32_t n,const Locator&,const Locator&)override{if(!audit->alive)++audit->late;++audit->calls;if(pause)pause();audit->bytes.assign(p,p+n);}
+    void OnDataReceived(const std::uint8_t*p,std::uint32_t n,const Locator&,const Locator&)override{if(!audit->alive)++audit->late;++audit->calls;if(pause)pause();audit->bytes.assign(p,p+n);}
 };
 struct Observer final:ProcessReceiveObserver {
     Event entered,release;bool pause_capture=false;std::atomic<bool> paused{false};
@@ -22,7 +22,11 @@ struct C {
     bool Open(InputChannels::Receiver* p){return transport->OpenInputChannel(L(2),p,64);}
     bool Close(){return transport->CloseInputChannel(L(2));}
     void Emit(std::uint8_t value=7){mock->callbacks.OnBytes(42,&value,1);}
+#if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+    bool Send(){std::uint8_t b=19;std::vector<Locator> peers{L(3)};rtps::Locators begin(peers.begin()),end(peers.end());return senders.front()->send(&b,1,&begin,&end,std::chrono::steady_clock::now()+5s);}
+#else
     bool Send(){std::uint8_t b=19;std::vector<rtps::NetworkBuffer> buffers{{&b,1}};std::vector<Locator> peers{L(3)};rtps::Locators begin(peers.begin()),end(peers.end());return senders.front()->send(buffers,1,&begin,&end,std::chrono::steady_clock::now()+5s,0);}
+#endif
     void Delivered(){Check(loop->PumpReceive()==BackendStatus::None,"delivery");}
     void Shutdown(){transport->shutdown();auto v=loop->Observe();Check(v.closed&&v.active_pumps==0&&v.tx.records==0&&v.tx.bytes==0,"whole work settled");}
 };
