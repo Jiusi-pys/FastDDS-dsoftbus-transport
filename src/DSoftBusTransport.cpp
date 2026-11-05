@@ -305,12 +305,12 @@ void DSoftBusTransport::select_locators(Selector& selector) const
     auto& entries = selector.transport_starts(); auto r = ReadyLease(); if (!r) return;
     for (std::size_t i = 0; i < entries.size(); ++i) {
         auto* entry = entries[i]; if (!entry->transport_should_process) continue;
-#if !defined(FASTDDS_DSOFTBUS_FASTDDS_214)
+#if !defined(FASTDDS_DSOFTBUS_FASTDDS_214) && !(FASTDDS_VERSION_MAJOR == 3 && FASTDDS_VERSION_MINOR < 5)
         if (!entry->allowed_to_send) continue;
 #else
-        // The actual 2.14 selector seeds transport_should_process from enabled.
-        // It has no later allowed_to_send field; admission still uses the same
-        // frozen egress plan and per-target core gates below and in Send.
+        // The 2.14 and 3.0-3.4 selectors seed transport_should_process from enabled
+        // and have no allowed_to_send field (added in 3.5.0); admission still uses the
+        // same frozen egress plan and per-target core gates below and in Send.
         if (!entry->enabled) continue;
 #endif
         bool added = false;

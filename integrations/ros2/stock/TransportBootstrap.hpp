@@ -2,7 +2,7 @@
 
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
-#include <fastdds/rtps/transport/TransportDescriptorInterface.h>
+#include <fastdds_dsoftbus/dsoftbus/FastddsApi.hpp>
 #include <memory>
 #include <vector>
 
@@ -28,8 +28,8 @@ public:
     BootstrapResult Install(
             eprosima::fastdds::dds::DomainId_t domain,
             std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>,
-            const std::vector<eprosima::fastrtps::rtps::Locator_t>& local,
-            const std::vector<eprosima::fastrtps::rtps::Locator_t>& peers);
+            const std::vector<fastdds_dsoftbus::binding::Locator_t>& local,
+            const std::vector<fastdds_dsoftbus::binding::Locator_t>& peers);
     // Explicitly restore only this registration's unchanged default QoS after
     // successful public Participant deletion. Does not call Runtime::Close or
     // manufacture a public deletion result. A refusal changes no factory state.

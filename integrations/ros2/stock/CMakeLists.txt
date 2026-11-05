@@ -12,14 +12,60 @@ if(BUILD_STOCK_214_SHARED_REGRESSIONS AND DEFINED BUILD_TESTING AND NOT BUILD_TE
     message(FATAL_ERROR "BUILD_STOCK_214_SHARED_REGRESSIONS requires BUILD_TESTING=ON")
 endif()
 project(StockFastddsTransportBootstrap LANGUAGES CXX)
-find_package(fastrtps 2.14.5 EXACT CONFIG REQUIRED)
+# Fast DDS line used by this product: 2.14 (ROS 2 Jazzy; default, unchanged behaviour),
+# 3.6 (ROS 2 Lyrical/Rolling) or 3.2 (ROS 2 Kilted). The OHOS product pins the exact release
+# (2.14.5 / 3.6.2 / 3.2.5); Host builds accept any patch release of the selected line.
+set(FASTDDS_DSOFTBUS_STOCK_FASTDDS "2.14" CACHE STRING "Fast DDS line for the stock Transport: 2.14, 3.6 or 3.2")
+set_property(CACHE FASTDDS_DSOFTBUS_STOCK_FASTDDS PROPERTY STRINGS 2.14 3.6 3.2)
+if(FASTDDS_DSOFTBUS_STOCK_FASTDDS STREQUAL "2.14")
+    set(_stock_fastdds_release 2.14.5)
+    set(_stock_fastcdr_release 2.2.5)
+    set(_stock_fastdds_target fastrtps)
+    set(_stock_variant_definitions FASTDDS_DSOFTBUS_FASTDDS_214=1)
+    set(_stock_suffix 214)
+    find_package(fastrtps 2.14.5 EXACT CONFIG REQUIRED)
+elseif(FASTDDS_DSOFTBUS_STOCK_FASTDDS STREQUAL "3.6")
+    set(_stock_fastdds_release 3.6.2.0) # upstream package version of the v3.6.2 tag
+    set(_stock_fastcdr_release 2.3.7)
+    set(_stock_fastdds_target fastdds)
+    set(_stock_variant_definitions FASTDDS_DSOFTBUS_FASTDDS_36=1)
+    set(_stock_suffix 36)
+    if(CMAKE_CROSSCOMPILING)
+        find_package(fastdds 3.6.2.0 EXACT CONFIG REQUIRED)
+    else()
+        find_package(fastdds 3.6 CONFIG REQUIRED)
+    endif()
+elseif(FASTDDS_DSOFTBUS_STOCK_FASTDDS STREQUAL "3.2")
+    # ROS 2 Kilted line (end of life 2026-11): scatter/gather send without transport priority.
+    set(_stock_fastdds_release 3.2.5)
+    set(_stock_fastcdr_release 2.3.7)
+    set(_stock_fastdds_target fastdds)
+    set(_stock_variant_definitions FASTDDS_DSOFTBUS_FASTDDS_32=1)
+    set(_stock_suffix 32)
+    if(CMAKE_CROSSCOMPILING)
+        find_package(fastdds 3.2.5 EXACT CONFIG REQUIRED)
+    else()
+        find_package(fastdds 3.2 CONFIG REQUIRED)
+    endif()
+else()
+    message(FATAL_ERROR "FASTDDS_DSOFTBUS_STOCK_FASTDDS must be 2.14, 3.6 or 3.2")
+endif()
+if(NOT FASTDDS_DSOFTBUS_STOCK_FASTDDS STREQUAL "2.14")
+    foreach(_stock_214_only IN ITEMS BUILD_STOCK_214_LOWER_REGRESSIONS BUILD_STOCK_214_HOST_LOOP_REGRESSIONS
+            BUILD_STOCK_214_SHARED_REGRESSIONS)
+        if(${_stock_214_only})
+            message(FATAL_ERROR "${_stock_214_only} is bound to the 2.14 line")
+        endif()
+    endforeach()
+endif()
 find_package(fastcdr 2 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 get_filename_component(_repo "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 add_library(stock_transport_bootstrap STATIC TransportBootstrap.cpp)
-target_include_directories(stock_transport_bootstrap PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
+target_include_directories(stock_transport_bootstrap PUBLIC "${CMAKE_CURRENT_LIST_DIR}" "$<BUILD_INTERFACE:${_repo}/include>")
 target_compile_features(stock_transport_bootstrap PUBLIC cxx_std_17)
-target_link_libraries(stock_transport_bootstrap PUBLIC fastrtps)
+target_compile_definitions(stock_transport_bootstrap PUBLIC ${_stock_variant_definitions})
+target_link_libraries(stock_transport_bootstrap PUBLIC ${_stock_fastdds_target})
 include(GNUInstallDirs)
 install(TARGETS stock_transport_bootstrap ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES TransportBootstrap.hpp ScopedTransportBootstrap.hpp
@@ -47,12 +93,12 @@ if(BUILD_STOCK_TRANSPORT_RUNTIME_COMPILE_ONLY)
     include(../RuntimeSources.cmake)
     add_library(stock_transport_runtime_compile STATIC ${_files} "${_repo}/integrations/ros2/Observation.cpp")
     target_compile_features(stock_transport_runtime_compile PRIVATE cxx_std_17)
-    target_compile_definitions(stock_transport_runtime_compile PRIVATE FASTDDS_DSOFTBUS_FASTDDS_214=1
+    target_compile_definitions(stock_transport_runtime_compile PRIVATE ${_stock_variant_definitions}
         FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1)
     target_include_directories(stock_transport_runtime_compile PRIVATE "${_repo}/include"
         "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center"
         "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
-    target_link_libraries(stock_transport_runtime_compile PRIVATE fastrtps fastcdr Threads::Threads)
+    target_link_libraries(stock_transport_runtime_compile PRIVATE ${_stock_fastdds_target} fastcdr Threads::Threads)
 endif()
 
 # Reusable current-source OHOS product. This does not enable the legacy bridge.
@@ -64,7 +110,7 @@ if(BUILD_STOCK_TRANSPORT_OHOS_PRODUCT)
     if(NOT OHOS_STL STREQUAL "c++_shared")
         message(FATAL_ERROR "Stock product requires the declared shared SDK C++ runtime")
     endif()
-    find_package(fastcdr 2.2.5 EXACT CONFIG REQUIRED)
+    find_package(fastcdr ${_stock_fastcdr_release} EXACT CONFIG REQUIRED)
     if(NOT IS_ABSOLUTE "${DSOFTBUS_SOURCE_DIR}" OR NOT EXISTS "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport/socket.h")
         message(FATAL_ERROR "Stock product requires explicit official Socket source headers")
     endif()
@@ -109,12 +155,12 @@ if(BUILD_STOCK_TRANSPORT_OHOS_PRODUCT)
         "${_repo}/integrations/ros2/Observation.cpp" TransportBootstrap.cpp)
     add_library(FastDDSDSoftBusStock::Transport ALIAS fastdds_dsoftbus_stock_transport)
     set_target_properties(fastdds_dsoftbus_stock_transport PROPERTIES
-        EXPORT_NAME Transport OUTPUT_NAME fastdds_dsoftbus_stock_214
+        EXPORT_NAME Transport OUTPUT_NAME fastdds_dsoftbus_stock_${_stock_suffix}
         CXX_VISIBILITY_PRESET default VISIBILITY_INLINES_HIDDEN OFF
         BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "$ORIGIN" INSTALL_RPATH_USE_LINK_PATH FALSE)
     target_compile_features(fastdds_dsoftbus_stock_transport PUBLIC cxx_std_17)
     target_compile_definitions(fastdds_dsoftbus_stock_transport PUBLIC
-        FASTDDS_DSOFTBUS_FASTDDS_214=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1
+        ${_stock_variant_definitions} FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1
         PRIVATE FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1)
     target_include_directories(fastdds_dsoftbus_stock_transport PUBLIC
         "$<BUILD_INTERFACE:${_repo}/include>" "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>"
@@ -122,17 +168,17 @@ if(BUILD_STOCK_TRANSPORT_OHOS_PRODUCT)
         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/fastdds_dsoftbus/stock_transport>"
         PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport"
         "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
-    target_link_libraries(fastdds_dsoftbus_stock_transport PUBLIC fastrtps fastcdr
+    target_link_libraries(fastdds_dsoftbus_stock_transport PUBLIC ${_stock_fastdds_target} fastcdr
         PRIVATE Threads::Threads stock_dsoftbus_platform_client)
     target_link_options(fastdds_dsoftbus_stock_transport PRIVATE
-        "LINKER:-soname,libfastdds_dsoftbus_stock_214.so"
+        "LINKER:-soname,libfastdds_dsoftbus_stock_${_stock_suffix}.so"
         "LINKER:--enable-new-dtags" "LINKER:-rpath,$ORIGIN"
         "LINKER:-z,defs" "LINKER:--no-undefined" "LINKER:--no-allow-shlib-undefined")
     foreach(_provider_dir IN LISTS FASTDDS_DSOFTBUS_PLATFORM_LINK_DIRECTORIES)
         target_link_options(fastdds_dsoftbus_stock_transport PRIVATE "LINKER:-rpath-link,${_provider_dir}")
     endforeach()
     set_property(TARGET fastdds_dsoftbus_stock_transport PROPERTY
-        INTERFACE_FASTDDS_DSOFTBUS_FACADE_VARIANT stock-214-ohos-product)
+        INTERFACE_FASTDDS_DSOFTBUS_FACADE_VARIANT stock-${_stock_suffix}-ohos-product)
     set_property(TARGET fastdds_dsoftbus_stock_transport APPEND PROPERTY
         COMPATIBLE_INTERFACE_STRING FASTDDS_DSOFTBUS_FACADE_VARIANT)
     enable_language(C)
@@ -160,6 +206,29 @@ if(BUILD_STOCK_TRANSPORT_OHOS_PRODUCT)
         FILES_MATCHING PATTERN "*.hpp" PATTERN "RuntimeProbeAccess.hpp" EXCLUDE)
     install(DIRECTORY consumer DESTINATION "${CMAKE_INSTALL_DATADIR}/FastDDSDSoftBusStock"
         FILES_MATCHING PATTERN "CMakeLists.txt" PATTERN "*.cpp")
+    # Cross-board device suite and the UDP/TCP content-filter race reproducer (test executables).
+    option(BUILD_STOCK_DEVICE_SUITE "Build the cross-board device suite executables" OFF)
+    if(BUILD_STOCK_DEVICE_SUITE)
+        set(FASTDDS_DSOFTBUS_FASTDDS_SOURCE_DIR "" CACHE PATH "Fast DDS source tree of the selected release (statistics types)")
+        if(NOT EXISTS "${FASTDDS_DSOFTBUS_FASTDDS_SOURCE_DIR}/src/cpp/statistics/types")
+            message(FATAL_ERROR "BUILD_STOCK_DEVICE_SUITE needs FASTDDS_DSOFTBUS_FASTDDS_SOURCE_DIR (Fast DDS source of the selected release)")
+        endif()
+        add_executable(dsb_suite "${_repo}/tests/device_suite/dsb_suite.cpp")
+        target_include_directories(dsb_suite PRIVATE "${FASTDDS_DSOFTBUS_FASTDDS_SOURCE_DIR}/src/cpp"
+            "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
+        target_link_libraries(dsb_suite PRIVATE fastdds_dsoftbus_stock_transport stock_dsoftbus_platform_client
+            Threads::Threads ${CMAKE_DL_LIBS})
+        add_executable(cft_race "${_repo}/tests/device_suite/cft_race.cpp")
+        target_link_libraries(cft_race PRIVATE ${_stock_fastdds_target} fastcdr Threads::Threads)
+        target_compile_definitions(cft_race PRIVATE ${_stock_variant_definitions})
+        foreach(_suite_target dsb_suite cft_race)
+            set_target_properties(${_suite_target} PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "$ORIGIN/../lib")
+            foreach(_provider_dir IN LISTS FASTDDS_DSOFTBUS_PLATFORM_LINK_DIRECTORIES)
+                target_link_options(${_suite_target} PRIVATE "LINKER:-rpath-link,${_provider_dir}")
+            endforeach()
+        endforeach()
+        install(TARGETS dsb_suite cft_race RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
 endif()
 
 if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
@@ -172,13 +241,13 @@ if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
         "${_repo}/integrations/ros2/Observation.cpp")
     target_compile_features(stock_transport_host_fake PUBLIC cxx_std_17)
     target_compile_definitions(stock_transport_host_fake PUBLIC
-        FASTDDS_DSOFTBUS_FASTDDS_214=1 FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1
+        ${_stock_variant_definitions} FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT=1
         FASTDDS_DSOFTBUS_PUBLIC_SOCKET_HOST_C_SEAM=1
         PRIVATE FASTDDS_DSOFTBUS_PUBLIC_SOCKET_RUNTIME_PROBE=1)
     target_include_directories(stock_transport_host_fake PUBLIC "${_repo}/include" "${_repo}/tests"
         PRIVATE "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/transport"
         "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/bus_center" "${DSOFTBUS_SOURCE_DIR}/interfaces/kits/common")
-    target_link_libraries(stock_transport_host_fake PUBLIC fastrtps fastcdr Threads::Threads)
+    target_link_libraries(stock_transport_host_fake PUBLIC ${_stock_fastdds_target} fastcdr Threads::Threads)
     if(BUILD_STOCK_214_LOWER_REGRESSIONS)
         include("${CMAKE_CURRENT_LIST_DIR}/Stock214LowerRegressions.cmake")
     endif()
@@ -279,7 +348,7 @@ if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     target_compile_features(stock_transport_default_observed_fake PUBLIC cxx_std_17)
     target_include_directories(stock_transport_default_observed_fake PUBLIC ${_default_includes})
     target_compile_definitions(stock_transport_default_observed_fake PUBLIC ${_default_definitions} FASTDDS_DSOFTBUS_HOST_RX_OBSERVATION=1)
-    target_link_libraries(stock_transport_default_observed_fake PUBLIC fastrtps fastcdr Threads::Threads)
+    target_link_libraries(stock_transport_default_observed_fake PUBLIC ${_stock_fastdds_target} fastcdr Threads::Threads)
     add_executable(stock_transport_default_observed_tests
         "${_repo}/tests/ros2_host/stock_transport/default_participant_tests.cpp")
     target_link_libraries(stock_transport_default_observed_tests PRIVATE stock_transport_default_observed_fake)
