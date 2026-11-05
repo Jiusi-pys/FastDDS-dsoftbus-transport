@@ -1,3 +1,5 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 # ROS 2 target rosbag preparation
 
 > **Current bounded device result (2026-10-18 10:33 UTC):** Record5 A-to-B and play1 B-to-A passed on the real RK3588A pair: ten original String CDR messages persisted, independently checked after normal close, then replayed and received in exact order/bytes after one actual Resume response. Current native artifacts are reused and hash-bound, not a full rebuild/ABI rerun. Earlier ABI and offline oracle stages are published through `ee04d945b993b4e7b4cdc96f9773afa3a18817ff` (05:52:42 UTC CI NOT_RUN). This seven-source stage has final tester Commit gate PASS; Main graph/PRE_COMMIT/publication remain pending. Record2/3 FAIL and record4 BLOCKED remain unchanged. General rosbag/ROS 2, broader QoS/reconnect and SDK epoch/quiescence remain unverified; R22 STOPPED. [Full commands, evidence and limitations](ROS2_ROSBAG_RECORDPLAY_ACCEPTANCE.md). Older preparation/NOT_RUN statements below are dated snapshots.
@@ -45,9 +47,9 @@ FIX3 PASS and final sandbox MSYS/Temp infrastructure failure remain preserved;
 the unchanged normal-user retry passed. Earlier dated records below stay historical.
 
 See [fixture commands and limits](../tests/ros2_host/rosbag_string/README.md).
-Local-only evidence: [final report](../../../r20-runtime-entry/final-test/REPORT.md),
-[result](../../../r20-runtime-entry/final-test/RESULT.json) and
-[seal](../../../r20-runtime-entry/final-test/SEALED_MANIFEST.json), SHA256
+Local-only evidence: final report (historical local evidence unavailable in this checkout: `../../../r20-runtime-entry/final-test/REPORT.md`),
+result (historical local evidence unavailable in this checkout: `../../../r20-runtime-entry/final-test/RESULT.json`) and
+seal (historical local evidence unavailable in this checkout: `../../../r20-runtime-entry/final-test/SEALED_MANIFEST.json`), SHA256
 `eef15516e2c10832699cdde80f5dda1d9a5658e84ab25e67a18a16da9584b691`.
 Review seals: `02551079490612015c0311c19b19f94baf6560971e4bc8d4a19735b15aa8824b`
 and repair review `be6e9da238cbe318ceae1a89a392f53743b4e2254daba92b4ec3f3939b0f15ed`.

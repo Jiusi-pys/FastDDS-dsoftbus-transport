@@ -17,8 +17,8 @@ This project now supports three Fast DDS lines from one source tree:
 | Fast DDS | ROS 2 | Status in this project |
 | --- | --- | --- |
 | 2.14.5 | Jazzy | BUILDS, HOST_TESTED, DEVICE_TESTED. This is the existing line, unchanged and still the default. |
-| **3.6.2** (selected 3.x) | Lyrical, Rolling | BUILDS, HOST_TESTED (root suite against host Fast DDS 3.6.2.0), DEVICE_TESTED. Full suite, Security, Statistics, outage, restart, CFT race. |
-| 3.2.5 | Kilted (EOL 2026-11) | BUILDS. DEVICE_TESTED by the full suite (see section 6). |
+| **3.6.2** (selected 3.x) | Lyrical, Rolling | BUILDS; HOST_TESTED with the root CONFIG gaps in section 6.3; DEVICE_TESTED by the full device suite, Security, Statistics, outage and restart cases. CFT race results and workaround are in section 6.4. |
+| 3.2.5 | Kilted (EOL 2026-11) | BUILDS; DEVICE_TESTED by the full suite (see section 6). Host test evidence is NOT_RECORDED; the two-outage case is NOT_RUN. |
 
 ## 2. ROS 2 to Fast DDS matrix (evidence)
 
@@ -162,7 +162,7 @@ The full `BUILD_INFO.txt` and the logs are in each `<work>/<version>/` directory
 
 | Run | 2.14.5 | 3.6.2 | 3.2.5 |
 | --- | --- | --- | --- |
-| Full suite: core 3, QoS 13 (incl. transport priority), feature 14, Security 2, Statistics 1 = 35 per board | 4 runs, 70/70 each | 4 runs, 70/70 each, plus 1 earlier run at 68/68 (before the priority case existed) | 3 runs, 70/70 each |
+| Full suite: core 3, QoS 15 (incl. transport priority), feature 14, Security 2, Statistics 1 = 35 per board | 4 runs, 70/70 each | 4 runs, 70/70 each, plus 1 earlier run at 68/68 (before the priority case existed) | 3 runs, 70/70 each |
 | Route outage, one 15 s IP drop (`--route 1`) | PASS | PASS (2 runs) | PASS |
 | Route outage, two 15 s IP drops (`--route 2`) | PASS (max gap 17.4 s) | PASS (max gap 16.8 s) | not run |
 | Peer OS-process SIGKILL and restart; Participant hot rebuild; second domain; four Participants per Runtime | inside the full suite | inside the full suite | inside the full suite |
@@ -190,6 +190,10 @@ Results are in `E:/fdds-rel-20261105/batch/<version>-<run>/result.json` and `run
 - **Root suite, CONFIG mode, host Fast DDS 3.6.2.0:** 303 of 391 pass on this branch and also on `origin/main`, with an identical failure set:
   - 87 tests are "Not Run" because of root link-graph gaps that already exist on `origin/main` (`HostProviderLoop` lacks `PublicSocketBackend`).
   - `dsoftbus.naming.configuration` fails only without the Fast-DDS submodule, and passes once it is initialized.
+
+Fast DDS **3.2.5 Host tests: NOT_RECORDED** in this evidence set. The cross-board
+results in section 6.2 do not establish a Host test result. These are recorded
+2026-11-05 results; this documentation correction did not rerun the suites.
 
 ### 6.4 Content-filter race on Fast DDS 3.x (re-evaluated, not assumed)
 

@@ -1,1169 +1,165 @@
-## Supported Fast DDS versions (2026-11-05)
-
-Fast DDS **2.14.5** (ROS 2 Jazzy), **3.6.2** (ROS 2 Lyrical and Rolling) and **3.2.5** (ROS 2 Kilted) are supported and tested on two RK3588A OpenHarmony boards. For the version matrix, API/ABI differences, reproducible OHOS builds (`scripts/release/`), deployment and the cross-board test procedure, see [docs/FASTDDS_VERSIONS_AND_RELEASE.md](docs/FASTDDS_VERSIONS_AND_RELEASE.md).
-
-## 2026-10-31 evaluator rejection evidence — COMPLETE LOCAL / SYNTHETIC ONLY
-
-UTC 2026-10-30T16:57:12.512168+00:00. Bounded offline repair COMPLETE_LOCAL: source-owned safe rejection reason plus durable pre-rethrow checkpoint. FINAL_TEST_RESULT_D01.json SHA2565d23e1aa5428020f1c3a897d7bd1625a3f99d80309ba57703a9856cbae7cc073 is distinct final7 targeted synthetic/native outer0,12pins matched. Formal review finds no actionable issue. Six original parser/evaluator ASTs and58 guards remain unchanged; command/predicates did not receive a syntax fix. This does not identify historical readonly2 rejection cause, which remains UNKNOWN without serialized predicate.
-
-Exact source schema EVIDENCE_REJECTION1 records fixed step/stage EVIDENCE_EVALUATION/predicate/reason/acceptedfalse only; enum-controlled reasons, STRICT_TEXT/TEXT_DECODE_FAILED and generic unclassified exception categories never recover exception text/input/class details. Journal fsync precedes rethrow of original exception, then existing cleanup alone writes exclusive one RESULT. Record failure still rejects, no early RESULT/self-collision/accept/close bypass. Errors before evaluator and actual remote facts remain UNKNOWN.
-
-REDexit1 and initial7/native1 (wrong expected exact original exception type in test oracle) remain preserved; corrected oracle retains reason/privacy/durability assertions, affected7PASS then distinct final7PASS. Source catalog/slash/helper failures retained as offline evidence-processing failures. New final does not rerun or promote historical17 lifecycle/combination7 into whole-current-backend PASS. Olde6b actualHOLD consumed, unaccepted resource and NativeSDKDDS NOT_RUN remain unchanged. No new execution package/AUTH/once/real approval; HDC0 and no ordinary fix decision is needed. Future actual needs separately prepared corrected package and specific approval, no card request now.
-
-Only goal_evidence.py, goal_windows_backend.py and test_evidence_rejections.py form this increment; exact hashes in LOCAL_SOURCE_MANIFEST and docs receipt. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. All prior raw body/BOM/EOL/user dirt preserved below. Docs performs no tests/HDC/process/private-body/hash/production source/Git modification or successor dispatch.
-
----
-
-## 2026-10-31 actual same-scope attempt — HOLD_CONSUMED / NO RETRY
-
-Docs UTC 2026-10-30T16:22:04.913447+00:00. Original time was subsequently supplied as2026-10-30T15:44:49.285817+00:00, precisionsecond with fraction preserved, for same Sentinel request35a/replydff. Earlier execution-d01 missing-time HOLD/entry0/unconsumed remains exact history. New truthful AUTH/MDI/fresh/once then permitted unique entry1; this approved opportunity is now CONSUMED, never reset. Current actual HOLD is not runtime PASS. MAIN_ACTUAL_FACTS_D01 SHA25692a0f7e01e2a7a0fdcab7b9e5c0797629645c7727c4f7a622610d828b08bdc73 / ACTUAL_RECEIPT_REVIEW_D01 SHA2560d463c78c6218f3e56961b583f074c9c93a32028b2d55eb231af4b1022f4b8f1 / distinct ACTUAL_FINAL_RECEIPT_RESULT_D02 SHA256529aff7764f8d162ca6260bb4ef0aef1bed4e444329fbc55a4959ef2a7ef3339 establish receipt consistency ONLY.
-
-Four HDC roots actually ran: server plus three clients. Accepted server, exactA/B targets and A-provider readonly1 remoteRC0/Linux6.6.101aarch64/two aliases resolving systemlib/sameinode2799/exact cached interpreter SHA d3c3. A-resource readonly2 local0/terminalEOFtrue/strong original-handle proof true was NOT accepted. Generic OBSERVATION_OR_RECEIPT_UNKNOWN / GOAL_FAILED_OR_UNKNOWN has no serialized specific parser predicate; do not read restricted resource raw or infer memory/disk/ENOENT/permissions/ABI/format cause. No false identity31 observed in root API; repaired Win32 path achieved limited real targets/provider acceptance, not whole-goal success.
-
-ServerPID37924/h692 ownstop1/native125/terminalEOFtrue/drainEOFcleanup empty; clients natural0/stop0/EOF/prooftrue/signalfalse. Fourteen resource samples/eighteen epochs within recorded limits. Three key candidate paths before/after NOT_FOUND metadata-only. One safe server AUTH_CONTEXT_UNKNOWN continued under explicit scoped approval, not DIAGNOSTIC or real request proof. UI/USB/device/SDK/full-tree quiet remain UNKNOWN despite EOF/CIM empty.
-
-All B queries, deployment/11payloads/ELF0700/OWN/probe/data/SetSelf selection/restoration/GUID-SN-payload-ACK/DONE/TEARDOWN NOT_RUN/0. No further HDC/entry/fix or frozen source changes after failure. Original D01 final BLOCKED checker wrongly treated used sorted-set order as execution order; additive D02 reconciles matched set plus actual INTENT creation times, preserving D01 and performing no actual rerun. Tests/build N/A for actual receipt closeout, not PASS.
-
-All frozen31/canonical7 remain unchanged; prior card/Manifest/Binding/seals and user dirt retained. Possible next ordinary local acceptance-grammar/controlled-reason investigation is not dispatched; no blind actual retry or new profile. Any future actual needs corrected package qualification and new scoped approval. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical raw body follows unchanged. Docs runs no tests/process/HDC/SDK/private-content/hash/schema/Git operations.
-
----
-
-## 2026-10-30 approved scope / original-time provenance stop — NOT STARTED
-
-Documentation UTC 2026-10-30T15:54:27.368974+00:00, never asserted as user-send time. Trusted full-card scope APPROVED: requestID Sentinel_35a63cff819c8191a542a3b09d91823e / directreplyID Sentinel_dff2f1dac6888191891906e12ec578d5. No original user timestamp or precision was provided. This is not user scope denial, tool/model approval denial, Native exit/permission finding or card/source change.
-
-Independent AUTH_TIME_PROVENANCE_REVIEW_D01 SHA256052c2dd161ef1def29a20fd659ffffdef5fb8ba9823f4a390bdb9732e2795731: PASS_TRUSTED_NEW_SCOPE_APPROVAL / HOLD_MISSING_ORIGINAL_MESSAGE_TIME_PROVENANCE. Frozen goal_authorization.py requires source.sent_time_original (nonempty original time) and source.time_precision (minute/second). No supported UNKNOWN representation exists in that immutable contract. NOT_PROVIDED plus minute would exploit truthiness, not honestly represent evidence. Queue/local current time must not substitute for original user time. No re-request of already-approved scope or contract redesign is performed.
-
-INITIAL_PROVENANCE_CHECK_D01 SHA256cc2eedece8805585b26a73664d9e428ac8a17b8ce30bd443e5b021d8435e66fe confirms frozen card/manifestebe31a0ac1cff8855fbcec7957e8f8ed71fa10bbbd2e842639c6706809e62333 / bindinge055d089e31f80acf06505ec2b9b95b43ec7b60a80b29dac24558175468376c5 / seal and31pins/989/26/69 MATCH. AUTH/MAIN_ADMISSION/FRESH/ONCE/newrune6b are absent. No tester dispatch/JIT preflight/INTENT/actualentry/HDC/Native/Token/SDK action; this once remains UNCONSUMED. All provider/deploy/probe/data/GUID-SN-payload-ACK/restore NOT_RUN. Tests/build/device are N/A for this zero-action closeout, not PASS.
-
-Old consumed actual scope/5c7 HOLD stays historical. Canonical card/Manifest/Binding/source/schema/seals unchanged; necessary docs only report inability to truthfully form runtime admission. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical body follows byte-identically. No private-body/hash/PNP/HDC/Native/Token/Job/Git operation or subsequent dispatch; stop after docs.
-
----
-
-## 2026-10-30 terminal-repair composed packet — LOCAL COMPLETE / NEW APPROVAL CANDIDATE
-
-UTC 2026-10-30T14:26:21.086260+00:00. New complete local offline packet READY_FOR_NEW_SCOPED_APPROVAL / EXECUTION_NOT_AUTHORIZED. FINAL_PACKET_REVIEW_D01.json SHA25622ee65c4704d631406905500bfc99ab31452261593982419a9febf202929a3f5 qualifies current manifestebe31a0ac1cff8855fbcec7957e8f8ed71fa10bbbd2e842639c6706809e62333 / bindinge055d089e31f80acf06505ec2b9b95b43ec7b60a80b29dac24558175468376c5. Production verify_package returned0 in pure verification; this is package integrity, not actual execution. No new AUTH/Main/fresh/once/run. Old actual consumed HOLD and authorization history are not reset.
-
-Distinct FINAL_TEST_RESULT_D01.json SHA2562043afdd0c3ae0e57604e2f4c80683cd5760e41b49481cdba0043e08e7817de0 reports7 pure metadata/Fake-AST checks/native outer0, no WinDLL/backend/child/Goalentry/Grantloader. FORMAL_COMBINATION_REVIEW_D01.md SHA256b6f46eac70f94dc43eb471750b7c6861519b11a78d7cf5d98743bd055f8fac65 finds no blocking local composition issue. Reused exact seven-pin local terminal/EOF repair previously passed17 Host tests; those real CPython fixtures were NOT rerun here. Local natural31 reproduction does not diagnose historical HDC31 cause.
-
-31 project roles/14 source copies include fresh canonical-seven repair reuse; twelve exact literal-only migrations across three files, other eleven copies exact canonical. Registry123steps/121clients/115normal/max5roots is planned only. Eleven Native/tool/controller references unchanged, no new Native build/action or policy expansion. Conservative active charge23,768,086B fits unchanged32MiB active/64MiB total model; project static closure is not full platform loader/ABI/SDK attestation.
-
-CURRENT_EXECUTION_CARD_D01.md SHA2565e88de399115d577586c4d3a8deee318a17cdb4e5c15e8d40ebffdd5bf0e6a9c has new scope ONE_NEW_CURRENT_STOCK_DDS_AB_TERMINAL_REPAIR_D03 / noncee6b3148f-directdds-d03/new run-device paths. Any actual240s/121client/max5root/max8setter plan needs new explicit scoped approval with unchanged full risks; package readiness is no sensitive grant. Real data/Token/SDK/A-B DDS/normal exit NOT_RUN/NOT_VERIFIED. Old EOFfalse/unaccepted targets/HOLD remain intact.
-
-Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical raw body preserved below. Documentation changes no source/schema/active package/config/rules/old seals/Git, and runs no tests/HDC/Native/private content operation or successor dispatch.
-
----
-
-## 2026-10-30 bounded Windows terminal/drain repair — LOCAL FIX / HOST PASS ONLY
-
-UTC 2026-10-30T13:22:18.161488+00:00. Local lifecycle implementation repaired and Host-tested; real A/B stock DDS/normal exit remains NOT_VERIFIED. Distinct FINAL_TEST_RESULT_D01.json SHA25654468586d1f160caa006d1e68ba062e9246c37c505e594173df74373e4d8f421 reports17 PASS/native outer0:13pureFake (only two affected older methods) plus four fixed directly owned CPython children. Final natural post-exit image error31 was actually observed PID27920 (initial45168/retest2956), not injected. Three local observations reproduce this Windows condition only; they do NOT diagnose historical HDC Query31 cause, still UNKNOWN.
-
-Immutable original handle/PID-birth/live-image/FileID anchors distinguish strict LIVE from terminal same-handle proof; terminal state revokes signal authority. UNKNOWN remains sticky. Same2s/root and global absolute bounded drain distinguish TRUE0 from EOF, never send empty observer chunks, recognize broken109 exactly and preserve lateEOF/deadline/cancel/closed-repeat blocked status. Observer-before-capture, lateclose and critical-record failures retained. Real held-writer50ms deadline/EOFfalse remains evidence; late-tail/drain EOFtrue and only owned live-child stop1/exit125 are local fixture results, not descendant/SDK cleanup proof.
-
-Actual formal two-P2 review and focused FINAL_REVIEW_RESOLUTION_D01.md SHA2568e328ae9c35db66beaf9b350e82411c393900947179bee9f29e21e1592bea943 close local corrections before distinct final. Seven current source pins match RETEST_INPUT_D02. RED1ERROR+1FAIL,13initial, older17/current-pure retest histories, resourceBLOCK and withdrawn missing-import candidate remain preserved. No Native build, GoalBackend construction/actual permit/Goal entry, Job manager, HDC/Native/Token/SDK or broad old suite execution. No source above Transport semantics changed.
-
-Frozen goal-active-d02, D05card/AUTH/consumed once/run/actual HOLD63 seal unchanged. Old serverEOFfalse and unaccepted targets remain historical; local fix is not retroactive success. New actual experiment NOT_AUTHORIZED; old once not reset. A corrected complete execution package and new explicit approval are still required before any future actual; no new execution package prepared this round. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical raw body follows unchanged; docs performs no test/process/private-body/hash/Git operation or successor dispatch.
-
----
-
-## 2026-10-30 actual Goal attempt — HOLD_CONSUMED / NOT READY FOR REPLAY
-
-UTC 2026-10-30T12:06:30.452735+00:00. One approved Goal attempt was actually invoked and consumed: entry1/outer1. Current packet HOLD_CONSUMED, not execution PASS or replay-ready. Distinct ACTUAL_FINAL_RECEIPT_RESULT_D01.json SHA25646cc60270c9c4b19e8de3119315554ad12892c2bcec10b4f1cb4d76403c846de is PASS_RECEIPT_CONSISTENCY_ONLY. ACTUAL_TESTER_RESULT_D01.json SHA2561b85e30f6867e67a386765ebc09bf81ad63e0c4283c3da5237d5a566ecf75632 and ACTUAL_RECEIPT_REVIEW_D01.json SHA25648149ca87c0fe6b22e30834ccbbfccb13367ca539796a79924279c73d98b1072 remain authoritative historical receipts.
-
-Only serverPID672/h680 stop1/exit125/terminal/EOFfalse and targetsPID57868/h724 natural0/EOFtrue were created. Targets output was NOT accepted. Controlled API JSON line340 records QueryFullProcessImageNameW return0/immediate error31 after terminal ExitCode/Times success; root.identity revoked authority and threw before targets parse/accept. OS31 cause UNKNOWN, not demonstrated permission/ABI/disconnection. No notice events is not UI quiet; passive PnP2OK is not HDC target acceptance.
-
-Other120 client opportunities, controller/deployment/readonly4/OWN/probe/data/SetSelf selection/restoration/GUID-SN-payload-ACK are NOT_RUN/0. Seven memory samples were within limits; three default key paths NOT_FOUND metadata-only. Approved USB/automatic effects remain unknown. Both roots terminal is not complete cleanup: serverEOFfalse explicitly remains, full-tree/remote/USB recovery unproved; CIM empty is narrow snapshot only. No further entry/HDC; once stays consumed, no new scope/approval.
-
-Initial tester manual GBK JSON precheck failure entry0 remains TESTER_UTF8_PREFLIGHT_FAILURE. Explicit utf8-sig recovery, preserved old fresh/MDI backups and Main publicationD02 used same authorization before the single entry; do not erase that local failure or label it Native failure. No source/build/Fake test change or rerun by docs. Frozenactive/CardD05/Manifest/Binding/prior review cards/seals untouched. Ordinary future local terminal-original-handle identity repair and NONHDC fixture work may be planned; any future actual requires a new scoped approval, not automatically requested here.
-
-Goal real A/B stock DDS pub/sub plus normal exit remains NOT_VERIFIED. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical body follows byte-identically, including prior candidate qualification and all failures/UNKNOWN. This sync performs no source/tests/config/AGENTS/Git/private-content/Native/HDC operations or successor dispatch.
-
----
-
-## 2026-10-30 FSIZE1MiB successor — NEW SCOPED APPROVAL CANDIDATE / NOT AUTHORIZED
-
-UTC 2026-10-30T10:15:49.883692+00:00. Old64KiB packet is HOLD: inherited FSIZE65536 could not accommodate302104-byte sealed memfd before SetSelf. This later cross-artifact blocker supersedes prior candidate status without rewriting earlier docs/reviews. Ordinary1MiB successor is implemented and locally qualified, not Native-executed. Initial one C compile/one link retained strict CFI; distinct FSIZE_NEW_FINAL_RESULT_D01.json SHA256c4345c270982f2976a86eb3d2756e7eeb913d745b0f9f44b49309c01d2bd72b6 reports metadata/static proof plus22 pure-Fake tests/Windows-native Python-wrapper-outer0,16source/432proof closure. FSIZE_FORMAL_REVIEW_D01.md SHA25684a74d76da1c67a44fe3c42f49557e500ef888ced02cd56f4f32a9b154b89eae supports local closure only. Supervisor nowa392ea9eda1368436b6389e73b4eab4f46f6e895e4a557a8cef273330e255e0f.
-
-Current complete goal-active-d02 manifest8ece786b5510df86982ead8258603a0c697427a3393ea484b1ed6045232b0b14 / bindinga2cee6342516a20adb0181824c76b2338bdca7149bfcc0c64dbb7082072357df is READY_FOR_NEW_SCOPED_APPROVAL / EXECUTION_NOT_AUTHORIZED under COMPOSED_PACKET_REVIEW_D02.json SHA2565340541581f7cfcb93668c72bab0e3a9d41af9ce2d0cc5eb60abef484ae54fcd. It binds30roles/13bytecopies/123steps/121clients/115normal/5roots plan and23,593,592 charged bytes below32MiB, not executed steps. Correct substantive candidate is CURRENT_OWN_GOAL_EXECUTION_CARD_D04.md SHA256e6965a4153439753cda37b136eabbf6783993995191abed1ae9612692e179319; D03 wrong-backslash entry remains historical, not a source bug. Additive D05 only prepends final status to D04 unchanged.
-
-No HDC/Native/realSDK/Token, actual new AUTH/admission/fresh/once/run or sensitive approval. Local22 and build/static proof are not DDS/A-B/normal-exit/runtime/fullABI proof. Old8/11/18/20/21 results, capacity/failures/UNKNOWN and previous docs remain historical. Early basename-collision backup failure remains preserved, with no source edit. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. Historical body follows unchanged; no tests/private content/Git transition or further dispatch by this docs sync.
-
----
-
-## 2026-10-30 composed Goal executor — READY FOR NEW SCOPED APPROVAL / NOT AUTHORIZED
-
-UTC 2026-10-30T09:40:12.495623+00:00. Local executor implementation PRESENT and composed packet READY_FOR_NEW_SCOPED_APPROVAL; execution remains EXECUTION_NOT_AUTHORIZED. Real A/B stock DDS publish/subscribe plus normal exit remains NOT_VERIFIED. Global/PRE_COMMIT FAIL; Ready for commit NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD. New AUTH/admission/fresh/once/run absent; HDC/Native actual NONE.
-
-recovery-d03/ADAPTER_NEW_FINAL_RESULT_D02.json SHA256a607ef12665b47a8be9f9016a9bf210b8fa308fc9c9ef65bb822a443a5f17810 is distinct final21 pure-Fake tests, native Python/monitor wrapper/outer0 and15pins matched. ADAPTER_FINAL_REVIEW_D02.md SHA256c92fc774c7f614824d4abd1707cc986dc88735ab2787252ae32251336821ad75 closes source review including lateclose/record-success finalization, typed workflow/permissions/byte gates, exact providerSHA and board-resource predicates. This is Fake control evidence, not DDS/Native proof. Core C++/four artifacts reuse exact old final a5ab85ed428342c80aa035dee23f6b9ac87ffab00cf94c1a90d8abb12af55ae0 qualification without rebuild or Native run.
-
-COMPOSED_PACKET_REVIEW_D01.json SHA2566a23c5f5457dab61c0babf7960d3d1abf886e97eb45d0ec2cff2d9de9061fb85 qualifies full composition: manifest520b6daeaa54efdb3a5bdf234fc017bd1edec28e1a20cf4c24e069be44e6c3e0 / bindingfab3a739a773c90635e78d2cb84a4ab431cc2d5c61fffd5247446eaa732f7822;13 exact byte-copied executor sources,30 roles,123 registered steps/121clients,115 normal/5roots plan, activity charged23,583,721B below32MiB. This is a qualified proposed execution packet, not evidence those steps ran. Reusable direct_goal entry defaults NONE without new scoped authorization; future invocation must follow bound current card and gates.
-
-Old8/11/18/20 results, BLOCKED/capacity and historical failures/UNKNOWN remain unchanged; final21 does not retroactively promote them. Real SDK/identity/board/source-image/full mixed ABI/normal exit remain unverified. No tests/HDC/Native/private body/hash/Git transition occurs in this documentation sync. Historical entire raw body follows unchanged.
-
----
-
-## 2026-10-30 direct stock DDS mainpath — LOCAL SOURCE / BUILD / MARKED HOST ONLY
-
-Current evidence recorded UTC 2026-10-30T05:35:25.756505+00:00. Goal remains real A/B stock DDS publish/subscribe with normal exit; it is NOT_VERIFIED. Local implementation is PRESENT, Native artifacts BUILDS/static-ELF only, marked Host control path tested. No new HDC/Native/Token/SDK business authorization or execution. Global/PRE_COMMIT FAIL; Ready NO; Stage1 NOT_VERIFIED; all37 Stage2 HELD.
-
-Evidence root E:/Codex-FastDDS-stage1-directdds-mainpath-20261030-d01/recovery-d02. Canonical FINAL_TESTER_RESULT_D01.json SHA256 a5ab85ed428342c80aa035dee23f6b9ac87ffab00cf94c1a90d8abb12af55ae0 is distinct final; nested final-d01/RESULT.json SHA256 b061fd26ab9a2919cf6e98dbde227a14620cec30e787d7d19ea5525dc0c55033 is a different artifact. Actual final four metadata checks plus one marked file-control case: current CLI childPID3372 exit0, releases1,2,4,3, eleven events each side, both DONE/TEARDOWN, fixture1/native_attestationfalse. All8444 pins matched. This is no Native runtime or real DDS/board proof; prior45/65 Host assertions do not replace device acceptance.
-
-Independent initial testing, actual formal four-P2 review, Main fixes/affected retest, same-reviewer focused resolution and distinct final completed in order. FORMAL_REVIEW_RESOLUTION_D01.md SHA2564633513d8e1cecf80a43312d1b27473e2dd96e2bf03577bea9f2840566f7764e closes findings within source/build/marked-Host boundary. Native app a4d0104a7f9b0a1cf9cefc9f3a6e8f4683cc293036ac4aac4f8c5181262375b1; launcher59a5d7fd8e6bb4026dac14e5bff73e6d4f123f6a186762301ee0598414d4fa82; supervisor4133d3934d70efb709df3176e137b855367d431072df0b5fd59de05e363c6cf0 build/static evidence only. Private336B/public V2 48-byte contracts unchanged. BOOT UID/group, pure wall freshness guard, unknown query withdrawing signal authority and fixed phase return codes are code/marked-Host bounded closure.
-
-Raw GetSelf/SetSelf behavior, SDK callbacks, A/B traffic, full ABI/source-image association and normal/mixed-ABI runtime remain unverified. Existing syntaxfail/ODR/launcher-o/CRLF82/resource-capacity03:13:50 turn01a18acc and reviewfix01 syntaxfail remain preserved; later successful same-actor resource recovery does not rewrite those failures/UNKNOWNs. DOCS_PREFLIGHT_HELPER_FAILURE remains historical (canonical-vs-nested hash confusion), not execution evidence. Historical P1 corrections and every previous body byte remain intact below.
-
-Future execution-card drafts (including HDC240/parallel clients/paired setters) are not qualified approvals and do not change current authorization. Only local evidence is synchronized here; no additional development or execution follows this update.
-
----
-
-## 2026-10-29 direct-child supervisor repair — LOCAL BUILD / HOST ONLY
-
-Small C four-operation core has no group-signal capability. It requires positive creation/PPID/birth/nonconsuming wait/exclusive ownership checks; EINTR needs fresh evidence. Other wait/identity/generation/time/signal/reap uncertainty seals the state against late operations. First terminal timing/raw status and shared2s budget remain stable, with near-MAX arithmetic guarded. Normal terminal exit never signals; timeout may signal one exact owned root. Native handlers do not kill/log; alarm precedes fork/capture and ordinary context emits CREATED/UNKNOWN receipts. Root-only is not descendant cleanup, SDK quiet, restoration or Native PID/kernel proof. Descendants remain UNKNOWN; all ten Native cases HOLD.
-
-Evidence root `E:/Codex-FastDDS-stage1-supervisor-directchild-20261029-d01`: six-file formal review's two P2 findings (initial alarm/UNKNOWN receipt and explicit C11/C++17 CMake contract) were fixed, freshly retested and formally closed. CMake was not configured. Old C Native helper profile/CFI unchanged, strict zdefs/now and ARM64 ABI statically checked. Native ELF c48d98539be440c544245a003a818e37e86761348a26f7d3e11f0b5ae18bf1d8 BUILDS_NOT_RUN. Distinct prep/FINAL_RESULT_D01.json SHA256 `f7be7933f7a443b54c40cb90144cb0ca1aad1c00f7ddbe5efb8deb58b1e1f96c` records fresh ELF/Host evidence: actual Windows47152 exit0/signals0 and56512 exit201/one owned-handle signal/reaped, Jobsactive0;951 sources/9687 pins unchanged. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-supervisor-directchild-20261029-d01/final_once.py`. Cumulative6 compiles/4 links/3 Host commands; zero configure/Native/HDC/identity. Host scripted failures and actual finite Windows child handles prove Host behavior only. Prestatic D01/D02 blocks preserved; no compiler/test FAIL this phase.
-
-The exact five READONLY_SCOPE_D03 HDC commands ARE explicitly user-authorized. Eligibility is BLOCKED because no positively identified existing safe client/server channel could be established without forbidden autostart. All five (RO1, ROA provider/resource, ROB provider/resource) remain NOT_RUN, exitNone, HDC0. No server start/restart/kill, device signal or Native helper occurred. Original eligibility receipt's incorrect .md/S reference is additively corrected by hdc/ELIGIBILITY_BINDING_ADDENDUM_D02.json; missing file is not the blocker. This authorized-readonly blockage neither makes HDC generally unapproved nor contributes Native PASS.
-
-UPDATED_NATIVE_PROPOSAL_D01.json/.md replace only the supervisor reference in the five-artifact bundle; no copies or argv execution/reuse. DIRECT_SUP_* root-only protocol cannot simply replace the old wrapper in old argv. Native wait/proc/alarm/runtime and safe exact descendant contract remain unqualified. Frozen dangerous0f9c/6168 and P595/Q40 unchanged/unexecuted; current consumer88/product14878/original299 unchanged/not loaded. Current docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md separates authorized five-readonly eligibility from out-of-scope Native OS execution and unapproved sensitive selection. Stage1 NOT_VERIFIED; all37 Stage2 HELD; global/PRE_COMMIT FAIL; Ready NO. Historical bodies/failures/UNKNOWN preserved. No cleanup, successor or publication.
-
----
-
-## 2026-10-29 Native parent / reusable V2 increment — BUILD / STATIC / HOST MECHANICAL SUBSET
-
-Native parent code now implements fork/fixed-FD remap/CLOEXEC/fexecve of sealed frontend, gate and sealed manifest after actual child PIDs; owned WNOHANG/PID-only kill/wait4, shared2s cleanup/status and positive RSS accounting. Separate OS-purpose same-target logical children do not create a business Channel/Window. Kernel proc/self/exe/hash preparation and normal Native policy remain distinct. Post-LTO real parent flow is present; Native parent/child syscalls/runtime remain NOT_RUN. Host tests cover bootstrap/FD/policy and actual Windows Pipe/Port/Client built-in fixture only.
-
-Reusable48-byte GetRunApi/provider-owner/Port/Client route is genuinely linked to CLI; static CFI create/execute/destroy and folded getter table are evidenced. Actual getter CALL, cancel execution and cross-DSO ABI remain UNPROVEN. Native Port AUTH hard-denies; synthetic run/PID/token1 fixture result-8 is local policy, not a service or permission query. Currentconsumer88/product14878/original299 unchanged/not loaded. Business loader/positive Port/real consumer route remain BLOCKED; this is not completed Native V2/Transport.
-
-Evidence root `E:/Codex-FastDDS-stage1-native-parent-v2-20261029-d01`: loader report prep/LOADER_CONTRACT_D01.md finds matched cached dlopen_ext/constructor implementation and current INIT arrays; private FD ABI/name/SONAME/dependency/preloaded-provider guarantees remain UNKNOWN, not system unsupported. CLOCK_CONTRACT_D01.md identifies selected SDK clock_gettime(1), not live Native provider/epoch proof. Formal14-file review P2 gate/data alias and mode issue was fixed, freshly rebuilt (8 compile attempts/3 links/Host) and manually post-LTO resolved. D01 static-policy BLOCK3, unexecuted D02 and first C4996/ELAPSED failures remain preserved; no root warning policy weakening.
-
-Distinct prep/FINAL_RESULT_D01.json SHA256 `897c54c3b7ede097c652b9140fc90d94b57875f34cb06707f52d5715bc2152e4` records fresh final Host/static/manual-path subset PASS and unchanged945-source/9722-pin/artifact closure. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-native-parent-v2-20261029-d01/final_once.py`. Current Native frontend d4e5d829c8ed5fe406c525e410f68599012ebac1e46bded57b2de3770cec4015; Native parent eb2113af1749429106c99a959bcb9c5422335936e2c1f039af3eca5b99308f07; Host c306d244ad514ec9404b598fa3e3ef6458503a5b922ceeb84f71ec661e28dd52. Cumulative22 compile attempts/7 links/3 Host commands; zero Native/HDC/identity execution.
-
-NATIVE_OS_PACKAGE_D01.json is a five-artifact reference bundle, not deployed copies. NATIVE_OS_ARGV_D01.json contains exact10 A/B proposed cases. prep/OS_PROPOSAL_REVIEW_D01.md conditionally admits data FOR REVIEW only; NATIVE_OS_PROPOSAL_ADDENDUM_D02.md clarifies external denial nonce versus synthetic context, timeout124 acceptance requiring SUP_RESULT timeout0/internal_error0/child_exit124 and actual owned-child records, and future tree/group cleanup qualification. No case executed; optional own-DSO constructor/destructor case remains conditional NOT_READY. Same-child live dual-clock probe is absent. Current docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md separates reviewable OS data from business NOT_READY and records mandatory remaining work. Stage1 NOT_VERIFIED; all37 Stage2 HELD; global/PRE_COMMIT FAIL; Ready NO. Historical403/797/439/359/871/G612 and all FAIL/UNKNOWN preserved. No cleanup or successor.
-
----
-
-## 2026-10-29 Native FD preparation subset — BUILDS / STATIC REACHABILITY / HOST CONTRACT ONLY
-
-Partial closure only: --native-fd-prepare is real linked Native preparation code for four FDs plus parent PID/start, side and hash. It validates a canonical27-field Native-purpose approval0 request, own PID/image/manifest/module-FD same-file association, immutable memfd/all seals/hash, fresh exclusive caller/one-shot ownership and validation before adoption. Parent identity is sampled, not pidfd-bound. Exact sampled regular-file size bounds allocation; cooperative poll0 checkpoints reject peer EOF/error/invalid descriptors or early queued bytes. They consume no frame, validate no Abort and establish no SDK READY. Synchronous VFS calls are not hard-interruptible.
-
-Evidence root `E:/Codex-FastDDS-stage1-native-fd-v2-20261029-d01`: original D01 static3 BLOCK/D02 superseded and D03 length-audit FAIL remain preserved. CFI real-path correction, fresh Host GREEN, two formal P2 fixes (single exact stat-size guard and cooperative external-close checks), postreview rebuild and formal resolution CLOSED precede distinct final. `prep/FINAL_RESULT_D01.json` SHA256 `3364aa551a072052d94b46ff929ef0a257ee2f6affbcdbc3cab5de92765bfa8c` records actual new Host contract0/refusal78 and unchanged938-source/9412-pin closure. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-native-fd-v2-20261029-d01/final_once.py`. Cumulative10 compiles/4 links/6 Host commands, zero configure/Native execution/HDC/identity. Native8c8a1a7c7f242617a9e30f75268ba0da89fc210de9284b65f16637bc9b035aee BUILDS with static CFI preparation reachability; Host52eff0bbfa61bb0df029c886b2f49519ad1883683d74b3da1f2fefd7bb7654fb tests metadata/mapper/allocation logic and FAKE journal only, not POSIX syscalls.
-
-Native FD/POSIX/memfd/poll/cancel runtime remains NOT_RUN. Journal records observations, invokes no identity API; Native EntryReadbackOnly cannot prove worker/kernel restoration or SIGKILL/exec recovery. Product/current consumer88/original299 were not rebuilt; exact88 export evidence is static only. Protected business loader remains UNSUPPORTED_PRECONSTRUCTOR_AND_DEPENDENCY_BINDING; full Native Port/Client/getter route remains disabled or pruned. This is not completed Native V2. SDK __n1/platform bridge __h and CFI remain unchanged; SDK23 .32 versus board .31 source association is UNKNOWN, not proven incompatibility.
-
-Mandatory gaps and exact approval boundaries are in docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md (NOT_READY / NOT_AUTHORIZED): preconstructor root/dependency byte contract, actual Native supervisor/FD/request wiring, fully linked current-consumer48-byte API/provider ownership and Port/Client, preparation OS/deadline/EOF runtime verification, current route-specific permissions/OWN/ACL/sole-main facts, precise identity/last-use evidence and real Socket/DDS closed loop. DATASYNC is not assumed universally required. No new service/full firmware pack is requested. Stage1 NOT_VERIFIED; all37 Stage2 HELD; global/PRE_COMMIT FAIL; Ready NO. Old797/439/359/871/G612 and every historical body byte remain preserved. No further cleanup or successor execution.
-
----
-
-## 2026-10-29 handoff/loader increment — WINDOWS NONBUSINESS FIXTURE ONLY
-
-External Windows two-child pipe handoff is now implemented and tested: canonical27-field full deployment request, PID/image/manifest binding, locked ancestor/file handling and same-handle SHA/provider verification, C/POD exception containment and one-shot handle ownership. Frontend /MT and origin-contained /MD fixture use no BCRYPT dependency. This supersedes earlier Windows-handoff deferral only. Native FD/protected business-loader integration remains unverified. Strict sole-main count1 gate is unchanged; historical count4 startup/capacity failures remain failures, and the earlier thread creator remains UNKNOWN. No Native identity-safety conclusion follows.
-
-Evidence root `E:/Codex-FastDDS-stage1-handoff-loader-20261028-d01`: formal review found one P2 (owning parent handle before validation); current code validates PID/birth/liveness before adoption. Fresh reviewfix and formal resolution close it with eighth bad_parent_handle negative proving unrelated handle remains valid. Distinct `prep/FINAL_RESULT_D01.json` SHA256 `bd6ea90c1fe58ef888353e623aa4b50df454c41d2ebdc527aaadcd0c32504074` records two PE inspections0, fresh eight-case suite0, locked guard78, all16 children reaped, Jobsactive0/cleanup empty. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-handoff-loader-20261028-d01/final_once.py`. Current934-source/144-pin closure remained unchanged after final. Cumulative28 compiles/8 links/8 Host commands/52 created children includes failures and diagnostics; it is not an all-PASS tally.
-
-Current Host EXE `2f3f9a2efc510ed2f93ad987033ddf688f351e65ed2176dc427d10f0dd0d9aac`; fixture DLL `a196d3781c1956da84006b73cc60d882909d035032f0f70d175a945945e9a5d8`; Native frontend `a81466cec994ed0261deae7baaf8dd3d9657088ebfef4815844b5c5ec918b017` is crosscompiled/unexecuted. Full Native V2 may be LTO-pruned; POSIX compiled only. Product14878/original299 unchanged. --handoff-run returns78 before parse/getter/load/identity; record/env/fixture grants no approval.
-
-Mandatory remaining work: Native FD handoff and protected load-byte binding, actual current-consumer V2 fully linked, fresh security/permission and specific approval prerequisites, real READY/DATA_DONE plus DDS traffic with no alternate transport, and wrapped lifecycle/last-use evidence. Controller carries control/evidence, not DDS payload. Actual SDK quiet and boards remain NOT_VERIFIED. Current phase card: docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md, NOT_READY / NOT_AUTHORIZED. Stage1 NOT_VERIFIED; all37 Stage2 HELD; global/PRE_COMMIT FAIL; Ready NO. Historical failures and entire old body remain preserved. No automatic next development.
-
----
-
-## 2026-10-29 bounded control-IO increment — CROSSBUILD / STATIC / REAL WINDOWS FIXTURE ONLY
-
-This update supersedes the earlier statement that the shared control adapter was undelivered: wire/Channel/Port/Client code is now PRESENT and actually exercised across a marked Windows fixture DLL. Native business getter/loader integration, external FD/channel handoff and cross-process board coordination remain NOT WIRED. Stage1 NOT_VERIFIED; all 37 Stage2 items HELD; global/PRE_COMMIT FAIL; Ready for commit NO. No automatic next development or sensitive execution is authorized.
-
-Implemented: explicit big-endian wire version1 with direction, length, sequence, run nonce and complete envelope; semantic reconstruction into native C/POD V2, never raw padded C structs. Bounds: 24-byte header, body<=896 bytes, <=64 frames and <=65536 bytes per direction; strict identity/sequence/truncation/EOF/limit checks, local deadline and cancellation. Real Win32 overlapped local named pipes and shared V2 Port/Client reached getter/create/execute/cancel/destroy across a real fixture DLL. Tests exercised blocked reads/writes, partial cancellation, stale/late capsule callbacks, drop-ack races and cancellation completing after wrapper destruction. POSIX nonblocking poll/thread-local SIGPIPE branch is CROSSCOMPILED ONLY. Control evidence/releases are not a DDS payload transport.
-
-Default --control-run returns fixed78 before observations, pipe open, module load, getter or SDK activity; --control-codec-selftest only handles bytes. execution_enabled=false remains unchanged. Native/default Port authorization always returns NS_AUTH; only the separately compiled marked Windows fixture has fixture authorization. Environment or record booleans confer no OS grant. Every admitted Client method holds shared heap State; uncertain completion retains complete State/module/Port via a preallocated pin. Caller must keep wrapper alive through method admission and never start a method after destruction. Native callback capsules/modules remain process-lifetime pinned. Controlled fixture alone acknowledges drop after execute/live-handle/copied-late/cancel references are all zero; this is not SDK callback quiescence or an unload/restore guarantee.
-
-Evidence root `E:/Codex-FastDDS-stage1-controlio-20261028-d01`: prep/INITIAL_RESULT_D01.json records actual12 compiles/3 links/3 Host executions (suite0 and expected guard78). Formal review raised two P1 lifetime findings: cancellation bookkeeping outliving wrapper, and copied-late callback references omitted from drop acknowledgement. Heap State retention and producer reference accounting plus controlled-CV regression tests corrected them. review/FORMAL_RESOLUTION_D01.md reports no actionable findings remaining within the source/Windows fixture boundary after fresh reviewfix7 compiles/3 links/1 Host0. Distinct prep/FINAL_RESULT_D01.json SHA256 `686b0bfaeecd921a360252f753b4aa214cec6123709645e5e0c90e048085cda7` records actual ELF/COFF tool exit0, fresh suite0 and locked78, naturally drained Jobs0/no cleanup errors, all42 pins unchanged. Final command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-controlio-20261028-d01/final.py`. Cumulative19 project compiles/6 links/6 Host executions; zero configure/HDC/identity/Native business operations. Source924/code and consumed headers were freshly bound/audited.
-
-Native frontend SHA256 `b2f2d9a1a60b7475112054e9aa7231e7c7269df00faa0b86e7bda6501f271984`: actual SDK23 __n1/CFI crossbuild and guard/codec linkage only. Unreachable full V2 paths may be LTO-pruned; this is not full Native adapter linkage/runtime proof. Current Host EXE SHA256 `58a936400a2f81ccc386a1105eae092f9c8531fef2c96ca1b5387948c112d2a8`, actual fixture DLL `759a4950944ee4d6ccce998418ee07268e2078194ff2ca1e670acae075c8d57c`. True consumer88b20, product14878, original299 and frozen historical359/871/G612 remain unchanged. Native SDK/Socket/DDS/device/business/identity: NOT_RUN; full ABI/Shutdown quiet: UNPROVEN.
-
-Current sensitive-window status is docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md: NOT_READY / NOT_AUTHORIZED, with current hashes, fixed A/B targets, project OWN and com.kaihong.mdds. Dated G grants are historical, not fresh permission proof. Native loader/getter and deployment bindings, external channel handoff, startup/caller checks and specific approval remain prerequisites. No Set/GetAccess/Reload/profile actions occurred, and no existing service/new profile requirement is asserted. Same160MiB E plan remains24 prep/32 initial/48 fix/32 final/2 docs/22 reserve; no cleanup or transfer of old budget. All previous BLOCK/FAIL evidence and historical body bytes remain unchanged.
-
-Historical document body follows unchanged.
-
----
-
-## 2026-10-28 consumer run-entry increment — BUILD / STATIC / PORTABLE HOST ONLY
-
-This update supersedes historical deferral statements only for the new, separately compiled consumer run entry. Overall Stage1 remains NOT_VERIFIED; all 37 Stage2 items remain HELD. Global / PRE_COMMIT: FAIL. Ready for commit: NO. No subsequent development or sensitive execution is automatically authorized.
-
-Implementation PRESENT in `tests/stage1_native_successor`: separate V2 C/POD create/execute/cancel/destroy API; genuine root Listen/Publish witness hook followed by external CONNECT wait; stock Fast DDS 2.14.5 public Participant/endpoints/QoS with built-in transports, intraprocess and DataSharing disabled; three exact run/side/payload/GUID/sequence-number samples and acknowledgement; cross-log DATA_CHECK / DATA_DONE / DELETE_RELEASE ordering. Strict extra-take NO_DATA check precedes local DATA_DONE. Existing legacy prepare/frontend/product299 remain unchanged. The frontend remains compilation-locked and does not call the new run API. Native cross-process bounded control-IO adapter and frontend wiring are not delivered.
-
-Evidence root: `E:/Codex-FastDDS-stage1-consumer-entry-20261028-d01`. Initial `prep/INITIAL_RESULT_D05.json`: bounded composite PASS (Native build and first actual Host04 execution). `review/FORMAL_REVIEW_D01.md` raised one P2; `review/FORMAL_RESOLUTION_D01.md` closes it after readiness-promise/failure-cleanup correction and records the extra-take ordering correction. `prep/REVIEWFIX_RESULT_D01.json`: two fresh C++ compiles, two links, one actual Host execution PASS. Distinct final `prep/FINAL_RESULT_D01.json` SHA256 `dcc60d88dae843bfec15daa5586c3ee22340b4bb828653f10cf5ac825dc04b78`: fresh actual protocol.exe exit0, wrapper0, owned processes drained0, cleanup errors empty, all39 pins unchanged. Command: `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-consumer-entry-20261028-d01/final_once.py final`; actual child `reviewfix01/protocol.exe` reports `HOST_FIXTURE_ONLY noDDS noSDK noIdentity`. These marked portable C++ Window events are actual Host test evidence, not Native runtime evidence.
-
-Current Native DSO SHA256 `88b20c2a17c0ff65829babd7673b881ca258b211f7466f68a2f55bbadc83e466`; Host EXE SHA256 `db992abd2ccd0d838eede60aa5230dd350dd808ff0c40fabbf610c4257f12700`. True Native build uses SDK23 __n1 / strict CFI, public2.14.5 and current product14878; unchanged C TU and legacy C++ objects are provenance/header-bound reuse (713 headers), not fresh compiles. Cumulative actual work: 10 project compiles, 5 links, 3 new Host executions, zero configure/HDC/identity operations. NativeSession, SDK/Socket/DDS traffic, device/cross-device/business and identity execution: NOT_RUN / UNVERIFIED. Full ABI behavior and Shutdown callback quiescence: UNPROVEN.
-
-Business DSO must remain mapped until process exit. Failure retains owners behind a terminal process fence. Callback deadlines are cooperative; synchronous SDK/DDS/delete/join calls are not guaranteed interruptible. Root shared-listener witness does not establish per-domain input publication, connection generation or lease. Delete/Close/process exit does not prove SDK quiet.
-
-All historical FAIL/BLOCKED records remain evidence: missing TopicDataType pre-pin failure, prep8MiB guard refusal, Host warnings and unattributed GLOBAL_C_DROP, Host link0 followed by Job ELAPSED/VCTIP, static D03/D09/D11 BLOCK and template-parse failure. No retroactive PASS. Resource accounting remains new144MiB on E with the same pools (final32MiB/reserve22MiB); prep corrected24MiB explicitly adds16MiB after actual guard refusal. No cleanup or cap-floor weakening.
-
-Current owned-window prerequisite/approval status is solely `docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md`: NOT_READY / NOT_AUTHORIZED. Fixed A/B boards, named project OWN and com.kaihong.mdds remain scoped deployment constraints; dated permission/OWN observations were not freshly queried. Future paired SetSelf selection/restoration remains unapproved; fresh sole-main caller, live permission/profile checks, actual new frontend binding/hash and thread/kernel/restore unknowns remain prerequisites. No new service/profile is asserted or required here. Documentation sync does not grant identity or traffic execution approval.
-
-Historical document body follows unchanged.
-
----
-
-<!-- CURRENT_ADMISSION_ENTRY_DOC_SYNC_D01; raw historical body preserved below. -->
-# Current structured input validation entry — 2026-10-27T05:59:29.120624+00:00
-
-**Selected fallback scope closes ONE item: input-validation entry IMPLEMENTED / BUILDS / bounded A+B DEVICE_TESTED PASS. Actual Participant/Reader/Writer/pubsub and Native READY/DATA_DONE remain NOT_IMPLEMENTED/deferred. Stage1 NOT_VERIFIED; Stage2 all37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.**
-
-Five paths in `tests/stage1_native_successor` changed: frontend, CMake, README and private `entry_admission.hpp/.cpp`. Retained RED shows old image's unsupported new CLI returned78 where0 was required. Initial compiled 2 new CPP TUs and 1 strict CFI link (599+597 actual headers; frozen C layout reused). Formal agentic-review0.1.1 found no actionable blocker; NEW independent final reused exact frontend SHA256 `085b6d7c276fc556d589f902e79c5a7c88fc45d9ec6ee91ea838a0e0599cd56c`. Command `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-admission-entry-20261027-d01/execute_final_d01.py final` passed10 fresh A/B cases: SHA/parser0, valid input0, always-locked78, badhash78 before getter, wrongcaller78 after stable getter phase. The getter-phase flag does not mean exactly one call; source reads twice. Historical `target_execution_yet:false` is pre-test artifact metadata, not current execution status.
-
-35 HDC clients + 1 ELF tool returned0; all36 jobs drained, owned children reaped and recorded PIDs absent. Peak observed RSS4352KiB; AS2684354560 bytes is virtual-address policy, not RSS. Source907/root26/native69/G612/Git barriers matched; old failures and evidence retained. No old Host/G suite replay, standard-layer/production Transport modification or consumer/bridge rebuild/business-load occurred. The older 5-TU static driver was not updated or relabelled PASS for this new 2-CPP profile.
-
-`--admission-check A|B <record>` conveys input by argv through unchanged token-free supervisor6168, resolving the earlier environment-transport gap. Private same-executable __n1 parser checks exactly20 ordered ASCII/LF fields, <=4096 bytes, <=300-second interval, code-image anchor, canonical regular-file/same-FD hashes and stable declared/current caller. Consumer20ac/bridge3ed bytes are DATA only. Scalar GetSelf is the only token API in this round; no manager/vector query or fresh OWN profile lookup. Board is external explicit-HDC attestation; OWN target is a dated G declaration. `INPUT_VALID_ONLY` establishes neither OS grant, signature/trusted producer, user approval, replay protection nor Native READY; hash-time correspondence does not solve future pathname-load TOCTOU.
-
-`--admitted-run` always refuses78 before business load/setters. Legacy `--approved-owned-window` is compile-locked in this image, even with environment flags. No SetSelf(target or restore), GetAccessTokenId, Reload/Delete, Socket/DDS business or privileged execution adapter is implemented/qualified here. Fresh caller conditions were checked; prior G OWN Native/APL/DATASYNC facts remain dated, not re-queried. No new profile/account/service is requested.
-
-Runtime/old299 source mapping informs future work only: after-listener-publication hook holds outer pins and must not wait for DDS match/Close; old `_Exit90` must not be copied into a DSO. A finite coordinator and genuine SDK lifecycle/traffic acceptance remain future engineering. Remaining boundaries include armed input/execution artifact, exact image-to-load binding, kernel Set/Restore effect/recovery scope and specific approval, actual pubsub/READY/DATA_DONE and callback quiet.
-
-Evidence root `E:/Codex-FastDDS-stage1-admission-entry-20261027-d01`: canonical `prep/FINAL_RESULT_D01.json` SHA256 `a0d1145eaa1403a2be993ee6bc0e55ee852c97fb2c489192f960eeb81e17a1e0`; current `docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md` SHA256 `392b2fe0a2319df42643516bb84a5de7457b03efee79d14a6f3452202738deac` is **NOT_READY**, not an approval request. No next sensitive or business phase starts automatically.
-
-Use `INPUT_VALID_ONLY` literally: the working entry validates data and caller consistency, then keeps execution closed.
-
----
-
-<!-- CURRENT_NATIVE_GUARD_READONLY_DOC_SYNC_D01; raw historical body preserved below. -->
-# Current Native guard and OWN metadata checkpoint — 2026-10-27T05:05:56.340115+00:00
-
-**Bounded Native DEVICE_TESTED=true / PASS for guards, local pthread selftest, tiny loader and fixed OWN metadata only. Stage1 NOT_VERIFIED; Stage2 all 37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.** Prior NOT_RUN statements below describe earlier checkpoints.
-
-Two-file frontend/README increment adds read-only fixed OWN query, task/symbol observations, normal-stop worker flow and fixture ownership/cookie/duplicate negatives. Initial crossbuild compiled 1 fresh TU/linked frontend with 598 consumed headers; NEW final reused exact immutable frontend SHA256 `4193950f88d366f1e266332f9c9d8c50e1bdedeec5e8adf9107220e0f8629f81`. Formal agentic-review0.1.1 found no actionable blocker. Final command `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-native-guard-readonly-20261027-d01/execute_final_d01.py final` executed 10 fresh nonce-bound children on A/B: default/`--real` deliberate refusal78; normal+cancel pthread selftest0 (tasks2→joined1); libc fixture0 (ctor/dtor1, timing/version/size/ownership/cookie/duplicate checks); OWN query0 on each. Artifact receipt `target_execution_yet:false` is historical pre-test metadata; actual final cases prove execution.
-
-27 HDC clients + 1 ELF tool returned0; all28 host jobs drained; recorded owned parent/child PIDs were reaped/absent. Peak observed child RSS was7680KiB; AS limit2684354560 bytes is virtual-address policy, not physical RSS. Source905/protected26/native69/oldseal664/Git barriers matched. Existing product14878/current299/consumer20ac were neither loaded nor rebuilt; no Host suite replay.
-
-Both queried profiles were exactly `mdds_actionbag_2e107f51cd7b40218b01437d1e5c4e16`: A lookup672006291, B lookup672042405; NativeType1/APLnormal1/infoRC0/vectorRC0/count1/state0/granted1. These are dated queried-profile facts, not caller grants or full permission inventory. Caller self A806246851 / B806017503 stayed unchanged before/bridge/after; UID/EUID0 does not prove token authority. Metadata IPC is local permission-service work, not cross-board DSoftBus business/Socket/DDS data. No SetSelf(target or restore), creation/reload/delete/grants/credential/security/network configuration occurred; `--approved-owned-window` was NEVER_RUN.
-
-Tasks were1 before provider and after bridge load, then3 after query on both boards. Worker/parent token effects, restoration and SDK callback quiet remain UNKNOWN. Existing __h bridge with __n1 frontend passed the covered C/POD query/normal-process-exit path; full source-image ABI/CFI/global allocator/GOT binding remains UNKNOWN. Global-vs-bridge-handle new/delete symbol results are LOOKUP_ONLY, not allocator execution proof. Manager handles stayed until process exit; fixture unload does not qualify SDK quiescence.
-
-Evidence root `E:/Codex-FastDDS-stage1-native-guard-readonly-20261027-d01`: canonical `prep/FINAL_RESULT_D01.json` SHA256 `2f4cb3144e9847b87a74dd59820655752b95d125e058944be2f7602bdc36d27e`. Current future card `docs-gate/CURRENT_OWN_WINDOW_CARD_D01.md` SHA256 `72d5544e75b01c3a984d1df419e86c392641bf35c07b40ed9ab14813c612fd66` is **NOT_READY**, not an approval request. Fresh OWN facts and covered query ABI are resolved; future paired setters still need approval, kernel effect/recovery scope and a qualified admitted-input artifact (current controller environment omits admission variables). No new profile/service is requested. Real Participant/traffic entry and Native READY/DATA_DONE remain next engineering, outside this checkpoint.
-
-Actual board execution now qualifies the stated local guard/query subset; it does not qualify DSoftBus Transport communication or dual-board DDS delivery.
-
----
-
-<!-- CURRENT_NATIVE_SUCCESSOR_DOC_SYNC_D01; raw historical body preserved below. -->
-# Current ARM64 Native successor — 2026-10-27T04:15:31.092975+00:00
-
-**IMPLEMENTED + BUILDS + LOCAL STATIC/CODEGEN PASS only. Stage1 NOT_VERIFIED; Stage2 all 37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.**
-
-Nine new files in `tests/stage1_native_successor` provide a genuine frontend PIE, identity bridge, consumer DSO and libc-only loader fixture. Independent final tester ran `C:/Users/17715/anaconda3/python.exe -B E:/Codex-FastDDS-stage1-native-successor-20261027-d01/validate_final_d01.py final`: real configure, 5 fresh project TUs, 4 AArch64 ELF links, 13 commands exit 0, 5 static tests PASS, 1286 actual headers and 2 before/after LLVM IR outputs. All owned jobs drained with zero exits and no cleanup errors; protected source/tool/runtime378 and Git state matched. Compiler-probe count remains UNKNOWN. This increment ran no Windows Host fixture suite, product D06/current299 rebuild, ARM executable, HDC, identity or SDK business call.
-
-Formal agentic review found one P2: preparation needed cancellation/time checks after external allow returned. Three added source lines recheck cancellation and a single monotonic timestamp against the original deadline before preparation. Final independent IR/CFG inspection confirms those branches dominate Runtime construction; this proves source/codegen ordering only. Earlier real SONAME failure was corrected with explicit SONAMEs on all 3 DSOs. Original FAIL/classifier/metadata records and pre-fix review remain historical evidence.
-
-Actual selected SDK23 libcxx namespace is `__n1`, platform bridge `__h` (actual include traces and symbols); alternate SDK `__1` was not selected. This additive clarification supersedes overbroad historical SDK labels below, without rewriting their evidence. LTO/CFI, strict links and C/POD boundaries do not qualify allocator/interposition, NativeTokenInfo source-image ABI or native behavior.
-
-Consumer exposes guarded Runtime/descriptor/public stock QoS preparation only: no Participant, input/output/pump or traffic entry. Native listener/DATA_DONE control provider is NOT_IMPLEMENTED. Default/`--real` source refuses with 78 before optional loads/query/setters. Latent paired OWN identity window remains UNAPPROVED/NOT_RUN; no provisioning/reload/delete/new profile/account/init/package exists. Native callbacks/Shutdown quiet, bridge/runtime ABI and full Stage1 remain UNVERIFIED; DEVICE_TESTED=false.
-
-Evidence root: `E:/Codex-FastDDS-stage1-native-successor-20261027-d01`. Canonical `prep/FINAL_TESTER_RESULT_D01.json` SHA256 `ecefbf5b586fc3a9482d4f6e1166cf34f07c7df68209d78faaeff0bc18388b2b`; exact final artifact hashes and link/header/codegen bindings are in `final/ELF_AUDIT.json`, `OBJECTS.json`, `ACTUAL_HEADER_CLOSURE.json` and the tester result. Future `docs-gate/FUTURE_OWN_WINDOW_CARD_D01.md` SHA256 `7a9ecbb2b21a3161a12beb17a594d66457e11cacffde7b7fc09354ddc5311cfa` is **NOT_EXECUTION_READY**, not an approval request or permission grant.
-
-Use the Native successor records for this bounded build; the Windows delayed-module fixture and prior device results below retain their original scopes. Neither supplies current Native execution acceptance.
-
----
-
-<!-- CURRENT_DELAYED_HOST_DOC_SYNC_D01; historical body preserved below. -->
-# Current delayed-module Host fixture — 2026-10-27T02:31:16.325366+00:00
-
-Eight project test files implement Windows-only HostFakeIdentity/real-DLL loading; no production/stock/native adapter change. **Host fixture PASS; Stage1 NOT VERIFIED; Stage2 all37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.** Distinct NEW final fresh VS17 Release/MD C+CXX configure/build/PE/suite commands returned native0:4 project TUs/4 AMD64 COFF objects,3 AMD64 PE images (1EXE+2DLL), small import libraries;9 methods/18 child cases matched expected exits0,77/78/79/80/51/52/53/54/55/43/42/90. Compiler-check invocation count UNKNOWN/raw configure logs separate from project TUs.
-
-Real Windows DLL attach/detach/witness ordering, exports/function-pointer ownership, type-size-version/canary/reentry/cancel-after-OPEN/lifecycle were tested with fake identity only. Default/--real refuse before DLL load; actionbag/com.kaihong labels grant nothing. Controlled worker entry is not OpenHarmony single-task proof; OS thread count is diagnostic. No real identity/provider API, HDC or SDK compilation; offline SDK llvm-readobj inspected Host PE only. Native __h/__1 ABI/profile/kernel/workers/parent/Shutdown quiescence/real DDS boards remain UNKNOWN/NOT VERIFIED. Hard exit90 intentionally provides no fake restoration; no SIGTERM/KILL/exec-restore promise.
-
-Configure/build native0 was followed by intentional0xE002 termination of only exact pinned current-job vctip handles with job/image identity; PE/suite drained naturally. Not all descendant exits were0 and not all jobs drained naturally. Final post-run GBK display diagnostic failed separately; no actual command retry.
-
-Evidence root `E:/Codex-FastDDS-stage1-delayed-host-20261027-d01`: NEW `FINAL_RESULT_D01.json` SHA256 `4b7d10935163377c9c62edf5550e2457a0857dfb8be3df781de911764b282df5`; `final-execution/TESTER_EXECUTION_FINAL_D01.json` SHA256 `0fa26a2c6612edb5f622819886eaeddd3a62ac99075367d291616a972014e7c8`; independent `review/FORMAL_REVIEW_D01.md` SHA256 `691dc9b95c7ec42ec97f13d843199e384287b06236111478a1354332c5f55362` found no actionable findings in pinned Tier2 fixture scope. Initial recovery from original tester/offline byte oracle reran no native command.
-
-Preserved history: static-path BLOCKED; unsupported-T configure failure/job cap; default VS configure0/vctip drain cap; C4127/WX first frontend failure then one C11 static-assert-line fix; D05 four command0/9+18 tests but localized UTF8 log postprocessing failure. No warning/oracle/timeout weakening or failed-stage relabeling. Future real SetSelf would need a qualified ARM64 successor/bridge hashes/fixedA-B/own-profile binding/paired select-and-restore authorization; this fixture grants none. No new package/profile/account/init or candidate revival. All previous history/P1 corrections/37 rows remain byte-identical below; docs role runs no build/test/native/HDC/Git action.
-
----
-
-<!-- CURRENT_HOST_COORDINATOR_DOC_SYNC_D01; full historical body retained below. -->
-# Current Host coordination control fixture — 2026-10-26T22:45:00.020693+00:00
-
-Reusable Python-stdlib coordination subset PRESENT/HOST_TESTED at its bounded fixture contract. **Stage1 NOT VERIFIED; Stage2 all37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.** Distinct NEW final fresh LANGUAGES NONE CMake configure, syntax target and one CTest passed:32 named methods/OK,25s suite timeout, native/wrapper exits0 and natural owned-job drain. C++ compilation/SDK/HDC/board/current-consumer actions0. Fixtures are not native facts; current299 consumer/product bytes unchanged.
-
-Initial28-method PASS, actual RED four methods/five assertion failures, GREEN32 PASS and NEW final32 PASS are separate evidence. RED DELETE subcase stopped at earlier SEND snapshot; no deeper DELETE RED execution is claimed. Three P2 findings were fixed: read-only absolute deadline, per-side issued CONNECT/SEND/DELETE release credit, and one-shot hook/lifecycle admission. Four new methods and explicit fixture releases retain the original28 assertions. Original D01 temp BLOCKED/D02 Ninja-dollar failure remain; VERBATIM fixed the latter. Historical stale inventory28 field is retained with an additive actual32 correction.
-
-Component enforces strict envelopes, CV cancellation without Close, cross-side GUID/sequence/payload/DataDone checks and weak hook/strong opaque owner retention. Project CMake/CTest entry exercises pure control/lifetime fixtures only. Native C++/SDK listener observer/real Runtime hook/IPC IO/authorized startup/full callback quiescence remain unimplemented or unverified. Real Socket/DDS traffic, native listener coordination and positive two-board acceptance are not established.
-
-Evidence root `E:/Codex-FastDDS-stage1-coordinator-host-20261027-d01`: `FINAL_RESULT_D01.json` SHA256 `b6af145212b64e6449158131a74c1e32db7217d427c02017c40ec02526d0bc5c`; `final-execution/TESTER_EXECUTION_FINAL_D01.json` SHA256 `d839e26634f545ac00fc14b6066fee3f2f112f2dad5e657c6cb3bbba3b40539f`; independent `review/FORMAL_RESOLUTION_D01.md` SHA256 `c7186da22a0265a14f65be501026798870da76986e834d2f644b8a313de90d9a` resolves all three scoped P2 findings. `prep/TEST_INVENTORY_CORRECTION_D01.json` preserves the28-to32 inventory history. No old test result is substituted for the NEW final.
-
-Existing read-only startup evidence remains sealed; no supported native launcher is known. Minimum missing project information: exact service/bundle and owner, manifest/formal startup documentation, and who configured current299's supported startup/permission/path namespace/DAC/SELinux relationship. No new scan, native adapter, identity grant/selection or security/network operation is authorized or implemented here. This documentation step runs no build/test/native/HDC/Git action and preserves all prior caller/CFI/P1/failure history and37 capability rows byte-for-byte below.
-
----
-
-<!-- CURRENT_DIRECTDDS_OWN_GUARD_DOC_SYNC_D06; historical body preserved below. -->
-# Current consumer own-guard evidence — 2026-10-26T20:38:37.730892+00:00
-
-Build PRESENT/PASS; A/B module/permission negative guard PASS only. **Data branch PREPARED/BUILDS, NOT_RUN; Stage1 NOT VERIFIED; Stage2 all37 HELD; global/PRE_COMMIT FAIL; Ready for commit NO.** Public C OH_AT_CheckSelfPermission takes a const-char permission string and returns bool: false has no query_rc and means **NOT_GRANTED_OR_QUERY_UNAVAILABLE**, never newly measured DENIED. Earlier vector-query DENIED remains historical for its own children. No identity selection/grant/security/network action occurred; SetSelf necessity remains unproved and unauthorized.
-
-Current ELF `299e487da02d664e34c07b993e5eb4a04ad50fc63966f655021f28d046bc0f2b` (393264B) uses reused qualified main plus fresh guard, strict cached-libc CFI closure/BIND_NOW/no RPATH. Local history3 real configurations/6 project compile attempts/3 link attempts (2 linked ELFs); current2TU closure/0 project archives. Compiler-check exact invocation count UNKNOWN/raw records retained. No rebuild during the initial-guard or NEW final executions. Source prepares current Runtime.MakeStockDescriptor/stock2.14 public per-participant QoS/XML, builtins off/one user transport/unicast/intraprocess off/DataSharing off/three unique payloads and DDS sequence/GUID checks. This is not runtime no-fallback qualification.
-
-Initial115 HDC exits0 included2 EXE uploads/expected native77 A+B. NEW independent final109 HDC exits0/no upload/build/mkdir/retry: A29647 native77/self806246851 unchanged/RSS21076KiB/71ms; B23533 native77/self806017503 unchanged/RSS21112KiB/51ms. Exact reap/known-PID absence and57 selected closure/current-binary pre/post hashes passed. Each child had exactly one expected SDK libc++_shared/current product14878/stockfastrtps2.14 module family plus2 matching C API owners. Lower-priority system libc++_shared discovery is NOT_SELECTED; module identity is not GOT/allocator/fullABI proof. Existing helper6168/childAS2.5GiB/8+2s unchanged; constructors may execute. Guard-only had no DATA_ENTER or explicit Runtime/DDS/Socket entry.
-
-Evidence root `E:/Codex-FastDDS-stage1-directdds-20261027-d01`: initial SHA256 `9ef2a5b3f7740be83cfdc537614c3119ea97386107acff1727b2f060f1dcf9d2`; formal `prep/FORMAL_DIRECTDDS_CONSUMER_REVIEW_D06.md` SHA256 `feb7492b8478ed7fbc65bc2230a2ef775345b10d1070be82b7144f21f84bc76e` found no additional guard-scope findings; NEW `final-package/FINAL_RESULT_D06.json` SHA256 `2ecdbeab5a83dff91597ed4f799dee46bed8459a6cf376f37247a306fb0c41b8`. Real Socket/directDDS/different-domain/discovery/QoS, listener coordination/positive peer/data, native Shutdown deadline/quiescence and broader applicable TransportInterface coverage and full source/image ABI remain NOT VERIFIED. SDK23(6.1.0.32)/board6.1.0.31 association UNKNOWN, not presumed incompatible; legitimate service/HAP startup unverified.
-
-Legacy3.6 static draft, D02 LocatorList compile failure, D03 strict CFI/601-unbound-header failures, metadata framing/alias STOP and file-size/lower-priority-classifier BLOCKED records retain their scope. Earlier512/driver-warning/old-binding/capacity/A139/caller/CFI/P1/Host history and all37 capability rows remain byte-identical below. This docs step runs no source/test/config/build/native/HDC/Git action.
-
----
-
-<!-- CURRENT_INHERITED_CALLER_DOC_SYNC_20261027; entire historical body retained below. -->
-# Current inherited-caller permission measurement — 2026-10-26T17:32:19.599871+00:00
-
-Canonical synchronization after actual INITIAL → independent formal review → NEW independent final: **measurement PASS on A/B; DISTRIBUTED_DATASYNC prerequisite BLOCKED_DENIED in those measured fresh-child startup contexts**. Full Stage 1 remains UNVERIFIED; Stage 2 all 37 capability IDs HELD; global/PRE_COMMIT FAIL; Ready for commit NO. uid0 does not imply permission grant.
-
-NEW final A child9269 and B child3893 exited0. Each vector query returned query_rc0, exactly one state, raw_state-1 (DENIED), type2 TOKEN_SHELL. Full inherited self tokens A806246851/B806017503 were unchanged before/after. This is a valid permission result, not a query error classified as denial. wait4 peak RSS6516/6396KiB and elapsed41/31ms, confirmed owned group/exact-child reap/known-PID absence, and all47 HDC client exits0 support only this bounded measurement. GetSelfTokenID lookup owner is exact platformsdk; VerifyAccessToken.vector/GetTokenTypeFlag.u32 resolve via the byte-matched platformsdk path canonicalized to chipset-sdk.
-
-Probe source only queries its own inherited context: no GetNativeTokenId/named lookup, identity selection/provision, Grant/Reload/revoke, Socket or DDS invocation. Successful measurement is not successful communication. A future SDK consumer must check its own actual startup context; these observations neither grant future traffic nor prove SetSelfTokenID indispensable. Current metadata/provider-query evidence does not establish full SDK ABI/source association, Shutdown/callback quiescence, real Socket behavior or direct two-board DDS traffic.
-
-Evidence root `E:/Codex-FastDDS-stage1-caller-20261027-d01`: resumed initial SHA256 `f825f7f45ded177677b440f8b54ad6bd8c57caadf188318b88ef0d4d15d3f6c0`; NEW `FINAL_RESULT.json` SHA256 `41b979b16b03aa2efba955d7650a82ac5bc9107437690463fbff91d218ad3ae4`; `prep/FINAL_TESTER_EXECUTION_D01.json` SHA256 `b5461b4d789577991fbbed5064441fb4cc56ad7c61cd405aaa35708cd894a11f`; `prep/FORMAL_CALLER_REVIEW_D01.md` SHA256 `e9b75f7de56aeb66027fd2d744b3ac694aa66c73cefd427cac3f5e8ddb5326be` found no actionable findings within inherited-caller measurement and command-length correction. Four prior local compile/link/ELF/nm tools exited0 with609 dependency records; resumed/final phases reused the compiled probe without rebuilding. The deterministic162-candidate/six-chunk runner (max6954 serialized UTF16 code units including full HDC argv/wrapper) preserves exact search coverage.
-
-Original whole INITIAL_RESULT remains BLOCKED/UNKNOWN (actual overall FAIL_OR_BLOCKED_CALLER_INITIAL_UNKNOWN; tester terminal BLOCKED), with failed CreateProcess WinError206 before the A client launch and its original result `43390a5ca4e467cedf6f57975e4a3e2574688d7bfbd0aea840457c3870e00da8`. Old512MiB failure, first SDK-driver warning failure, old-document-binding static BLOCKED, capacity stops and older distinct-root A139 remain preserved. Current production product/loader are unchanged; sealed Host/D06 suites were not rerun. This documentation step changes no source/config/test, performs no build/HDC/native operation, and makes no Git state transition. All previous CFI/P1 evidence, historical bodies and capability rows remain byte-identical below.
-
----
-
-<!-- CURRENT_CFI_METADATA_DOC_SYNC_D01; historical body preserved byte-for-byte below. -->
-# Current A/B metadata-load evidence — canonical sync 2026-10-27T00:55:26.663689+08:00
-
-This canonical documentation synchronization is newly authorized and applied at `2026-10-26T16:55:26.663689+00:00`. Earlier E-only evidence and its `NOT_APPLIED_USER_SCOPE` result remain unchanged historical records; their scope/status is not retroactively rewritten. **Current module metadata load/provider lookup/dlclose/process exit: PASS on A/B. Full Stage 1: UNVERIFIED. Stage 2 all 37 capability IDs: HELD. Global/PRE_COMMIT: FAIL. Ready for commit: NO.**
-
-The original whole-process512MiB AS cap could not accommodate the byte-matched interpreter's2GiB CFI PROT_NONE/MAP_NORESERVE virtual reservation. The admitted fresh helper preserves the original512MiB normal allowance with child AS2684354560 bytes and wait4 peak-RSS telemetry. This is reserved virtual address space, not2GiB physical allocation; peak RSS is not VmPeak or an instantaneous RSS enforcement limit. No CFI/ASLR/security/identity/network setting was changed. Original ownership, bounded logs, core/file/time/parent-death guards remain.
-
-Actual initial A/B current loads exited0; the intentional A `_ZdlPv` negative exited1 because dlsym lookup identified owned `lib/libc++_shared.so` instead of the expected product, followed by dlclose0. This is lookup-owner rejection, not GOT/IAT binding proof or allocator execution. NEW independent final A/B loads exited0 with wait4 peak RSS20032/20288KiB respectively, exact five system Socket lookup owners plus two current-product lookup owners, dlclose0, confirmed process-group ownership and exact-child reap/known-PID absence. Final11 HDC client exits and reported remote codes were0;56 pre/post hashes matched per board. This documentation step ran no native/build/test/HDC action and made no source/config/Git transition.
-
-Current product `14878b1ce5ef5d490ac332e0df95886fd6b89da90547fb9813f3975d3bea533c` and loader `0225a138175d14e10844d18ad357f78ee8ed5b4c540e91070ab05c2d56b30751` are unchanged. Evidence under `E:/Codex-FastDDS-stage1-device-20261026-d01`: initial `REMOTE_CFI_INITIAL_RESULT.json` SHA256 `bd9b92f6040a394410c142e9a3c34c682fc0bef4b00d8e59028d78a6982003cf`; final `prep/cfi-static-d01/FINAL_CFI_RESULT.json` SHA256 `71e5638fe65300d280efb11d592bf938d27bcb3165ec24d3d9c513b7f16ccd9b`; independent formal review `prep/cfi-static-d01/FORMAL_CFI_REVIEW_D01.md` SHA256 `d72d847744b2b386169687df49212ef32ac734d1665a4a6d6093872cddcc31e7` found no additional actionable findings within this metadata-load increment. This does not qualify wider runtime behavior.
-
-No resolved SDK/Runtime/Socket/DDS API was explicitly invoked and no communication traffic was exercised; dependency constructors/destructors can execute. Inherited caller permission, real SDK/Socket behavior, callback/parameter last-use, Shutdown quiescence, full image/source/runtime ABI association and direct two-board DDS remain UNVERIFIED. Named-identity evidence does not establish inherited caller permission or SetSelfTokenID indispensability. Those remain separate prerequisites, not authorization granted by this update. Host/D06 sealed suites were not rerun.
-
-Original512MiB native failure, first SDK-driver warning failure, old-document-binding static BLOCKED, capacity stops and older distinct-root A139 remain historical failures with their original scope. No old result is converted to PASS. Prior P1 corrections, all capability rows and the complete historical body below are retained byte-for-byte.
-
----
-
-<!-- CURRENT_NATIVE_SDK_BUILD_LINK_20261026; historical body below preserved byte-for-byte. -->
-# Current native SDK build/link evidence — 2026-10-26
-
-Step 1 native candidate: implementation PRESENT; SDK23 AArch64 build, install and installed-consumer link PASS. This increment changed no production source. Host/P1 status is unchanged; sealed Host suites were not rerun. Full Stage 1 Transport/runtime acceptance remains NOT VERIFIED. **PRE_COMMIT FAIL; Ready for commit NO; Stage 2 all 37 capability IDs HELD.**
-
-Current product SHA256 `14878b1ce5ef5d490ac332e0df95886fd6b89da90547fb9813f3975d3bea533c` binds the current 22-TU Transport, including HostProviderLoop `b7df7183…`, PublicSocketBackend `119fc151…`, ExperimentalRuntime `30ba5c7a…`. Actual compilation uses native SDK23 clang 15, ARM64/shared libc++, native Fast DDS 2.14.5 and fastcdr 2.2.5, rather than the repository-root DDS 3.6 or a Host/Fake SDK substitute. Five public Socket imports at `@1.0`, no Session API, loader direct `NEEDED libc++_shared.so`, 40 installed files, and installed public macros/layout/link contract passed static audits. Official Socket headers come from the repository, not shipped SDK headers. The 51 cached provider DSOs are hash-bound link inputs; image/source/toolchain ABI association is UNKNOWN.
-
-Initial evidence: `E:/Codex-FastDDS-stage1-native-20261026-d01/CURRENT_NATIVE_INITIAL_D06_RESULT.json`, SHA256 `a63679cef48ed192a31f9169cbbf0fdb96bf4f6226f9a5b18ce49cc2c4f5b4aa`: product22 + bootstrap1 + C-source/CXX-linked loader1 + installed consumer1 = 25 TUs, three ELF links, one one-TU archive, two real configurations. Formal source/artifact-bound review `prep/FORMAL_ARTIFACT_REVIEW_D06.md`, SHA256 `d8d7abe200b94bc447373a8df0b51f638aa83c6c1f48e161e4ded59c4c4064a4`, found no actionable findings within this build/link increment; runtime qualification is outside that verdict.
-
-Fresh final evidence: `final/FINAL_RESULT.json`, SHA256 `1cda2e14205a5dd1dd8bb1fea5b95a2e458a48cd6b6e57c68f1a1d3405807443`: a real installed-consumer configure, one-TU build/link, and readelf audit (three commands, native/wrapper exits 0; jobs clean). Initial product/build/install were not repeated. Final evidence binds 69 direct artifact pins. Cumulative actual scope is **26 project TUs, four ELF links, three real configurations, one one-TU archive**. Compiler-check artifacts are 62 + 48 + 48; these are not invocation counts, and exact compiler invocation count remains UNKNOWN with raw logs retained. Final consumer SHA256 is `d55065e80adc5295d93351c173f5ee3894939c589667e718db523b8e3315e448`.
-
-CURRENT ARM execution, SDK initialization, loader execution, Socket/BYTES transfer, DomainParticipantFactory/Participant, Writer/Reader, and dual-board DDS are NOT_RUN / NOT VERIFIED. SDK .32 versus board .31 ABI remains UNKNOWN. The current product differs from historical `91456513…`; loader `0225a138…` matching an older C++ root is not current runtime evidence. Historical board A Signal11/139 and board B skipped, followed by older C++ loader A/B load0/dlclose0, retain their original dated scope below.
-
-Static lifecycle evidence copies a listener adapter under lock and later invokes OnBytes. Void Shutdown/local deletion neither proves callback drain nor guarantees local OnShutdown. Current process slots retain state and report SdkDrainUnproven / NativeRetainedNotQuiescent. Temporary timed-QoS last-use is UNKNOWN; no new production defect or observed runtime race is established. Default8/opt-in12 prerequisites, two views/two circuits, FailedRetained/drain/full recreation and real failure lifecycle remain open acceptance gaps. The separate Shim25 Host variant is not a native build prerequisite and remains a later gap.
-
-D02 shadowing BLOCKED, D03 configure-success/output-classification FAIL, and D05 product/install PASS then unknown consumer phony STOP remain historical failures. D06 adds one exact read-only CMakeFindDependencyMacro pin; unknown/changed external inputs and material external targets remain rejected. Capacity stops and later additive public turn-UUID correction preserve earlier UNKNOWN records. Final D02 root derivation was corrected before native execution. No guard weakening or sealed Host rerun is claimed.
-
-This uses a separate 128 MiB allowance (prep4 / initial64 / review-fix32 / final16 / docs2 / reserve10), not spare historical 416 MiB. Outputs/temp/cache/logs remain on E with original single-job guards; C-write attribution and transient category peaks remain UNKNOWN. Next native Socket/BYTES and current direct stock-DDS dual-board work require their own immutable package, provider/image ABI, device and identity approval prerequisites, independently of Host/P1 and its budget. This document grants no device/security/identity action and no SetSelfTokenID use.
-
----
-
-<!-- CURRENT_LAZY_TX_RX_ONLY_D07_20261026; entire preceding historical document body preserved below. -->
-# Current lazy-TX / RX-only Host closure - 2026-10-26
-
-**Implementation PRESENT; qualified Host build PASS; bounded Windows HostFake/Mock final40 PASS. Overall NOT_VERIFIED; global PRE_COMMIT / Commit gate FAIL; Ready for commit: NO. Current native SDK, direct DDS, RK3588A and cross-device tests NOT_RUN / NOT_VERIFIED; DEVICE_TESTED=false. Stage2 original Jazzy RMW and all37 CLI IDs remain HELD.**
-
-This current supplement supersedes earlier shared36 missing-oracle/deferral wording only within the new Host scope. Every prior body, failure and37-ID history below is retained verbatim as dated evidence. Current initial36 uses the revised lazy-TX/domain contract; it is not proof that every unchanged historical oracle passes. Entire pending stage covers five production CPPs/five headers plus test support; the bounded review repair changes only HostProviderLoop.cpp and the existing-friend test helper. Normal first Send prepares lazy outgoing TX only after genuine Ready; weak ownership, deadline checks, setup pins, ordering and close remain. Tested first-TX Bind failure and known client-shutdown HostFake paths preserve RX with their asserted sticky refusal; the separate internal error-model path qualifies RX admission only, not application dispatch or an SDK ISocketListener OnError callback; no automatic reconnect, eager TX, synthetic generation, artificial wake or upper DDS/RTPS workaround is claimed.
-
-The initial P1 payload marker160 is the first B TX: exactly +1 B Socket and +1 B Bind, with A unchanged. Recovery payload marker161 reaches the replacement receiver once while native counters and observed Socket IDs remain stable; 160/161 are payload markers, not domain IDs or new guards. Live native owner/generation remains UNKNOWN. Empty/unsupported/unconfirmed admission produces no extra A DID/send; exact A-negative and B-positive observations qualify validated Fake Send entry, not SDK return or application dispatch. Original WaitNone, restoration and cleanup remain. Strict201 keeps A never-open; strict202/204 retain the same A. Four new A/B x view-order cases use genuine151/152 Ready guards and actual queued records=1/queued=1/bytes=4/native_admitted=0 before first PumpSend. They prove same-call progress past an RX-only circuit, exact peer delivery in Fake, settled queue and natural close. Stable public WaitForWork generation boundary is observed; execution inside the internal CV sleep is not established. Helper snapshots are synchronized/read-only through an existing friend, not injected work.
-
-Evidence root: `E:/Codex-FastDDS-r39-p1-20261025-d01/noopen-incremental-d01/b-domain-full-d01`. Initial revised36: `unconfirmed-lazy-prereq-d01/INITIAL_NATIVE_RESULT.json` SHA256 `422dfd877da2ad0929c9d954857e09f2ee75f261df6f6d62a40a08463ca6337b`. Entire-stage formal review `review/FORMAL_LAZY_TX_REVIEW_D01.md` SHA256 `92fef375ccf51a9f04cf667eee1900baee7640191991fb8c1af03bc9ec4a5676` found one P1: null lazy outgoing provider aborted scanning before another domain queued TX. Valid `review-fix/RED_D07/RESULT.json` SHA256 `cfae085f6a219e15928d5a0c6131459e2a337dc838c037cdf5148e18221bdace`: compile/link/identity0, CTest8 / child1 after the exact queued prerequisite. D04 CL2/C2664, D05 CL1/missing parent and D06 CTest8/child1 with wrong queue precondition remain failures, not valid production RED.
-
-Minimal Host fix skips the valid RX-only circuit before Take, preserving real invalid-execution/non-circuit closing errors and releasing scoped pins/credits. Current Host SHA256 `b7df7183a2f3735fc36052ae3daa2c8ebda474d6f7350d1c8373418bdbdf6763`; helper SHA256 `d830a00f1200efcc9461b134db5b21c746e5e27d63680bcf870c2731d82cd07f`. Independent GREEN_D07:2 Host CL,4 links,12 affected cases,19 commands exit0. `review-fix/prep/FORMAL_RESOLUTION_D07.md` SHA256 `aaae2f903239b7ec3be3515baa4c0bbf6f5b4b55c99355011183f9ee875f9198` closes the P1 with no additional actionable blocker in that bounded repair; it does not replace the entire-stage review.
-
-Canonical NEW final: `final/FINAL_RESULT.json` SHA256 `ac34fd3c13786ea194e8f1b7892d4c69cdf1bb4287b6962465873f5d6977a77e`. Actual identity+40 isolated fresh singleton CTests =41 commands/native+wrapper exits0,40 fresh passed XMLs; jobs drained/no stop. Child0 where raw absent is derived from passed XML, not GetExitCodeProcess. Final performs0 CL/link/configure/archive: exact current GREEN49 objects/four EXEs are qualified reuse, not a fresh build. Final command is `C:/Users/17715/anaconda3/python.exe -B <evidence-root>/final/validate_final.py`; raw argv/receipts/XML/source closure remain in that directory. Documentation inspection reads those records; it does not rerun them. All execution stages are closed; no native job is pending.
-
-Cumulative actual CL/link/CTest/configure =79/14/103/6 against unchanged maxima197/17/145/8. Resource authorization remains task416MiB/N224/shared5/prefinal155/reviewfix48/final64/docs1/additional2; final8 is inside reserved64, and map24 uses unused4 within48, not an added reservation. Boundary checks do not establish transient category peaks (UNKNOWN); ordinary CLI/system C-write attribution remains UNKNOWN. No cleanup, reserve reduction or zero-C-write claim. Docs evidence cap1MiB includes680662B existing before-backups.
-
-SDK/ABI6.1.0.32 versus6.1.0.31, hard native deadlines, void Shutdown completion, NotQuiescent/FailedRetained, callback/parameter last-use, native drain/name cleanup/fullclose-recreate and live owner/generation remain unqualified. Default8 / explicit opt-in12 prerequisites and our max2 views/2 circuits persist. Historical SDK loader/static-build PASS belongs to its old artifact and does not qualify current native source. Root exact3.6 legacy guards are retained, not revalidated; stock2.14 public five-argument contiguous calls do not establish3.6 scatter/priority behavior. Stale graph/UNKNOWN boundaries are unresolved; no clean graph claim or commit/push.
-
-Next documented substantive Stage1 gaps remain shim25 frontend/version/runtime-variant mapping and current native SDK acceptance, then all applicable stock2.14 -> custom Transport -> real DSoftBus Socket interfaces/lifecycle/failure/recovery and direct DDS across both RK3588A boards. This is a remaining gap, not a new executed plan. Standalone SDK BYTES needs its own immutable package/provider ABI/device and identity approval independently of Host P1/resource closure, and proves neither DDS nor ROS2. SetSelfTokenID remains PENDING/FORBIDDEN. Security/identity approval alone cannot close the broader Stage1 gaps. Stage2 all37 remain HELD.
-
----
-
-<!-- R39_DG02_CURRENT_20261023; complete prior body remains byte-preserved dated evidence. -->
-# Current R39 DG02: default Runtime domain guard (2026-10-23)
-
-**Implementation PRESENT; Host build PASS; bounded Host scope PASS; SDK initial static build hash-validated reuse. Overall NOT_VERIFIED / normal Commit gate FAIL / Ready for commit: NO. DEVICE_TESTED=false; CROSS_DEVICE_TESTED=false.**
-
-Runtime MakeDescriptor now fills an absent expected_domain_id from the one validated configured native primitive after ValidateV1 and binding checks (domain0 is engaged; explicit conflict refused). The same canonical configuration reaches Start and descriptor across normal/observed/Persistent/legacy assembly. Every facade still waits for its actual public domain callback: empty/unsupported/callbackless stays Await, mismatch stickyRefused; Factory/init/native-ready is not domainReady. Standalone low-level descriptors and opaqueBootstrap are outside this safe-default guarantee. No automatic ROS_DOMAIN_ID/Context selection; one descriptor issuance and normal max2/onepeer limits remain.
-
-Independent DG01 → Tier3 three-pass review/no validated P0–P3/no code change → DG02 final re-executed257 children:255OS0 plus original raw OS1 and original full domain OS1. Targeted19/RX PASS; limited3.6 interface component188/188 PASS; stock47/48 CTest8 (outer PowerShell1 is not CTest exit8). Original T2Domains621B/a126 remains: first crossdomain WaitNone passes, native151/actual151 group0 gets2writes/2takes, then fixednative151/actual152 positive reader match FAILS. Raw top+recursive7 old helpers/currentlib actually FAIL while Await. No all-original-baselines PASS claim.
-
-Normal/observed each20 remote takes8/4/8 with replacementGUID changes remain Host Fake; no same-Runtime local-edge proof. Windows HostSocket RX is stock2.14 observed-ABI opaque bytes6sends/ingress,4held,1LocalBytesrefusal,5delivered/released, not SDK or ROS data. New allocation28 failures then firstsuccess28 qualify only that path; size200/index26 is a candidate, not exact guard-type proof. Original24 allocation case also reran.
-
-Previously recorded raw environment whitelist fields (including rawPATH) match257/257; this does not assert equality of unrecorded historical OS environment. args_after_exe/timeouts match; cwd follows old→fresh mapping.27 copied binaries, no final compile/link. Fast external module misses UNKNOWN; self OS path is not external memoryhash. SDK uses current DG01 archive88b73…21TU/21AArch64objects/21members/708inputs, not prior DP87eb or a new final build.
-
-[DG02 implementation, assertion ledger, execution and blockers](docs/ROS2_DEFAULT_DOMAIN_GUARD_20261023.md) / [capability matrix](docs/ROS2_CAPABILITY_MATRIX.md).
-
-Currentstock37 Jazzy dual-board accepted0. HDC d04 is USB/shell availability only; no current Runtime/Socket/DDS/ROS2 board test. Current sharedlink/targetentry/GOT/ABI qualification is absent. Default8negative Socket exhaustion and complete immutable-deployment opt-in conditions remain; positive3RetainedNotQuiescent/Runtime and nativeSDK drain/namecleanup/fullclose-recreate UNKNOWN. Security build OFF, max2/onepeer and flow/topology limits remain. No new R39 stage/commit/push/SHA/CI or clean graph claim. Earlier current/PASS text below retains its own dated scope.
-
----
-
-<!-- R39_DP_CURRENT_20261023; entire previous body below remains byte-preserved dated evidence. -->
-# Current R39 DP: default and observed two-view Host scope (2026-10-23)
-
-**Implementation PRESENT for the bounded eight-path DP+compat increment; current default two-view HOST_FAKE scope PASS. Overall FAIL / NOT_VERIFIED; normal Commit gate FAIL; Ready for commit: NO. DEVICE_TESTED=false; CROSS_DEVICE_TESTED=false.**
-
-Normal and observer Runtime now issue one descriptor; that same descriptor admits at most two active/pending views, and the last view permanently closes normal lifetime. Explicit PersistentNativeAnchor retains the same two slots across compatible descriptors and keeps its native pin through a zero-view gap. Legacy reaccept/node-route exclusive limits remain. Same-Runtime local edges are NOT_PROVIDED; max2/onepeer is not arbitrary multi-Participant/multi-peer support, and automatic ROS_DOMAIN_ID selection remains absent. Older one-shot/single-facade descriptions below are dated snapshots; normal single-descriptor issuance remains.
-
-Three baseline results must remain distinct: original19389-byte test SHA7651… + first precompat candidate library was DI01 OS1 FAIL; the unchanged original test + current compat library is DI02/DF01 OS2 FAIL (obsolete single-facade oracle; exact return2 OR operand UNKNOWN); strengthened current two-view Baseline is OS0 PASS. Component188/188 uses that revised contract; original descriptor-repeat refusal, concurrent init, shim provenance, NoResidue and all other function tails remain. No claim that all original baselines pass.
-
-Independent DI02 → one independent Tier3 reviewer/three passes (no validated P0–P3) → DF01 final: new9cases/currentbaseline/independent extra PASS; stock38/39 CTest8, unchanged original domain FAIL. Actual239 functional children:237OS0 + originaldomainOS1 + originalcontrolOS2, ordinary/non-elevated with wait/OS receipts. Normal and observed DDS each have20 exact remoteGUID/payload takes (8/4/8) across four remote crosspairs/eight directions, changed replacementGUID; actualbadalloc24/refund/unique-stop/observer-sticky controls PASS. Bottom Socket is Host Fake, not native communication.
-
-Final replay used25 identical copied binaries without compiling/linking. **RAW_ENV_NOT_IDENTICAL_227:**12 raw environments match;227 CTest PATHs contain one fewer exact repeated stock/ROS2/pixi triplet. All239 non-PATH variables, arguments/timeouts/binary hashes and first-occurrence ordered exact PATH directories match; this does not establish external DLL capture for fast misses (UNKNOWN). SDK21/21/21/708 is initial DI02 static compile, final hash-validated reuse only.
-
-[DP contract/assertion changes, final evidence and blockers](docs/ROS2_DEFAULT_TWO_VIEW_20261023.md) / [current capability matrix](docs/ROS2_CAPABILITY_MATRIX.md).
-
-Default nohandle8-call exhaustion FAIL and separate defaultfalse immutable-deployment opt-in constraints remain historical limits, not rerun/fixed by DP. SDKdrain/name cleanup/full nativeclose-recreate UNKNOWN; currentstock37 Jazzy dual-board communication0accepted. Latest2026-10-23 19:48:36UTC HDC USB-shell availability is not communication or independent remote-exit measurement. No shared native link/target entry/GOTABI/device qualification, no new R39 commit/push/SHA/CI; security build OFF and flow/topology restrictions remain. A default-domain next-stage plan is PLANNED/NOT_IMPLEMENTED/NOT_RUN. All earlier current/PASS text below belongs to its own dated scope.
-
----
-
-<!-- R39_PV01_CURRENT_20261023; complete prior body preserved below as dated snapshots. -->
-# Current R39 PV01: explicit persistent two-view Host scope (2026-10-23)
-
-**Implementation PRESENT for the six-path PV01 increment; bounded PersistentNativeAnchor two-view HOST_FAKE PASS. Overall FAIL / NOT_VERIFIED; normal Commit gate FAIL; Ready for commit: NO. DEVICE_TESTED=false; CROSS_DEVICE_TESTED=false.**
-
-The explicit existing PersistentNativeAnchor now admits at most two active or borrowed views per Runtime, with independent receiver/egress leases on the same live native anchor. Exact-root identity, two-slot bound and record/entrance budgets remain. Default Participants are still one-shot; local same-Runtime all-to-all edges are NOT_PROVIDED; automatic ROS_DOMAIN_ID mapping is absent. Older single-active-view wording below is a dated snapshot for the prior implementation, not the current explicit persistent contract.
-
-Independent PI01 → three-pass review by one independent reviewer (no validated P0–P3; Tier3 retained; no code fixes) → final PF01: targeted8/8, component188/188, stock29/30; the unchanged original `stock_transport.views.domains` still FAILS (CTest8/nativeOS1). Four crosspairs/eight directions on one topic had exact remoteGUID/payload and20takes (8/4/8), including view close/replacement with changed writerGUID. All24 actual bad_alloc injections failed and refunded; uninjected second-view creation and original-view traffic then passed. These are true stock2.14.5 DDS APIs over Host Fake Socket, not device communication. Component scope is limited3.6 interfaces, not a full3.6 DDS build.
-
-Default no-handle eight-call exhaustion remains FAIL. The separate immutable_deployment_no_listener_record_reuse flag remains false; historical same12/distinct12 opt-in Host PASS requires immutable full native-name→identity/domain/peer/package/QoS/config mapping across deployment/fresh Runtimes, with no global registry. Published records/entrances remain retained; no larger quota or SDK drain is claimed. The original domain failure occurs with first Participants on two independent Runtimes, so it is not resolved by adding a second persistent view. Explicit selected151 descriptors do not implement automatic domain mapping.
-
-[PV01 stage report, commands, evidence and blockers](docs/ROS2_PERSISTENT_TWO_VIEW_20261023.md) / [current capability matrix](docs/ROS2_CAPABILITY_MATRIX.md).
-
-Current-stock37 finite Jazzy dual-board communication cases remain0 accepted. HDC at2026-10-23 16:49:43UTC confirmed both boards USBConnected only. SDK23 initial static21TU/21objects/21members/708inputs compiled; final SDK evidence was hash-validated reuse without new build/link/run. Shared native link/target entry/ABI/communication qualification remain missing; native close/recreate/drain UNKNOWN. Security build OFF and flow/topology limits remain. No R39 stage/commit/push/new SHA/CI. The entire no-handle, foundation and older R38/current/PASS body below is historical evidence, preserved byte-for-byte.
-
----
-
-<!-- R39_NOHANDLE_CURRENT_20261023; all prior body bytes below are dated snapshots. -->
-# Current R39 no-handle opt-in increment (2026-10-23)
-
-**Implementation PRESENT for the bounded eight-path increment; Host opt-in scope PASS / overall Host FAIL; SDK static compile evidence reused, no final rebuild; DEVICE_TESTED=false; CROSS_DEVICE_TESTED=false; Overall FAIL / NOT_VERIFIED. Normal Commit gate: FAIL; Ready for commit: NO.**
-
-Independent initial tester → three-pass agentic review (no validated P0–P3; Tier 3 residual risk) → final tester completed in sequence. Final execution: 11/11 new cases, 188/188 component cases; stock 26/27, original `stock_transport.views.domains` FAIL (CTest 8). The default-off `immutable_deployment_no_listener_record_reuse` preserves the default exhaustion failure: 8 actual negative Socket calls retain 8 records; attempts 9/10 are refused before the API. Explicit opt-in same-name12/distinct-name12 returns project records to free8 each cycle in Host Fake SDK controls only. It requires immutable complete native-name→identity/domain/peer/package/QoS/configuration mapping across the entire deployment, including fresh Runtimes; no global registry enforces this. SDK cleanup/drain is UNKNOWN; published records remain retained. This is not a default-capacity repair.
-
-The single-active owning-or-borrowed view per Runtime is a temporary restriction; concurrent multi-Participant/domain support remains incomplete. All 37 finite Jazzy current-stock dual-board communication cases still have **0 accepted**. Other QoS/service/action/ROS2 rows remain unverified on the current stock device artifact. SECURITY build OFF, flow and topology restrictions remain. True stock 2.14.5 Host DDS (six exact GUID/payload writes/takes) still uses Fake public Socket; limited 3.6 interface component tests are not a full 3.6 DDS build. Read-only HDC availability at 2026-10-23 14:51 UTC confirms both aarch64 boards connected, not communication. Historical loader-only PASS belongs to the older 4580 source/DSO; R38 patched-library PASS does not qualify AF15/current stock.
-
-[Current increment, commands, evidence and unresolved gates](docs/ROS2_NOHANDLE_OPTIN_20261023.md) / [current capability matrix](docs/ROS2_CAPABILITY_MATRIX.md).
-
-No R39 stage/commit/push or new SHA/CI. Published baseline remains `123051e6abcc55db0712befd71eca0c7670f681f`; its CI is NOT_REPORTED (zero runs/checks/statuses in the prior observation). All 2026-10-22 foundation and older R38/current/PASS/publication sections below are **dated snapshots**, retained byte-for-byte, not current overall verdicts.
-
----
-
-<!-- R39_STOCK_FOUNDATION_CURRENT_PREFIX; original dated body below remains byte-preserved. -->
-# R39 unmodified Fast DDS / public-QoS foundation (2026-10-22)
-
-**Implementation PRESENT for a six-file foundation; bounded Host execution PASS; SDK23 stock build audited PASS; new stock DEVICE_TESTED=false / CROSS_DEVICE_TESTED=false. Overall NOT_VERIFIED. Normal project Commit gate: BLOCKED; Ready for commit: NO.**
-
-The post-review final tester qualifies only the frozen stock-build and public-QoS Bootstrap foundation: fresh Host CTest 3/3 and Python integrity 4/4; existing SDK23/AArch64 stock Fast DDS audited (229 objects), plus a fresh Bootstrap static compile. Host execution uses a Fake Socket seam; the SDK Bootstrap was neither runtime-linked nor executed. The new target entry/package and the 37-case current-stock Jazzy acceptance remain pending. Read-only board identification is not a communication test.
-
-[R39 scope, commands/evidence and remaining gates](docs/ROS2_STOCK_FOUNDATION_20261022.md) / [current capability matrix](docs/ROS2_CAPABILITY_MATRIX.md). R38 was published as `123051e6abcc55db0712befd71eca0c7670f681f`; its genuine bounded dual-board PASS belongs to its historical patched Fast DDS/bridge artifact and does not qualify this new unmodified upstream path. Earlier pre-publication wording below remains a dated snapshot. No R39 stage/commit/push or CI PASS is asserted.
-
----
-
-<!-- R38_CURRENT_SCOPED_PASS_PREFIX; the complete prior body below remains byte-preserved historical evidence. -->
-# R38 finite dual-board endurance and durable capture: scoped PASS (2026-10-20)
-
-**Implementation PRESENT; native BUILDS; HOST_TESTED PASS; DEVICE_TESTED / CROSS_DEVICE_TESTED / INTEGRATION_TESTED PASS for the selected case; VERIFIED_CURRENT_SCOPE=true. Full ROS2 remains NOT_VERIFIED.** Independent final tester D03 accepts new run `940f4e9c10a29830`: 1801 String roundtrips, 7204 complete 33-byte CDR stage records, zero loss/duplicates/reordering/foreign payload, spans A1811.239383904s / B1811.244691655s. Both original complete-stream oracle modes (`final=False` and `final=True`) PASS. Both boards have RuntimeClose0, observation_complete1, public deletion0, interpreter0 and device-child0; four owned PIDs are absent and tokens restored, with zero forced cleanup.
-
-The Windows x64 durable worker owns a finite kill-on-close Job for its executor/runner/SDK descendants, checks exact source13/job/process/one-shot identities before SDK dispatch, and writes bounded append-only state. An independent observer retained the exact live worker/child objects, then recorded actual OS exit0 for both; runner and original CLI Popen exits and external short-helper exit are0. The observer's own OS exit is explicitly **UNOBSERVED_NONBUSINESS_AUXILIARY**; exact identity absence, closed handles, complete bounded output and two stable hash snapshots satisfy the reviewed final conditions. This does not claim every host process had an observed OS exit0.
-
-D07's real 68 Python methods/0 skips and fresh 13-case Host CTest build remain PASS; D03 final testing revalidates those sealed bytes rather than rerunning them. Four new post-review Windows lifecycle controls PASS separately with model admission/runner, not DSoftBus. The genuine SDK23/AArch64 native bridge build has 23 TU/objects and 1037 inputs; final testing revalidates it, with no new D07 SDK compile. Exact ordered SPDP batches share the original 256 observation slots; this is observation bookkeeping, not DDS per-payload wire causality. Fast DDS DDS/RTPS/QoS semantics and the DSoftBus Socket API boundary remain unchanged.
-
-[R38 commands, artifact/target identities, sealed evidence and limitations](docs/ROS2_DURABLE_CAPTURE_ACCEPTANCE.md) / [capability matrix](docs/ROS2_CAPABILITY_MATRIX.md). Canonical tester seal: `9d8dbe9e15813da1fad73dbc213dfd505d871868e69e24a765d711a3d2f97459` (730 members). Tester Commit gate:PASS covers its technical scope only. Documentation is synchronized for Main's remaining gates; **Main PRE_COMMIT / final all+staged graph analysis / commit / push are PENDING, CI NOT_RUN_NO_NEW_COMMIT**. No new publication SHA is asserted. Historical R37 FAIL, initial/review failures and old R38 run `efa7336e7ca4b78b` BLOCKED/tool24208 exit UNKNOWN retain their original verdicts and bytes below.
-
----
-
-<!-- R37_BLOCKED_CURRENT_PREFIX; all following R36/R35/R26 bodies remain byte-preserved historical snapshots. -->
-# R37 source-bound native observation and close: FAIL / BLOCKED (2026-10-20T03:08:59.634827+00:00)
-
-**Implementation PRESENT; native BUILDS; HOST_TESTED PASS; DEVICE_TESTED=true; CROSS_DEVICE_TESTED=true with failed acceptance; INTEGRATION_NOT_QUALIFIED; VERIFIED=false. Commit gate: BLOCKED; Ready for commit: NO.** The single real run `5f28247d2fc3258a` has 1801 ordered String exchanges and 7204 complete matching 33-byte CDR stage observations, established by separate read-only extraction. Both unchanged original oracle invocations (`final=False` and `final=True`) reject the full streams, which retain the fixed1910s probe-deadline FAIL. This component observation is not an accepted endurance-and-normal-close run.
-
-R37 built a source-bound SDK23/AArch64 native bridge from 23 translation units, 1037 compiler/link inputs and 23 objects; final testing revalidated that D01 build, without a new final SDK build or full Fast DDS rebuild. Final HOST results are **46 Python methods, 0 skips**, and a **fresh 13-case C++ CTest build**, reported separately. Exact complete ordered SPDP batches now share the original 256 observation slots; both observers report captured1/faults0/adverts4 and all seven fatal counters0. This attempt did not reproduce the original capacity overflow; normal close still failed.
-
-Both boards report OriginalDeleteParticipant0, RuntimeClose2, observation_complete1, public deletion1 and child exit71; stderr includes `CONTROL_MISSING_OR_INVALID` and `Failed to delete participant`. Host progress ended at A385/B385; the original `BUSINESS_COMMAND.json` remains RUNNING, and original host exit/capture-loss cause are **UNKNOWN**. The original PROBE_FINISH/normal-close controls and runner RESULT/CLEANUP/ANALYSIS are absent. Eleven read-only recovery commands recovered six original raw files with equal before/local/after hashes; all four owned device PIDs are absent and tokens restored (matches1/rc0), with zero signals, replay, restart, manual close or cleanup mutation. These facts do not qualify close.
-
-[R37 build, actual commands, results and limits](docs/ROS2_NATIVE_CLOSE_ACCEPTANCE.md) / [current matrix](docs/ROS2_CAPABILITY_MATRIX.md). **Full ROS2 NOT_VERIFIED**; wider QoS, large-message/concurrency/longer soak, strong DDS/wire provenance, SDK epoch/global drain and leak freedom remain open; default automatic reconnect is NOT_PROVIDED by this configuration. Loan/recorder-internal take remain UNOBSERVABLE; third observer unsupported, selected-client status/feedback ordering OPEN; R22 STOPPED/excluded. R36 FAIL and all original failures remain historical. No new commit or push; CI NOT_RUN_NO_NEW_COMMIT. Detached `e27b7e9d1be7e72944108655a62f9753bfa99448` is the historical R35 baseline. Documentation is synchronized for blocked handoff only; all older “current”/PASS/publication text below belongs to its own dated snapshot and does not qualify the R37 library.
-
----
-
-<!-- R36_BLOCKED_CURRENT_PREFIX; original body below is byte-preserved. -->
-# R36 finite endurance: FAIL / BLOCKED (2026-10-20T00:34:50.480663+00:00)
-
-**Implementation PRESENT; HOST PASS; DEVICE_TESTED / CROSS_DEVICE_TESTED executed and FAIL; INTEGRATION_NOT_QUALIFIED; Overall NOT_VERIFIED.** Run `f048d4650806d520` completed 1801 String application echo roundtrips (7204 matching 33-byte CDR stage records), then both native close paths failed and both child processes exited 71. Content-only PASS is a separate component result; final tester **Commit gate: BLOCKED; Ready for commit: NO**.
-
-The native package is BUILD_QUALIFIED_REUSED_NATIVE, with 3236 members/220 unchanged R26 ELFs and no new native compilation. Final HOST evidence is 52 test methods (14 new + 18 R26 + 15 independent + 5 Q2 schema methods containing 27 controls). [R36 commands, retained failures and limits](docs/ROS2_FINITE_ENDURANCE_ACCEPTANCE.md) / [capability matrix](docs/ROS2_CAPABILITY_MATRIX.md).
-
-Normal close returned `INTEGRATION_CLOSE_RESULT=2`, public participant deletion returned 1, and additional stderr reports `FDDST_CLOSE_RESOURCE_COMPLETE_WITH_RUNTIME_ERROR` and `Failed to delete participant`. Unmodified strict native/diagnostic checks reject this run. Four owned PIDs absent, zero forced signals and restored tokens do not establish successful close. Current-source observation-capacity analysis is a sufficient failure-condition inference only; it is not a confirmed sole root cause or evidence that current C++ was compiled into this reused artifact.
-
-**Full ROS2 NOT_VERIFIED; leak freedom/SDK epoch/global drain NOT_PROVEN; strong DDS BLOCKED_PROVENANCE_GAP; loan UNOBSERVABLE.** Selected RELIABLE/VOLATILE, one outstanding request/no application retry or dedupe only. Broader QoS, large messages, concurrency and longer soak remain unverified. Default automatic reconnect is NOT_PROVIDED by the accepted configuration; the current two-Participant/one-peer configuration does not support a third observer. R22 remains STOPPED/excluded.
-
-This is a blocked handoff. A separately reviewed source-bound native observation/close contract and new build are required before repeating the original complete dual-board acceptance. No post-failure device rerun, cap/timeout/assertion/return-code workaround or source change was made. R36 has no new commit/push; CI is NOT_RUN_NO_NEW_COMMIT. Checkout baseline `e27b7e9d1be7e72944108655a62f9753bfa99448` identifies the historical R35 state, not a new R36 commit or fresh remote verification.
-
-The entire original body below is retained as dated historical evidence. In particular, R35's three bounded RECORD/DEFAULT/NO_LOAN PASS cases and R26's 200-roundtrip PASS retain their original scope; this failed R36 run neither extends nor removes those results. Older uses of “current”, PASS, pending publication or CI describe their own dated snapshots.
-
----
-
-<!-- R35_CURRENT_STATUS_PREFIX; historical body below is byte-preserved. -->
-# R35 current bounded serialized bag evidence (2026-10-19T22:45:38.910915+00:00)
-
-**Implementation PRESENT; bounded DEVICE_TESTED / CROSS_DEVICE_TESTED PASS** for three fixed cases: RECORD `995d57d79617477a`, DEFAULT `f1037096c37e5b3b`, NO_LOAN `128ed56c0766fce3`. Four topics/two types/two indexes produced eight immutable SQLite CDR rows, then sixteen typed/raw callbacks and eight full-buffer matches in each playback. [R35 acceptance, original commands and limits](docs/ROS2_SERIALIZED_BAG_ACCEPTANCE.md) / [current matrix](docs/ROS2_CAPABILITY_MATRIX.md).
-
-Native package qualification is REUSED_HASH_VERIFIED_NOT_REBUILT. Final agentic-review has zero findings/source fixes; the final tester reports Commit gate: PASS for the finite R35 technical test scope. Existing device/host results were REUSED_NOT_RERUN with unchanged source hashes; only two readonly public-admission checks were newly executed by that final tester. This documentation sync makes no device or SDK call.
-
-**Full ROS2 NOT_VERIFIED.** General serialized compatibility remains OPEN; strong DDS payload/wire proof is BLOCKED_PROVENANCE_GAP. Recorder-internal take and effective can-loan are UNOBSERVABLE; SDK epoch/global drain are NOT_PROVEN. The accepted configuration has two Participants/one peer; its third-observer topology remains unsupported. Selected RELIABLE/VOLATILE only; broad QoS, large-message/concurrency/soak/leak freedom and default automatic reconnect are not newly qualified. R22 remains STOPPED/excluded.
-
-DEFAULT D01 expired before deployment and remains FAIL/no CONSUMED. Serialized ParameterEvent nonzero suffix bytes are retained, not normalized or treated as proven padding. Git publication outcomes are maintained separately by Main; this technical record does not invent a future commit/CI result. Earlier sections below are dated historical evidence, including their original failures and publication snapshots.
-
----
-
 # Fast DDS OpenHarmony DSoftBus Transport
 
-## R34 stage1: bounded typed/serialized publish and raw callback observation (2026-10-19T06:28:09.313739+00:00)
-
-**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for `R34_SERIALIZED_IMPACT_TYPED_AND_RAW`, A-to-B only.** Four dedicated topics/two fixed types/two indexes produced 8 public publish calls,16 typed/raw callbacks and16 full buffers. ParameterEvent local buffers were148 bytes/140 consumed/8 suffix; typed publication yielded140-byte raw callbacks, while bytes publication yielded148-byte raw callbacks identical to the full sent buffers. Four String controls remained40 bytes without suffix. All fields and complete-buffer native deserialization agreed. [Acceptance, commands and retained failures](docs/ROS2_SERIALIZED_IMPACT_ACCEPTANCE.md) / [central matrix](docs/ROS2_CAPABILITY_MATRIX.md).
-
-This is a diagnostic experiment on unchanged stock RMW/native code. Raw callback observation is the accepted boundary; **strong DDS serializedPayload/wire-boundary proof is BLOCKED_PROVENANCE_GAP**. General serialized compatibility remains OPEN. This run's zero nonzero-suffix count does not erase R33's22 suffix samples/11 nonzero samples or establish safe padding. Original R34 query1 remains FAIL; initial auxiliary receipt history remains PARTIAL/times UNKNOWN.
-
-**R34 bag NOT_TESTED.** The current bridge supports two Participants with one peer; the proposed third observer/recorder arrangement and recorder-internal-input comparison remain BLOCKED. A two-process staged record/closed-SQLite/play study is a separately scoped NOT_IMPLEMENTED/NOT_TESTED candidate; its internal recorder input would remain unobserved. Historical ten-String bag PASS retains its original scope. Full ROS2 NOT_VERIFIED; QoS/concurrency/large-message/soak/default reconnect/SDK epoch gaps remain; R22 STOPPED.
-
-R33 functional V2 is published as `bb007f39d3d5224d44ed5bcfa8294a68b337b32e` (2026-10-19 02:50:54.316289 UTC; exact-SHA CI NOT_RUN, zero runs/checks/statuses), confirmed by root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`. At this 2026-10-19T06:28:09.313739+00:00 pre-commit documentation snapshot, R34 Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual later outcomes belong in `build/r34-serialized-impact/main-publication/POST_PUBLISH.json`; no future SHA or PASS is prefilled.
-
-Earlier dated sections below retain their original evidence and publication snapshots.
-
-## R33 functional V2: bounded native parameters PASS (2026-10-19T02:39:39.888997+00:00)
-
-**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS for `R33_NATIVE_PARAMETER_FUNCTIONAL_V2_STOCK_RMW`.** Stock RMW is retained. One fresh two-board window passed six services/14 RPCs/nine value types,12 mutation events,3 atomic rejections/readback, whole-byte native local roundtrips and normal close: two rc0, four PIDs absent, tokens restored, no forced signals. [Evidence, original failures and limits](docs/ROS2_NATIVE_PARAMETER_ACCEPTANCE.md) and [capability matrix](docs/ROS2_CAPABILITY_MATRIX.md).
-
-All40 local serialization samples are preserved;22 retain suffixes. **COMPAT_RMW_FASTRTPS_STANDALONE_LENGTH remains OPEN** for canonical serialization/general serialized API, serialized publication and general rosbag compatibility. V2 is an explicitly reviewed functional evidence model, not an RMW/Transport fix, trimmed-CDR workaround, wire capture or retrospective V1 PASS. Both original V1 device failures remain FAIL; the unchanged strict V1 decoder also rejects this new run. Full ROS 2 NOT_VERIFIED; R22 STOPPED.
-
-R32 is published as `5585ce7ffde6a1191b1a2b49dd5d2abdfb581484` (2026-10-18 23:35:56 UTC exact-SHA CI NOT_RUN). At this 2026-10-19T02:39:39.888997+00:00 pre-commit documentation snapshot, the technical tester gate is PASS only for functional V2; Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual publication outcomes are recorded separately in root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled. Older dated scopes below remain unchanged.
-
-## R32 autonomous Action after one guarded server replacement (2026-10-18)
-
-**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS, finite:** one live A Node/Context/Participant/ActionClient autonomously sent PRE6, OLD7 and NEW8 after observing unavailable then ready across one normal B0-to-B1 replacement. PRE5 and NEW7 exact feedbacks/results passed; OLD6 feedbacks and SUCCEEDED occurred before disappearance, so OLD recovery is not claimed. No host Action business permissions or EXECUTING precondition; explicit native ARM/REPLACE lifecycle controls remain. [Commands, evidence and limits](docs/ROS2_NATURAL_ACTION_RESTART_ACCEPTANCE.md).
-
-R31 current-stack natural Action AB/BA is published as `f14e57c9e5e94558a66a0f028cf99801f37ccd84` on the existing branch (2026-10-18 22:16:35 UTC exact-SHA CI NOT_RUN). At this 2026-10-18T23:26:38.723843+00:00 pre-commit documentation snapshot, the R32 finite technical tester gate is PASS; Main graph/PRE_COMMIT/commit/push/CI are PENDING. Final publication outcomes are recorded separately in root-relative `build/r32-action-natural-restart/main-natural-restart-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
-
-Selected rclpy early-status/late-feedback compatibility remains **OPEN**; default automatic reconnect, SDK epoch/drain, old-goal recovery, soak/broad QoS and full ROS 2 remain unverified. Unique-flow NOT_PROVIDED/strict UNTESTED; R22 STOPPED. [Current matrix](docs/STATUS.md). Older sections below retain their dated scopes.
-
-## R31 current-stack natural Action (2026-10-18)
-
-**DEVICE_TESTED / CROSS_DEVICE_TESTED PASS, finite AB/BA:** the unchanged current R30 3,236-file package/`9db2a35c` bridge ran stock Fibonacci order=6 once per direction, each with five ordered feedback prefixes and exact SUCCEEDED result. No START_OLD/COMPLETE business permissions were used; listener/fixture-finish/runtime-close infrastructure remains. Physical A retained the explicit bounded outgoing-first backend, B the ordinary backend. This is not a default-backend or restart qualification. [Commands, bridge lineage and limits](docs/ROS2_NATURAL_ACTION_ACCEPTANCE.md).
-
-R30 coordinated replacement is published as `a8945d4520af23f476ac93f9c376668b4d397481` on the existing branch (2026-10-18 19:36:28 UTC exact-SHA CI NOT_RUN). At this 2026-10-18T22:06:34.620832+00:00 pre-commit documentation snapshot, the R31 finite technical tester gate is PASS; Main graph/PRE_COMMIT/commit/push/CI are pending. Actual publication results are recorded separately in root-relative `build/r31-action-natural/main-current-action-publication/POST_PUBLISH.json`; no future SHA or CI success is prefilled.
-
-The selected rclpy early-status/late-feedback compatibility item remains **OPEN**. Natural restart, default automatic reconnect, old-goal recovery, SDK epoch/drain and full ROS 2 remain unverified. Unique-flow NOT_PROVIDED/strict UNTESTED; R22 STOPPED. [Current capability matrix](docs/STATUS.md). Earlier dated entries below retain their original evidence scope.
-
-> **Publication-state timestamp:** Any R28 Main gate/publication/CI pending statement in this document describes the **2026-10-18 16:41 UTC pre-commit documentation snapshot**, not a permanent current-state assertion. The finite scene evidence is PASS; Main records the actual commit, remote branch and CI outcome separately in root-relative `build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json` when publication completes. No future commit SHA or CI success is prefilled.
-
-## Current progress and navigation (2026-10-18)
-
-- **R25 native C++ Action business/path PASS, bounded:** one real RK3588A pair exercised goals, feedback, concurrent execution, cancellation, rejection, abort and normal completion over native DSoftBus with project DDS/RMW. [Results and limits](docs/ROS2_NATIVE_ACTION_ACCEPTANCE.md).
-- **Recorded limitation:** each board logged a failed optional unique-flow Reader attempt; independent review confirmed the existing RMW retries with original QoS on the same custom Transport. Unique flows were not provided, strict mode was not tested, and startup was not error-free.
-- **R24 project-linked Python PASS, no Node:** native imports, exact String CDR and help/resource queries remain qualified and published as `d8b0fdfecaa654183c57d4b973cc936234080667`. [Dependencies and reproduction](docs/ROS2_PROJECT_PYTHON_ABI.md).
-- **R25 ordinary Python/CLI node discovery PASS, bounded:** single public Node lifecycle and stock `ros2 node list --no-daemon --spin-time 3` passed on the real RK3588A pair in both directions. [Commands, evidence and limits](docs/ROS2_ORDINARY_CLI_NODE_DISCOVERY_ACCEPTANCE.md).
-- **Ordinary topic evidence:** topic graph/pub passed in both directions under the preceding runner; the current four-file Host readiness repair has independent review/post-review tests and fresh real AB/BA `topic echo` PASS. [Results and evidence boundaries](docs/ROS2_ORDINARY_CLI_TOPIC_ACCEPTANCE.md).
-- **Ordinary Action CLI PASS, bounded:** stock `ros2 action send_goal` accepted one Fibonacci order=6 goal in each direction, with five feedback prefixes and exact successful result on the real RK3588A pair. [Commands, evidence and limits](docs/ROS2_ORDINARY_CLI_ACTION_ACCEPTANCE.md).
-- **Rosbag native ABI prerequisite PASS, no Node:** the SQLite rosbag overlay builds and composes; real imports, String/Resume CDR, native QoS conversions and stock parser checks passed on both RK3588A boards. Recording/playback and communication are NOT_RUN in this stage. [Evidence and limits](docs/ROS2_ROSBAG_ABI_ACCEPTANCE.md).
-- **Rosbag record/play DEVICE_TESTED PASS, bounded:** record5 A-to-B persisted ten original String CDR messages; play1 B-to-A resumed through one actual service call and received all ten byte-for-byte in order. Normal close/exit, owned PID absence and token restoration passed. [Evidence, prior failures and limits](docs/ROS2_ROSBAG_RECORDPLAY_ACCEPTANCE.md).
-- **R26 sustained pub/sub echo DEVICE_TESTED PASS, bounded:** 200 exact String application roundtrips, normal paired exit and identity restoration passed on the RK3588A pair; resource samples do not prove leak freedom. This is not ROS service/action traffic. [Evidence and restart limits](docs/ROS2_SUSTAINED_ROUNDTRIP_ACCEPTANCE.md).
-- **R27 single process restart PASS, published:** explicit ON one normal B replacement with continuous A and PRE5/POST5 String echo is published as `46ef5523fdee66421dc29b23aaeae9e095d8fa0d`. [Evidence and limits](docs/ROS2_PROCESS_RESTART_ACCEPTANCE.md).
-- **R28 repeated process restart PASS, published:** two normal B replacements, continuous A and15 String echo roundtrips are published as `65ec59cffdd0ad4b0d9991b713a0a2741522f5e3`. Finite resource samples do not prove long-duration stability/leak freedom. [Evidence](docs/ROS2_REPEATED_RESTART_ACCEPTANCE.md).
-- **R29 true service recovery PASS, published:** one normal AddTwoInts server replacement with persistent A and distinct PRE/OLD/NEW is published as `b5b8fbcfa7ab1de7dd6cb24297967e1181b8372b`; OLD local disposal is not remote cancellation. [Evidence](docs/ROS2_SERVICE_RESTART_ACCEPTANCE.md).
-- **R30 Action server replacement DEVICE/CROSS-DEVICE PASS, coordinated:** persistent A, normal B0-to-B1, PRE5/NEW7 feedback and successful results; OLD one feedback remains pending and is only locally disposed. **Selected rclpy early-status compatibility remains OPEN**; three permission controls constrain ordering. [Evidence and limits](docs/ROS2_ACTION_RESTART_ACCEPTANCE.md).
-- **Publication / next boundaries (2026-10-18 19:28 UTC pre-commit snapshot):** R29 published on existing branch (18:10:45.662387 UTC CI NOT_RUN). R30 Main gate/publication pending; final record is root-relative `build/r30-action-restart/main-action-restart-publication/POST_PUBLISH.json`. Default reconnect, old-goal recovery, SDK epoch/drain and full ROS2 remain unverified; R22 STOPPED. [Current matrix](docs/STATUS.md).
-
-
-以下带日期摘要保留其历史范围，不能替代上述当前状态，也不构成新的设备测试授权。
-> **ROS 2 2.14 maintenance candidate (2026-10-07)**：源绑定候选使用 Fast DDS
-> 2.14.7 (`010b908dc3bb2b6f2818d61ac8db462d01b79a1f`) 与 Fast CDR 2.2.8
-> (`1bc9c919311ffce555b445560bf7ae062a4e1c72`)，保留接口 schema `21405`。
-> 最终独立验证的 test-time snapshot 记录 source hash `27/27`、无关 hash `6/6`；
-> 文档更新后不将该快照误称为当前工作树哈希。offline fixture preflight 为 `31/31`，
-> installed-prefix 正负例与 ABI guard 分开记录；
-> candidate `3/3`、Host/ASan `14/14`、定向 parser/RTTI/factory/observer、Host
-> QoS/graph/service close `20 writes/20 takes`、两路 reaccept 及迁移 prefix 后的
-> relocated consumer `PASS_CLOSED_RUNTIME` `20/20`。修正后的 moved trace 直接记录
-> moved DDS/CDR origins，并排除原任务 build/runtime/install 目录；早期 moved run
-> 因加载原始 CDR runtime 保留为 PARTIAL。API23 r4 ROS consumer 仅为
-> `PASS_STATIC_ONLY`；无 HDC、设备/SDK runtime 或平台 DSO body 分发。旧 2.14.5
-> 默认与历史证据保留；CVE-2026-63340、SDK epoch/drain、PF/P4、产品数值、SBOM、
-> 平台 SDK/DSO 权利、first-party license 和 QualificationProfile 仍未闭合。详见
-> [dependency security assessment](docs/DEPENDENCY_SECURITY_20261006.md) 与
-> [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)。
-
-> **Payload Resource Guard（2026-10-10）**：可选 IPayloadPool 注入到 Fast DDS 2.14.7 Subscriber，在 Reader 构造前拦截、检查用户 payload 的 M/B/N 三项资源度量。Host 验证范围内：component 纯 plain 与 ASan、8 线程并发 race 测试、四个真实 ROS 场景（boundary/huge/count/budget）全 PASS，mutant 杀死 4/4。已知问题：一例 tester-canon-1 huge 场景在 HostProviderLoop 关闭时 exit 0xC0000409（约 1/36，是否与 guard 相关未证实，根因 UNKNOWN，见文档），WSL2 ASan start-up 随机崩溃。未运行：设备验证、TSan、per-process 预算、builtin/crypto/CDR 覆盖。产品数值与全量需求设计待供应商输入。详见 [Payload Resource Guard](docs/PAYLOAD_RESOURCE_GUARD.md)。
-
-本项目是 Fast DDS 的 OpenHarmony DSoftBus Socket Transport 适配层，不是独立的
-MDDS 中间件或新的 DDS/RMW 实现。公开命名已迁移为 `fastdds_dsoftbus`、
-`<fastdds_dsoftbus/dsoftbus/...>` 和 CMake 包 `FastDDSDSoftBusTransport`。
-这次迁移改变源码/ABI/构建接口；旧设备证据仍绑定旧命名的原源码与包。
-迁移规则和保留的历史协议名称见 [命名说明](docs/NAMING.md)。
-
-> **生产化基础包（2026-10-06）**：基于基线 `facca428` 完成了可迁移安装
-> 前置检查与首版生产支持合同。最终独立验证通过 Host/core/target 构建、移动
-> prefix 消费、30/30 离线合同测试、命名边界和预期 exit 2 负例；有效输入仍明确
-> 为 `INSTALL_INPUTS_VALID` + `EXPERIMENTAL_ONLY` +
-> `PLATFORM_CONTRACT_UNVERIFIED`，native 模板在缺少合法外部身份/平台运行时输入
-> 时正确拒绝。该包没有运行 HDC、SDK 业务或设备数据面，也没有重跑 V1/reaccept/普通
-> ROS 验收。P0/PF/P4、默认 `NativeBackendUnavailable`、产品数值、供应方 drain/epoch
-> 机制和 `QualificationProfile` 均保持未资格化；不得据此声明 `PRODUCTION_READY` 或
-> `P4_PASS`。详见 [生产化基础验收](docs/PRODUCTION_FOUNDATION_ACCEPTANCE_20261006.md)。
-
-当前还提供一个隔离的 ROS 2 Jazzy Host 集成入口，使用原版 `rmw_fastrtps` 和
-版本绑定的 Fast DDS 2.14 Host 前端；它不创建 `rmw_mdds`，不改变默认 Fast DDS
-3.6 基线，也不构成设备或生产资格。构建、安装、外部 `find_package` 和已验证的
-Host 范围见 [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)。
-
-> **当前限定 ROS 2 双板验收摘要（2026-10-04）**：SDK23/AArch64 的
-> `build/ros2-target/r2` 已在登记双板上完成限定功能范围验证：query
-> `d1c2cb4097279214`、data `be8cb2d90f287223`，RELIABLE/BEST_EFFORT 双向各 5/5，
-> Topic 合计 20/20，并完成 graph、service、实体/Participant 删除、Runtime close、
-> 正常退出和环境恢复。该结果不等于生产资格；P0/PF/P4 原状态、默认
-> `NativeBackendUnavailable`、SDK epoch/drain/cancellation 和 `QualificationProfile`
-> 边界保持不变。设备验收记录产生时 HEAD 为
-> `4807765f53826ed0b882cac32610acb17ee30b4f` 且尚未提交；后续本地提交状态以 Git
-> 历史为准，不预写推送结果。详见 [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)
-> 的当前摘要和 paired-close 证据入口。
-
-> **ROS 2 device acceptance final stop（2026-10-01）**：补充 query
-> `cdd5bbe62d49a8a6` 与修复 query `5b1d035fb8e6ae66` 均仅达到 `PASS_QUERY_ONLY`。
-> canonical data `9b301c516da4d1eb` 保持初始化失败；修复 data
-> `a6b0948bf98c9a78` 失败，A/B remote exit 均为 `4`，无正式 Topic write/take、graph、
-> service 或正常 DDS/Runtime close。环境 guard 在其测量范围内通过，但不等于 SDK drain。
-> 当前 verdict 为 `FAIL_CONFIRMED_AND_STOP_REQUIRED`，query 使用 3、data 使用 2，
-> 剩余额度为 0；不再重试、不再提交成功基线。此前 `762fe826e929da8c` 缺原始 claim
-> 的失败事实保持不变。详见 [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)
-> 与 [supplemental stop report](.artifacts/ros2-device-acceptance/run-20260930-local/SUPPLEMENTAL_RESUME_FINAL_REPORT.md)。
-
-> **ROS 2 dual-board acceptance stop（2026-10-01）**：本次真实双板只完成了目录
-> query `762fe826e929da8c` 及两端恢复/guard；数据程序未启动，Topic、graph、service
-> 和 ROS 数据关闭保持 `NOT_RUN`。query postrun 因缺少原始执行 claim 被正式拒绝，
-> 原 claim 不可回填或退款；当前状态为 `BLOCKED / DEVICE_ROS2_DATA_NOT_RUN /
-> NOT_COMMITTED`。随后对未来 ROS real claim 分支的两项本地测试通过，不改变这次
-> 历史 query 结果，也不授权重新查询或继续设备运行。Host/本地模拟证据仍按各自范围
-> 记录，不能当作设备 ROS 证据。详见 [ROS 2 Host integration](docs/ROS2_HOST_INTEGRATION.md)
-> 和本次 [device stop evidence](.artifacts/ros2-device-acceptance/run-20260930-local/OBSERVED_REAL_BUDGET_AND_STOP.json)。
-
-> **Offline ROS startup diagnostics（2026-10-01）**：当前离线诊断已达到
-> `ROS2_STARTUP_OBSERVABILITY_VERIFIED / ROS2_FAILURE_CLASSIFICATION_REPAIR_VERIFIED /
-> INDEPENDENT_REVIEW_CLOSED / DEVICE_NOT_ADMITTED / NOT_COMMITTED`。R2 受影响 Host
-> 与 ASan 各 `53/53`，安装版 hook 测试 `6/6`，本地正确依赖前缀 pipe `2/2`；Host
-> ROS 双 QoS/graph/service 记录 `20/20` 仍是 Host 证据。启动观测现在区分 primary、
-> cleanup、capture 和 remote exit，并保留首个错误；有限元数据容量不等于阻塞 I/O
-> 硬期限或 SDK cancellation 保证。历史设备失败 `9b301c516da4d1eb` 与
-> `a6b0948bf98c9a78` 仍为 FAIL，第二次启动根因 UNKNOWN；本轮无 HDC、设备、Git
-> 或新额度操作。详见 [离线诊断收据](.artifacts/ros2-device-acceptance/run-20260930-local/offline-startup-diagnostics/FINAL_REPORT.md)。
-
-> **Installed Runtime dual-board acceptance（2026-09-30）**：安装版公开消费者的
-> 双板窗口 `data-2`（run `73ff0560343b4afb`）通过独立原始收据复核；配套
-> `query-3` 为 `52093e521faf0dcb`。A/B 各完成 5 writes 与 5 Reader takes，
-> 每个方向的 ordinal、Writer GUID、DDS SN、run 字段和 payload 均逐项匹配。
-> A/B 均在 listener-ready 后释放连接并完成正常 DDS 删除、`Runtime::Close`、
-> token restore 与进程退出。该结果只覆盖当前安装包和配置的限定双板功能窗口，
-> 不证明 SDK epoch/drain/cancellation、完整 SDK 模块闭包、PF/P0/P4 或生产资格。
-> 历史 `data-1` FAIL 与 `query-r6-1` FAIL/RECOVERY_BLOCKED 保持原样；本次查询和
-> 数据额度已用尽，没有后续设备窗口。详见 [Installed Runtime acceptance](docs/INSTALLED_RUNTIME_ACCEPTANCE.md)。
-
-> **Library delivery checkpoint（2026-09-29）**：r1 完整 CONFIG `524/524 PASS`
->（677.01 s）；r2 受影响安装、move-prefix 外部消费者、Host DDS/default-Unavailable、
-> 负例、API23 真实库 compile/link/$ORIGIN 与限定 ASan 复测均 PASS。正式 review PASS；
-> 仅 1 个 nested DLL allocator-injection case 未触发而 SKIPPED。该包只有 Host/compile/
-> static API23 证据，设备/HDC=0，不是 DSoftBus runtime/device/生产资格。README/INSTALL
-> 本轮新增薄封装及安装/导出，未改既有生命周期实现。详见 [安装与交付边界](docs/INSTALL.md)。
-
-> **Local checkpoint closure（2026-09-28；`checkpoint-local`）**：标准 CONFIG
-> `523/523 PASS`（复用原 source correspondence），Host100 replay `25 PASS`、target-core
-> W2 replay `5 PASS`；final tool closure `11/11` commands、Flow21 PASS。17 个 task members
-> + 2 个 external members 的绑定闭合是本地 promotion path，不是历史 device execution
-> path。内部 9 个 RealText cases 保持 SKIP，DLL allocator injection 未触发；初次无效环境
-> 日志保留，旧 ASan220 仅复用原身份。本轮 HDC/device=0；N10/N100 有限范围、默认
-> `NativeBackendUnavailable`、生产/P4 限制保持不变。详见 [checkpoint docs report](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/checkpoint-local/docs-final/FINAL_REPORT.md)。
-
-> **Final N100（2026-09-28；`final-n100`）**：`QUERY100` PASS（run
-> `12ceebf2b741302e`），`NEW_PATH_100_CYCLE_FUNCTIONAL_REGRESSION_PASS` PASS（Q-first
-> run `eab10c4b776d792c`，3000/3000），独立 N100 review PASS。既有 P-first N10
-> `df9319fdf22ab3d9` 保持 PASS，本轮未重跑；这不是两种创建顺序各100。N100/新 query
-> 额度均已用尽，`CHECKPOINT_READY` 仅表示有限记录证据，`NOT_COMMITTED=YES`。
-> SDK drain/epoch、生产/P4/QualificationProfile 仍未证明。此段是运行后文档增量，
-> 不宣称当前全树仍等于 source390；r14、manifest、claim 和原始验收件身份不变。
-> 详见 [final-n100 report](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/final-n100/FINAL_REPORT.md)。
-
-> **Query replay repaired / N10 accepted（2026-09-28；`query-replay`）**：
-> `QUERY_CLAIM_PHASE_REPAIR_VERIFIED = PASS`、`POSTRUN_QUERY_REPLAY_VERIFIED = PASS`，
-> `NEW_PATH_10_CYCLE_FUNCTIONAL_REGRESSION_PASS = PASS`（run `df9319fdf22ab3d9`，
-> 独立证据复核接受）。N10 数据额度已用 1/剩 0；query 已用 1、新目录 query=0。
-> N100 `NOT_RUN`：原 query10 不能作为 purpose100，缺 query100 且新 query 许可为0。
-> `CHECKPOINT_READY_FOR_ORIGINAL_PACKAGE=NO`、`NOT_COMMITTED=YES`、SDK drain/epoch
-> `UNPROVEN`。本段是运行后的文档增量，不宣称当前整树仍等于冻结 source390；旧 r12、r13、
-> manifest 与 replay 身份保持不变。详见 [query-replay final report](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/query-replay/FINAL_REPORT.md)。
-
-> **Observed retry stop（2026-09-28；`observed-retry`）**：新 N10 为
-> `INCOMPLETE / PRE-DISPATCH STOP`，不是完成的 data FAIL，也不是 PASS。唯一获准
-> query `5ca407e7845f0484` 在本地 post-query `route_query.py` 因
-> `Supplemental quota already claimed` 停止；query quota 已用 1、余 0，data
-> dispatch 为 0、data quota 余 1（见 `BUDGET_CLARIFICATION.json`）。两端
-> 两端 query/restore guards PASS；两板只读预检/目录 query 已执行（local/remote rc0/0），
-> 但 workflow 在本地 post-query gate 失败；无 P/Q data、deletion、live-load 或 postrun
-> data 证据。README/PLAN 这一段是停止后的文档增量，不宣称当前全树仍匹配运行的
-> source390；旧 r12/运行包保留原身份。
-> N100 `NOT_RUN`（前置 N10 成功/接受未满足），历史 N10 `FAIL`、`CHECKPOINT_READY=NO`、
-> repair=0 保持不变。27/27 local tester 与 review-stop 只覆盖其声明范围，不覆盖
-> prepare→claim→postrun 整路径。详见 [observed-retry final report](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/observed-retry/FINAL_REPORT.md)。
-
-> **离线诊断包（2026-09-28；`offline-c6`）**：`OFFLINE_CAUSALITY_GAP_BOUNDED /
-> HISTORICAL_N10_CAUSE_PARTIALLY_UNRESOLVED / INDEPENDENT_REVIEW_CLOSED /
-> DEVICE_RETRY_AUTHORIZATION_REQUIRED`。本包仅完成离线诊断与有界证据修复：tester-2
-> 本地命令 `18/18 PASS`，无 HDC、设备、SDK、目标执行或真实 window，retry=0。
-> 历史 N10 `FAIL`、N100 `NOT_RUN`、`CHECKPOINT_READY=NO` 与原六项 gate 不变；
-> 不宣称找到历史 SIGTERM/SDK 根因。F05/F32 已按实际 stage 修正为 C5 并由两份
-> independent offline review 复核关闭。详见 [offline-c6 final report](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/offline-c6/FINAL_REPORT.md)
-> 与 [diagnosis](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/offline-c6/DIAGNOSIS.md)。
-
-> **当前 NEW_PATH_EXACT_ONCE_AND_BOUNDED_REBUILD_REPETITION 状态（2026-09-28；artifact run `20260927T113439Z`）：**
-> `EXACT_ONCE_PIN_VALIDATION_CLOSED = PASS`；`HOST_100_CYCLE_VERIFIED = PASS`；
-> `NEW_PATH_10_CYCLE_FUNCTIONAL_REGRESSION_PASS = FAIL`；
-> `NEW_PATH_100_CYCLE_FUNCTIONAL_REGRESSION_PASS = NOT_RUN`；
-> `CHECKPOINT_READY = NO / BLOCKED`；`NOT_COMMITTED = YES`。r9 的 exact-once pin guard
-> 及定向 T-A 历史结论保留，且已由最终 r5 review 覆盖；r8/r9 设备结论仍是各自历史证据，
-> 不回填为本轮 N10/N100 结果。
->
-> r5 是 post-validation 之前的两文件 Python-only 分析器/测试 delta；本次 README/PLAN
-> 修改属于 r5 验证与设备运行结束后的另一个 documentation delta。r5 SOURCE390
-> 冻结快照 SHA 为 `09ba0a53238890acff824d597f5ad60ed03e0d771502eb5ceabf4384ed59ef1f`，相对 r4 仅
-> `scripts/public_socket/analyze_shared.py` 与
-> `tests/public_socket_send_cancellation_analysis_tests.py` 变化，其余 388 个 SOURCE
-> 文件与 EXECUTOR25 未漂移；这只是 r4→r5 冻结比较，不宣称当前整树仍为 390/390 零漂移。r4 独立 full CONFIG `507/507 PASS`、双 100-cycle、ASan
-> 唯一并集 `220 PASS`（130+90；smoke 5 为重复子集）以及 r5 Python/target projection
-> 套件均有独立 PASS；r4 的首次缺 target、ASan PATH、宽泛日志提取错误保持为历史原件，
-> 没有改写成首次 PASS。预编译第三方 Fast DDS DLL 未完整插桩。
->
-> 唯一获准的 repair N10 真实设备尝试 `c1ed9706ef5b794f` **FAIL**：整窗
-> `timedOut=false`，A 在 `SHARED_READER_MISSING`（84 writes / 81 takes），B 在
-> `C6_P_OLD_DELETED` 的控制 collector 收到 `SIGTERM`（`control-92.json` 的
-> `code=null`、`collector_closed=true`，不能归因远程 SDK）。B 的 `q_deleted=0` 与
-> 已存在的 `SHARED_DELETE Q FINAL` 原始收据并存，且 `egress_closed=1`、
-> `egress_drained=1`；该差异不被宣称为完整删除账本 PASS。A 的 null-input load
-> collection 失败、B 完整收集、两端 guards/cleanup/process/permission 收据均保留。
-> 这是唯一 repair attempt，已耗尽；原 N100 限定授权的前置 gate 未满足，N100 当前不执行，
-> 也不是“下一阶段未开始”或取消原授权。SDK
-> 内部 drain/epoch 仍 `UNPROVEN`。新数据继续前只能离线定位 C6 collector 终止与 load
-> collection 错误，并取得新的限定 attempt 授权；当前设备 gate 仍 BLOCKED。
->
-> 详细最终记录见 [codex-resume/FINAL_REPORT.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/FINAL_REPORT.md)
-> 与 [codex-resume/IN_PROGRESS.md](.artifacts/public-socket-shared-reattach/run-20260927T113439Z/codex-resume/IN_PROGRESS.md)。
-
-> **当前基线（2026-09-28）：共享 Participant 生命周期已提交。**
-> 提交 `7f40798eb551c0ff89bc956367c1b31ba663855f`，parent `400e4ff3b27c39ce4ef25b4fc8b1128bc98e1880`，
-> tree `6948c5e27a105e0329f286121b53ec8fe19b8677`，分支 `claude/dsoftbus-transport-20260924` 不变。
-> 状态为 `SHARED_LIFECYCLE_BASELINE_COMMITTED / NOT_PUSHED / NOT_PRODUCTION_QUALIFIED`：
-> 恰好一个新 commit，22 个路径（16 修改 + 6 新增），不含任何 gitlink，未 push、未 merge、未 amend。
-> 完整契约、必测矩阵、逐项处置与证据入口见 [PLAN.md](PLAN.md) §21 与
-> `.artifacts/public-socket-shared-reattach/run-20260927T113439Z/claude-r8/CLOSEOUT.md`。
->
-> **本轮实现**：同一个进程里两个真实 Fast DDS DomainParticipant 共享一套 DSoftBus runtime
-> （一条 listener/outgoing/accepted 与一份发送注册），各自保有独立的 application、receiver
-> 与 DDS 实体。`HostProviderLoop` 成为「runtime 所有者 + 每个 façade 一个 View」，View 通过
-> 活 runtime 上的显式 `Join()` 取得；每个 View 持有自己的 egress registration，停止一个
-> Participant 不会撤销另一个的，最后一个 View 才执行最终关闭。接收侧在 native 准入点固定
-> 候选集合，并且只为**各个原目标自己**取准入 pin，由不可拷贝、只可移动的 RAII 持有者释放。
->
-> **验证（全部绑定冻结修订 freeze-r8，364 文件）**：完整 CONFIG Host **484/484 PASS**（0 fail/0 err/0 skip，
-> 224.4 s）；受影响集 ASan **121/121 PASS**；**13 个独立变异全部被杀死，0 存活**，其中包含早前
-> review 报出的两个缺口——逐 View egress 结算与 shared/exclusive claim 冲突；分析器 **36/36**，
-> 含 9 个用真实设备日志的 text→parse→validate 入口驱动的边界用例。
->
-> **设备（真实双板，freeze-r8 包 `main_sha256 31f48fd384b04018…`）**：`SHARED_W1 256cce1c37aabcac`、
-> `SHARED_W2 372d9a20c0db57e9`、`F1M cb0a993d921f9c8b`、只读路由查询 `query-r8`，全部 PASS 且两板
-> guard 完整（`byte_match`/`metadata_match`/`process_absent`/`DENIED`、`first_failure=null`、
-> `cleanup_failures=[]`）。两种创建顺序下：P(old) 删除与同显示名 P(new) 重建全程，每板
-> **shutdown 调用为 0**，`FINAL` 恰好 **1** 次且 `views=0`；listener/outgoing/accepted 各一、
-> entry 与 record/owner 世代不变。该 `shutdown_calls` 是
-> `PublicSocketObservation.operations[4]`，即本进程 shim 进入公共 Socket `Shutdown` API 的次数，
-> **不是** SDK 终端通知，也不是 runtime finalization 计数，更不是物理关闭证明。
->
-> **已提交的运行时代码与 freeze-r8 按行尾规范化后逐字节等价**：92 个 `src/include/probes` 路径中
-> 18 个仅 EOL 不同、**零实质差异**；相对 freeze-r8 的唯一实质源码差异是本轮新增的
-> `tests/public_socket_shared_analysis_tests.py`（纯测试）。因此设备证据仍绑定该提交的运行时代码，
-> 但以该 EOL 前提陈述，而非宣称逐字节相同。
->
-> **如实保留的限制**：`R8-R1`（fail-fast 诊断在一条当前不可达分支变为可达时会给出错误补救）、
-> `R8-R2`（响亮释放检查不覆盖独占 façade 与最终关闭失败）记为已知非阻塞限制，未改运行时代码；
-> 准入 pin 的**双重逻辑释放**这一类只有隔离变异能表达，本轮**未运行**，记为未闭合验证缺口；
-> 三个未跟踪文件没有 freeze-r4 逐字节原件，其历史谱系为 `NOT_ESTABLISHED`（不影响当前内容被版本化）；
-> 修复 diff 的独立复审在设备窗口**之后**才返回，**未回填为设备前批准**（`PROCEDURE_DEVIATION`，
-> 见 CLOSEOUT §5）。
->
-> **边界不变**：SDK 物理记录 epoch 连续性 `UNPROVEN`；PF-02、P0/PF 仍 `BLOCKED`；P4 未放行；
-> 生产默认仍为 `NativeBackendUnavailable`；`QualificationProfile` 为 `NOT_GENERATED`。
-> 未声称 `SDK_RECORD_CONTINUITY_FULLY_PROVEN`、`PF01/PF02_PASS`、`100_CYCLE_QUALIFIED`、
-> `ARBITRARY_TOPOLOGY_SUPPORTED`、`PRODUCTION_READY`。
-
-> **累计实验基线（2026-09-27）**：A 的七场景与真实 CloseBusy 责任修复，加上 B 的 opt-in 决策诊断及稳定化验证。旧 111/6 未知与新 107/2 已观察原因分别保留。
-> 范围、容量单位、依赖与证据见 [bounded DDS stabilization baseline](docs/BOUNDED_DDS_STABILIZATION_BASELINE.md)。该 checkpoint 当时的 isolated Host CONFIG suite 为 `445/445 PASS`；设备未运行，未进行新的 ASan。下列工作包状态是历史快照，不代表当前 Git 提交状态或生产放行。
-
-> **当前 checkpoint（2026-09-27；artifact run `20260927T103431Z`）**：独立 tester 在冻结候选树上完成 Release/CONFIG Host build 与完整 CTest，`445/445 PASS`、exit 0、commit gate `PASS`。配置显式开启 bounded regression 与 decision diagnostics；生产默认仍为 `NativeBackendUnavailable`，诊断默认 OFF。没有 HDC/SDK/device execution，也没有新的 ASan；B 的 `72/72` ASan 结果仍是历史、预构建 Fast DDS 未完整插桩的 source-equivalent evidence。此状态是 checkpoint evidence，不声明已提交、SDK qualification、release 或 production readiness。
-
-> **当前文档同步状态（2026-09-27；artifact run `20260927T083510Z`）：**
-> 本次 public Socket binding decision / close stabilization 工作包为
-> `CLOSED_WITH_HISTORICAL_LIMITATION / CHECKPOINT_READY / NOT_COMMITTED`。
-> scoped functional gate 与 independent review 为 PASS；该结论只覆盖本包的
-> bounded source/test/runtime review，不构成 commit、SDK qualification、release
-> 或 production-readiness approval。三次 guarded query 与 F1M、D1、D2 三个双
-> RK3588A 数据窗口均 PASS；F1M 为每个 1 MiB 样本 131 fragments，D1/D2 各为
-> 每方向 5 个 Reader samples。23 个 Reader rows、5 个 DDS wait API operations
-> 与 0 次 data retry 均为独立计数，不能解释为 packet-loss 或 SDK settlement。
-> 新 F1M 的 A 侧有 107 次直接记录的 `CAPTURE/LOCAL_RECORDS`；F1M 与 D2 的 B 侧
-> 各有一次直接记录的 Deploying/`ADAPTER_PHASE` 拒绝。D1 无拒绝，D2 无 Binding 拒绝。
-> 另行保留：旧 F1M 的 111 次是没有逐次原因的 Binding 聚合拒绝；旧六条 adapter
-> `InvalidState` 的直接原因未观察。两组历史计数不能相加为 117 条唯一丢失，
-> 新 107/2 也不回填旧原因。
->
-> 新增的是 SDK-free value-only `ReceiveDecision`，由现有 process receive observer
-> 在真实决策点捕获值；受锁保护的状态在对应 gate 内取得快照。现有 observer 在解锁后
-> 接收该快照，不重新查询当前 map；diagnostic 默认 OFF，
-> 每进程容量 16384 rows（reported storage 5243440 bytes），带 reason aggregates
-> 与 overflow counters。该 instrumentation 有实际开销，并非 zero-overhead，且不
-> 构成 SDK drain 证明。CloseBusy algorithm 未改变；继承的 original owner/namespace
-> 与 single close credit retention 已由 Host deterministic tests 验证，设备未声称
-> hit CloseBusy。QualificationProfile 未生成；local raw artifacts 与 package-specific
-> profile helper 不会因 Git clone 自动进入仓库。
->
-> Final Host canonical `443/443`、affected Host `72/72`、affected ASan `72/72`、
-> analyzer `20/20`、bounded profile `27/27` 以及 independent target build/static
-> audit 均有 PASS 记录；最终 discovery 为 445，但没有宣称完整 445 run。ASan
-> 使用的预构建 Fast DDS 未完整插桩，TSan 未执行。目标包构建和静态审计 PASS，
-> target execution 与 device validation 在该 scoped audit 中 SKIPPED；设备窗口
-> 使用已构建包的独立 HDC evidence。CloseBusy 分支在设备上未证明实际命中，SDK
-> cancellation/quiescence/settlement、full Transport qualification、性能、完整
-> firmware ABI 与 QualificationProfile 仍未验证。P0/PF-01/PF-02 仍为
-> `BLOCKED / NOT QUALIFIED`，P4 未放行，生产默认仍为
-> `NativeBackendUnavailable`。详见 [public Socket binding decision and close stabilization](docs/NEW_PUBLIC_SOCKET_BINDING_DECISION_AND_CLOSE_STABILIZATION.md)。
-
-> **当前工作包（2026-09-27；artifact run `20260927T014310Z`）：**
-> `NEW_PUBLIC_SOCKET_BOUNDED_DDS_REGRESSION_VERIFIED / CHECKPOINT_READY /
-> NOT_COMMITTED`。七个独立 fresh-process、双 RK3588A A→B DDS 数据窗口和七个
-> fresh guarded query 均完成：七个数据窗口、七次查询、28 个 board-window guards、
-> 26 个正式 Reader rows，0 次数据重试。用例结果为 F256 `3/3`（每个样本 33
-> fragments）、F1M `3/3`（每个样本 131 fragments）、REL_LOSS `3/3`（一次精确
-> drop 后 NACK_FRAG admitted repair）、BE_LOSS `2/3`（完整 post-drop 窗口中
-> sample 1 absent，2/3 complete）、VOL_LATE `3/3`（仅新 4/5/6）、TL_LATE
-> `6/6`（保留 1/2/3 后接收新 4/5/6）和 KEYED_LAST `6/6`（每个 key 保留
-> 3/4 后接收 5）。最终 Host `438/438 PASS`，affected ASan `169/169 PASS`。
-> Fragment size `8016`、native record bound `8192` 未改变；实际链路为
-> public DDS factory → 当前 DSoftBusTransport façade → NativeSendExecution →
-> PublicSocketBackend/public Socket API → remote accepted/Binding →
-> ReceiverResource/DataReader。
->
-> 该结果只关闭上述七个 bounded functional profiles。F1M 的 A 侧 Binding
-> `refused_receive` 在 MATCH→DATA_DONE 增加 `111`，个别原因和 record ID 为
-> `UNOBSERVED`；另有六个 B 侧 setup `OnBytesRejected`，均为本地
-> `BackendStatus::InvalidState`，不能改写为 SDK 错误、容量结论、无害事件或
-> all-ingress loss-free。DDS wait API 不是 ACK packet 计数，void `Shutdown`
-> 没有 SDK rc0；SDK internal settlement、cancel/quiescence、旧物理事件身份和
-> full TransportInterface 仍未证明。共享 close-credit 修复保留原 owner 并在
-> gate 外等待单一 close credit；provider callback reentry 拒绝阻塞控制，精确
-> self-wait destructor 受控，其他 native table 的合法销毁保留。默认
-> `NativeBackendUnavailable`、P0/PF-01/PF-02 `BLOCKED / NOT QUALIFIED`、P4 未
-> 放行、无 QualificationProfile；无性能/生产资格结论。详见
-> [New Public Socket bounded DDS regression](docs/NEW_PUBLIC_SOCKET_BOUNDED_DDS_REGRESSION.md)。
-
-> **当前 PRE-COMMIT SNAPSHOT（2026-09-27；artifact run 20260927T005155Z）：**
-> `LOCAL_NATIVE_DDS_BASELINE_HOST_VERIFIED / CHECKPOINT_READY`。
-> 用户授权范围为当前分支一次本地 commit；不包含 merge/push/device/SDK/release，且
-> 当前尚无 commit hash。候选 345 个冻结文件前后哈希一致，最终 CONFIG Release
-> CTest `420/420 PASS`、exit 0（144.58s）；初始 `418/420` 的两个
-> `Get-FileHash` PowerShell 环境失败保留，并在恢复模块路径后完整复跑通过。最终
-> affected helper gate `3/3 PASS`。详见 [Public Socket baseline build](docs/PUBLIC_SOCKET_BASELINE_BUILD.md)
-> 与 [Public Socket evidence index](docs/PUBLIC_SOCKET_EVIDENCE_INDEX.json)。默认
-> `NativeBackendUnavailable`、P0/PF-01/PF-02、P4 与 QualificationProfile 不变。
-
-> **当前工作包（2026-09-27；artifact run 20260926T225417Z）：**
-> `REAL_DDS_OVER_NEW_PUBLIC_SOCKET_DEVICE_BASELINE_VERIFIED / CHECKPOINT_READY /
-> NOT_COMMITTED`。D1 `e6e553...` 与 D2 `c4af736...` 在两块 RK3588A 上通过实际
-> DSoftBusTransport façade→NativeSendExecution→ProviderAdapter/PublicSocketBackend→
-> public Socket API→remote accepted/ProviderAdapter/Binding→ReceiverResource/DataReader；
-> 每窗口每方向 5 条、共 20 条正式样本 GUID/SN 链。Host full `414/414`，final affected
-> Host/ASan 各 `161/161`，final probe Host/ASan 各 `9/9`（重叠不相加）。这是小型
-> DDS baseline，不是 full QoS/TransportInterface/SDK drain/PF/P4/生产放行。默认
-> `NativeBackendUnavailable`、P0/PF-01/PF-02、P4 与 QualificationProfile 不变。
-> 详见 [Real DDS Public Socket device baseline](docs/REAL_DDS_PUBLIC_SOCKET_DEVICE_BASELINE.md)。
-
-> **当前工作包（2026-09-27；artifact run 20260926T200859Z）：**
-> `TARGET_LOAD_OBSERVED / BOUNDED_PUBLIC_SOCKET_CALLBACK_PATH_OBSERVED /
-> NEW_SHIM_BIDIRECTIONAL_SMALL_BYTES_OBSERVED / CHECKPOINT_READY / NOT_COMMITTED`。
-> L `93a421...`、guarded query `7ec64...` 与唯一实际 socket 数据窗口 `d82c4...`
-> 均有双板 guard；后者为每方向 5 条 256-byte 合成 BYTES probe，非 DDS/RTPS。
-> Host R3 `407/407`、最终受影响 Host/ASan 各 `151/151`，运行时 Host/ASan 各
-> `10/10`（不相加）。目标包使用授权公共 headers 和同一 fresh probe；不证明
-> firmware ABI、SDK drain、完整 DDS 或生产资格。默认 `NativeBackendUnavailable`、
-> P0/PF-01/PF-02、P4 和 QualificationProfile 不变。详见
-> [Public Socket runtime probe](docs/PUBLIC_SOCKET_RUNTIME_PROBE.md)。
-
-> **最新工作包（2026-09-27；artifact run 20260926T174047Z）：**
-> `PUBLIC_SOCKET_ACCEPTED_HOST_CONTRACT_VERIFIED / REAL_DDS_OVER_PUBLIC_SOCKET_FAKE_VERIFIED /
-> SOURCE_HEADER_TARGET_LINK_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`。限定双 Host
-> endpoint、one listener/outgoing/accepted、Fake public Socket C API 与真实公开
-> Fast DDS DDS 链路；独立 focused `80/80 PASS`、full `396/396 PASS`，ASan affected
-> `139/139 PASS`（总数不相加）。E4 是 live pair 上额外 accepted capacity refusal 后
-> 继续 10 次 DDS take，不是 Participant create failure。目标 `727` inputs/`7` outputs
-> 的 API23 AArch64 静态链接证据仍不代表 SDK/device/runtime。生产 `NativeBackendUnavailable`、
-> P0/PF-01/PF-02、P4 与 QualificationProfile 不变。详见 [Public Socket accepted Host](docs/PUBLIC_SOCKET_ACCEPTED_HOST.md)。
-
-Current versioned Host capability, build dependencies and external evidence: [Host DDS baseline](docs/HOST_DDS_BASELINE.md). Host validation does not enable the SDK backend or release P0/PF/P4.
-
-> **最新工作包（2026-09-27；artifact run 20260926T160850Z）：** `DSOFTBUS_PUBLIC_SOCKET_SHIM_IMPLEMENTED / TARGET_SDK_BUILD_VERIFIED / HOST_SHIM_CONTRACT_TESTED / CHECKPOINT_READY / NOT_COMMITTED`。现有 `NativeBackend` 已有面向公共 DSoftBus Socket API 的薄 shim，并通过 Host Fake 公共符号、既有 adapter/Binding/owned-copy/receiver lease 路径测试；API23 AArch64 目标配置/编译及五个公共符号静态审计通过。头文件来自授权的 `communication_dsoftbus` 源码，不是安装 SDK 自带头文件；目标程序未运行、未部署，固件 ABI、loader、SDK drain 和真实设备仍未验证。默认 `NativeBackendUnavailable`、真实 provider 准入、P0/PF-01/PF-02、生产 P4 和 QualificationProfile 状态不变。详见 [Public Socket shim](docs/PUBLIC_SOCKET_SHIM.md)。
-
-> **最新工作包（2026-09-26；artifact run 20260926T093712Z）：**
-> `REAL_FASTDDS_PARTICIPANT_OVER_HOST_NATIVE_BACKEND` 达到 `REAL_FASTDDS_PARTICIPANT_HOST_INTEGRATION_VERIFIED /
-> CHECKPOINT_READY / NOT_COMMITTED`。限定为真实公开 Fast DDS factory ->
-> test-only descriptor -> 现有 Host facade -> SenderResource/
-> NativeSendExecution/ProviderAdapter/Binding -> ReceiverResource -> Reader 的
-> one-local、one-dial、双 Participant 单进程 Host 链路。独立 focused `9/9 PASS`，
-> full Release CTest `346/346 PASS`、exit 0；ASan 新 `9/9`、既有 close `14/14`、
-> loop `15/15` 通过。D1+D2+D3/D4 正常链路共有 25 次实际 DataReader take，D5 的
-> 真实结果是 non-null Participant 但 input Bind rejected，不能写成 null。mock
-> provider、非设备、非 SDK；真实 SDK/device/native qualification、P0/PF/P4 和
-> QualificationProfile 仍未完成；P0/PF-01/PF-02 保持 `BLOCKED / NOT QUALIFIED`，生产 P4 未放行，默认保持 `NativeBackendUnavailable`。详见 [Real Participant Host](docs/REAL_PARTICIPANT_HOST.md)。
-
-> **最新工作包（2026-09-26；artifact run 20260925T213718Z）：**
-> `HOST_INPUT_CHANNEL_CLOSE_REOPEN` 达到
-> `HOST_INPUT_CHANNEL_CLOSE_REOPEN_HOST_VERIFIED / CHECKPOINT_READY /
-> NOT_COMMITTED`，限定为冻结 R3 源码上的 one-local、one-dial Host facade。独立
-> corrected-environment receipt 为 `32/32 PASS`；随后独立全目标 Release 构建
-> exit 0，标准环境完整 CTest 为 `337/337 PASS`、exit 0（canonical receipt：
-> [`tester/canonical-full-r3/RECEIPT.json`](.artifacts/host-input-close-reopen/run-20260925T213718Z/tester/canonical-full-r3/RECEIPT.json)，原始日志
-> [`ctest.stdout.raw.log`](.artifacts/host-input-close-reopen/run-20260925T213718Z/tester/canonical-full-r3/ctest.stdout.raw.log)，119.84 秒）。首轮
-> uninterrupted full Release run 的 `335/337`、exit 8 及其环境失败保留为历史
-> 原始证据。Release
-> ASan input-close `14/14`、provider-loop `15/15` 通过，variants `1/1` 为
-> 构建/default gate。独立 Close、gap drop、TX/native 保留及同 locator reopen 已
-> 通过；callback Close 死锁修复经 RED/复测及 m10 deletion evidence 闭合。Debug
-> 受 Release-only ABI guard 阻断，TSan 未执行；真实 ReceiverResource、Participant/
-> SDK、完整 TransportInterface、native/device/cross-device 仍未验证。详见
-> [Host input close/reopen contract](docs/HOST_INPUT_CLOSE_CONTRACT.md)。
-
-> **最新工作包（2026-09-26；artifact run 20260925T202407Z）：**
-> `HOST_FACADE_PROVIDER_LOOP` 达到 `HOST_FACADE_PROVIDER_LOOP_HOST_VERIFIED /
-> CHECKPOINT_READY / NOT_COMMITTED`。限定 Host 注入 facade 已通过 focused `16/16`
-> 与 full CONFIG `323/323`，并保持默认 OFF；真实 Participant、SDK provider、native/device
-> 和完整 TransportInterface 仍未执行。详见 [Host facade/provider loop](docs/HOST_FACADE_PROVIDER_LOOP.md)。
-> `NativeBackendUnavailable`、P0/PF-01/PF-02、生产 P4 与 QualificationProfile 状态不变。
-
-> **最新工作包（2026-09-26；artifact run 20260925T190646Z）：** `NATIVE_PROVIDER_ADAPTER_DESIGN_PHASE0` 达到
-> `NATIVE_PROVIDER_ADAPTER_BOUNDARY_DESIGNED / CHECKPOINT_READY / NOT_COMMITTED`。
-> SDK-free `NativeBackend`/`NullBackend` 与 Host-only `ProviderAdapter` 已实现并经
-> focused `16/16`、full CONFIG `307/307` 验证；真实 provider、SDK、设备和 DDS 接线
-> 仍未执行。详见 [Phase 0 adapter boundary](docs/NATIVE_PROVIDER_ADAPTER_PHASE0.md)。
-> 默认 `NativeBackendUnavailable`、P0/PF-01/PF-02、生产 P4 和 QualificationProfile
-> 状态不变。
-
-> **当前开发工作包（2026-09-25）：CALLBACK_CONTEXT_DESTROY_CONTRACT = `CALLBACK_DESTROY_CONTRACT_HOST_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`。** 本轮关闭组合层最后一项未闭合寿命合同：**在回调执行上下文内销毁 binding 会自等待**（释放必须等本帧持有的 receiver in-flight 许可）。采用方案 A —— 禁止回调内同步销毁，并提供不等候的关闭请求：`CloseRequest()` 是唯一合法于 ingress/投递回调内的控制入口，只记录关闭意图（相位转 `Closing`）并立即返回，从不 drain、释放或等待；`DeferredClose()` 由所有者在其后的控制上下文完成关闭，走与 `Abandon()` 完全相同的 drain+释放路径；`BeginClose()`/`Abandon()`/`DeferredClose()` 在回调内一律以 `WrongState` 明确拒绝而非等待；从回调内**销毁**则 fail-fast（带指向 `CloseRequest()` 的诊断后 abort），不再死锁。sink/receiver/owner/claim 四条寿命前提与 drain-before-free 语义不变。新增 11 个 case（CLOSE-C1…C7、C2b 完成守卫、无关 binding 与非末位 sibling 两个合法形状、禁止形状的跨进程 case），组合 case 共 32 个；Release/Debug/ASan 32/32、本配置 86/86、仓库标准 CONFIG host Release 290/290；本轮 11 个变异体全部被杀死。合同与执行状态见 [PLAN.md 第 20 节](PLAN.md)，收据与 RED 证据见 [.artifacts/srtc-close/](.artifacts/srtc-close/)；上一轮（SRT-MEM 寿命/并发/上下文与测试判据修复）见 [PLAN.md 第 19 节](PLAN.md) 与 [.artifacts/srtc-repair/](.artifacts/srtc-repair/)。本轮未提交；真实 SDK provider、设备与 DDS 证据仍 `NOT_RUN`。
-
-> 累计实验源码的构建、生成来源、外部证据及资格范围见 [实验基线说明](docs/EXPERIMENT_BASELINE.md)。原始 `.artifacts`、SDK 和设备运行库不随 Git 提交提供。
-
-> **当前性能基线（2026-09-24）：** `DDS_BOUNDED_PERFORMANCE_BASELINE` 已达到 `BOUNDED_PERFORMANCE_BASELINE_MEASURED / CHECKPOINT_READY / NOT_COMMITTED`。限定范围为 `BYTES_NATIVE`、两块 RK3588A、6 个固定配置、3 个独立 MEASURE 重复：正式 RTT 共 3,300 次；固定负载 Reader delivery 共 6,120 次（RTT full-echo 的 Reader delivery 不计入该固定负载合计）。合并 p50/p99 分别为 RTT_1K `3.219125/4.435375 ms`、RTT_4K `3.226709/4.408250 ms`、RTT_256K `11.085668/14.135335 ms`。固定负载 Reader business goodput 为 1K `0.09765625 MiB/s`、4K `0.390625 MiB/s`、256K `1.00000000 MiB/s`；这些是已执行的 nominal loads，不是最大吞吐量。
-
-> **性能基线证据与边界：** final data review 无未解决 blocker；独立 host post-review 为 OFF `243/243 PASS`、ON `245/245 PASS`；`49/49` 是 TRACE 修复前的历史 full-host stage，focused R3 的最终 analyzer 为 `58/58 PASS`。独立双板记录为 query + 失败 TRACE01 + 成功 TRACE02 + M1/M2/M3，12/12 final board guards PASS。Native package 输入 1,737、6 artifacts，focused R3 executor checks 为 PowerShell 4、Python 10、Node 14，包与输入哈希保持一致；native executable SHA-256 为 `5f98207268441debefcfaa57f0396a7be0d1cc2ed9d40e98e49f11211b30a440`。原始 TRACE01 失败保持记录并排除正式统计；CSV 的 19,116 行是 planned-identity rows，不是 deliveries。SDK internal settlement、exact queue HWM 仍 `UNOBSERVED`；仅 M3/A 的两个累计 `NO_APPLICATION` rejected records（不是四个）保留 payload/Writer identity 与 control-versus-business classification 未观测状态；每侧 TX reject 为 2，RX prefix overflow 仅表示诊断细节受限，不证明业务丢失。P0/PF-01/PF-02 仍 `BLOCKED / NOT QUALIFIED`，生产默认 `NativeUnavailable`，P4 未发布，无 QualificationProfile，禁止 stage/stash/commit/amend/push。详见 [bounded performance results](.artifacts/dds-bounded-performance-20260924/run-20260923T183702Z/analysis/RESULT_TABLES.md) 与 [final data review](.artifacts/dds-bounded-performance-20260924/run-20260923T183702Z/review/final-data/FINAL_DATA_REVIEW.md)。
-
-> **资源观察：** 单进程 single-core CPU 为每 case `3.293%–12.126%`；观测 Participant 生命周期跨度为 `85.656–86.118 s`；采样 RSS 最大 `29.824 MiB`，observed VmHWM 最大 `30.133 MiB`。这些是边界观察，不是长期泄漏或 SDK 内部结算证明。
-
-> **历史已关闭工作包（2026-09-23）：DDS_MULTI_ENDPOINT_AND_LATE_JOINER_FUNCTIONAL_MATRIX = `DDS_NORMAL_FUNCTIONAL_MATRIX_VERIFIED / CHECKPOINT_READY / NOT_COMMITTED`。** 13 个限定 `BYTES_NATIVE` 双板矩阵场景均通过独立复核：M1/M2/M3/M4 多端点与删除后持续通信、Q_BE_BE/Q_REL_BE/Q_REL_REL/Q_BE_REL 兼容性、L1/L2/L3 晚加入、I1 Topic 隔离和 I2 Domain 隔离。该已关闭矩阵共 102 次原始写入、132 条独立 Reader 交付/native 关联；实际 QoS、当前匹配图、逐 Reader 账本和同轮 native 证据见 [.artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/analysis](.artifacts/dds-functional-matrix-20260923/run-20260923T094900Z/analysis)。
-
-> **本轮验证边界：** 独立 host 最终 OFF `175/175 PASS`、ON `177/177 PASS`；选定的 OFF/ON native 包分别为 1,693 inputs、6 artifacts，并由 `device-build/BUILD_SELECTION.json` 绑定。13 个矩阵窗口、4 个 native 回归窗口和 1 个 Socket-free directory query 共 18 个注册窗口，其中 17 个为实际 DDS native 窗口；36/36 板端 guards 完成。SDK internal settlement 仍 `UNOBSERVED`；观察到的 27 条非零 SendBytes 返回按原始证据保留，不能推断其统一原因。
-
-> **资格边界保持不变：** P0、PF-01/PF-02 仍 `BLOCKED / NOT QUALIFIED`；生产默认仍 `NativeUnavailable`，P4 未放行，无 QualificationProfile；禁止 stage/stash/commit/amend/push。旧 [restored-package-device 交付线](.artifacts/restored-package-device/run-20260923T075212Z/FINAL_GATE.json) 已正式关闭，本轮未重开。L2/L3 证明的是仍存活 application 内的 DDS 历史/晚加入行为，不是新的 no-application gap 或 PF-02 物理旧帧隔离资格；RAW、三板、mixed transport、ROS 2/RMW、性能和 100 轮新资格均未执行。
-
-> **历史已关闭工作包（2026-09-23）：DDS_KEYED_HISTORY_AND_RESOURCE_BOUNDARIES = `FINAL_CODE_AND_DEVICE_REVIEW_CLOSED / CHECKPOINT_READY / NOT_COMMITTED`。** 十个限定 `BYTES_NATIVE` keyed native cases K1/K2/K3/K4_TRUE/K4_FALSE/H1/H2/H3/R2/R3 均 PASS；R1 为 `HOST_ONLY_PASS`。canonical totals 为 62 writes、128 API data/take observations、58 unique data identities、42 taken identities、3 state records，形成 58 data + 3 state native associations。H1 的 4 个 oldest-before-Reader evictions 属于 Writer `KEEP_LAST` 行为；H2 的重复读取不等于网络重复；`valid_data=false` 记录未解析 payload。详细收据见 [.artifacts/dds-keyed-history-20260923/run-20260923T140748Z/docs/DOCS_SYNC.md](.artifacts/dds-keyed-history-20260923/run-20260923T140748Z/docs/DOCS_SYNC.md)。
-
-> **本轮证据与边界：** 独立 host 最终 OFF `205/205 PASS`、ON `207/207 PASS`，53 analyzer tests、12 post-R4 affected gates 通过；native OFF/ON build 均 PASS，每包 1,719 inputs 且独立核对零 mismatch，设备只执行 OFF 包。14 registered windows（13 DDS attempts + 1 Socket-free query）对应 28 board windows，全部 guards PASS；K1-attempt-01 仅 outer launcher exit 为 `UNOBSERVED`，runner/remote exits 为 `0`，并排除 canonical totals。Fresh small run `87c0d1ef21b9257c` 为严格 actual-native replay PASS；fresh M2 run `50ebee5e4a4e215a` 为 10 writes、两个 Reader 各 10 deliveries、20 native associations。
-
-> **资格边界保持不变：** Reader `get_key_value` 与 Writer `lookup_instance` unsupported，standalone registration propagation 未实现；WriterDataLifecycle 的 broad documentation warning 与本轮 true/false narrow observed behavior 冲突，不能据此宣称全策略合格。SDK internal settlement 为 `UNOBSERVED`；P0、PF-01/PF-02 仍 `BLOCKED / NOT QUALIFIED`，生产默认 `NativeUnavailable`，P4 未发布，无 QualificationProfile。RAW、三板、mixed transport、ROS 2/RMW、性能、100 cycles 及全拓扑资格均未执行。
-
-> **Historical — RX accounting closeout（2026-09-22）：DONE_WITH_HISTORICAL_LIMITATION / NOT_COMMITTED。** 源码封存/恢复及最终 checkpoint 结论以该轮 `FINAL_REPORT.md` / `FINAL_GATE.json` 为准；本摘要不独立宣称恢复验证 PASS。`HOT_REBUILD_BASELINE_CLOSEOUT_AND_RX_REJECTION_ACCOUNTING` 已完成上一轮证据核对、16 条历史接收前 ingress ledger、诊断 delta、分析器测试、定向 1 MiB 与 hot-smoke 验证以及 PF-01/PF-02 契约材料。历史 16 条只有 `EXPERIMENT_NATIVE_INGRESS`，没有 Captured/owned-copy/rejection 字段，具体原因保持 `HISTORICAL_CAUSE_UNRESOLVED`；不能将其改称 DATA_FRAG 丢失或容量拒绝。
-
-> **Historical RX closeout 验证摘要（2026-09-22）：** 独立 host 最终 OFF `148/148 PASS`、ON `150/150 PASS`，focused `8/8 PASS`，最终 RX analyzer `31/31 PASS`；诊断 delta 的 post-review native OFF/ON build 均 `0/0/0`，各有 1,657 inputs、6 artifacts，主程序 SHA-256 为 `6352b28f6b7f3d033bb8ecd58f5319eb4479cfe76d5d0ece461ed21487f1c0fc`（OFF）和 `dedfad61e0c26da6e9d7a5e26b60c21ab8db9130a573d4513a5223a8ce8f3a19`（ON）。新 1 MiB 窗口 `5923cd595106e8a6` 的 203 条 admission 全部 accepted、拒绝 `0`，本次 1 MiB 接收拒绝未复现（`NOT_REPRODUCED`），旧 16 条原因仍为 `HISTORICAL_CAUSE_UNRESOLVED`；新 hot-smoke `98e4d1228566a0a4` 完成 10 条同轮链、10 次 DDS `wait_for_acknowledgments`，并观察到 2 条严格 gap `NO_APPLICATION` 与 1 条 final-cleanup `NO_APPLICATION`。这些是限定窗口证据，不能替代 SDK internal settlement 或 PF 资格。
-
-> **Historical RX closeout 接线边界（2026-09-22）：** Participant ExperimentalTransport facade 接入新的 application/receiver/logical-token attachment，再接共享 ProcessRuntime 与实际 ProcessCoordinator/ApplicationAttachments/InputChannels；每个 endpoint 保有独立 native State/listener/table/owner/worker。P1 detach 排空自身原 lease/TX/RX/last-payload 并保留 live native 表；Q 不受影响；所有 application detach 后才 Finalize native stop/join/tombstone。SDK TX 仍使用原有有界 owned-vector 队列和原 application 联合 drain，不宣称运行于 `NativeSendExecution` provider；RX 是一次 copy 加原 lease，无 application 时当场丢弃。默认 setup=1，双 endpoint runtime 显式 setup=2，池为 `2 setup / 2 send / 1 close`，没有延长 SDK timeout 或新增协议。
-
-> **Historical RX closeout 资格边界（2026-09-22）：** P0、PF-01/PF-02 仍 `BLOCKED / NOT QUALIFIED`；生产默认仍 `NativeUnavailable`，P4 未放行，无 QualificationProfile；Git commit/push 为 `USER_PROHIBITED`。SDK internal settlement 为 `UNOBSERVED`。该历史轮次未修改 admission、调度、预算或生命周期语义；review 未发现该轮 Transport 缺陷。完整收尾记录见 [DOCS_SYNC.md](.artifacts/hot-rebuild-closeout-rx-20260922/run-20260922T012640Z/docs/DOCS_SYNC.md)，源码封存/恢复及最终 checkpoint 结论以该轮 `FINAL_REPORT.md` / `FINAL_GATE.json` 为准。
-
-> **历史：same-name hot-reattach admission（2026-09-21）。** 该旧 STOP-0 结论记录了当时 facade 到 surviving live InputChannel/table 的接线缺口；本工作包现已在限定 live-table app reattach 路径上闭合该历史 STOP-0。OLD2/PF-02 与 full-native-record RED 仍是独立未资格化边界，不能被本次 PASS 删除或提升为生产资格。
-
-> **Historical — Same-name hot-reattach admission (2026-09-21): BLOCKED / NOT_COMMITTED.** At that earlier STOP-0, the facade-to-surviving-live-InputChannel/table bridge was absent and native build/device pilot were `NOT_RUN`; the current limited live-table app-reattach path closes that historical wiring gap. OLD2/PF-02 and the full-native-record RED remain separate qualification boundaries. See [historical hot reattach record](.artifacts/experiment-hot-reattach-20260921/run-20260921T145916Z/FINAL_REPORT.md).
-
-> **最新双实例验证修正（2026-09-21）**：实验验证器修正后的限定 `BYTES_NATIVE` 运行已完成并由独立证据收口。最终 host 套件为 OFF `55/55 PASS`、ON `57/57 PASS`；OFF/ON native bridge/configure/build 均为 `0/0/0`，各 manifest 记录 93 个输入，运行包哈希分别为 `09b16d92…f23c` 与 `5096447d…6f55`。两块 RK3588A 上五个新窗口均通过：双 Participant/P1 删除后 P2 继续写入、默认小消息、256 KiB 分片、RELIABLE 单次受控丢包恢复、BEST_EFFORT 目标样本缺失；每个窗口均为 HDC/remote exit `0`、无 watchdog，并完成撤权与最终 guard。完整字段、历史失败更正和证据索引见 [双实例最终报告](.artifacts/experiment-dual-20260921-second-instance-fix/run-20260921T121708Z/FINAL_REPORT.md)。该结果仅是 default-OFF 的限定实验，不改变 `P0 BLOCKED / NOT QUALIFIED`、`NativeUnavailable`、PF-01–04、生产 P4 未授权、`no QualificationProfile` 或 `COMMIT_GATE=PROHIBITED`；SDK 内部 settlement 仍 `UNOBSERVED`，本工作包未提交。
-
-> **前一工作包：可行性收敛（历史，2026-09-21）**：该工作包状态为 `CLOSED_WITH_PLATFORM_DEPENDENCIES`（可行性收敛已关闭，平台问题未解除）；平台资格仍为 P0 **BLOCKED / NOT QUALIFIED**，生产 DSoftBus Transport 仍为 `NativeUnavailable`。该工作包的 build/host/device 均 `NOT_RERUN`；历史 D 交付窗口 `64/64` 与 V4 `1/64` 不拼接为压力资格，`NEED_ACK` 的 `NotCalled` 保留。只有具体新机制、平台契约、可判别 trace 或明确用户决策才重开对应问题；同一阻塞不会自动启动新一轮全面探针。Fast DDS 集成、生产 native backend、DDS discovery、可靠性、分片和 RMW 未验证，PRE_COMMIT 仍 FAIL，该工作包不可提交。详见 [docs/P0_IMPLEMENTATION_20260920.md](docs/P0_IMPLEMENTATION_20260920.md)、[review](.artifacts/closure-20260921/review/REVIEW.md) 和 [readonly verification](.artifacts/closure-20260921/verification/RESULT.md)。
-
-> **有限例外实验（2026-09-21）**：经用户明确授权，独立的 default-OFF [Real Fast DDS × DSoftBus Socket 实验报告](docs/FASTDDS_DSOFTBUS_EXPERIMENT_20260921.md) 在两块 RK3588A 上完成了限定 R4 BYTES 场景：OHOS 包构建 `0/0/0`、host `7/7`、双板 discovery/Writer/Reader/10 samples/正常 close 均有证据，`SCENARIO_GATE=PASS`。这不改变上述 P0/P4 结论，不是生产放行；RAW、热重建、多 Participant、压力/故障 close、混合 transport 和 native self-route 仍未覆盖，`COMMIT_GATE=PROHIBITED`。
-
-> **前序 R4 实验补充（历史）**：R4 生命周期/observer hardening 已由独立 host `16/16 PASS`、review 和设备复测闭合；硬化包 SHA-256 为 `448663…`。随后 default-OFF fragments host `17/17 PASS`、OHOS `0/0/0`，256 KiB 与 1 MiB 三样本 DATA_FRAG 场景均完成 ACK、Reader mask、正常 close 与无 watchdog 观察；1 MiB 的 79 条 DATA_FRAG 观察含每序列 18 个唯一范围，重复范围不推断 NACK/重试原因。小消息十样本路径仍保留；小/256 KiB guard 边界缺口与 1 MiB 即时撤权 guard PASS 见实验报告。
-
-> **前序 controlled-loss 补充（历史）**：独立 OFF/ON host `21/21`、`23/23 PASS` 与 OHOS `0/0/0` 完成；RELIABLE 的单次 whole-message drop 已由 v2 因果收据关联到 NACK_FRAG、缺失范围重发、ReaderSampleInfo 与 ACK，BEST_EFFORT 则保留 samples 2/3、mask `006`、ACK `NotCalled`。两种窗口均正常清理并恢复 guards；SDK 内部物理结算仍 `UNOBSERVED`。这仍是 default-OFF 限定实验，不改变 P0/P4 结论。
-
-本快照优先于下文较早的 N1/N2/N3 历史记录；那些记录仍保留其原始范围和证据，不计入本轮计划完成度。最新冻结方案见 [docs/FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md](docs/FASTDDS_DSOFTBUS_TRANSPORT_V1_PLAN.md)。
-
-历史 N1/N2/N3 工作包中，ApplicationAttachments 的设计 R1（unique InputChannels/attachment 封装）与代码 R1（Close waiter 等待迟到 Opening）是两个不同问题，均已在各自限定范围通过 review/test；N3-1 的 N2 root public target wiring 也已通过独立 review 与最终复测。64 次仅为模型 application attachment 周期，不是 DDS Participant 或真实同名热重建。这些历史工作包当时未执行 native backend、实际 DDS/SPDP/SEDP/样本、同名 Participant 热重建或 RMW；本次 R4 的新增证据与覆盖范围见上方实验报告。
-
-本仓库用于在不改变 Fast DDS DDS/RTPS 语义的前提下，验证并实现基于 OpenHarmony DSoftBus Socket API 的 Transport。当前仓库包含 S1/S2 探针、S3 独立核心和 D2 发送资源桥接；完整可用于 Fast DDS 生产通信的 DSoftBus Transport 仍未完成。
-
-## 历史工作包状态（N1/N2/N3及前期切片）
-
-以下表格保留各历史工作包的原始范围和证据；它们不是对 2026-09-21
-限定 R4 实验的重新判定，也不覆盖完整生产 Transport 的未决资格。
-
-| 项目 | 状态 | 证据 |
+English | [简体中文](README_zh.md)
+
+A custom [Fast DDS](https://github.com/eProsima/Fast-DDS) transport for
+OpenHarmony devices, using the **DSoftBus Socket API** to carry RTPS traffic.
+The project targets applications that need DDS communication over DSoftBus,
+including integration with ROS 2 through Fast DDS.
+
+The transport is responsible for addressing, connections, sending, receiving and
+resource lifetime. Discovery, reliability, fragmentation, history and QoS remain
+responsibilities of Fast DDS. The integration uses the Socket API exclusively.
+
+## Architecture
+
+```text
+DDS application / ROS 2 application
+                |
+       Fast DDS DDS / RTPS
+                |
+        TransportInterface
+                |
+       DSoftBus Transport
+                |
+     OpenHarmony DSoftBus Socket API
+                |
+        Peer OpenHarmony device
+```
+
+The repository contains the transport implementation, SDK-free lifecycle and
+routing components, native Socket bindings, integration examples, and host and
+device test tools. The stock integration registers the transport through Fast DDS
+public transport configuration. Earlier integration and diagnostic paths are kept
+in the repository with their own build instructions and evidence.
+
+## Choose a build path
+
+| Goal | Entry point | Scope |
 | --- | --- | --- |
-| Fast DDS 接口探针 | IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED | 当前 3.6.2.0 真实头文件与未修改 `TransportInterface.cpp` 源片段；S1 上轮 Host 7/7（`155515Z`），本轮 Host 9/9（`184049Z`）；接口契约内部覆盖 IF-01..04，两板 IF-01..04 各 4/4 为 S1 设备证据 |
-| DSoftBus 符号探针 | IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED | SDK 23 arm64 构建；两板客户端库 required/optional symbols PASS |
-| DSoftBus Socket 通信 | 有界双板记录 PASS；quiescence 未验证 | token-first 运行在 A/B 各方向验证 32/255/4096/16384/60000 字节记录，发送 ≤3 ms、关闭观察 202 ms；权限随后已撤销并恢复原始记录。不等于 SDK 回调排空或生产 Transport |
-| S3-A EndpointDirectory | BUILDS / HOST_TESTED（cross build） | Debug/Release、consumer/library-only/cross 共 13 组；仅目录模型及消费者，不是 DEVICE_TESTED 或完整目录 VERIFIED |
-| Locator wire characterization | BUILDS / DEVICE_TESTED / REVIEWED（限定范围） | A/B 各 4 组仅验证 LocatorCodec 与真实 Fast DDS CDR/ParameterList；不覆盖 EndpointDirectory 全部算法、DSoftBus records 或 DDS discovery |
-| S2-P native 身份/最小权限探针 | DEVICE_TESTED / PASS（限定范围） | A/B 同 ID regrant → Socket 创建/Shutdown 一次 → revoke 闭环 PASS；服务 GRANTED→DENIED、self 还原、JSON guard 和 provider hashes 保持；不等于 Transport 通信通过 |
-| PLAN 15.2 thread-token diagnostic | IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED / REVIEWED（限定范围） | 两板受控测量均 PASS：旧线程保持原 token，新线程观察目标 token，主线程恢复成功；证据 `.artifacts/diagnostics/thread-token/20260914T035011891Z-tester-device/` 及 review `.artifacts/review/20260914T035632Z-thread-token-device-results/REVIEW.md`。不证明 DSoftBus callback 身份或 Socket 根因 |
-| RecordPairHarness | IMPLEMENTED / HOST_TESTED / REVIEWED（限定范围） | final host/simulated 测试通过，closure review 完成；不代表真实 Socket 通信 |
-| Record timing fix | BUILDS / HOST_TESTED / DEVICE negative TESTED；限定范围 | final Debug/Release 各 21 组、平台交叉构建通过；A/B 拒权模式真实退出 6，非法参数退出 64，符合负例预期。`BindReturned` 是 checkpoint，不等于物理 API 返回瞬间 |
-| S3-B SendQueue / S3-D1 batch | IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）；NOT DEVICE_TESTED | D1 final 独立验证 direct Debug/Release 各 26 组、root Debug/Release 各 14/14、consumer 与 SDK23 arm64 static build PASS；review `.artifacts/review/20260914T040359Z-send-batch/REVIEW.md` 无 blocking。仅证明队列原子接纳与记录所有权移交，不证明 SDK Send/真实 Transport |
-| S3-D2 RuntimeSendPath / SenderResource bridge | IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）；NOT DEVICE_TESTED | `.artifacts/verification/runtime-send-final-20260914T0527Z/RESULT.md`：D/R direct 各 27 组、root D/R 各 17/17、public consumer、SDK23 arm64 static build 均 PASS；review 无 actionable finding。仅证明 D2 发送计划与资源桥接，不证明 native backend、SDK 实际 Send、DDS/RMW |
-| S3 real Fast DDS binding | IMPLEMENTED / BUILDS / HOST_TESTED / DEVICE_TESTED / REVIEWED（限定范围） | host SOURCE D/R 各 17/17、source consumer 1/1、CONFIG matrix 32/32、CONFIG root 17/17、flat 2/2、nested 4 组、poison/absent SOURCE 17/17；SDK23 arm64 与两板 ABI/model、wrong-architecture rejection 均 PASS。预加载 `fastdds`/`fastcdr`/`foonathan_memory` 必须是 `IMPORTED_GLOBAL`，Release 映射仅未设置或单一 `RELEASE`。证据见 real-binding final host/SDK 与 fix review；bare-PATH、长路径、初始部署失败保留。仅证明真实配置/ABI 绑定，不证明 DSoftBus Socket、DDS discovery、同名 Participant 热重建或 RMW |
-| S3-LC Socket lifecycle/callback close | IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（LC runner 限定范围）；NOT DEVICE_TESTED | 独立 final `.artifacts/verification/lc-runner-final-20260914T120200Z/RESULT.md`：80/42/130/16/169/10 + syntax 4 及私有 real-fd/process diagnostic PASS；review closure `.artifacts/review/20260914T-lc-runner-code/CLOSURE.md`。collector exit-before-probe race 已修复；full log overlap、SDK quiescence、设备 Socket/Transport 仍未验证 |
-| ApplicationAttachments root wiring | IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）；NOT DEVICE_TESTED | `.artifacts/verification/attachments-wiring-final-20260914T093400Z/RESULT.md`：选项 7/7、SOURCE Debug/Release 22/22、CONFIG Release facade ON 23/23、consumer、既有 binding/facade 矩阵和 SDK23 arm64 link PASS；接线 review `.artifacts/review/20260914T-attachments-wiring-code/REVIEW.md`（SHA `89C726AF62F1B001523C2221B9BBE70DF74DC56927D544C67984900517912418`）无 blocking。仅为根构建接线和外部 consumer，不含 HDC、SDK runtime、DDS 或热重建 |
-| N1 stable native owner | IMPLEMENTED / BUILDS / HOST_TESTED / SDK23 ABI LINK/ELF TESTED / REVIEWED（模型/owner slice 限定范围） | [N1 completion record](docs/N1_COMPLETION.md) 与 `.artifacts/verification/n1-completion-final-20260914T1455Z/RESULT.md`：候选树 87/87 字节一致、SOURCE D/R 23/23、CONFIG 24、root options 9、attachment 7、consumer 1、standalone、20 次重复、SDK23 link/readelf PASS；fresh cache 中默认 `BUILD_DSOFTBUS_NATIVE_OWNER` 跟随 `BUILD_DSOFTBUS_DIRECTORY`，测试仅在 `BUILD_TESTING=ON` 时注册。该结果不是 SDK runtime/设备验证 |
-| N2 native send execution | IMPLEMENTED / BUILDS / HOST_TESTED / SDK23 ABI LINK/ELF TESTED / REVIEWED（SDK-free injected synchronous model 限定范围） | [N2 completion record](docs/N2_COMPLETION.md)；最终 receipt SHA `3AC3B952B424D3EDFF1A16D584463ABA89F369D9E0A37527316B32D3955612F7`，SOURCE Debug/Release 各 24/24、CONFIG 25/25、20×10 repeat、N1 9/9、attachments 7/7、binding 32/32、facade 4/4、SDK23 AArch64 link/readelf PASS；review SHA `227E9479AC4CA318B1B89BD51AE66D554ED47F69819DE2B13E1CAB8CA6D660D7` 无 actionable finding。真实 Socket/SDK Send、DDS/RTPS、设备、跨设备、RMW、同名 Participant 热重建 NOT RUN；scoped model gate PASS，不等于 Transport DONE |
-| N3-1 N2 root wiring | IMPLEMENTED / BUILDS / HOST_TESTED / SDK23 LINK/ELF TESTED / REVIEWED（限定范围）；NOT DEVICE_TESTED | [N3-1 completion](docs/N3_WIRING_COMPLETION.md)；最终 tester `.artifacts/n3-execution/wiring-final/RESULT.md`：root/source-subproject 10/10，SOURCE Debug/Release 各 24/24，CONFIG Release 25/25，既有 N1/attachments/binding/facade 9/7/32/4，外部消费者 1/1/2，SDK23 AArch64 link/readelf PASS；唯一 review P2 已修复并由 clean-parent 10/10 复测。仅证明根构建接线，不含真实 backend、DSoftBus、DDS、设备、热重建或 RMW |
-| Fast DDS 主机库构建 | BUILDS / PASS（准备阶段） | `.artifacts/build/fastdds-logs/HOST_BUILD_RESULT_20260914.md`：实际 237/237 编译、install exit 0；仅证明主机库构建准备完成，不是 Transport、DDS 集成或上游测试通过 |
-| Fast DDS Transport / DDS / RMW 集成 | Descriptor facade IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）；native backend、DDS/RMW NOT RUN | 真实 Descriptor/Transport factory、接口与 selectors 已完成限定范围验证；native backend 缺失时 production init 固定失败，私有 HostModel 仅供测试。N1 owner host/source/consumer 与 SDK23 ABI recovery PASS（限定范围）；真实 SPDP/SEDP、用户数据、同名 Participant 热重建与 RMW 未执行 |
-| N3 frozen lifecycle model | IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）；SDK23 LINK/ELF TESTED；NOT DEVICE_TESTED | [N3 completion](docs/N3_COMPLETION.md)；final root Debug/Release 26/26，Coordinator 13、Process 8、N2 17、AA 9、Input 16、Runtime 30、N1 11；CONFIG facade 21 + Coordinator 13；N1 consumer 9/9、N2 consumer 10/10；SDK23 两个 ELF64/AArch64，补充 manifest 另验证 N2/Process/Coordinator 三个 ELF；review P2 已闭环。仅证明 SDK-free 同 local 模型组合，不证明真实 DSoftBus、DDS 或实际同名 Participant 热重建 |
-| SRT-1 共享 service-record 表模型 | IMPLEMENTED / BUILDS / HOST_TESTED / REVIEWED（限定范围）；NOT DEVICE_TESTED | `PLAN.md` §18 冻结契约的有界实现：`include/mdds/dsoftbus/ServiceRecordTable.hpp`、`src/ServiceRecordTable.cpp`、`tests/service_record_table_tests.cpp`（15 case × 独立进程）。Release 15/15、Debug 15/15、standalone 全量 43/43、CONFIG host Release 全量 258/258、`/W4` 无告警；RED 为 stub 15/15 行为失败并与 GREEN 共用同一 test/header 字节。收据 [.artifacts/srt1/README.md](.artifacts/srt1/README.md)。不含 SDK 调用、native backend 接线、设备、DDS、热重建或 RMW |
-| 总体 | NOT VERIFIED | N3 frozen host model 已实现并通过限定范围复测；真实 native backend、callback quiescence、DDS/RMW、设备/跨设备和同进程同名 Participant 热重建仍未验证；这是完整 Transport 发布边界。**更新（2026-09-28）**：在该行所指的默认/生产 Transport 之外，显式实验路径（PublicSocket + 真实 DDS）的双板通信与同进程同名 Participant 单轮热重建**已有设备证据**，见本文档顶部当前基线与 [PLAN.md](PLAN.md) §21；默认 backend 仍为 `NativeBackendUnavailable`，该行的历史判定不改写 |
+| Build the native transport for OpenHarmony | [Version and release guide](docs/FASTDDS_VERSIONS_AND_RELEASE.md), `scripts/release/`, `integrations/ros2/stock/` | Stock Fast DDS 2.14.5, 3.6.2 or 3.2.5; version-specific libraries and device suite |
+| Develop the cores and inspect interface contracts on Windows | Root `CMakeLists.txt`; commands below | Default `SOURCE_PROBE` binding, SDK-free components and host fixtures |
+| Work with the earlier installed package or experimental consumer | [Installation guide](docs/INSTALL.md), [input preflight](docs/INSTALL_PREFLIGHT.md) | Separate root `CONFIG` and historical integration paths; follow their exact dependency and ABI requirements |
 
-完整基线、哈希和执行记录见 [docs/BASELINE.md](docs/BASELINE.md) 与 [docs/STATUS.md](docs/STATUS.md)，实施计划见 [PLAN.md](PLAN.md)。
+The default root build is for host development. A device runtime requires the
+explicit native build, platform libraries and deployment configuration described
+in the version and release guide. The root `CONFIG` binding and the stock build
+are separate CMake entry points.
 
-## 仓库布局
+## Get the source
 
-- `Fast-DDS`: Fast DDS 下游源码子模块。
-- `communication_dsoftbus`: OpenHarmony DSoftBus 下游源码子模块。
-- `probes/`: 当前接口和 DSoftBus 能力探针。
-- `tests/`: 探针契约测试与 host-only fixture。
-- `cmake/`: 独立探针构建配置。
-- `.artifacts/`: 被忽略的构建产物、测试日志和设备证据。
+Git and access to the configured submodule remotes are required. The current
+submodule URLs use SSH.
 
-## 初始化子模块
+```sh
+git clone --recurse-submodules git@github.com:Jiusi-pys/FastDDS-dsoftbus-transport.git
+cd FastDDS-dsoftbus-transport
+```
 
-新 checkout 可执行以下命令初始化当前 root 记录的子模块版本；不要用 `pull` 替代 pin，也不要在此步骤提交子模块指针：
+For a new checkout whose submodules have not been initialized:
 
-```powershell
+```sh
 git submodule update --init --recursive
 ```
 
-## Host 构建和测试（Windows）
+The parent repository pins the submodule commits. Keep those pins when reproducing
+a checkout; updating a submodule to its remote branch changes the source inputs.
+The release scripts fetch their own explicitly selected upstream versions as
+described in the release guide.
+
+## Host development on Windows
+
+Prerequisites: CMake 3.22 or later, Visual Studio 2022 with the C++ tools,
+initialized submodules, Python 3, Node.js (`node` on `PATH`) and Windows
+PowerShell. Use a fresh build directory.
 
 ```powershell
-cmake -S . -B .artifacts/build/host-capability -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON -DBUILD_NATIVE_PERMISSION_PROBE=OFF -DBUILD_INTERFACE_PROBE=ON -DBUILD_SOFTBUS_CAPABILITY_PROBE=ON
-cmake --build .artifacts/build/host-capability --config Debug --parallel 4
-ctest --test-dir .artifacts/build/host-capability -C Debug --output-on-failure
+cmake -S . -B build/host-source-probe -G "Visual Studio 17 2022" -A x64 -DFASTDDS_DSOFTBUS_FASTDDS_MODE=SOURCE_PROBE -DBUILD_TESTING=ON -DBUILD_NATIVE_PERMISSION_PROBE=OFF
+cmake --build build/host-source-probe --config Debug --parallel 4
+ctest --test-dir build/host-source-probe -C Debug --output-on-failure
 ```
 
-最终 N1 root CTest 需在该测试进程内设置 machine PowerShell module path，并使用绝对 host DLL `bin` 前缀；这不是全局环境变更。此前模块查找/相对 DLL 路径失败保留为环境边界证据，不计为通过。
+These commands exercise the selected host configuration. They do not deploy to a
+board or establish device acceptance. Tests that use fake Socket symbols validate
+the host contracts within that fixture's scope.
 
-当前权限生命周期 run 的 canonical Host suite 证据为 10/10 tests passed：接口契约 CTest 内部覆盖 IF-01..04，另有 capability cases、`permissions.flow` 的 10 个权限流程 groups、`snapshot_guard` 的 158 checks 和记录契约。fixture DLL 仅用于 host capability 测试，不部署到设备，也不代表设备上的 DSoftBus 实现。
+## OpenHarmony build and use
 
-## OpenHarmony arm64 构建
+The native workflow uses an OpenHarmony SDK 23 AArch64 toolchain and platform
+libraries matching the target firmware. Cross-board examples require two paired
+OpenHarmony devices, `hdc`, and the process identity and permissions required by
+DSoftBus. The recorded hardware is RK3588A running KaihongOS/OpenHarmony.
 
-```powershell
-$sdk = 'C:/Users/17715/AppData/Local/OpenHarmony/Sdk/23/native'
-cmake -S . -B .artifacts/build/ohos -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DBUILD_NATIVE_PERMISSION_PROBE=OFF -DCMAKE_TOOLCHAIN_FILE="$sdk/build/cmake/ohos.toolchain.cmake" -DCMAKE_MAKE_PROGRAM="$sdk/build-tools/cmake/bin/ninja.exe" -DOHOS_ARCH=arm64-v8a -DBUILD_INTERFACE_PROBE=ON -DBUILD_SOFTBUS_CAPABILITY_PROBE=ON
-cmake --build .artifacts/build/ohos --parallel 4
-```
+Follow [the release workflow](docs/FASTDDS_VERSIONS_AND_RELEASE.md) for the exact
+prerequisites, version selection, build commands, deployment paths and cross-board
+procedure. Its tools cover:
 
-基础构建显式保持 `-DBUILD_NATIVE_PERMISSION_PROBE=OFF`，避免复用已有 cache 中的 ON 设置；这只构建基础探针。权限 probe 已使用官方平台 clang、原始 `__h` libc++ 头文件和板端 `libc++.so` 单独构建/链接并完成两板受控生命周期验证；早期应用 SDK `std::__n1` 链接失败属于历史候选路径。默认 CMake permission target 尚未自动切换该平台工具链，复现时须使用独立 build 目录并显式记录工具链。
+- Building pinned Fast DDS and dependency sources with `build_fastdds_ohos.sh`.
+- Collecting target link inputs with `pull_platform_libs.py`.
+- Building the transport and device programs with `build_transport_ohos.sh`.
+- Deploying and running the selected two-board scenarios with `run_cross_board.py`.
 
-ARM64 二进制不能在 Windows 主机直接运行 `ctest`，必须通过 `hdc` 部署后执行。
+For application integration, start with the
+[stock bootstrap headers](integrations/ros2/stock/TransportBootstrap.hpp),
+[scoped bootstrap wrapper](integrations/ros2/stock/ScopedTransportBootstrap.hpp)
+and [device suite examples](tests/device_suite/README.md). Select the matching
+Fast DDS line and supply explicit runtime and peer configuration. Keep dependency
+ABIs consistent within each process.
 
-## RK3588A 设备探针
+## Validation and limitations
 
-最终验证部署目录为 `/data/local/tmp/fastdds_dsoftbus_probe_20260913T155515Z/`。每块板均部署 `fastdds_interface_tests`、`softbus_capability_probe` 和 SDK `libc++_shared.so`；fixture 不部署。设备执行形式为：
+Build and test evidence is tied to a specific version, configuration, device image
+and scenario. The [version matrix](docs/FASTDDS_VERSIONS_AND_RELEASE.md) records
+builds and two-board tests for Fast DDS 2.14.5, 3.6.2 and 3.2.5, including the scope
+of host testing. This is not a blanket qualification of every ROS 2 distribution
+or deployment configuration.
 
-```text
-hdc -t <target> shell "cd /data/local/tmp/fastdds_dsoftbus_probe_<run> && LD_LIBRARY_PATH=. ./fastdds_interface_tests IF-01"
-hdc -t <target> shell "cd /data/local/tmp/fastdds_dsoftbus_probe_<run> && LD_LIBRARY_PATH=. ./softbus_capability_probe --library /system/lib64/platformsdk/libsoftbus_client.z.so"
-```
+- DDS feature coverage, security, statistics and recovery scenarios are described
+  in the version matrix and its acceptance records.
+- A ContentFilteredTopic filter-factory race is recorded for Fast DDS 2.14.5
+  and 3.6.2. The documented workaround disables writer-side filtering and requires
+  application serialization of filter changes and teardown. Proposed upstream
+  patches are not applied. See the
+  [CFT results and workaround](docs/FASTDDS_VERSIONS_AND_RELEASE.md#64-content-filter-race-on-fast-dds-3x-re-evaluated-not-assumed)
+  and the [2.14.5 investigation](docs/FASTDDS_FULL_BUILD_AND_CFT_RACE_20261105.md).
+- ROS 2 acceptance is recorded separately in the
+  [ROS 2 capability matrix](docs/ROS2_CAPABILITY_MATRIX.md). ROS 2 validation of
+  the current stock version builds is recorded as `NOT_RUN` (Stage 2) in the
+  version guide. Earlier ROS runs do not qualify a newly built Fast DDS or
+  transport binary automatically.
+- Platform deployment contracts, production qualification and distribution rights
+  have separate requirements; consult the
+  [production support contract](docs/PRODUCTION_SUPPORT_CONTRACT_V1.md).
 
-实际验证器为每条命令设置 10 秒外部 watchdog；上面的裸 `hdc shell` 示例本身不提供 watchdog。watchdog 触发必须记为失败，不能当作正常取消机制。Socket 检查通过 `--socket-check` 使用 `com.kaihong.mdds` 的 pkgName 字段和独占本地名称前缀；这不证明 hdc shell 进程具有该应用的 AccessToken 身份。最终运行命令示例为：
+For dated development progress and remaining work, use
+[STATUS](docs/STATUS.md) and the acceptance documents it links. [PLAN](PLAN.md)
+contains design and historical work records; a dated checkpoint applies to its
+own evidence scope.
 
-```text
-hdc -t <target> shell "cd /data/local/tmp/fastdds_dsoftbus_probe_<run> && LD_LIBRARY_PATH=. ./softbus_capability_probe --library /system/lib64/platformsdk/libsoftbus_client.z.so --socket-check"
-```
+## Repository layout
 
-早期无授权 Socket 检查两板均为 probe exit 3（`Socket()` 返回 `-426115032`，约 5 秒）；本轮授权闭环中的独立 Socket 创建/Shutdown 已 PASS。HDC 外层 exit 0 不等价于探针成功；当前证据仍不包含跨设备记录或 Fast DDS 通信。
+| Path | Contents |
+| --- | --- |
+| `include/fastdds_dsoftbus/`, `src/` | Transport interfaces, implementation and supporting components |
+| `integrations/ros2/stock/` | Stock Fast DDS transport bootstrap and native library build |
+| `integrations/ros2/` | ROS 2 integration, historical adapters and diagnostics |
+| `scripts/release/` | Native dependency builds, transport builds and cross-board runner |
+| `examples/`, `tests/`, `probes/` | Consumers, host contracts, device scenarios and probes |
+| `docs/` | Architecture, installation, support contracts and acceptance records |
+| `Fast-DDS/` | Fast DDS source submodule |
+| `communication_dsoftbus/` | OpenHarmony DSoftBus source submodule |
 
-## 下游来源
+## Development and contribution
 
-- Fast DDS: `git@github.com:eProsima/Fast-DDS.git`
-- OpenHarmony DSoftBus: `git@gitcode.com:openharmony/communication_dsoftbus.git`
+Follow [AGENTS.md](AGENTS.md) for the architectural boundaries and validation
+workflow. Keep changes within the transport and necessary adapters, preserve
+DDS/RTPS semantics, and use independent execution evidence and review for
+implementation changes. Communication changes require the applicable real-device
+and cross-device checks.
 
-## 最新证据更正（2026-09-14）
+## Licensing and third-party materials
 
-`InputChannels` S3-C 接收关联/交付寿命核心已完成 R1 修复、OOM 修复、独立 review 与最终限定范围验证：root CONFIG CTest 20/20、SOURCE Debug/Release 各 19/19、facade repeat 20 次、FCD 21/21、IC-12 及 public consumer 均 PASS。证据见 `.artifacts/verification/facade-host-final-20260914T075048953Z/RESULT.md` 与 `.artifacts/review/20260914T-facade-code/REVIEW.md`。这只证明该生产核心及 facade 的 host/build 契约，不证明 DSoftBus SDK 回调、真实 Transport、DDS discovery、用户数据或 RMW。
-
-token-first 双板 Socket record 实验已在有界范围 PASS：A/B 各方向五种完整记录均通过字节、长度和计数校验；A Listen、B 同步 Bind 和关闭观察均有记录。证据为 `.artifacts/diagnostics/token-first/20260914T051101677Z-execute/` 与 `.artifacts/verification/20260914T045328Z-token-first-device/`；该实验明确记录 quiescence 未验证、DDS 未运行、Transport 未实现。此前 exit=6 的尝试保留为历史证据，不与本轮成功实验混同。整体仍 NOT VERIFIED（完整 Transport 发布未就绪）；N1 限定执行门已 PASS，提交须单独满足范围、文档、图分析与 Git 门槛。
-
-线程身份诊断已完成独立 review、平台构建和两板受控测量。设备证据目录 `.artifacts/diagnostics/thread-token/20260914T035011891Z-tester-device/`；原体/runner 的 `032800Z`、`034800Z` 目录名保留为标签，实际执行时间以其中记录为准。该结果只支持本次短命诊断观察到的线程 token 行为：A 旧线程 `806246851` 保留、主线程目标 `671793191`，B 旧线程 `806017503` 保留、主线程目标 `671320465`；两板均恢复主线程 token、准确 PID 消失且持久 JSON/stat/label/guards 未变。它不证明 DSoftBus callback 使用何种身份，也不证明 Socket 失败根因。新的 completion IPC 记录已执行但仍 FAIL（0 bytes、remote exit 6），最终只读 manager 预检为 DENIED/before-select；证据见 `.artifacts/diagnostics/record-bind-readonly/20260914T041328638Z-execute/` 与 `.artifacts/verification/20260914T035259996Z-record-completion/final-readonly-20260914T041700Z/`。
-
-后续真实 Transport、SPDP/SEDP、用户数据和 ROS 2 RMW 集成必须在 S2 Socket 契约及终止条件得到证据支持后再推进；不能由当前探针结果推导完成。
-
-## 当前 ROS 2 Host 集成收据（2026-10-02）
-
-本轮范围限定为 Host 集成与安装消费，设备验证为 `N/A_HOST_ONLY`。候选基于
-`8077386403b81cd75cf691bf883ec0769bf6a1b0`，包含 38 个经选择收据绑定的源码/测试文件；独立
-review 结论为 `NO_ACTIONABLE_SOURCE_FINDINGS_IN_HOST_SCOPE`。公开项目和安装包名为
-`FastDDSDSoftBusTransport`，C++ 命名空间为 `fastdds_dsoftbus`；原版 `rmw_fastrtps` 未修改，Fast DDS 2.14.5
-隔离前端与默认 3.6 依赖分开核对。
-
-最新 Host 双进程运行 `bf9a3fe141ababbe` 实际完成 Reliable 与 Best Effort 双向各 5 条，合计
-20 writes/20 takes；真实 ROS graph、service request/reply、应用及 Runtime 正常关闭均有原始收据。
-独立安装 prefix 外部消费者完成构建，prefix relocation 为 10/10；builtin/XML、DataSharing
-冲突拒绝、required 缺失/错误/bridge 不可用 fail-closed、禁转发 0/0 等边界通过。默认无
-required 配置的测试确认 Node 可创建并可关闭，但因没有隔离 peer 退出 4，不能作为应用成功。
-
-完整 CONFIG 原始执行为 540/543、退出码 8；两个环境问题后续 2/2 修复通过，子依赖路径修复
-1/1 通过，原始失败收据保持不变。ASan 使用同源码范围的既有 53 项映射复用，Fast DDS、Fast
-CDR 和 foonathan 依赖未插桩。上述 Host 结果不证明 OpenHarmony 设备、DSoftBus SDK、SDK
-epoch/drain/cancellation 或生产资格；默认 `NativeBackendUnavailable`、P0/PF/P4 和
-`QualificationProfile` 状态不变。
-
-历史 ROS 设备 attempts 仍为 `FAIL`，其查询/数据额度账本保持 `0`，未因本轮 Host 验证改变。
-
-证据入口：[当前 Host 集成收据](.artifacts/ros2-host-integration/run-20261002-current/FINAL_REVIEW.md)。
-构建依赖、安装目录和外部输入属于本机只读材料，不随项目 clone 提供。
-
-## 最新 ROS 2 双板收尾验收（2026-10-04）
-
-最新受限设备窗口已完成：`ROS2_DSOFTBUS_DUAL_BOARD_FUNCTIONAL_VERIFIED`。
-查询 `d1c2cb4097279214` 和数据窗口 `be8cb2d90f287223` 使用 DevEco/OpenHarmony SDK23
-构建的 `build/ros2-target/r2` 包，通过 SDK23 HDC 部署到登记的两块 RK3588A。普通
-`rclcpp` → 未修改 `rmw_fastrtps` → Fast DDS 2.14.5 → `FastDDSDSoftBusTransport`
-→ DSoftBus Socket/Binding → 对端 ROS 回调路径完成了 RELIABLE 和 BEST_EFFORT 双向各
-5 条、合计 20/20 Topic 交付；graph 和 service request/reply 分开验收，正常
-rclcpp/RMW/DDS/Runtime 关闭、进程退出和环境恢复均有独立收据。两端原始 Topic、
-Publisher/Subscriber、Writer/Reader 删除及 Participant 删除均返回 0；native 记录与
-20 条接收建立了同 run 的结构关联，但不证明 SDK 内部 event epoch 或物理包逐一因果。
-
-本结果是限定双板功能范围的 `DEVICE_TESTED` / `VERIFIED`，不是全项目生产完成。实际
-目标为 Fast DDS 2.14.5、Fast CDR 2.2.5、RMW 8.4.3、rcl 9.2.11、rclcpp 28.1.22，
-构建与临时输出均在仓库 `build/ros2-target` 内。目标包含 109 个成员，原版 RMW
-未修改；paired pre-native-close 协调、creation-complete 识别和串行控制修复均有源码与
-独立测试收据。设备验收记录产生时 HEAD 为
-`4807765f53826ed0b882cac32610acb17ee30b4f`，当时尚未提交或推送；后续提交状态以 Git
-历史为准。
-
-仍未证明 SDK epoch/drain/cancellation、任意故障安全、异构 OpenHarmony/非 OpenHarmony
-互通或完整 ROS 工具链兼容性；P0/PF/P4、默认 `NativeBackendUnavailable` 和生产资格不变，
-未生成 `QualificationProfile`。完整证据见 [paired-close 最终报告](.artifacts/ros2-topic-rtti-repair-20261004/paired-close/FINAL_REPORT.md)
-和 [证据索引](.artifacts/ros2-topic-rtti-repair-20261004/paired-close/EVIDENCE_INDEX.json)。
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for dependency attribution
+and distribution constraints. The repository does not currently provide a root
+first-party release license; dependency licenses do not grant a license to all
+project code. Vendor SDKs, device images and platform binaries have their own terms.

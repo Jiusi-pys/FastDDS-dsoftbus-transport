@@ -1,3 +1,5 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 <!-- R35_CURRENT_STATUS_PREFIX; historical body below is byte-preserved. -->
 # R35 current bounded serialized bag evidence (2026-10-19T22:45:38.910915+00:00)
 
@@ -56,7 +58,7 @@ Initial auxiliary history is **PARTIAL**: a first premature support_readiness re
 
 The registered RK3588A OpenHarmony A/B pair uses SDK23/AArch64,project-linked CPython3.12.7,ROS2 Jazzy/rmw_fastrtps_cpp,project FastDDS2.14 and DSoftBus Socket providers. Native selected configuration remains custom-only,with the previously qualified experimental outgoing-first A backend and ordinary B backend; no default reconnect or topology change is implied. Query `6bc41cb2deba743a`,scenario `1e7ff88669a22014`,execution/output `147dc09d418ab3f5`; exact target IDs/deploy roots/native commands and ownership are retained in the local immutable receipts.
 
-Historical host argv from [HOST_START](../../../../build/r34-serialized-impact/scene-raw-query2-host/HOST_START.json),with root-relative arguments below expanded against the workspace,was:
+Historical host argv from HOST_START (historical local evidence unavailable in this checkout: `../../../../build/r34-serialized-impact/scene-raw-query2-host/HOST_START.json`),with root-relative arguments below expanded against the workspace,was:
 
 ```text
 C:/pixi_ws/.pixi/envs/default/python.exe -X utf8 -B
@@ -67,7 +69,7 @@ C:/pixi_ws/.pixi/envs/default/python.exe -X utf8 -B
   --output build/r34-serialized-impact/execution-147dc09d418ab3f5
 ```
 
-This records a consumed once-only release,not authorization to rerun. All230 scene host commands,40 query host commands and4 continuation commands exited0;214 scene/24 query shell commands contain exactly one remote zero marker,the remainder include successful transfers. [HOST_EXIT0](../../../../build/r34-serialized-impact/scene-raw-query2-host/HOST_EXIT.json) binds outer execution. No safety bound was increased and documentation/audit made no new HDC call.
+This records a consumed once-only release,not authorization to rerun. All230 scene host commands,40 query host commands and4 continuation commands exited0;214 scene/24 query shell commands contain exactly one remote zero marker,the remainder include successful transfers. HOST_EXIT0 (historical local evidence unavailable in this checkout: `../../../../build/r34-serialized-impact/scene-raw-query2-host/HOST_EXIT.json`) binds outer execution. No safety bound was increased and documentation/audit made no new HDC call.
 
 | Existing bound | Actual observed interval |
 | --- | --- |
@@ -91,7 +93,7 @@ Both children exit0,interpreter execution/finalize/native teardown0,four owned c
 
 ## Bag decision and remaining gaps
 
-**R34 bag remains NOT_TESTED.** [Independent feasibility review](../../../../build/r34-serialized-impact/bag-followup-review/REPORT.md) blocks the original simultaneous A publisher/B raw observer/B stock recorder plan. Current bridge/backend has one peer,two Participant slots and one accepted owner; adding an observer process/node name does not qualify a third native Participant/route. The observer would still be a different subscription from recorder-internal take. No third observer or native topology change is selected.
+**R34 bag remains NOT_TESTED.** Independent feasibility review (historical local evidence unavailable in this checkout: `../../../../build/r34-serialized-impact/bag-followup-review/REPORT.md`) blocks the original simultaneous A publisher/B raw observer/B stock recorder plan. Current bridge/backend has one peer,two Participant slots and one accepted owner; adding an observer process/node name does not qualify a third native Participant/route. The observer would still be a different subscription from recorder-internal take. No third observer or native topology change is selected.
 
 A separate narrower candidate may use exactly two Participants in a RECORD phase,an independently sealed/read-only closed-SQLite audit,then a fresh two-Participant PLAY phase. It is **NOT_IMPLEMENTED / NOT_TESTED** and does not complete the original phase2 recorder-input goal. Internal recorder input remains unobservable. Stored BLOB/replay bytes could be compared by topic+sample index using full bytes,lengths/hashes/fields,without assuming cross-topic timestamp order. Typed stock serialization is distinct from local diagnostic serialization. Package/type-support presence and source contracts are prerequisites,not ParameterEvent execution proof. Each new phase needs its own design,source/package binding,tests/review,operational admission and normal lifecycle evidence; original safety bounds remain. [Historical ten-String rosbag PASS](ROS2_ROSBAG_RECORDPLAY_ACCEPTANCE.md) remains a separate bounded qualification.
 
@@ -103,18 +105,18 @@ These ignored build artifacts are local supporting evidence,not promised remote 
 
 | Record | SHA256 |
 | --- | --- |
-| [d01-device2-final-audit/RESULT.json](../../../../build/r34-serialized-impact/d01-device2-final-audit/RESULT.json) | `578e3bc511c424c83c3d120153ad3100ad9ce56777031d5fb38d7e608f00e387` |
-| [d01-device2-final-audit/SEAL.json](../../../../build/r34-serialized-impact/d01-device2-final-audit/SEAL.json) | `8acf6b7fddfdaa6a364ed322d35e231d7ae76e2080460a40e04ebad87728fbae` |
-| [d01-final-host/RESULT.json](../../../../build/r34-serialized-impact/d01-final-host/RESULT.json) | `78878238211ab39e530c1a1a96a8c8acc6156bb3f8536795d2e5b3cbeced3a19` |
-| [d01-final-host/SEAL.json](../../../../build/r34-serialized-impact/d01-final-host/SEAL.json) | `000481bc71ec5202c7612a387a6badcbab80f7d75ef58b592df17ef40f8e86c9` |
-| [d01-code-review/RESULT.json](../../../../build/r34-serialized-impact/d01-code-review/RESULT.json) | `ab86407da81ad58bbe5a343f53eab757d7f0b35fa0c60bc36fa2ac90e82ae936` |
-| [bag-followup-review/RESULT.json](../../../../build/r34-serialized-impact/bag-followup-review/RESULT.json) | `4bfe353a27cf8515f77bfd6a65d6f7fdcffe4d48ebf64eca4bf722c94659ad50` |
-| [bag-followup-review/SEAL.json](../../../../build/r34-serialized-impact/bag-followup-review/SEAL.json) | `243dcbe1fa60c8e00b4b5c46b0dedb66a86caa1e25aa6a653ae1304c7f96a910` |
-| [d01-device2-final-audit/REPORT.md](../../../../build/r34-serialized-impact/d01-device2-final-audit/REPORT.md) | `cf9ed3be0d5841bd6aeda81fd995e444df89c5b5d1043c8d441dbe9fcd8a622c` |
-| [d01-device2-final-audit/CONTENT_SUMMARY.json](../../../../build/r34-serialized-impact/d01-device2-final-audit/CONTENT_SUMMARY.json) | `f2ea8c24fe959728520d56c2747b632a718e15faea4bca5f69c2e3c397d07312` |
-| [d01-initial-host/RESULT.json](../../../../build/r34-serialized-impact/d01-initial-host/RESULT.json) | `19fa413a5ed275c946cf1da494ce9106dbda89de4a283a9e337c995ebdac2451` |
-| [ops-query2-review/RESULT.json](../../../../build/r34-serialized-impact/ops-query2-review/RESULT.json) | `d1d83907b186f585e20cb5c0a03f0b263a871151d987d9ddb3d2ca20f0dcf11d` |
-| [device-query1-failure-audit/RESULT.json](../../../../build/r34-serialized-impact/device-query1-failure-audit/RESULT.json) | `9cdf8b27a0023e5660b63cb254aabab97f48b6e6c06174a06458754c775099ae` |
+| [d01-device2-final-audit/RESULT.json](../build/r34-serialized-impact/d01-device2-final-audit/RESULT.json) | `578e3bc511c424c83c3d120153ad3100ad9ce56777031d5fb38d7e608f00e387` |
+| [d01-device2-final-audit/SEAL.json](../build/r34-serialized-impact/d01-device2-final-audit/SEAL.json) | `8acf6b7fddfdaa6a364ed322d35e231d7ae76e2080460a40e04ebad87728fbae` |
+| [d01-final-host/RESULT.json](../build/r34-serialized-impact/d01-final-host/RESULT.json) | `78878238211ab39e530c1a1a96a8c8acc6156bb3f8536795d2e5b3cbeced3a19` |
+| [d01-final-host/SEAL.json](../build/r34-serialized-impact/d01-final-host/SEAL.json) | `000481bc71ec5202c7612a387a6badcbab80f7d75ef58b592df17ef40f8e86c9` |
+| [d01-code-review/RESULT.json](../build/r34-serialized-impact/d01-code-review/RESULT.json) | `ab86407da81ad58bbe5a343f53eab757d7f0b35fa0c60bc36fa2ac90e82ae936` |
+| [bag-followup-review/RESULT.json](../build/r34-serialized-impact/bag-followup-review/RESULT.json) | `4bfe353a27cf8515f77bfd6a65d6f7fdcffe4d48ebf64eca4bf722c94659ad50` |
+| [bag-followup-review/SEAL.json](../build/r34-serialized-impact/bag-followup-review/SEAL.json) | `243dcbe1fa60c8e00b4b5c46b0dedb66a86caa1e25aa6a653ae1304c7f96a910` |
+| [d01-device2-final-audit/REPORT.md](../build/r34-serialized-impact/d01-device2-final-audit/REPORT.md) | `cf9ed3be0d5841bd6aeda81fd995e444df89c5b5d1043c8d441dbe9fcd8a622c` |
+| [d01-device2-final-audit/CONTENT_SUMMARY.json](../build/r34-serialized-impact/d01-device2-final-audit/CONTENT_SUMMARY.json) | `f2ea8c24fe959728520d56c2747b632a718e15faea4bca5f69c2e3c397d07312` |
+| [d01-initial-host/RESULT.json](../build/r34-serialized-impact/d01-initial-host/RESULT.json) | `19fa413a5ed275c946cf1da494ce9106dbda89de4a283a9e337c995ebdac2451` |
+| [ops-query2-review/RESULT.json](../build/r34-serialized-impact/ops-query2-review/RESULT.json) | `d1d83907b186f585e20cb5c0a03f0b263a871151d987d9ddb3d2ca20f0dcf11d` |
+| [device-query1-failure-audit/RESULT.json](../build/r34-serialized-impact/device-query1-failure-audit/RESULT.json) | `9cdf8b27a0023e5660b63cb254aabab97f48b6e6c06174a06458754c775099ae` |
 
 R33 functional V2 is published as `bb007f39d3d5224d44ed5bcfa8294a68b337b32e` (2026-10-19 02:50:54.316289 UTC; exact-SHA CI NOT_RUN, zero runs/checks/statuses), confirmed by root-relative `build/r33-capability-gap/main-functional-v2-publication/POST_PUBLISH.json`. At this 2026-10-19T06:28:09.313739+00:00 pre-commit documentation snapshot, R34 Main graph/PRE_COMMIT/commit/push/CI remain PENDING. Actual later outcomes belong in `build/r34-serialized-impact/main-publication/POST_PUBLISH.json`; no future SHA or PASS is prefilled.
 

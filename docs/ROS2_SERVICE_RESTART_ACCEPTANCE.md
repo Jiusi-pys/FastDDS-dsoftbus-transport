@@ -1,3 +1,5 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 # R29 bounded true service restart acceptance
 
 ## EOF qualification addendum (2026-10-18 18:06 UTC pre-commit snapshot)
@@ -35,15 +37,15 @@ recovery, soak/leak freedom and full ROS2 remain unqualified.
 
 | EOF evidence (local ignored files) | SHA-256 |
 | --- | --- |
-| [build/r29-service-restart/eof-final-tester/RESULT.json](../../../../build/r29-service-restart/eof-final-tester/RESULT.json) | `01dc0bbf97a1ffab070f89b66dcd126216b87edc175c37885723c58cbb699b0f` |
-| [build/r29-service-restart/eof-final-tester/SEAL.json](../../../../build/r29-service-restart/eof-final-tester/SEAL.json) | `d79c01f7ba1e63bb83a201085bb5662715a371a1f4fcdd3d2fdc2ebaa86b9ab5` |
-| [build/r29-service-restart/eof-final-tester/BUILD_RECEIPT.json](../../../../build/r29-service-restart/eof-final-tester/BUILD_RECEIPT.json) | `860b808301a6cfcd78dcca067dce4f10a14c18487556aec1c3119e291e1b050d` |
-| [build/r29-service-restart/package-1d3f139c844aed53/DERIVATION.json](../../../../build/r29-service-restart/package-1d3f139c844aed53/DERIVATION.json) | `2a715b6456d5e194e4340eca5aa0b61ab11c28e525b764488386658316454df2` |
-| [build/r29-service-restart/eof-final-tester/EQUIVALENCE.json](../../../../build/r29-service-restart/eof-final-tester/EQUIVALENCE.json) | `c7b3b5c0c1afa5a903fd4b37ffe5d7b264d9c2fa84320fe31e1f466d84040ddb` |
-| [build/r29-service-restart/eof-final-tester/PACKAGE_EQUIVALENCE.json](../../../../build/r29-service-restart/eof-final-tester/PACKAGE_EQUIVALENCE.json) | `5c62f5ebd098906b610f707a101c7005c3a528264a57a1c3ddcd0b6a6901776b` |
-| [build/r29-service-restart/eof-initial-tester/RESULT.json](../../../../build/r29-service-restart/eof-initial-tester/RESULT.json) | `7e0b721d78aaa5e34df7721dbcf335e52734e5045e714b97328f162ebdc2de74` |
-| [build/r29-service-restart/eof-review/RESULT.json](../../../../build/r29-service-restart/eof-review/RESULT.json) | `64e0cd84202d90978999c54cad7be67462f720827e0fdc555138ef5459d3297a` |
-| [build/r29-service-restart/eof-finalization/FAILURE.json](../../../../build/r29-service-restart/eof-finalization/FAILURE.json) | `2ac77bcf624113bfd645e397891e0f6460d5096d8a17b8f2c2230433cab428cd` |
+| [build/r29-service-restart/eof-final-tester/RESULT.json](../build/r29-service-restart/eof-final-tester/RESULT.json) | `01dc0bbf97a1ffab070f89b66dcd126216b87edc175c37885723c58cbb699b0f` |
+| [build/r29-service-restart/eof-final-tester/SEAL.json](../build/r29-service-restart/eof-final-tester/SEAL.json) | `d79c01f7ba1e63bb83a201085bb5662715a371a1f4fcdd3d2fdc2ebaa86b9ab5` |
+| [build/r29-service-restart/eof-final-tester/BUILD_RECEIPT.json](../build/r29-service-restart/eof-final-tester/BUILD_RECEIPT.json) | `860b808301a6cfcd78dcca067dce4f10a14c18487556aec1c3119e291e1b050d` |
+| [build/r29-service-restart/package-1d3f139c844aed53/DERIVATION.json](../build/r29-service-restart/package-1d3f139c844aed53/DERIVATION.json) | `2a715b6456d5e194e4340eca5aa0b61ab11c28e525b764488386658316454df2` |
+| [build/r29-service-restart/eof-final-tester/EQUIVALENCE.json](../build/r29-service-restart/eof-final-tester/EQUIVALENCE.json) | `c7b3b5c0c1afa5a903fd4b37ffe5d7b264d9c2fa84320fe31e1f466d84040ddb` |
+| [build/r29-service-restart/eof-final-tester/PACKAGE_EQUIVALENCE.json](../build/r29-service-restart/eof-final-tester/PACKAGE_EQUIVALENCE.json) | `5c62f5ebd098906b610f707a101c7005c3a528264a57a1c3ddcd0b6a6901776b` |
+| [build/r29-service-restart/eof-initial-tester/RESULT.json](../build/r29-service-restart/eof-initial-tester/RESULT.json) | `7e0b721d78aaa5e34df7721dbcf335e52734e5045e714b97328f162ebdc2de74` |
+| [build/r29-service-restart/eof-review/RESULT.json](../build/r29-service-restart/eof-review/RESULT.json) | `64e0cd84202d90978999c54cad7be67462f720827e0fdc555138ef5459d3297a` |
+| [build/r29-service-restart/eof-finalization/FAILURE.json](../build/r29-service-restart/eof-finalization/FAILURE.json) | `2ac77bcf624113bfd645e397891e0f6460d5096d8a17b8f2c2230433cab428cd` |
 
 Snapshot: 2026-10-18 17:51 UTC. **IMPLEMENTED / HOST_TESTED / DEVICE_TESTED /
 CROSS_DEVICE_TESTED PASS**, only one explicit normal AddTwoInts server replacement
@@ -189,21 +191,21 @@ described in the dated snapshot above.
 
 | Local evidence | SHA-256 |
 | --- | --- |
-| [build/r29-service-restart/device1-final-audit/RESULT.json](../../../../build/r29-service-restart/device1-final-audit/RESULT.json) | `946a4984970c7c31c40b773b494c59d12b00f56e84695158da56118517955ead` |
-| [build/r29-service-restart/device1-final-audit/SEAL.json](../../../../build/r29-service-restart/device1-final-audit/SEAL.json) | `51cfe218f7835d6f6fd87871b9b36493252952f41faecd5ff9852327c4320fb6` |
-| [build/r29-service-restart/device1-final-audit/APPLICATION_CDR.json](../../../../build/r29-service-restart/device1-final-audit/APPLICATION_CDR.json) | `56e6774c3278a8499fc5caae1219a6b8c68b86dfa24571557fb3ae5452d3a289` |
-| [build/r29-service-restart/device1-final-audit/TRANSPORT_AND_CONTROLS.json](../../../../build/r29-service-restart/device1-final-audit/TRANSPORT_AND_CONTROLS.json) | `24e114de59db3fef1609e3f64a39ec67b77489bb424f4d679d546a0a5d90735b` |
-| [build/r29-service-restart/device1-final-audit/TIMING.json](../../../../build/r29-service-restart/device1-final-audit/TIMING.json) | `07ec92ca19d7d097aa5d3c62e0bbf0fe8ea6c8a3fce4f6479bd95bd53a36d6c8` |
-| [build/r29-service-restart/device1-final-audit/QUERY_AND_HOST.json](../../../../build/r29-service-restart/device1-final-audit/QUERY_AND_HOST.json) | `189bc01bec640b89afe212f305bf3cddbf982c0f4274b38f5c517a62fb94fcde` |
-| [build/r29-service-restart/device1-final-audit/COMMAND_AUDIT.json](../../../../build/r29-service-restart/device1-final-audit/COMMAND_AUDIT.json) | `a64a745510974e4acca5c66267d1dda0460202847de2c403e418a466237fa1af` |
-| [build/r29-service-restart/device1-final-audit/RAW_HASHES.json](../../../../build/r29-service-restart/device1-final-audit/RAW_HASHES.json) | `cf34f5653003f556e2a4748b936842760f5e85bc80b7065cfda20d0e16392637` |
-| [build/r29-service-restart/initial-tester/RESULT.json](../../../../build/r29-service-restart/initial-tester/RESULT.json) | `02569b0e9ca30d7c70d4dd61671b6f5e2d31c5eb2be14c432e082512d93e2e14` |
-| [build/r29-service-restart/initial-fix1-tester/RESULT.json](../../../../build/r29-service-restart/initial-fix1-tester/RESULT.json) | `f81a6d2223f92bd3338cf27cba9f11739293c688d61c12021596c97ec549bf03` |
-| [build/r29-service-restart/implementation-review/RESULT.json](../../../../build/r29-service-restart/implementation-review/RESULT.json) | `dab29deb5f123d60ba6d325469255b3c9a2f882e9c788e6eb7b5e493a370b3f5` |
-| [build/r29-service-restart/final-tester/RESULT.json](../../../../build/r29-service-restart/final-tester/RESULT.json) | `1ab0ac21dc3c4adbbbd167dd5af055ffab4ee750d3ca28ddb7572265e160a71d` |
-| [build/r29-service-restart/final-tester/SEAL.json](../../../../build/r29-service-restart/final-tester/SEAL.json) | `208f921119d815696b623342e03a0a097b83466a09ddfcd7c8d9a74c4d493c7d` |
-| [build/r29-service-restart/device-plan-review/RESULT.json](../../../../build/r29-service-restart/device-plan-review/RESULT.json) | `920c19d78d2f44a5935d82eee914d19645a4a55e8c71fc5b63529315a58772e6` |
-| [build/r29-service-restart/execution-e3ce620975f5a132/RESULT.json](../../../../build/r29-service-restart/execution-e3ce620975f5a132/RESULT.json) | `ea73ea1f75b23ff0cf13c3a23a3cb423f64a19fe58e885a47404c0e23e0deaa1` |
-| [build/r29-service-restart/package-ab5881038de7217f/DERIVATION.json](../../../../build/r29-service-restart/package-ab5881038de7217f/DERIVATION.json) | `42788a1723f2880794b53963d5fa7b8d1c4eab9af56e33dd2575489608ad57e1` |
-| [build/r29-service-restart/main-service-restart-publication/IMPLEMENTATION_FILES.json](../../../../build/r29-service-restart/main-service-restart-publication/IMPLEMENTATION_FILES.json) | `d0b22f3f7a7f4fa5268a627877940d799e8333fc4455ed81886bd170e7a7a986` |
-| [build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json](../../../../build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json) | `d980fc30e57072e65f666cc9ff8a5ef9dce011989608d8fe8a12439eb2598fb8` |
+| [build/r29-service-restart/device1-final-audit/RESULT.json](../build/r29-service-restart/device1-final-audit/RESULT.json) | `946a4984970c7c31c40b773b494c59d12b00f56e84695158da56118517955ead` |
+| [build/r29-service-restart/device1-final-audit/SEAL.json](../build/r29-service-restart/device1-final-audit/SEAL.json) | `51cfe218f7835d6f6fd87871b9b36493252952f41faecd5ff9852327c4320fb6` |
+| [build/r29-service-restart/device1-final-audit/APPLICATION_CDR.json](../build/r29-service-restart/device1-final-audit/APPLICATION_CDR.json) | `56e6774c3278a8499fc5caae1219a6b8c68b86dfa24571557fb3ae5452d3a289` |
+| [build/r29-service-restart/device1-final-audit/TRANSPORT_AND_CONTROLS.json](../build/r29-service-restart/device1-final-audit/TRANSPORT_AND_CONTROLS.json) | `24e114de59db3fef1609e3f64a39ec67b77489bb424f4d679d546a0a5d90735b` |
+| [build/r29-service-restart/device1-final-audit/TIMING.json](../build/r29-service-restart/device1-final-audit/TIMING.json) | `07ec92ca19d7d097aa5d3c62e0bbf0fe8ea6c8a3fce4f6479bd95bd53a36d6c8` |
+| [build/r29-service-restart/device1-final-audit/QUERY_AND_HOST.json](../build/r29-service-restart/device1-final-audit/QUERY_AND_HOST.json) | `189bc01bec640b89afe212f305bf3cddbf982c0f4274b38f5c517a62fb94fcde` |
+| [build/r29-service-restart/device1-final-audit/COMMAND_AUDIT.json](../build/r29-service-restart/device1-final-audit/COMMAND_AUDIT.json) | `a64a745510974e4acca5c66267d1dda0460202847de2c403e418a466237fa1af` |
+| build/r29-service-restart/device1-final-audit/RAW_HASHES.json (historical local evidence unavailable in this checkout: `../../../../build/r29-service-restart/device1-final-audit/RAW_HASHES.json`) | `cf34f5653003f556e2a4748b936842760f5e85bc80b7065cfda20d0e16392637` |
+| [build/r29-service-restart/initial-tester/RESULT.json](../build/r29-service-restart/initial-tester/RESULT.json) | `02569b0e9ca30d7c70d4dd61671b6f5e2d31c5eb2be14c432e082512d93e2e14` |
+| [build/r29-service-restart/initial-fix1-tester/RESULT.json](../build/r29-service-restart/initial-fix1-tester/RESULT.json) | `f81a6d2223f92bd3338cf27cba9f11739293c688d61c12021596c97ec549bf03` |
+| [build/r29-service-restart/implementation-review/RESULT.json](../build/r29-service-restart/implementation-review/RESULT.json) | `dab29deb5f123d60ba6d325469255b3c9a2f882e9c788e6eb7b5e493a370b3f5` |
+| [build/r29-service-restart/final-tester/RESULT.json](../build/r29-service-restart/final-tester/RESULT.json) | `1ab0ac21dc3c4adbbbd167dd5af055ffab4ee750d3ca28ddb7572265e160a71d` |
+| [build/r29-service-restart/final-tester/SEAL.json](../build/r29-service-restart/final-tester/SEAL.json) | `208f921119d815696b623342e03a0a097b83466a09ddfcd7c8d9a74c4d493c7d` |
+| [build/r29-service-restart/device-plan-review/RESULT.json](../build/r29-service-restart/device-plan-review/RESULT.json) | `920c19d78d2f44a5935d82eee914d19645a4a55e8c71fc5b63529315a58772e6` |
+| [build/r29-service-restart/execution-e3ce620975f5a132/RESULT.json](../build/r29-service-restart/execution-e3ce620975f5a132/RESULT.json) | `ea73ea1f75b23ff0cf13c3a23a3cb423f64a19fe58e885a47404c0e23e0deaa1` |
+| [build/r29-service-restart/package-ab5881038de7217f/DERIVATION.json](../build/r29-service-restart/package-ab5881038de7217f/DERIVATION.json) | `42788a1723f2880794b53963d5fa7b8d1c4eab9af56e33dd2575489608ad57e1` |
+| [build/r29-service-restart/main-service-restart-publication/IMPLEMENTATION_FILES.json](../build/r29-service-restart/main-service-restart-publication/IMPLEMENTATION_FILES.json) | `d0b22f3f7a7f4fa5268a627877940d799e8333fc4455ed81886bd170e7a7a986` |
+| [build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json](../build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json) | `d980fc30e57072e65f666cc9ff8a5ef9dce011989608d8fe8a12439eb2598fb8` |

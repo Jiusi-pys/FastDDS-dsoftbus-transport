@@ -1,5 +1,22 @@
 # Fast DDS OpenHarmony DSoftBus Transport: installation and consumers
 
+## Select the installation path (2026-11-05)
+
+This page documents the **root CONFIG package and historical experimental installed
+consumers**. Its root CONFIG instructions require the exact Fast DDS 3.6.2.0
+package and retain the default `NativeBackendUnavailable` facade; the historical
+ROS integration sections have their own dependency and binary requirements.
+
+For the native stock transport on OpenHarmony with Fast DDS **2.14.5, 3.6.2 or
+3.2.5**, use the [version and release guide](FASTDDS_VERSIONS_AND_RELEASE.md).
+That workflow builds from `integrations/ros2/stock/` through `scripts/release/`
+and produces the version-specific `libfastdds_dsoftbus_stock_*` runtime.
+Selecting that workflow is separate from configuring the repository root.
+
+For SDK-free host development, use the root `SOURCE_PROBE` instructions in
+[README](../README.md). The dated checkpoints below retain their original evidence
+scope; an old checkpoint is not a qualification of the newer stock runtime.
+
 ## ROS 2 2.14 maintenance candidate checkpoint (2026-10-07)
 
 The source-bound ROS 2 candidate uses Fast DDS 2.14.7

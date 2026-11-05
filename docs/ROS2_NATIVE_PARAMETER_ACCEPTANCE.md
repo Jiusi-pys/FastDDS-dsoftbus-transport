@@ -1,3 +1,5 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 # R33 native parameters: functional V2 PASS, strict V1 failures retained
 
 ## R34 diagnostic follow-up (2026-10-19T06:28:09.313739+00:00)
@@ -33,7 +35,7 @@ The independent auditor executed the actual current `ParameterScene.analyze` aga
 
 ## Commands, budgets and immutable package
 
-Actual [HOST_START](../../../../build/r33-capability-gap/scene-functional-v2-query3-host/HOST_START.json) / [HOST_EXIT0](../../../../build/r33-capability-gap/scene-functional-v2-query3-host/HOST_EXIT.json) bind the following historical command. This is not permission to reuse a consumed release:
+Actual HOST_START (historical local evidence unavailable in this checkout: `../../../../build/r33-capability-gap/scene-functional-v2-query3-host/HOST_START.json`) / HOST_EXIT0 (historical local evidence unavailable in this checkout: `../../../../build/r33-capability-gap/scene-functional-v2-query3-host/HOST_EXIT.json`) bind the following historical command. This is not permission to reuse a consumed release:
 
 ```json
 [
@@ -87,7 +89,7 @@ The auditor's initial equality-to89 assertion failed and remains sealed. Its nex
 
 ## Design, implementation review and host qualification
 
-[Design review](../../../../build/r33-capability-gap/acceptance-v2-design-review/REPORT.md) approved the stock-RMW functional model with conditions before implementation. Initial FV2-T01 exposed wrong-role extra REQUEST/RESPONSE/PARAMETER_EVENT acceptance; FV2-T02 exposed boolean release schema comparing equal to1. Both failures remain sealed. Repairs enforce per-role/kernel guards and exact schema type before dispatch/output; independent fix1 initial passes.
+Design review (historical local evidence unavailable in this checkout: `../../../../build/r33-capability-gap/acceptance-v2-design-review/REPORT.md`) approved the stock-RMW functional model with conditions before implementation. Initial FV2-T01 exposed wrong-role extra REQUEST/RESPONSE/PARAMETER_EVENT acceptance; FV2-T02 exposed boolean release schema comparing equal to1. Both failures remain sealed. Repairs enforce per-role/kernel guards and exact schema type before dispatch/output; independent fix1 initial passes.
 
 Formal review found no actionable blocker and executed28 repository tests plus27 host controls. Post-review final host freshly ran17+11 repository tests,11 original-failure rejection controls,50 parser/semantic/full-byte/immutable-suffix/native-API-stub entries,16 actual workflow deadline cases,eight actual execute lifecycle/release cases,complete synthetic analyze/endpoint cases and27 reviewer controls. Counts overlap and are not a total of distinct tests. Other exact-same-source selected ParameterService14RPC/startup/discovery/packaged-constructor/regression evidence is explicitly retained, not claimed rerun. Host native-I/O/capsule stubs do not establish target serialization.
 
@@ -111,19 +113,19 @@ Device audit SEAL2,692 members; original snapshot2,172 files (different scopes).
 
 | Record | SHA256 |
 | --- | --- |
-| [functional-v2-device3-final-audit/RESULT.json](../../../../build/r33-capability-gap/functional-v2-device3-final-audit/RESULT.json) | `cfc8ca5f62841a9d314e6a7cafa5c1f210ea55a9fdb80fad8edb141919f24d18` |
-| [functional-v2-device3-final-audit/SEAL.json](../../../../build/r33-capability-gap/functional-v2-device3-final-audit/SEAL.json) | `5d6ca8a9694a5c370fcea5fe66568c2fc1478000ee2223c9451db60afee4d813` |
-| [functional-v2-device3-final-audit/REPORT.md](../../../../build/r33-capability-gap/functional-v2-device3-final-audit/REPORT.md) | `e20c6e2e5af6dd94d120515f4cea8081451508db424f4362c6df39d77462bf88` |
-| [functional-v2-final/RESULT.json](../../../../build/r33-capability-gap/functional-v2-final/RESULT.json) | `1d50f030dbf1e69efea8eaf40358a0ee05725867b78f9f6af0eebd01f653056d` |
-| [functional-v2-final/SEAL.json](../../../../build/r33-capability-gap/functional-v2-final/SEAL.json) | `cee09e86df3f8010f7f2e870ca9b348d66572767b97e69b82b561d66cd111fe0` |
-| [functional-v2-review/RESULT.json](../../../../build/r33-capability-gap/functional-v2-review/RESULT.json) | `25a9d7c79df3d932cdb1ee411b153d02531846176d4d74075732237376a1b7cf` |
-| [functional-v2-operations3-review/RESULT.json](../../../../build/r33-capability-gap/functional-v2-operations3-review/RESULT.json) | `06cf3f14350428a72b89bd4ada9256ad99f789837a96d5b1d248e36abdb4bca4` |
-| [functional-v2-fix1-initial/RESULT.json](../../../../build/r33-capability-gap/functional-v2-fix1-initial/RESULT.json) | `a6e8df578a86d99a808b4940a1b75b51f7ec6057732781a04e415e2940ad0eb3` |
-| [device1-failure-audit/RESULT.json](../../../../build/r33-capability-gap/device1-failure-audit/RESULT.json) | `0e7f9e8a1c3184e9c907ab7977435f0a74ff1a32be67adfc32d05e3365e254ec` |
-| [device1-failure-audit/SEAL.json](../../../../build/r33-capability-gap/device1-failure-audit/SEAL.json) | `53e5dae4fd9f470de01c7e09b7adbd6991639d511728ed0feb5578682721d994` |
-| [device2-failure-audit/RESULT.json](../../../../build/r33-capability-gap/device2-failure-audit/RESULT.json) | `1116f4f1cf3724ac53ee38c760632b299944bcde0e10622a609738da94b40cfa` |
-| [device2-failure-audit/SEAL.json](../../../../build/r33-capability-gap/device2-failure-audit/SEAL.json) | `7ebd5f00ee33c36916184e3904f51e697e0819a1a9ed32c96eace16ef3bfc637` |
-| [acceptance-v2-design-review/RESULT.json](../../../../build/r33-capability-gap/acceptance-v2-design-review/RESULT.json) | `1a87bbebd6f378e87e0fe78616b16d2ba082627be484a3841e16746818c1ce4a` |
-| [functional-v2-initial/RESULT.json](../../../../build/r33-capability-gap/functional-v2-initial/RESULT.json) | `fc88223d808c9da4a5519118c81c6494625e78a8a12f9282dd74abc08fffa890` |
+| [functional-v2-device3-final-audit/RESULT.json](../build/r33-capability-gap/functional-v2-device3-final-audit/RESULT.json) | `cfc8ca5f62841a9d314e6a7cafa5c1f210ea55a9fdb80fad8edb141919f24d18` |
+| [functional-v2-device3-final-audit/SEAL.json](../build/r33-capability-gap/functional-v2-device3-final-audit/SEAL.json) | `5d6ca8a9694a5c370fcea5fe66568c2fc1478000ee2223c9451db60afee4d813` |
+| [functional-v2-device3-final-audit/REPORT.md](../build/r33-capability-gap/functional-v2-device3-final-audit/REPORT.md) | `e20c6e2e5af6dd94d120515f4cea8081451508db424f4362c6df39d77462bf88` |
+| [functional-v2-final/RESULT.json](../build/r33-capability-gap/functional-v2-final/RESULT.json) | `1d50f030dbf1e69efea8eaf40358a0ee05725867b78f9f6af0eebd01f653056d` |
+| [functional-v2-final/SEAL.json](../build/r33-capability-gap/functional-v2-final/SEAL.json) | `cee09e86df3f8010f7f2e870ca9b348d66572767b97e69b82b561d66cd111fe0` |
+| [functional-v2-review/RESULT.json](../build/r33-capability-gap/functional-v2-review/RESULT.json) | `25a9d7c79df3d932cdb1ee411b153d02531846176d4d74075732237376a1b7cf` |
+| [functional-v2-operations3-review/RESULT.json](../build/r33-capability-gap/functional-v2-operations3-review/RESULT.json) | `06cf3f14350428a72b89bd4ada9256ad99f789837a96d5b1d248e36abdb4bca4` |
+| [functional-v2-fix1-initial/RESULT.json](../build/r33-capability-gap/functional-v2-fix1-initial/RESULT.json) | `a6e8df578a86d99a808b4940a1b75b51f7ec6057732781a04e415e2940ad0eb3` |
+| [device1-failure-audit/RESULT.json](../build/r33-capability-gap/device1-failure-audit/RESULT.json) | `0e7f9e8a1c3184e9c907ab7977435f0a74ff1a32be67adfc32d05e3365e254ec` |
+| [device1-failure-audit/SEAL.json](../build/r33-capability-gap/device1-failure-audit/SEAL.json) | `53e5dae4fd9f470de01c7e09b7adbd6991639d511728ed0feb5578682721d994` |
+| [device2-failure-audit/RESULT.json](../build/r33-capability-gap/device2-failure-audit/RESULT.json) | `1116f4f1cf3724ac53ee38c760632b299944bcde0e10622a609738da94b40cfa` |
+| [device2-failure-audit/SEAL.json](../build/r33-capability-gap/device2-failure-audit/SEAL.json) | `7ebd5f00ee33c36916184e3904f51e697e0819a1a9ed32c96eace16ef3bfc637` |
+| [acceptance-v2-design-review/RESULT.json](../build/r33-capability-gap/acceptance-v2-design-review/RESULT.json) | `1a87bbebd6f378e87e0fe78616b16d2ba082627be484a3841e16746818c1ce4a` |
+| [functional-v2-initial/RESULT.json](../build/r33-capability-gap/functional-v2-initial/RESULT.json) | `fc88223d808c9da4a5519118c81c6494625e78a8a12f9282dd74abc08fffa890` |
 
-[Complete sample accounting](../../../../build/r33-capability-gap/functional-v2-device3-final-audit/CAPTURE_ACCOUNTING.json), [canonical audit report](../../../../build/r33-capability-gap/functional-v2-device3-final-audit/REPORT.md), [final host report](../../../../build/r33-capability-gap/functional-v2-final/REPORT.md), [formal code review](../../../../build/r33-capability-gap/functional-v2-review/REPORT.md) and [ops3 review](../../../../build/r33-capability-gap/functional-v2-operations3-review/REPORT.md) retain full supporting scope.
+Complete sample accounting (historical local evidence unavailable in this checkout: `../../../../build/r33-capability-gap/functional-v2-device3-final-audit/CAPTURE_ACCOUNTING.json`), canonical audit report (historical local evidence unavailable in this checkout: `../../../../build/r33-capability-gap/functional-v2-device3-final-audit/REPORT.md`), final host report (historical local evidence unavailable in this checkout: `../../../../build/r33-capability-gap/functional-v2-final/REPORT.md`), formal code review (historical local evidence unavailable in this checkout: `../../../../build/r33-capability-gap/functional-v2-review/REPORT.md`) and ops3 review (historical local evidence unavailable in this checkout: `../../../../build/r33-capability-gap/functional-v2-operations3-review/REPORT.md`) retain full supporting scope.

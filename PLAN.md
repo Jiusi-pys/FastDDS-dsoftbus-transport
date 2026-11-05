@@ -1,3 +1,28 @@
+# 开发计划与历史记录
+
+## 当前状态入口（2026-11-05）
+
+本节汇总已有验收记录，具体版本、配置和原始证据以 [当前状态](docs/STATUS.md)、
+[Fast DDS 版本与发布指南](docs/FASTDDS_VERSIONS_AND_RELEASE.md) 为准。
+本次文档同步没有重新执行构建、Host 或设备测试。
+
+- **Stage 1：限定范围的 DDS 双板验证已闭环。** Fast DDS 2.14.5、3.6.2、3.2.5
+  已有构建和两块 RK3588A 的设备测试记录；Host 范围按版本分别标注，不能由设备结果推定。
+  参见 [Stage 1 验收](docs/STAGE1_DIRECT_GOAL_DEVICE_20261104.md) 和
+  [完整构建与 CFT 调查](docs/FASTDDS_FULL_BUILD_AND_CFT_RACE_20261105.md)。
+- **Stage 2：这些新 stock 构建上的 ROS 2 集成仍为 NOT_RUN。** 历史 ROS 2 结果保留其原
+  二进制和配置范围，见 [ROS 2 能力矩阵](docs/ROS2_CAPABILITY_MATRIX.md)。
+- **仍有限制：** 3.6.2 root CONFIG Host 有 87 项链接阻塞，3.2.5 没有已记录的 Host 测试；
+  3.2.5 的双次路由中断场景未运行。2.14.5/3.6.2 的 CFT race 仍依赖文档中的 workaround。
+  有限设备通过不代表生产资格或当前工作树的全局 PRE_COMMIT gate 通过。
+
+## 历史计划与检查点
+
+以下保留各日期的原始计划、失败和验收记录。其中的“current”、PASS、FAIL、BLOCKED、
+审批和提交门状态只适用于各自当时的任务与证据，不能覆盖上面的当前状态入口。
+
+---
+
 ## 2026-10-31 evaluator rejection evidence — COMPLETE LOCAL / SYNTHETIC ONLY
 
 UTC 2026-10-30T16:57:12.512168+00:00. Bounded offline repair COMPLETE_LOCAL: source-owned safe rejection reason plus durable pre-rethrow checkpoint. FINAL_TEST_RESULT_D01.json SHA2565d23e1aa5428020f1c3a897d7bd1625a3f99d80309ba57703a9856cbae7cc073 is distinct final7 targeted synthetic/native outer0,12pins matched. Formal review finds no actionable issue. Six original parser/evaluator ASTs and58 guards remain unchanged; command/predicates did not receive a syntax fix. This does not identify historical readonly2 rejection cause, which remains UNKNOWN without serialized predicate.

@@ -1,3 +1,5 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 # R32 autonomous Action after one guarded server replacement
 
 Snapshot: 2026-10-18T23:26:38.723843+00:00; W3 HEAD `f14e57c9e5e94558a66a0f028cf99801f37ccd84`.
@@ -20,7 +22,7 @@ Three goals, zero application retries. Goal/request/result associations are dist
 
 ## Environment, package and command record
 
-Windows host: `C:/pixi_ws/.pixi/envs/default/python.exe -X utf8 -B`; existing OpenHarmony SDK23 hdc. Physical RK3588A A `3e01ff55454d202020104033bf453b00`, token672006291; B `3e01ff55454d202020104433991c3b00`, token672042405. Scenario `98dac942b90719fd`, original paired query `495e2a0f9b739c25`, execution `6dbaf4fd56fdf4e5`. The exact [host start](../../../../build/r32-action-natural-restart/scene-query1-fix2-host/HOST_START.json) / [exit0](../../../../build/r32-action-natural-restart/scene-query1-fix2-host/HOST_EXIT.json) and [query/continuation receipts](../../../../build/r32-action-natural-restart/device1-final-audit/QUERY_AND_HOST.json) bind all argv, cwd, time, exits and streams. This recorded command is not authorization to reuse its consumed scene/query:
+Windows host: `C:/pixi_ws/.pixi/envs/default/python.exe -X utf8 -B`; existing OpenHarmony SDK23 hdc. Physical RK3588A A `3e01ff55454d202020104033bf453b00`, token672006291; B `3e01ff55454d202020104433991c3b00`, token672042405. Scenario `98dac942b90719fd`, original paired query `495e2a0f9b739c25`, execution `6dbaf4fd56fdf4e5`. The exact host start (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/scene-query1-fix2-host/HOST_START.json`) / exit0 (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/scene-query1-fix2-host/HOST_EXIT.json`) and query/continuation receipts (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/device1-final-audit/QUERY_AND_HOST.json`) bind all argv, cwd, time, exits and streams. This recorded command is not authorization to reuse its consumed scene/query:
 
 ```json
 [
@@ -69,7 +71,7 @@ Scene collection follows process-pair absence: pre-transfer size, successful rec
 | Probe40 s | Observed NODE_READY-to-FINAL A19.820515/B0 4.750450/B1 10.191922 s; source enforces create_node-return origin, whose exact timestamp is not independently exported. |
 | Entire scene host elapsed |107.378420 s including admission/deployment; no outer process kill. |
 
-These are host/control/capture-inclusive measurements, not network latency. One scene attempt, no automatic new query/window or relaxed bound. [Timing](../../../../build/r32-action-natural-restart/device1-final-audit/TIMING.json), [process identities](../../../../build/r32-action-natural-restart/device1-final-audit/PROCESSES.json) and [normal-exit ordering](../../../../build/r32-action-natural-restart/device1-final-audit/NORMAL_EXIT_ORDER.json) retain exact details.
+These are host/control/capture-inclusive measurements, not network latency. One scene attempt, no automatic new query/window or relaxed bound. Timing (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/device1-final-audit/TIMING.json`), process identities (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/device1-final-audit/PROCESSES.json`) and normal-exit ordering (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/device1-final-audit/NORMAL_EXIT_ORDER.json`) retain exact details.
 
 ## Initial failures, independent review and retest
 
@@ -95,25 +97,25 @@ These ignored build paths are local evidence, not promised remote downloads. The
 
 | Receipt | SHA256 |
 | --- | --- |
-| [device1-final-audit/RESULT.json](../../../../build/r32-action-natural-restart/device1-final-audit/RESULT.json) | `077a77c60a79637b8529b2c3583e2afe90d9fd908efdf0158fdfd367ab1159b1` |
-| [device1-final-audit/SEAL.json](../../../../build/r32-action-natural-restart/device1-final-audit/SEAL.json) | `d2df06f13bf75fbd0b1f3e445729e7779116e90b6403dbe0b1caa7d3299a5b0a` |
-| [final-tester/RESULT.json](../../../../build/r32-action-natural-restart/final-tester/RESULT.json) | `352c150344d4d819d9c16ac3565eaa1596d698f948814e21074d1c14e445d091` |
-| [implementation-review/RESULT.json](../../../../build/r32-action-natural-restart/implementation-review/RESULT.json) | `7fe847bbec3df93fa1ce78ff899a53815aa9ff7b6e4b4c87fa1e97156c6f469e` |
-| [initial-tester/RESULT.json](../../../../build/r32-action-natural-restart/initial-tester/RESULT.json) | `bdf9c7a64559f99560c6028836e37ba6695197fc2b43ac9ba2b089a679f7734e` |
-| [initial-fix1-tester/RESULT.json](../../../../build/r32-action-natural-restart/initial-fix1-tester/RESULT.json) | `f0dae5abe893266ece9262ca529f869f69a93b8a81b6c0e0ddcfffc42b4f25ec` |
-| [initial-fix2-tester/RESULT.json](../../../../build/r32-action-natural-restart/initial-fix2-tester/RESULT.json) | `9529f5c59908a11b1ef246b345bfff81f18927231c6ba8062aad5f83d52fb3e0` |
-| [device-plan-review/RESULT.json](../../../../build/r32-action-natural-restart/device-plan-review/RESULT.json) | `3834d02414ead621ca6fbff286db4e236c4f509cf781221ca6fdcecd495310d2` |
-| [device-plan-fix1-review/RESULT.json](../../../../build/r32-action-natural-restart/device-plan-fix1-review/RESULT.json) | `2ddb7f21141960aadd5fbfe2020d920e338a4fce75602891267777b378727361` |
-| [device-plan-fix2-review/RESULT.json](../../../../build/r32-action-natural-restart/device-plan-fix2-review/RESULT.json) | `eee9b0aac402420da5843ce1128d7a762954738e752428888eff0955e3e174b7` |
-| [execution-6dbaf4fd56fdf4e5/RESULT.json](../../../../build/r32-action-natural-restart/execution-6dbaf4fd56fdf4e5/RESULT.json) | `79547a58e8bed8a4c1c26eee32674847dad79d87be7477a961b00711b677b1ec` |
-| [final-tester/SEAL.json](../../../../build/r32-action-natural-restart/final-tester/SEAL.json) | `b9f1141f56a42d581b1049498b1c334facccb0a2efd16eb9969522ad1e176662` |
-| [implementation-review/SEAL.json](../../../../build/r32-action-natural-restart/implementation-review/SEAL.json) | `c3939d3b1097fc7efb477adaf88fbe84df7a0ea19ee8b332a0be17d90f2459ae` |
-| [initial-tester/SEAL.json](../../../../build/r32-action-natural-restart/initial-tester/SEAL.json) | `ec670b7b1e6583806c98e75e854d6903bd4201b2ecaabb06872a81137bbfb2ae` |
-| [initial-fix1-tester/SEAL.json](../../../../build/r32-action-natural-restart/initial-fix1-tester/SEAL.json) | `453420121d248eb666cbd1c66e66df89c06782b4d8507d531d94b86e3694821d` |
-| [initial-fix2-tester/SEAL.json](../../../../build/r32-action-natural-restart/initial-fix2-tester/SEAL.json) | `4c835ec48feaec9ce46b59e7111168065f3733f75f9cdf3193156082157dc8f2` |
-| [device-plan-review/SEAL.json](../../../../build/r32-action-natural-restart/device-plan-review/SEAL.json) | `36a8f086ddf4f438c9bd88d07d8fa1bacdbedfb6706a8e0b93d96ef911fc0611` |
-| [device-plan-fix1-review/SEAL.json](../../../../build/r32-action-natural-restart/device-plan-fix1-review/SEAL.json) | `cef581b286a08f0b0b34e62e97f5fb524cb520f5ae1af5b27dd5131c189e858e` |
-| [device-plan-fix2-review/SEAL.json](../../../../build/r32-action-natural-restart/device-plan-fix2-review/SEAL.json) | `ececaa9e811c06eac13bf0cb834a220f1f403f2e6d7ba8f0bff25c82e6e39c55` |
-| [R31 publication](../../../../build/r31-action-natural/main-current-action-publication/POST_PUBLISH.json) | `3e9dcce55df3979932d3f07bc5e7a4576f524d48a23cf780db4b955a753d3985` |
+| [device1-final-audit/RESULT.json](../build/r32-action-natural-restart/device1-final-audit/RESULT.json) | `077a77c60a79637b8529b2c3583e2afe90d9fd908efdf0158fdfd367ab1159b1` |
+| [device1-final-audit/SEAL.json](../build/r32-action-natural-restart/device1-final-audit/SEAL.json) | `d2df06f13bf75fbd0b1f3e445729e7779116e90b6403dbe0b1caa7d3299a5b0a` |
+| [final-tester/RESULT.json](../build/r32-action-natural-restart/final-tester/RESULT.json) | `352c150344d4d819d9c16ac3565eaa1596d698f948814e21074d1c14e445d091` |
+| [implementation-review/RESULT.json](../build/r32-action-natural-restart/implementation-review/RESULT.json) | `7fe847bbec3df93fa1ce78ff899a53815aa9ff7b6e4b4c87fa1e97156c6f469e` |
+| [initial-tester/RESULT.json](../build/r32-action-natural-restart/initial-tester/RESULT.json) | `bdf9c7a64559f99560c6028836e37ba6695197fc2b43ac9ba2b089a679f7734e` |
+| [initial-fix1-tester/RESULT.json](../build/r32-action-natural-restart/initial-fix1-tester/RESULT.json) | `f0dae5abe893266ece9262ca529f869f69a93b8a81b6c0e0ddcfffc42b4f25ec` |
+| [initial-fix2-tester/RESULT.json](../build/r32-action-natural-restart/initial-fix2-tester/RESULT.json) | `9529f5c59908a11b1ef246b345bfff81f18927231c6ba8062aad5f83d52fb3e0` |
+| [device-plan-review/RESULT.json](../build/r32-action-natural-restart/device-plan-review/RESULT.json) | `3834d02414ead621ca6fbff286db4e236c4f509cf781221ca6fdcecd495310d2` |
+| [device-plan-fix1-review/RESULT.json](../build/r32-action-natural-restart/device-plan-fix1-review/RESULT.json) | `2ddb7f21141960aadd5fbfe2020d920e338a4fce75602891267777b378727361` |
+| [device-plan-fix2-review/RESULT.json](../build/r32-action-natural-restart/device-plan-fix2-review/RESULT.json) | `eee9b0aac402420da5843ce1128d7a762954738e752428888eff0955e3e174b7` |
+| [execution-6dbaf4fd56fdf4e5/RESULT.json](../build/r32-action-natural-restart/execution-6dbaf4fd56fdf4e5/RESULT.json) | `79547a58e8bed8a4c1c26eee32674847dad79d87be7477a961b00711b677b1ec` |
+| [final-tester/SEAL.json](../build/r32-action-natural-restart/final-tester/SEAL.json) | `b9f1141f56a42d581b1049498b1c334facccb0a2efd16eb9969522ad1e176662` |
+| [implementation-review/SEAL.json](../build/r32-action-natural-restart/implementation-review/SEAL.json) | `c3939d3b1097fc7efb477adaf88fbe84df7a0ea19ee8b332a0be17d90f2459ae` |
+| [initial-tester/SEAL.json](../build/r32-action-natural-restart/initial-tester/SEAL.json) | `ec670b7b1e6583806c98e75e854d6903bd4201b2ecaabb06872a81137bbfb2ae` |
+| [initial-fix1-tester/SEAL.json](../build/r32-action-natural-restart/initial-fix1-tester/SEAL.json) | `453420121d248eb666cbd1c66e66df89c06782b4d8507d531d94b86e3694821d` |
+| [initial-fix2-tester/SEAL.json](../build/r32-action-natural-restart/initial-fix2-tester/SEAL.json) | `4c835ec48feaec9ce46b59e7111168065f3733f75f9cdf3193156082157dc8f2` |
+| [device-plan-review/SEAL.json](../build/r32-action-natural-restart/device-plan-review/SEAL.json) | `36a8f086ddf4f438c9bd88d07d8fa1bacdbedfb6706a8e0b93d96ef911fc0611` |
+| [device-plan-fix1-review/SEAL.json](../build/r32-action-natural-restart/device-plan-fix1-review/SEAL.json) | `cef581b286a08f0b0b34e62e97f5fb524cb520f5ae1af5b27dd5131c189e858e` |
+| [device-plan-fix2-review/SEAL.json](../build/r32-action-natural-restart/device-plan-fix2-review/SEAL.json) | `ececaa9e811c06eac13bf0cb834a220f1f403f2e6d7ba8f0bff25c82e6e39c55` |
+| [R31 publication](../build/r31-action-natural/main-current-action-publication/POST_PUBLISH.json) | `3e9dcce55df3979932d3f07bc5e7a4576f524d48a23cf780db4b955a753d3985` |
 
-[Device audit report](../../../../build/r32-action-natural-restart/device1-final-audit/REPORT.md), [final host report](../../../../build/r32-action-natural-restart/final-tester/REPORT.md), [implementation review](../../../../build/r32-action-natural-restart/implementation-review/REPORT.md) and [final operational review](../../../../build/r32-action-natural-restart/device-plan-fix2-review/REPORT.md) distinguish actual device facts from host fixtures and preserve all failure history.
+Device audit report (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/device1-final-audit/REPORT.md`), final host report (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/final-tester/REPORT.md`), implementation review (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/implementation-review/REPORT.md`) and final operational review (historical local evidence unavailable in this checkout: `../../../../build/r32-action-natural-restart/device-plan-fix2-review/REPORT.md`) distinguish actual device facts from host fixtures and preserve all failure history.

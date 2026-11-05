@@ -1,3 +1,5 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 # R30 finite coordinated Action server restart acceptance
 
 Snapshot:2026-10-18 19:28 UTC. **IMPLEMENTED / HOST_TESTED / DEVICE_TESTED /
@@ -167,25 +169,25 @@ release/route files are records, not reusable dispatch authorization.
 
 | Local evidence | SHA-256 |
 | --- | --- |
-| [build/r30-action-restart/device1-final-audit/RESULT.json](../../../../build/r30-action-restart/device1-final-audit/RESULT.json) | `c3e725e6ca3de342fbeea1fced2dd55c2a46dd50ff6826d097e716152fa81202` |
-| [build/r30-action-restart/device1-final-audit/SEAL.json](../../../../build/r30-action-restart/device1-final-audit/SEAL.json) | `60ccea1ef8984476ee46fa17dfc10b3f87dbc361eb0c97b142bf17e2d92f2b27` |
-| [build/r30-action-restart/device1-final-audit/APPLICATION_CDR.json](../../../../build/r30-action-restart/device1-final-audit/APPLICATION_CDR.json) | `287070cf8c90545a9d4d26f3f8fc8496ca8a1656fa9d08a1e52f455473ad5dcb` |
-| [build/r30-action-restart/device1-final-audit/COORDINATION_AND_NEGATIVES.json](../../../../build/r30-action-restart/device1-final-audit/COORDINATION_AND_NEGATIVES.json) | `c76b07f4a2a56ae7c2818efbf8e7a78c5cd8e327cf3fe536da6f3d1867e458f2` |
-| [build/r30-action-restart/device1-final-audit/QUERY_AND_HOST.json](../../../../build/r30-action-restart/device1-final-audit/QUERY_AND_HOST.json) | `3d1bed57ace8f27f431874718d8c3e39ab58766dd66cacccb93d861f7219f7aa` |
-| [build/r30-action-restart/device1-final-audit/TIMING.json](../../../../build/r30-action-restart/device1-final-audit/TIMING.json) | `cef1ed4af19ca6addf7f3658d8a0f632963df0841fc966f8b1ff838f0bae5349` |
-| [build/r30-action-restart/device1-final-audit/HELPER_FAILURE.json](../../../../build/r30-action-restart/device1-final-audit/HELPER_FAILURE.json) | `22905bdc0a957ee95a4184b62f83ceb99f6cbd86c0074fe2545ff389cc2fa3f4` |
-| [build/r30-action-restart/initial-tester/RESULT.json](../../../../build/r30-action-restart/initial-tester/RESULT.json) | `1bc8d8419fe67c8df55eeacc7681eb389205546134505de6bf799c17cb0e3306` |
-| [build/r30-action-restart/implementation-review/RESULT.json](../../../../build/r30-action-restart/implementation-review/RESULT.json) | `d46c99cfcb706805ec4228f5bfca5d822ef65eaef4d2ca865bbc7c7257d4d0f0` |
-| [build/r30-action-restart/initial-fix2-tester/RESULT.json](../../../../build/r30-action-restart/initial-fix2-tester/RESULT.json) | `186ba31d1e2f76ad87b96cb868899cffe16b4ff08b6b5b6498adb7fff1a0e351` |
-| [build/r30-action-restart/repair-review/RESULT.json](../../../../build/r30-action-restart/repair-review/RESULT.json) | `849107d9228c1f4496959f03f54ddf2a373788534e13b1f9215456ce3e7b7b3d` |
-| [build/r30-action-restart/final-tester/RESULT.json](../../../../build/r30-action-restart/final-tester/RESULT.json) | `6a6710ed313c06c01ac93fec87f92747baf060109a50bccac62a945276206a6f` |
-| [build/r30-action-restart/final-tester/SEAL.json](../../../../build/r30-action-restart/final-tester/SEAL.json) | `3c97f4de8c08eedd99bad0d9faa859a29c92f34583fe34c9836d506f5f1cb6f4` |
-| [build/r30-action-restart/compatibility-status-gap/RESULT.json](../../../../build/r30-action-restart/compatibility-status-gap/RESULT.json) | `79482991c8daf353ca25d3e73b1bcd0db3a81f48443bd5cc39e24e39cbc9e6e0` |
-| [build/r30-action-restart/compatibility-status-gap/NORMALIZATION.json](../../../../build/r30-action-restart/compatibility-status-gap/NORMALIZATION.json) | `c9c3fc112cbd1433bc510b4d26bfa2ecab4b8304ec27f171653743b3201a04e0` |
-| [build/r30-action-restart/compatibility-status-gap/SEAL.json](../../../../build/r30-action-restart/compatibility-status-gap/SEAL.json) | `77259ae57cac03332aaecc1a11719a7913710fa03310b18f62e03e02c2823ff8` |
-| [build/r30-action-restart/implementation-review/STATUS_RACE.json](../../../../build/r30-action-restart/implementation-review/STATUS_RACE.json) | `2dfb0109630fb3b43cb2573bd2b6567aa0aed1b9041f868b0debce4479e5aebf` |
-| [build/r30-action-restart/local-resume-review/RESULT.json](../../../../build/r30-action-restart/local-resume-review/RESULT.json) | `b7813252782f5a68e89f6f0d99973a0f4e623d6f09ee202ee9d34d1cbae5f57d` |
-| [build/r30-action-restart/execution-f87237d1b67505f3/RESULT.json](../../../../build/r30-action-restart/execution-f87237d1b67505f3/RESULT.json) | `0ccee0106bdf7af6bb8e3890a7145d22bb1ea051d2eb3b817544ee5798fb3506` |
-| [build/r30-action-restart/package-1eee6bd720e559ee/DERIVATION.json](../../../../build/r30-action-restart/package-1eee6bd720e559ee/DERIVATION.json) | `ac22627dd7c1597c2e3d52c35e6b85506be83ed2188bd8f86dcc48de201833ea` |
-| [build/r30-action-restart/main-action-restart-publication/IMPLEMENTATION_FILES.json](../../../../build/r30-action-restart/main-action-restart-publication/IMPLEMENTATION_FILES.json) | `64f204912b4326c71759e230ce28ea3ed73618979186f8f8d0965dd317f13f47` |
-| [build/r29-service-restart/main-service-restart-publication/POST_PUBLISH.json](../../../../build/r29-service-restart/main-service-restart-publication/POST_PUBLISH.json) | `edbcbfc3c5e3b135e3f6138b08a685c04a75c05e31a06fa59940088eebdc4dca` |
+| [build/r30-action-restart/device1-final-audit/RESULT.json](../build/r30-action-restart/device1-final-audit/RESULT.json) | `c3e725e6ca3de342fbeea1fced2dd55c2a46dd50ff6826d097e716152fa81202` |
+| [build/r30-action-restart/device1-final-audit/SEAL.json](../build/r30-action-restart/device1-final-audit/SEAL.json) | `60ccea1ef8984476ee46fa17dfc10b3f87dbc361eb0c97b142bf17e2d92f2b27` |
+| [build/r30-action-restart/device1-final-audit/APPLICATION_CDR.json](../build/r30-action-restart/device1-final-audit/APPLICATION_CDR.json) | `287070cf8c90545a9d4d26f3f8fc8496ca8a1656fa9d08a1e52f455473ad5dcb` |
+| [build/r30-action-restart/device1-final-audit/COORDINATION_AND_NEGATIVES.json](../build/r30-action-restart/device1-final-audit/COORDINATION_AND_NEGATIVES.json) | `c76b07f4a2a56ae7c2818efbf8e7a78c5cd8e327cf3fe536da6f3d1867e458f2` |
+| [build/r30-action-restart/device1-final-audit/QUERY_AND_HOST.json](../build/r30-action-restart/device1-final-audit/QUERY_AND_HOST.json) | `3d1bed57ace8f27f431874718d8c3e39ab58766dd66cacccb93d861f7219f7aa` |
+| [build/r30-action-restart/device1-final-audit/TIMING.json](../build/r30-action-restart/device1-final-audit/TIMING.json) | `cef1ed4af19ca6addf7f3658d8a0f632963df0841fc966f8b1ff838f0bae5349` |
+| [build/r30-action-restart/device1-final-audit/HELPER_FAILURE.json](../build/r30-action-restart/device1-final-audit/HELPER_FAILURE.json) | `22905bdc0a957ee95a4184b62f83ceb99f6cbd86c0074fe2545ff389cc2fa3f4` |
+| [build/r30-action-restart/initial-tester/RESULT.json](../build/r30-action-restart/initial-tester/RESULT.json) | `1bc8d8419fe67c8df55eeacc7681eb389205546134505de6bf799c17cb0e3306` |
+| [build/r30-action-restart/implementation-review/RESULT.json](../build/r30-action-restart/implementation-review/RESULT.json) | `d46c99cfcb706805ec4228f5bfca5d822ef65eaef4d2ca865bbc7c7257d4d0f0` |
+| [build/r30-action-restart/initial-fix2-tester/RESULT.json](../build/r30-action-restart/initial-fix2-tester/RESULT.json) | `186ba31d1e2f76ad87b96cb868899cffe16b4ff08b6b5b6498adb7fff1a0e351` |
+| [build/r30-action-restart/repair-review/RESULT.json](../build/r30-action-restart/repair-review/RESULT.json) | `849107d9228c1f4496959f03f54ddf2a373788534e13b1f9215456ce3e7b7b3d` |
+| [build/r30-action-restart/final-tester/RESULT.json](../build/r30-action-restart/final-tester/RESULT.json) | `6a6710ed313c06c01ac93fec87f92747baf060109a50bccac62a945276206a6f` |
+| [build/r30-action-restart/final-tester/SEAL.json](../build/r30-action-restart/final-tester/SEAL.json) | `3c97f4de8c08eedd99bad0d9faa859a29c92f34583fe34c9836d506f5f1cb6f4` |
+| [build/r30-action-restart/compatibility-status-gap/RESULT.json](../build/r30-action-restart/compatibility-status-gap/RESULT.json) | `79482991c8daf353ca25d3e73b1bcd0db3a81f48443bd5cc39e24e39cbc9e6e0` |
+| [build/r30-action-restart/compatibility-status-gap/NORMALIZATION.json](../build/r30-action-restart/compatibility-status-gap/NORMALIZATION.json) | `c9c3fc112cbd1433bc510b4d26bfa2ecab4b8304ec27f171653743b3201a04e0` |
+| [build/r30-action-restart/compatibility-status-gap/SEAL.json](../build/r30-action-restart/compatibility-status-gap/SEAL.json) | `77259ae57cac03332aaecc1a11719a7913710fa03310b18f62e03e02c2823ff8` |
+| [build/r30-action-restart/implementation-review/STATUS_RACE.json](../build/r30-action-restart/implementation-review/STATUS_RACE.json) | `2dfb0109630fb3b43cb2573bd2b6567aa0aed1b9041f868b0debce4479e5aebf` |
+| [build/r30-action-restart/local-resume-review/RESULT.json](../build/r30-action-restart/local-resume-review/RESULT.json) | `b7813252782f5a68e89f6f0d99973a0f4e623d6f09ee202ee9d34d1cbae5f57d` |
+| [build/r30-action-restart/execution-f87237d1b67505f3/RESULT.json](../build/r30-action-restart/execution-f87237d1b67505f3/RESULT.json) | `0ccee0106bdf7af6bb8e3890a7145d22bb1ea051d2eb3b817544ee5798fb3506` |
+| [build/r30-action-restart/package-1eee6bd720e559ee/DERIVATION.json](../build/r30-action-restart/package-1eee6bd720e559ee/DERIVATION.json) | `ac22627dd7c1597c2e3d52c35e6b85506be83ed2188bd8f86dcc48de201833ea` |
+| [build/r30-action-restart/main-action-restart-publication/IMPLEMENTATION_FILES.json](../build/r30-action-restart/main-action-restart-publication/IMPLEMENTATION_FILES.json) | `64f204912b4326c71759e230ce28ea3ed73618979186f8f8d0965dd317f13f47` |
+| [build/r29-service-restart/main-service-restart-publication/POST_PUBLISH.json](../build/r29-service-restart/main-service-restart-publication/POST_PUBLISH.json) | `edbcbfc3c5e3b135e3f6138b08a685c04a75c05e31a06fa59940088eebdc4dca` |

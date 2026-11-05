@@ -1,3 +1,5 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 <!-- R38_CURRENT_SCOPED_PASS_PREFIX; the complete prior body below remains byte-preserved historical evidence. -->
 # Current follow-up: R38 finite endurance and normal close PASS (2026-10-20)
 
@@ -249,29 +251,29 @@ worktrees/indexes and actual raw receipts without HDC replay.
 
 | Local evidence (root-relative) | SHA-256 |
 | --- | --- |
-| [build/r26-sustained-restart/sustained-probe-sr02-retest/FREEZE.json](../../../../build/r26-sustained-restart/sustained-probe-sr02-retest/FREEZE.json) | `9da97c8882205db8f1038684b4d71a289f1c363084e81928c4c66498c67c9db1` |
-| [build/r26-sustained-restart/sustained-probe-sr02-retest/RESULT.json](../../../../build/r26-sustained-restart/sustained-probe-sr02-retest/RESULT.json) | `f00c76180c129830fbb3f98b25c9a89b8c2f070c4f6515c6b4df98a1f47ad61e` |
-| [build/r26-sustained-restart/sustained-probe-sr02-code-review/RESULT.json](../../../../build/r26-sustained-restart/sustained-probe-sr02-code-review/RESULT.json) | `404a6c1250da7a45db4e461814364a0db07bbae47b77d20d74758535812b0381` |
-| [build/r26-sustained-restart/sustained-probe-final-host/RESULT.json](../../../../build/r26-sustained-restart/sustained-probe-final-host/RESULT.json) | `e62b998fcc6ea8d0251ad2bcb469474571c19b3f3556c4f3ff329a08223abf63` |
-| [build/r26-sustained-restart/execution-60a99477b1d6a82b/RESULT.json](../../../../build/r26-sustained-restart/execution-60a99477b1d6a82b/RESULT.json) | `5f475e3ce8c12228b455bde1808d6ff85bda1681e7a6e7e98eec197a97c36409` |
-| [build/r26-sustained-restart/query1-roundtrip-host/HOST_EXIT.json](../../../../build/r26-sustained-restart/query1-roundtrip-host/HOST_EXIT.json) | `86cc8a0941688a8d161e8e61460f7e22a646b0bb15e9c2277c1a5f99a82f961b` |
-| [build/r26-sustained-restart/package-4bd68cc7db3b7d31/DERIVATION.json](../../../../build/r26-sustained-restart/package-4bd68cc7db3b7d31/DERIVATION.json) | `f50221b60a304fb823539909ecb2ab9aa30493013a7ede9e5d0a318149580532` |
-| [build/r26-sustained-restart/sustained-device-final-audit/RESULT.json](../../../../build/r26-sustained-restart/sustained-device-final-audit/RESULT.json) | `da7d7a36e74dee5dee232c4706ded549db942d8fcc92cbe9a76e628a266a586c` |
-| [build/r26-sustained-restart/sustained-device-final-audit/SEAL.json](../../../../build/r26-sustained-restart/sustained-device-final-audit/SEAL.json) | `6cf9e4312c9b0df47cc5de41fffd1509a87e0268d4371c76d27400448f4bf724` |
-| [build/r26-sustained-restart/RESTART_DECISION.md](../../../../build/r26-sustained-restart/RESTART_DECISION.md) | `ceae0e2a97c2fa78e43df34b0fcd47364f2130debad14ea4e0b9fd3a99e0104b` |
-| [build/r26-sustained-restart/BASELINE_AND_MATRIX.json](../../../../build/r26-sustained-restart/BASELINE_AND_MATRIX.json) | `fc68e6a8f508c825a277cb53fd8caf8bac7fe4046e2493e2bf09e61e68848a2c` |
-| [build/r25-native-actionbag/main-bag-recordplay-publication/POST_PUBLISH.json](../../../../build/r25-native-actionbag/main-bag-recordplay-publication/POST_PUBLISH.json) | `af9d9b38816859857e1ec7bb1d398d6b177e8a1274b9f1ba557bd8f4cb2d57d8` |
-| [build/r26-sustained-restart/sustained-probe-initial-test/SEAL.json](../../../../build/r26-sustained-restart/sustained-probe-initial-test/SEAL.json) | `2bcd4790df94dc244f0e84601c371816ab1007b4f0b27d25a7667ae038ead28b` |
-| [build/r26-sustained-restart/sustained-probe-fix1-initial-test/SEAL.json](../../../../build/r26-sustained-restart/sustained-probe-fix1-initial-test/SEAL.json) | `a5fa855ff597ac3ee2776ab196296297f2a69806cf29f06f04e37f0c8f0f160c` |
-| [build/r26-sustained-restart/sustained-probe-code-review/SEAL.json](../../../../build/r26-sustained-restart/sustained-probe-code-review/SEAL.json) | `a3e5d64944bdcc173e47159309f713d1fc0a2d54d6cfcbfe3f09c5a3ca4ada51` |
-| [build/r26-sustained-restart/sustained-probe-sr02-retest/SEAL.json](../../../../build/r26-sustained-restart/sustained-probe-sr02-retest/SEAL.json) | `a6c0771fa06d5931acbf0d8bd0c504f51794cc82ce3562acc6c1fd06b9f23554` |
-| [build/r26-sustained-restart/sustained-probe-sr02-code-review/SEAL.json](../../../../build/r26-sustained-restart/sustained-probe-sr02-code-review/SEAL.json) | `28fbd4354ee3c2e9d3eb5c9676b9593226637d2ab086eed50ea75d36583f0279` |
-| [build/r26-sustained-restart/sustained-probe-final-host/SEAL.json](../../../../build/r26-sustained-restart/sustained-probe-final-host/SEAL.json) | `607465898438f72e1043a134f52d3915d1290cbbbe63fa4668fe99b26c4a3df0` |
-| [build/r25-native-actionbag/sustained-roundtrip-query1-window/command-0.json](../../../../build/r25-native-actionbag/sustained-roundtrip-query1-window/command-0.json) | `2bda2998eea839d3170edd820184d7dac859761c27e5d1451e692c21a3ebce23` |
-| [build/r26-sustained-restart/query1-local-permission-recovery/command-0.json](../../../../build/r26-sustained-restart/query1-local-permission-recovery/command-0.json) | `6b3eb961ad412bd793db480c4d359104004a389479ba51f617d7dcc255817f92` |
-| [build/r26-sustained-restart/query1-local-permission-recovery/command-1.json](../../../../build/r26-sustained-restart/query1-local-permission-recovery/command-1.json) | `bae492f42f4f641ea94bc8d37c0040f82608665512c4db72df127d68abe3a070` |
-| [build/r26-sustained-restart/query1-local-permission-recovery/command-2.json](../../../../build/r26-sustained-restart/query1-local-permission-recovery/command-2.json) | `ee95138c0a16936925a3915c76bc3dbff9295a73b58aef1014a55b6411c4029d` |
-| [build/r26-sustained-restart/query1-local-permission-recovery/command-3.json](../../../../build/r26-sustained-restart/query1-local-permission-recovery/command-3.json) | `8d59ffd3a17bea558b04b30add1044a157a11727685729e57fab20b11403a8a8` |
+| [build/r26-sustained-restart/sustained-probe-sr02-retest/FREEZE.json](../build/r26-sustained-restart/sustained-probe-sr02-retest/FREEZE.json) | `9da97c8882205db8f1038684b4d71a289f1c363084e81928c4c66498c67c9db1` |
+| [build/r26-sustained-restart/sustained-probe-sr02-retest/RESULT.json](../build/r26-sustained-restart/sustained-probe-sr02-retest/RESULT.json) | `f00c76180c129830fbb3f98b25c9a89b8c2f070c4f6515c6b4df98a1f47ad61e` |
+| [build/r26-sustained-restart/sustained-probe-sr02-code-review/RESULT.json](../build/r26-sustained-restart/sustained-probe-sr02-code-review/RESULT.json) | `404a6c1250da7a45db4e461814364a0db07bbae47b77d20d74758535812b0381` |
+| [build/r26-sustained-restart/sustained-probe-final-host/RESULT.json](../build/r26-sustained-restart/sustained-probe-final-host/RESULT.json) | `e62b998fcc6ea8d0251ad2bcb469474571c19b3f3556c4f3ff329a08223abf63` |
+| [build/r26-sustained-restart/execution-60a99477b1d6a82b/RESULT.json](../build/r26-sustained-restart/execution-60a99477b1d6a82b/RESULT.json) | `5f475e3ce8c12228b455bde1808d6ff85bda1681e7a6e7e98eec197a97c36409` |
+| [build/r26-sustained-restart/query1-roundtrip-host/HOST_EXIT.json](../build/r26-sustained-restart/query1-roundtrip-host/HOST_EXIT.json) | `86cc8a0941688a8d161e8e61460f7e22a646b0bb15e9c2277c1a5f99a82f961b` |
+| [build/r26-sustained-restart/package-4bd68cc7db3b7d31/DERIVATION.json](../build/r26-sustained-restart/package-4bd68cc7db3b7d31/DERIVATION.json) | `f50221b60a304fb823539909ecb2ab9aa30493013a7ede9e5d0a318149580532` |
+| [build/r26-sustained-restart/sustained-device-final-audit/RESULT.json](../build/r26-sustained-restart/sustained-device-final-audit/RESULT.json) | `da7d7a36e74dee5dee232c4706ded549db942d8fcc92cbe9a76e628a266a586c` |
+| [build/r26-sustained-restart/sustained-device-final-audit/SEAL.json](../build/r26-sustained-restart/sustained-device-final-audit/SEAL.json) | `6cf9e4312c9b0df47cc5de41fffd1509a87e0268d4371c76d27400448f4bf724` |
+| [build/r26-sustained-restart/RESTART_DECISION.md](../build/r26-sustained-restart/RESTART_DECISION.md) | `ceae0e2a97c2fa78e43df34b0fcd47364f2130debad14ea4e0b9fd3a99e0104b` |
+| [build/r26-sustained-restart/BASELINE_AND_MATRIX.json](../build/r26-sustained-restart/BASELINE_AND_MATRIX.json) | `fc68e6a8f508c825a277cb53fd8caf8bac7fe4046e2493e2bf09e61e68848a2c` |
+| [build/r25-native-actionbag/main-bag-recordplay-publication/POST_PUBLISH.json](../build/r25-native-actionbag/main-bag-recordplay-publication/POST_PUBLISH.json) | `af9d9b38816859857e1ec7bb1d398d6b177e8a1274b9f1ba557bd8f4cb2d57d8` |
+| [build/r26-sustained-restart/sustained-probe-initial-test/SEAL.json](../build/r26-sustained-restart/sustained-probe-initial-test/SEAL.json) | `2bcd4790df94dc244f0e84601c371816ab1007b4f0b27d25a7667ae038ead28b` |
+| [build/r26-sustained-restart/sustained-probe-fix1-initial-test/SEAL.json](../build/r26-sustained-restart/sustained-probe-fix1-initial-test/SEAL.json) | `a5fa855ff597ac3ee2776ab196296297f2a69806cf29f06f04e37f0c8f0f160c` |
+| [build/r26-sustained-restart/sustained-probe-code-review/SEAL.json](../build/r26-sustained-restart/sustained-probe-code-review/SEAL.json) | `a3e5d64944bdcc173e47159309f713d1fc0a2d54d6cfcbfe3f09c5a3ca4ada51` |
+| [build/r26-sustained-restart/sustained-probe-sr02-retest/SEAL.json](../build/r26-sustained-restart/sustained-probe-sr02-retest/SEAL.json) | `a6c0771fa06d5931acbf0d8bd0c504f51794cc82ce3562acc6c1fd06b9f23554` |
+| [build/r26-sustained-restart/sustained-probe-sr02-code-review/SEAL.json](../build/r26-sustained-restart/sustained-probe-sr02-code-review/SEAL.json) | `28fbd4354ee3c2e9d3eb5c9676b9593226637d2ab086eed50ea75d36583f0279` |
+| [build/r26-sustained-restart/sustained-probe-final-host/SEAL.json](../build/r26-sustained-restart/sustained-probe-final-host/SEAL.json) | `607465898438f72e1043a134f52d3915d1290cbbbe63fa4668fe99b26c4a3df0` |
+| [build/r25-native-actionbag/sustained-roundtrip-query1-window/command-0.json](../build/r25-native-actionbag/sustained-roundtrip-query1-window/command-0.json) | `2bda2998eea839d3170edd820184d7dac859761c27e5d1451e692c21a3ebce23` |
+| [build/r26-sustained-restart/query1-local-permission-recovery/command-0.json](../build/r26-sustained-restart/query1-local-permission-recovery/command-0.json) | `6b3eb961ad412bd793db480c4d359104004a389479ba51f617d7dcc255817f92` |
+| [build/r26-sustained-restart/query1-local-permission-recovery/command-1.json](../build/r26-sustained-restart/query1-local-permission-recovery/command-1.json) | `bae492f42f4f641ea94bc8d37c0040f82608665512c4db72df127d68abe3a070` |
+| [build/r26-sustained-restart/query1-local-permission-recovery/command-2.json](../build/r26-sustained-restart/query1-local-permission-recovery/command-2.json) | `ee95138c0a16936925a3915c76bc3dbff9295a73b58aef1014a55b6411c4029d` |
+| [build/r26-sustained-restart/query1-local-permission-recovery/command-3.json](../build/r26-sustained-restart/query1-local-permission-recovery/command-3.json) | `8d59ffd3a17bea558b04b30add1044a157a11727685729e57fab20b11403a8a8` |
 
 The prior bounded record/play stage was published as
 `6d025da0efd088be46fb59fdadfd18755f5cc31e` on the existing

@@ -1,8 +1,10 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 # R27 bounded process restart acceptance
 
 > **Publication-state timestamp:** Any R28 Main gate/publication/CI pending statement in this document describes the **2026-10-18 16:41 UTC pre-commit documentation snapshot**, not a permanent current-state assertion. The finite scene evidence is PASS; Main records the actual commit, remote branch and CI outcome separately in root-relative `build/r28-repeated-restart/main-repeated-restart-publication/POST_PUBLISH.json` when publication completes. No future commit SHA or CI success is prefilled.
 
-> **Publication / successor update (2026-10-18 16:41 UTC):** R27 was committed and pushed as `46ef5523fdee66421dc29b23aaeae9e095d8fa0d` to existing `origin/codex/flow-encoding-published-20261014`; its [actual publication receipt](../../../../build/r27-process-restart/main-process-restart-publication/POST_PUBLISH.json) at 14:14:15.875911 UTC records exact-SHA CI NOT_RUN. Former pending-publication text below is the preserved pre-commit snapshot. The subsequent [R28 finite two-replacement experiment](ROS2_REPEATED_RESTART_ACCEPTANCE.md) passed independent real-device acceptance with 15 String echo roundtrips; its Main gate/publication remain pending. This extends only the explicit bounded experiment, not default reconnect, SDK epoch/drain or general recovery.
+> **Publication / successor update (2026-10-18 16:41 UTC):** R27 was committed and pushed as `46ef5523fdee66421dc29b23aaeae9e095d8fa0d` to existing `origin/codex/flow-encoding-published-20261014`; its actual publication receipt (historical local evidence unavailable in this checkout: `../../../../build/r27-process-restart/main-process-restart-publication/POST_PUBLISH.json`) at 14:14:15.875911 UTC records exact-SHA CI NOT_RUN. Former pending-publication text below is the preserved pre-commit snapshot. The subsequent [R28 finite two-replacement experiment](ROS2_REPEATED_RESTART_ACCEPTANCE.md) passed independent real-device acceptance with 15 String echo roundtrips; its Main gate/publication remain pending. This extends only the explicit bounded experiment, not default reconnect, SDK epoch/drain or general recovery.
 
 ## Current Q3 final acceptance (2026-10-18 13:52 UTC)
 
@@ -91,18 +93,18 @@ The canonical device seal has 148 members. Evidence links are local ignored
 
 | Local evidence | SHA-256 |
 | --- | --- |
-| [build/r27-process-restart/device3-final-audit/RESULT.json](../../../../build/r27-process-restart/device3-final-audit/RESULT.json) | `b42700d0959ec65de81abe925d2b5b93e3af71a6b5f8bb14cbec4c24e17dca2d` |
-| [build/r27-process-restart/device3-final-audit/SEAL.json](../../../../build/r27-process-restart/device3-final-audit/SEAL.json) | `0cebe036e620a80b92af63c35efbb2dd6b6218d3c7d4401ff2d18bcd5faba907` |
-| [build/r27-process-restart/hdc-fix-final/RESULT.json](../../../../build/r27-process-restart/hdc-fix-final/RESULT.json) | `ce57b173f59c372717a09c47d12d5368469642709c6b05e60683e1f9a2bf40e7` |
-| [build/r27-process-restart/hdc-fix-final/SEAL.json](../../../../build/r27-process-restart/hdc-fix-final/SEAL.json) | `294b1117c9bca12b57757b285e0c453516ad5123761ed26b2be3b40253f3496a` |
-| [build/r27-process-restart/hdc-fix-review/RESULT.json](../../../../build/r27-process-restart/hdc-fix-review/RESULT.json) | `2d1386c10097f6ba6329aa613fb2f0377751490bb2ef5ccad99ebc3d4110a930` |
-| [build/r27-process-restart/hdc-fix-initial/RESULT.json](../../../../build/r27-process-restart/hdc-fix-initial/RESULT.json) | `5cdec048728400ac93699f3961b69e2d7e5b2260dd3ab329ae5bbfa82d0a699f` |
-| [build/r27-process-restart/hdc-capture-diagnostic/RESULT.json](../../../../build/r27-process-restart/hdc-capture-diagnostic/RESULT.json) | `783308e31e7540d246d75c047bf5bf65313eca5cfd83f7a1ba2aa7a67e30e1b3` |
-| [build/r27-process-restart/resumed-query3-main/INITIAL_CHECK_ERROR.txt](../../../../build/r27-process-restart/resumed-query3-main/INITIAL_CHECK_ERROR.txt) | `a92ecaeaff56e6dde6c22d9f340769e9f47dad47b2db0740631ff6ab59a77813` |
-| [build/r27-process-restart/scene-query3-host/HOST_START.json](../../../../build/r27-process-restart/scene-query3-host/HOST_START.json) | `928948d701d0cb23483e03ae36d763e56e19869acf8777c14a06d24f22e327bb` |
-| [build/r27-process-restart/scene-query3-host/HOST_EXIT.json](../../../../build/r27-process-restart/scene-query3-host/HOST_EXIT.json) | `e23ef6f61dbe3054366f3bae8682abe9b8b61ec62fec0acf5c17b983d29a23f5` |
-| [build/r25-native-actionbag/process-restart-query3-preparation/FINAL_QUERY_RESULT.json](../../../../build/r25-native-actionbag/process-restart-query3-preparation/FINAL_QUERY_RESULT.json) | `baabf1035c1d80fda35c27c1fdd1c861a6beccd7ecfad96adcf943b9cb13224a` |
-| [build/r27-process-restart/execution-567473f5c174bed6/RESULT.json](../../../../build/r27-process-restart/execution-567473f5c174bed6/RESULT.json) | `d91c9780007df129353b70aa962d6a77faf83926d463dbc2ce09204200d1d632` |
+| [build/r27-process-restart/device3-final-audit/RESULT.json](../build/r27-process-restart/device3-final-audit/RESULT.json) | `b42700d0959ec65de81abe925d2b5b93e3af71a6b5f8bb14cbec4c24e17dca2d` |
+| [build/r27-process-restart/device3-final-audit/SEAL.json](../build/r27-process-restart/device3-final-audit/SEAL.json) | `0cebe036e620a80b92af63c35efbb2dd6b6218d3c7d4401ff2d18bcd5faba907` |
+| [build/r27-process-restart/hdc-fix-final/RESULT.json](../build/r27-process-restart/hdc-fix-final/RESULT.json) | `ce57b173f59c372717a09c47d12d5368469642709c6b05e60683e1f9a2bf40e7` |
+| [build/r27-process-restart/hdc-fix-final/SEAL.json](../build/r27-process-restart/hdc-fix-final/SEAL.json) | `294b1117c9bca12b57757b285e0c453516ad5123761ed26b2be3b40253f3496a` |
+| [build/r27-process-restart/hdc-fix-review/RESULT.json](../build/r27-process-restart/hdc-fix-review/RESULT.json) | `2d1386c10097f6ba6329aa613fb2f0377751490bb2ef5ccad99ebc3d4110a930` |
+| [build/r27-process-restart/hdc-fix-initial/RESULT.json](../build/r27-process-restart/hdc-fix-initial/RESULT.json) | `5cdec048728400ac93699f3961b69e2d7e5b2260dd3ab329ae5bbfa82d0a699f` |
+| [build/r27-process-restart/hdc-capture-diagnostic/RESULT.json](../build/r27-process-restart/hdc-capture-diagnostic/RESULT.json) | `783308e31e7540d246d75c047bf5bf65313eca5cfd83f7a1ba2aa7a67e30e1b3` |
+| [build/r27-process-restart/resumed-query3-main/INITIAL_CHECK_ERROR.txt](../build/r27-process-restart/resumed-query3-main/INITIAL_CHECK_ERROR.txt) | `a92ecaeaff56e6dde6c22d9f340769e9f47dad47b2db0740631ff6ab59a77813` |
+| [build/r27-process-restart/scene-query3-host/HOST_START.json](../build/r27-process-restart/scene-query3-host/HOST_START.json) | `928948d701d0cb23483e03ae36d763e56e19869acf8777c14a06d24f22e327bb` |
+| [build/r27-process-restart/scene-query3-host/HOST_EXIT.json](../build/r27-process-restart/scene-query3-host/HOST_EXIT.json) | `e23ef6f61dbe3054366f3bae8682abe9b8b61ec62fec0acf5c17b983d29a23f5` |
+| [build/r25-native-actionbag/process-restart-query3-preparation/FINAL_QUERY_RESULT.json](../build/r25-native-actionbag/process-restart-query3-preparation/FINAL_QUERY_RESULT.json) | `baabf1035c1d80fda35c27c1fdd1c861a6beccd7ecfad96adcf943b9cb13224a` |
+| [build/r27-process-restart/execution-567473f5c174bed6/RESULT.json](../build/r27-process-restart/execution-567473f5c174bed6/RESULT.json) | `d91c9780007df129353b70aa962d6a77faf83926d463dbc2ce09204200d1d632` |
 
 ### Current source pins changed since the historical snapshot
 
@@ -289,32 +291,32 @@ HDC calls and inspected completed original executions without replay.
 
 | Local evidence (root-relative) | SHA-256 |
 | --- | --- |
-| [build/r27-process-restart/ack-fix-initial/RESULT.json](../../../../build/r27-process-restart/ack-fix-initial/RESULT.json) | `19c745035dd9193d0d379917c11d5b411250ca968116c063abe0a70a08e4b76a` |
-| [build/r27-process-restart/ack-fix-initial/SEAL.json](../../../../build/r27-process-restart/ack-fix-initial/SEAL.json) | `4bcf313b33a48b174377abf5d9102b1d495a03a1b499a25d0a182e44ec901755` |
-| [build/r27-process-restart/ack-fix-review/RESULT.json](../../../../build/r27-process-restart/ack-fix-review/RESULT.json) | `4fa8e979086ccee645211e53007fb2c933e176ba8384f1bf871682913259abc8` |
-| [build/r27-process-restart/ack-fix-review/SEAL.json](../../../../build/r27-process-restart/ack-fix-review/SEAL.json) | `4e91d5424eb6408788e2e1d660a030fa346ff7b1cc11af0e42bc6f32ba1b688f` |
-| [build/r27-process-restart/ack-fix-initial/TEN_SOURCES.json](../../../../build/r27-process-restart/ack-fix-initial/TEN_SOURCES.json) | `55187eba832ccf0b20671e25d9f4c1070f6a8f76fe547828fa2499bc923144cd` |
-| [build/r27-process-restart/ack-fix-final/SOURCE_INVENTORY.json](../../../../build/r27-process-restart/ack-fix-final/SOURCE_INVENTORY.json) | `1536ad5c6438053aca508f57ede115d7e8f67532fa4958723d001dcbbff79381` |
-| [build/r27-process-restart/execution-145103fdf161334a/RESULT.json](../../../../build/r27-process-restart/execution-145103fdf161334a/RESULT.json) | `402d9276631eca022091f88843a60dc89c9145a805446bfc465a1e3f436fe07e` |
-| [build/r27-process-restart/device1-failure-audit/MAIN_TOOL_EXECUTION_ATTESTATION.json](../../../../build/r27-process-restart/device1-failure-audit/MAIN_TOOL_EXECUTION_ATTESTATION.json) | `f6db513d4f173b6c9ca93e2cbcf191868dfb89f30818a5723e35845de11e112a` |
-| [build/r27-process-restart/execution-2fc1080aa99a16a7/RESULT.json](../../../../build/r27-process-restart/execution-2fc1080aa99a16a7/RESULT.json) | `e4acb9e1e8974733c26129ecafb8d547aa012857a1e2319ada19db7401344e23` |
-| [build/r27-process-restart/scene-query2-host/HOST_START.json](../../../../build/r27-process-restart/scene-query2-host/HOST_START.json) | `1642b66d4627c0cf1330eefe307b1db8db4249d9cb12293c28b05089dca2f245` |
-| [build/r27-process-restart/scene-query2-host/HOST_EXIT.json](../../../../build/r27-process-restart/scene-query2-host/HOST_EXIT.json) | `2438905287e98c86a880f2523297d2439e2645a3198e4a651a04159864f46c90` |
-| [build/r27-process-restart/device2-failure-audit/RESULT.json](../../../../build/r27-process-restart/device2-failure-audit/RESULT.json) | `697c736ee1b87d5db32c21c37be58d2ffd89ed23ba84c42bbd465a95fa5237e7` |
-| [build/r27-process-restart/device2-failure-audit/SEAL.json](../../../../build/r27-process-restart/device2-failure-audit/SEAL.json) | `984231919d7d52ce8461c48ef6a6dab1ca3b4235cfdc8d5e1549e84ff57fecd3` |
-| [build/r27-process-restart/ack-fix-final/RESULT.json](../../../../build/r27-process-restart/ack-fix-final/RESULT.json) | `56b0f40a2782c3e4e85789e96ee08b6deb3fe0d78c79bcc81b0d85feba1595a8` |
-| [build/r27-process-restart/ack-fix-final/SEAL.json](../../../../build/r27-process-restart/ack-fix-final/SEAL.json) | `e1a923d9ccd096215166f6beffcda382ca004cb99d2305016da89a89bdd5214d` |
-| [build/r27-process-restart/device1-failure-audit/RESULT.json](../../../../build/r27-process-restart/device1-failure-audit/RESULT.json) | `941dee2fbd1c99bc1afe30c94e06a7d2e866a439b64cef603f8f4ee65901bf34` |
-| [build/r27-process-restart/device1-failure-audit/SEAL.json](../../../../build/r27-process-restart/device1-failure-audit/SEAL.json) | `c08cc3e80b0fbaa95f0fade6e802064c7d0e9a19fad8c600bbab9c757854a17e` |
-| [build/r27-process-restart/initial-fix1-tester/BUILD_RECEIPT.json](../../../../build/r27-process-restart/initial-fix1-tester/BUILD_RECEIPT.json) | `de61f0f053705d8f90fc93373315589dd7bcae040f07a861e5b82d8ccf3f30a1` |
-| [build/r27-process-restart/initial-fix1-tester/RESULT.json](../../../../build/r27-process-restart/initial-fix1-tester/RESULT.json) | `480f1d2cccde3103b8b950a90a21175c4c8165073bcee6244e335434d756b3cb` |
-| [build/r27-process-restart/implementation-review/RESULT.json](../../../../build/r27-process-restart/implementation-review/RESULT.json) | `26f03f23a5207fbb188e4dff495465cb5fc4c227c8cd5c74a6296e9d14382a74` |
-| [build/r27-process-restart/final-host-tester/RESULT.json](../../../../build/r27-process-restart/final-host-tester/RESULT.json) | `da5d80d955b7a12022c558fb3881480be0f59d3b878321ca70c1dc190ddbc374` |
-| [build/r27-process-restart/ACK_WINDOW_DIAGNOSIS.md](../../../../build/r27-process-restart/ACK_WINDOW_DIAGNOSIS.md) | `60076bc69c9230c19c30639227c8fcd9a2ae4b5ea4ed2f341f48449894a471fd` |
-| [build/r27-process-restart/main-graph-user/GRAPH_ALL.json](../../../../build/r27-process-restart/main-graph-user/GRAPH_ALL.json) | `5d7ff6440f0cc5e012de347ab89eab1dd7b3a22e66880eb1bd81a3e87a1f5275` |
-| [build/r27-process-restart/main-hdc-diagnostic/EXTRACTION.json](../../../../build/r27-process-restart/main-hdc-diagnostic/EXTRACTION.json) | `1868c85d160208b40c4de64e1f7d2fbd5345222a79ca9106ef9cefabcde0dace` |
-| [build/r27-process-restart/main-hdc-diagnostic/HDC_SERVER_WINDOW.log](../../../../build/r27-process-restart/main-hdc-diagnostic/HDC_SERVER_WINDOW.log) | `0f124e93f68b7534f9cb24465d7906fd40538b690fbd7acad0b411cd7325db98` |
-| [build/r26-sustained-restart/main-sustained-publication/POST_PUBLISH.json](../../../../build/r26-sustained-restart/main-sustained-publication/POST_PUBLISH.json) | `f6c4fadcac4d1c5607fd5cfa48a2ad4cde0b48b74baede6b20df03fb2e4abc4a` |
+| [build/r27-process-restart/ack-fix-initial/RESULT.json](../build/r27-process-restart/ack-fix-initial/RESULT.json) | `19c745035dd9193d0d379917c11d5b411250ca968116c063abe0a70a08e4b76a` |
+| [build/r27-process-restart/ack-fix-initial/SEAL.json](../build/r27-process-restart/ack-fix-initial/SEAL.json) | `4bcf313b33a48b174377abf5d9102b1d495a03a1b499a25d0a182e44ec901755` |
+| [build/r27-process-restart/ack-fix-review/RESULT.json](../build/r27-process-restart/ack-fix-review/RESULT.json) | `4fa8e979086ccee645211e53007fb2c933e176ba8384f1bf871682913259abc8` |
+| [build/r27-process-restart/ack-fix-review/SEAL.json](../build/r27-process-restart/ack-fix-review/SEAL.json) | `4e91d5424eb6408788e2e1d660a030fa346ff7b1cc11af0e42bc6f32ba1b688f` |
+| [build/r27-process-restart/ack-fix-initial/TEN_SOURCES.json](../build/r27-process-restart/ack-fix-initial/TEN_SOURCES.json) | `55187eba832ccf0b20671e25d9f4c1070f6a8f76fe547828fa2499bc923144cd` |
+| [build/r27-process-restart/ack-fix-final/SOURCE_INVENTORY.json](../build/r27-process-restart/ack-fix-final/SOURCE_INVENTORY.json) | `1536ad5c6438053aca508f57ede115d7e8f67532fa4958723d001dcbbff79381` |
+| [build/r27-process-restart/execution-145103fdf161334a/RESULT.json](../build/r27-process-restart/execution-145103fdf161334a/RESULT.json) | `402d9276631eca022091f88843a60dc89c9145a805446bfc465a1e3f436fe07e` |
+| [build/r27-process-restart/device1-failure-audit/MAIN_TOOL_EXECUTION_ATTESTATION.json](../build/r27-process-restart/device1-failure-audit/MAIN_TOOL_EXECUTION_ATTESTATION.json) | `f6db513d4f173b6c9ca93e2cbcf191868dfb89f30818a5723e35845de11e112a` |
+| [build/r27-process-restart/execution-2fc1080aa99a16a7/RESULT.json](../build/r27-process-restart/execution-2fc1080aa99a16a7/RESULT.json) | `e4acb9e1e8974733c26129ecafb8d547aa012857a1e2319ada19db7401344e23` |
+| [build/r27-process-restart/scene-query2-host/HOST_START.json](../build/r27-process-restart/scene-query2-host/HOST_START.json) | `1642b66d4627c0cf1330eefe307b1db8db4249d9cb12293c28b05089dca2f245` |
+| [build/r27-process-restart/scene-query2-host/HOST_EXIT.json](../build/r27-process-restart/scene-query2-host/HOST_EXIT.json) | `2438905287e98c86a880f2523297d2439e2645a3198e4a651a04159864f46c90` |
+| [build/r27-process-restart/device2-failure-audit/RESULT.json](../build/r27-process-restart/device2-failure-audit/RESULT.json) | `697c736ee1b87d5db32c21c37be58d2ffd89ed23ba84c42bbd465a95fa5237e7` |
+| [build/r27-process-restart/device2-failure-audit/SEAL.json](../build/r27-process-restart/device2-failure-audit/SEAL.json) | `984231919d7d52ce8461c48ef6a6dab1ca3b4235cfdc8d5e1549e84ff57fecd3` |
+| [build/r27-process-restart/ack-fix-final/RESULT.json](../build/r27-process-restart/ack-fix-final/RESULT.json) | `56b0f40a2782c3e4e85789e96ee08b6deb3fe0d78c79bcc81b0d85feba1595a8` |
+| [build/r27-process-restart/ack-fix-final/SEAL.json](../build/r27-process-restart/ack-fix-final/SEAL.json) | `e1a923d9ccd096215166f6beffcda382ca004cb99d2305016da89a89bdd5214d` |
+| [build/r27-process-restart/device1-failure-audit/RESULT.json](../build/r27-process-restart/device1-failure-audit/RESULT.json) | `941dee2fbd1c99bc1afe30c94e06a7d2e866a439b64cef603f8f4ee65901bf34` |
+| [build/r27-process-restart/device1-failure-audit/SEAL.json](../build/r27-process-restart/device1-failure-audit/SEAL.json) | `c08cc3e80b0fbaa95f0fade6e802064c7d0e9a19fad8c600bbab9c757854a17e` |
+| [build/r27-process-restart/initial-fix1-tester/BUILD_RECEIPT.json](../build/r27-process-restart/initial-fix1-tester/BUILD_RECEIPT.json) | `de61f0f053705d8f90fc93373315589dd7bcae040f07a861e5b82d8ccf3f30a1` |
+| [build/r27-process-restart/initial-fix1-tester/RESULT.json](../build/r27-process-restart/initial-fix1-tester/RESULT.json) | `480f1d2cccde3103b8b950a90a21175c4c8165073bcee6244e335434d756b3cb` |
+| [build/r27-process-restart/implementation-review/RESULT.json](../build/r27-process-restart/implementation-review/RESULT.json) | `26f03f23a5207fbb188e4dff495465cb5fc4c227c8cd5c74a6296e9d14382a74` |
+| [build/r27-process-restart/final-host-tester/RESULT.json](../build/r27-process-restart/final-host-tester/RESULT.json) | `da5d80d955b7a12022c558fb3881480be0f59d3b878321ca70c1dc190ddbc374` |
+| [build/r27-process-restart/ACK_WINDOW_DIAGNOSIS.md](../build/r27-process-restart/ACK_WINDOW_DIAGNOSIS.md) | `60076bc69c9230c19c30639227c8fcd9a2ae4b5ea4ed2f341f48449894a471fd` |
+| [build/r27-process-restart/main-graph-user/GRAPH_ALL.json](../build/r27-process-restart/main-graph-user/GRAPH_ALL.json) | `5d7ff6440f0cc5e012de347ab89eab1dd7b3a22e66880eb1bd81a3e87a1f5275` |
+| [build/r27-process-restart/main-hdc-diagnostic/EXTRACTION.json](../build/r27-process-restart/main-hdc-diagnostic/EXTRACTION.json) | `1868c85d160208b40c4de64e1f7d2fbd5345222a79ca9106ef9cefabcde0dace` |
+| [build/r27-process-restart/main-hdc-diagnostic/HDC_SERVER_WINDOW.log](../build/r27-process-restart/main-hdc-diagnostic/HDC_SERVER_WINDOW.log) | `0f124e93f68b7534f9cb24465d7906fd40538b690fbd7acad0b411cd7325db98` |
+| [build/r26-sustained-restart/main-sustained-publication/POST_PUBLISH.json](../build/r26-sustained-restart/main-sustained-publication/POST_PUBLISH.json) | `f6c4fadcac4d1c5607fd5cfa48a2ad4cde0b48b74baede6b20df03fb2e4abc4a` |
 
 Current ten-source inventory (candidate bytes, not a completion claim):
 

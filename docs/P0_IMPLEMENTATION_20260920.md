@@ -1,3 +1,5 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 # P0 实施与验证报告（2026-09-20；2026-09-21 更新）
 
 ## 结论
@@ -141,7 +143,7 @@ RAW 和 `RAW_ENCRYPTED` 的早期 4096 轮结果仍为 `NOT_EXERCISED`。V4 运�
 - 本轮 D 交付窗口的实际 A/B 命令已由 tester 恢复并写入 [D RESULT](../.artifacts/feasibility-20260921/tester/D-device/RESULT.json)，并由 [raw pair log](../.artifacts/feasibility-20260921/tester/D-device/raw-final-pair.log) 与 [raw-encrypted pair log](../.artifacts/feasibility-20260921/tester/D-device/rawenc-final-pair.log) 关联验证。
 - 二进制/source 审计：[native-path/findings.md](../.artifacts/breakthrough-20260920/native-path/findings.md) 和 [callback-audit/audit.md](../.artifacts/breakthrough-20260920/callback-audit/audit.md) 绑定当前 boards/library hashes、公开 callback 签名、service-name table overwrite、ID 分配域及可达时序。它们支持阻塞命题和下一实验，不替代设备完整资格。
 
-当前工作树新增实现/诊断入口包括：[V1Address.hpp](../include/mdds/dsoftbus/V1Address.hpp)、[V1Configuration.hpp](../include/mdds/dsoftbus/V1Configuration.hpp)、[softbus_ingress_contract.hpp](../probes/softbus_ingress_contract.hpp)、[softbus_callback_table_probe.cpp](../probes/softbus_callback_table_probe.cpp)、[softbus_cancel_probe.cpp](../probes/softbus_cancel_probe.cpp) 和 [NativeWaitObserver.cjs](../scripts/NativeWaitObserver.cjs)。这些文件分别支持纯逻辑 codec/config、ingress 契约、callback table 诊断、native cancellation/交付窗口诊断和受控观测；它们不是生产 backend，也不改变 P0 资格结论。
+当前工作树新增实现/诊断入口包括：[V1Address.hpp](../include/fastdds_dsoftbus/dsoftbus/V1Address.hpp)、[V1Configuration.hpp](../include/fastdds_dsoftbus/dsoftbus/V1Configuration.hpp)、[softbus_ingress_contract.hpp](../probes/softbus_ingress_contract.hpp)、[softbus_callback_table_probe.cpp](../probes/softbus_callback_table_probe.cpp)、[softbus_cancel_probe.cpp](../probes/softbus_cancel_probe.cpp) 和 [NativeWaitObserver.cjs](../scripts/NativeWaitObserver.cjs)。这些文件分别支持纯逻辑 codec/config、ingress 契约、callback table 诊断、native cancellation/交付窗口诊断和受控观测；它们不是生产 backend，也不改变 P0 资格结论。
 
 ## 证据判定和未完成工作
 

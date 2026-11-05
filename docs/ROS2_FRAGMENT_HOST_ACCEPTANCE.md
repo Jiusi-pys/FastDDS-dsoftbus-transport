@@ -1,3 +1,5 @@
+> Evidence link maintenance (2026-11-05): unavailable historical local files are shown as explicit paths. Original labels, hashes and dated results are retained; see the [local evidence index](LOCAL_EVIDENCE_INDEX.md). Availability does not requalify an old run as current. Historical “byte-preserved” statements describe earlier archival steps; this navigation update changes Markdown bytes and does not assert the old document hash. Original execution results and artifact hashes remain unchanged.
+
 # R21 typed String Host delivery acceptance
 
 Current evidence: 2026-10-16 16:56 UTC. **Scoped HOST_TESTED PASS:** Reliable
@@ -119,8 +121,8 @@ application window was rerun; interruption and raw records remain.
 | review/EVIDENCE_MANIFEST.json | 21 | 8c36705d38715cd1b15f99f2c8d70e539da10093b7809bf4f5a405b8c0bb1632 |
 | final-test/EVIDENCE_MANIFEST.json | 147 | 349e2a740710264430ddbd8bf6a8cb7cde7c8d38cfd2b2aac8881ea3fc63c59a |
 
-Local-only [final report](../../../r21-host-delivery/final-test/REPORT.md) and
-[final result](../../../r21-host-delivery/final-test/RESULT.json) support this
+Local-only final report (historical local evidence unavailable in this checkout: `../../../r21-host-delivery/final-test/REPORT.md`) and
+final result (historical local evidence unavailable in this checkout: `../../../r21-host-delivery/final-test/RESULT.json`) support this
 snapshot; ignored evidence is not included in remote documentation commits.
 The new fixture's first creation preceded named-symbol impact: this remains a
 real process deviation, not retroactively compliant. Main preserved/dispositioned
