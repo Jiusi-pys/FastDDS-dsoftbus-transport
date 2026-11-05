@@ -129,7 +129,7 @@ Prerequisites on the Windows host:
 Steps:
 
 ```bash
-# The GitHub default branch is not main; clone main explicitly.
+# main is the default branch (since 2026-11-05); -b main keeps the command exact.
 git clone -b main --recursive https://github.com/Jiusi-pys/FastDDS-dsoftbus-transport.git && cd FastDDS-dsoftbus-transport
 W=E:/fdds-rel     # any work directory
 bash scripts/release/build_fastdds_ohos.sh 3.6.2 $W          # or 2.14.5 / 3.2.5
