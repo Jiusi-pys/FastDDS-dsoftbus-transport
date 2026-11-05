@@ -27,8 +27,10 @@ PINS = {
     'demos': '37e25e0dece32f972b3cc8677b6aab3e891a9365',
     'example_interfaces': '4ed406d1277df78be01a31005306d69e7592a993',
     'examples': '07008852303f2a35a91c65d78046b274a35477ea',
+    'geometry2': 'f702874b1c8535d6a038230ab2cda0ba5d521ebd',
     'libstatistics_collector': '150e1b0e1fbf920a97e4319f98eaf02be27fa892',
     'libyaml_vendor': '57b7deca1fa34ea95a6456c0cc08070c4ab389c2',
+    'message_filters': 'd655e78c6b86e43301a082df384c941bdd9dc19f',
     'pluginlib': 'd09dc3eb672b6b4ea3a7c8f2c1189e08bbbfa1e1',
     'rcl': '22c0b957140035c675f0a061daaab5fd6b2080e7',
     'rcl_interfaces': '7aa3caf43377ea6ad615bc1040832e2c7566bfbe',
@@ -40,6 +42,7 @@ PINS = {
     'rmw_dds_common': '2e3ebf31850a8b05430fb44230ead2d566b8ff1d',
     'rmw_fastrtps': 'bbbb90a98b65f1f678945ef69273edf8b09200ae',
     'rmw_implementation': '835ff87c676cd65634edd3ad7ba88c8d8a0452e7',
+    'rosbag2': '2999680798a94c2cc5d582bcb5227489cd189e82',
     'ros2_tracing': '615d3dc1ea9ce39784f36ab8bce3b362cd530a07',
     'ros_environment': '700bc3fe477cbe64cf50863968a4fbee2833ecff',
     'rosidl': '85fa592b698b0f665e3120f48fac0d35e2f7d8a4',
@@ -56,7 +59,8 @@ REPOS = {
     'ros2': ('common_interfaces demos example_interfaces libyaml_vendor rcl rcl_interfaces rcl_logging rclcpp '
              'rcpputils rcutils rmw rmw_dds_common rmw_fastrtps rmw_implementation ros2_tracing rosidl rosidl_core '
              'rosidl_defaults rosidl_dynamic_typesupport rosidl_dynamic_typesupport_fastrtps rosidl_typesupport '
-             'rosidl_typesupport_fastrtps spdlog_vendor unique_identifier_msgs console_bridge_vendor examples').split(),
+             'rosidl_typesupport_fastrtps spdlog_vendor unique_identifier_msgs console_bridge_vendor examples geometry2 '
+             'message_filters rosbag2').split(),
     'ament': ['ament_index'],
     'ros-tooling': ['libstatistics_collector'],
     'ros': ['ros_environment', 'class_loader', 'pluginlib'],
@@ -68,8 +72,14 @@ PACKAGES = ('ament_index_cpp rosidl_typesupport_fastrtps_c rosidl_typesupport_fa
             'rosidl_typesupport_introspection_c rosidl_typesupport_introspection_cpp rosidl_typesupport_c '
             'rosidl_typesupport_cpp builtin_interfaces unique_identifier_msgs service_msgs action_msgs rcl_interfaces '
             'rmw_fastrtps_cpp rmw_implementation rcl rcl_action rcl_lifecycle rclcpp rclcpp_action rclcpp_lifecycle '
-            'std_msgs example_interfaces lifecycle_msgs ros2_stage2 demo_nodes_cpp examples_rclcpp_minimal_publisher '
-            'examples_rclcpp_minimal_subscriber').split()
+            'std_msgs example_interfaces lifecycle_msgs geometry_msgs sensor_msgs tf2_msgs tf2 message_filters tf2_ros ros2_stage2 '
+            'demo_nodes_cpp composition quality_of_service_demo_cpp logging_demo lifecycle examples_rclcpp_minimal_action_server '
+            'examples_rclcpp_minimal_publisher '
+            'examples_rclcpp_minimal_subscriber '
+            # Message packages a ROS application may use, and rosbag2's. Fast CDR symbols differ between patch releases,
+            # so a typesupport library built against another Fast CDR fails to load here.
+            'std_srvs actionlib_msgs diagnostic_msgs shape_msgs nav_msgs stereo_msgs trajectory_msgs visualization_msgs '
+            'rosbag2_interfaces').split()
 
 
 def archive(group, name, out):
@@ -113,7 +123,7 @@ def main():
     workload = source / 'ros2_stage2'
     shutil.rmtree(workload, ignore_errors=True)
     workload.mkdir()
-    for name in ('CMakeLists.txt', 'package.xml', 'stage2_node.cpp'):
+    for name in ('CMakeLists.txt', 'package.xml', 'stage2_common.hpp', 'stage2_node.cpp', 'stage2_features.cpp'):
         shutil.copyfile(REPO / 'tests/ros2_stage2' / name, workload / name)
     argv = [a.python, REPO / 'integrations/ros2/target/build_ros_slice.py', '--source', source, '--output', a.work / 'ros',
             '--target-prefix', prefix, '--dependency-prefix', prefix, '--host-tools', a.host_tools, '--sdk', SDK, '--cmake', a.cmake,

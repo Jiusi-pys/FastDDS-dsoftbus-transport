@@ -48,6 +48,9 @@ int main()
     check(!CheckRosEnvironment(env(subnet), 151).empty(), "SUBNET adds a UDP multicast peer");
     auto missing = ok; missing.erase("ROS_DOMAIN_ID");
     check(!CheckRosEnvironment(env(missing), 151).empty(), "missing domain");
+    check(CheckRosEnvironment(env(missing), std::nullopt).empty(), "the hub serves any domain");
+    auto from_xml = ok; from_xml["RMW_FASTRTPS_USE_QOS_FROM_XML"] = "1";
+    check(!CheckRosEnvironment(env(from_xml), std::nullopt).empty(), "QoS from XML could enable data sharing");
     std::printf(failures ? "autoload config tests FAILED\n" : "autoload config tests PASS\n");
     return failures ? 1 : 0;
 }

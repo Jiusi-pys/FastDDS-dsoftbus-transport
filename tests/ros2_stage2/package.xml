@@ -12,6 +12,13 @@
   <depend>std_msgs</depend>
   <depend>example_interfaces</depend>
   <depend>lifecycle_msgs</depend>
+  <depend>type_description_interfaces</depend>
+  <depend>tf2_ros</depend>
+  <depend>statistics_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>geometry_msgs</depend>
   <export>
     <build_type>ament_cmake</build_type>
   </export>

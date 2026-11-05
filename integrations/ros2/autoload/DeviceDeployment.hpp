@@ -56,6 +56,7 @@ inline ds::DSoftBusTransportDescriptor Configuration(const Deploy& q, bool featu
     ds::V1PeerDeployment p; p.identity = {q.name_space, q.domain, q.peer_udid}; p.slot = q.peer_slot; p.network_id = q.peer_network;
     p.local_initiator_name = q.initiator; p.expected_remote_initiator_names = {q.peer_initiator}; p.native_name_scope = d.native_name_scope; d.peers = {p};
     ds::DSoftBusTransportDescriptor c(65536); Require(c.ConfigureV1(d).code == ds::DirectoryError::None, "ConfigureV1");
+    c.close_at_destruction = true; // peers learn of a clean exit from the Participant's dispose
     if (feature_limits) {
         c.max_participants = 4; c.receive_records = 256; c.receive_bytes = 2u << 20;
         // Secure Participants receive into buffers of at most 65535 bytes (Fast DDS uint16 cap).

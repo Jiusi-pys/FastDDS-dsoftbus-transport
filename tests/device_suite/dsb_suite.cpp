@@ -921,8 +921,11 @@ static void restart_case(Suite& s)
         s.barrier();
         const unsigned got2 = exchange(2);
         s.barrier(); s.barrier();
+        // The dispose goes to a helper that has already exited, so a send can fail from here on; failures before this count.
+        const bool pump_ok = !hs.failed.load();
+        hs.tolerate = true;
         const bool deleted = ok(p->delete_contained_entities()) && ok(s.factory->delete_participant(p));
-        const bool pump_ok = !hs.failed.load(); const bool closed = deleted && hs.stop_and_close(descs);
+        const bool closed = deleted && hs.stop_and_close(descs);
         okay = got1 == 3 && gone && got2 == 3 && pump_ok && closed;
         detail = "role=LIVE_PROCESS inc1_received=" + std::to_string(got1) + " unmatched_after_kill=" + std::to_string(gone) + " inc2_received=" + std::to_string(got2) +
             " runtime_closed=" + std::to_string(closed);

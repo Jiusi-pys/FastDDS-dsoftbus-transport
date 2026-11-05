@@ -12,9 +12,12 @@
   [完整构建与 CFT 调查](docs/FASTDDS_FULL_BUILD_AND_CFT_RACE_20261105.md)。
 - **Stage 2：在 `2.14.5-ros` 上为限定范围的 DEVICE_TESTED，NOT_PRODUCTION_QUALIFIED。**
   `2.14.5-ros` 是 v2.14.5 加一项经用户批准的补丁，不是 stock 构建。未修改的 ROS 2 Jazzy
-  节点已在两块 RK3588A 之间通过传输层运行，范围和限制见
-  [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)。stock 2.14.5、3.6.2、3.2.5 上的
-  Stage 2 仍为 NOT_RUN。历史 ROS 2 结果保留其原二进制和配置范围，见
+  节点已在两块 RK3588A 之间通过传输层运行，有两条路径：每板每配置一个进程的直连路径，
+  以及每板一个 `fdds_dsb_hub`、可接入多个 ROS 进程的 hub 路径。范围和限制见
+  [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)，部署方法和生产资格尚缺的工作见
+  [hub 部署指南](docs/ROS2_HUB_DEPLOYMENT.md)。45 s 和 70 s 断链后开发板会离开 DSoftBus 网络，
+  需要重启 `softbus_server`（可选参数 `--recover-bus-after`），无需重启开发板。
+  stock 2.14.5、3.6.2、3.2.5 上的 Stage 2 仍为 NOT_RUN。历史 ROS 2 结果保留其原二进制和配置范围，见
   [ROS 2 能力矩阵](docs/ROS2_CAPABILITY_MATRIX.md)。
 - **仍有限制：** 3.6.2 root CONFIG Host 有 87 项链接阻塞，3.2.5 没有已记录的 Host 测试；
   3.2.5 的双次路由中断场景未运行。2.14.5/3.6.2 的 CFT race 仍依赖文档中的 workaround；

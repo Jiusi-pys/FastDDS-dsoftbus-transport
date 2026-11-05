@@ -6,6 +6,7 @@
 //
 // Output: S2_CASE name=<case> pass=<0|1> detail=<text>, then S2_SUMMARY passed=<n> failed=<n>.
 // Exit 0 only when every case passed and rclcpp shut down.
+#include "stage2_common.hpp"
 #include <action_msgs/msg/goal_status.hpp>
 #include <example_interfaces/action/fibonacci.hpp>
 #include <example_interfaces/srv/add_two_ints.hpp>
@@ -27,9 +28,7 @@
 #include <string>
 #include <thread>
 
-using namespace std::chrono_literals;
-using Clock = std::chrono::steady_clock;
-using Int32 = std_msgs::msg::Int32;
+using namespace stage2;
 using Text = std_msgs::msg::String;
 using AddTwoInts = example_interfaces::srv::AddTwoInts;
 using Fibonacci = example_interfaces::action::Fibonacci;
@@ -38,36 +37,8 @@ using GetState = lifecycle_msgs::srv::GetState;
 using Transition = lifecycle_msgs::msg::Transition;
 
 namespace {
-constexpr auto kCaseTimeout = 90s;
 constexpr int kSamples = 20;
 constexpr std::size_t kLargeBytes = 150000;
-
-int passed = 0, failed = 0;
-
-void report(const std::string& name, bool ok, const std::string& detail)
-{
-    std::printf("S2_CASE name=%s pass=%d detail=%s\n", name.c_str(), ok ? 1 : 0, detail.c_str());
-    std::fflush(stdout);
-    ++(ok ? passed : failed);
-}
-
-template <typename Predicate>
-bool wait_for(Predicate predicate, std::chrono::seconds limit = kCaseTimeout)
-{
-    const auto end = Clock::now() + limit;
-    while (rclcpp::ok() && Clock::now() < end) {
-        if (predicate()) return true;
-        std::this_thread::sleep_for(10ms);
-    }
-    return predicate();
-}
-
-std::string pattern(std::size_t size, int side)
-{
-    std::string value(size, 'x');
-    for (std::size_t i = 0; i < size; ++i) value[i] = static_cast<char>('a' + (i * 7 + static_cast<std::size_t>(side)) % 26);
-    return value;
-}
 
 struct Context {
     int side = 0, peer = 1;
@@ -76,27 +47,6 @@ struct Context {
     std::string me() const { return std::to_string(side); }
     std::string other() const { return std::to_string(peer); }
     std::string peer_node() const { return "s2_node_" + other(); }
-};
-
-// Each side publishes the phase it reached on a latched topic and waits for the peer to reach it.
-class Barrier {
-public:
-    explicit Barrier(const Context& c)
-    {
-        const auto qos = rclcpp::QoS(1).reliable().transient_local();
-        publisher_ = c.node->create_publisher<Int32>("/s2/barrier_" + c.me(), qos);
-        subscription_ = c.node->create_subscription<Int32>("/s2/barrier_" + c.other(), qos,
-            [this](Int32::ConstSharedPtr m) { peer_ = m->data; });
-    }
-    bool pass(int phase)
-    {
-        Int32 message; message.data = phase; publisher_->publish(message);
-        return wait_for([&] { return peer_.load() >= phase; }, 180s);
-    }
-private:
-    rclcpp::Publisher<Int32>::SharedPtr publisher_;
-    rclcpp::Subscription<Int32>::SharedPtr subscription_;
-    std::atomic<int> peer_{0};
 };
 
 // Passed to the cases that own a server: it must stay alive until the peer's calls have finished.
@@ -366,7 +316,7 @@ int main(int argc, char** argv)
     // Set remotely by the peer's parameter case.
     c.node->declare_parameter<std::int64_t>("s2_from_" + c.other(), 0);
     // Outlives the executor, whose threads can still deliver the peer's last barrier message.
-    Barrier barrier(c);
+    Barrier barrier(c.node, c.me(), c.other());
     rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 4);
     executor.add_node(c.node);
     executor.add_node(c.lifecycle->get_node_base_interface());

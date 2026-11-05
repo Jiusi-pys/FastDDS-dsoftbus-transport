@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -54,15 +55,16 @@ inline std::string ParseConfig(const std::string& text, Config& out)
 
 using EnvLookup = std::function<const char*(const char*)>;
 
-// Empty return means the ROS environment cannot widen the transport set.
-inline std::string CheckRosEnvironment(const EnvLookup& env, std::uint32_t domain)
+// Empty return means the ROS environment cannot widen the transport set. The direct path serves one domain;
+// the hub serves any, so it passes no domain.
+inline std::string CheckRosEnvironment(const EnvLookup& env, std::optional<std::uint32_t> domain)
 {
     const auto equals = [&](const char* name, const std::string& expected) {
         const char* value = env(name);
         return value != nullptr && expected == value;
     };
     if (!equals("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")) return "RMW_IMPLEMENTATION must be rmw_fastrtps_cpp";
-    if (!equals("ROS_DOMAIN_ID", std::to_string(domain))) return "ROS_DOMAIN_ID must equal the configured domain";
+    if (domain && !equals("ROS_DOMAIN_ID", std::to_string(*domain))) return "ROS_DOMAIN_ID must equal the configured domain";
     // LOCALHOST adds SHM+UDP; SUBNET with initial peers adds a UDP multicast peer.
     if (!equals("ROS_AUTOMATIC_DISCOVERY_RANGE", "SYSTEM_DEFAULT")) return "ROS_AUTOMATIC_DISCOVERY_RANGE must be SYSTEM_DEFAULT";
     // These would let an XML file or environment value change what the process builds on.
@@ -71,6 +73,9 @@ inline std::string CheckRosEnvironment(const EnvLookup& env, std::uint32_t domai
         const char* value = env(name);
         if (value != nullptr && value[0] != '\0') return std::string(name) + " must be unset";
     }
+    // It keeps rmw_fastrtps from turning data sharing off, so same-board traffic could use shared memory instead.
+    const char* from_xml = env("RMW_FASTRTPS_USE_QOS_FROM_XML");
+    if (from_xml != nullptr && std::string(from_xml) == "1") return "RMW_FASTRTPS_USE_QOS_FROM_XML must not be 1";
     const char* peers = env("ROS_STATIC_PEERS");
     if (peers != nullptr && peers[0] != '\0') return "ROS_STATIC_PEERS must be unset";
     const char* localhost = env("ROS_LOCALHOST_ONLY");

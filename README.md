@@ -39,6 +39,7 @@ in the repository with their own build instructions and evidence.
 | --- | --- | --- |
 | Build the native transport for OpenHarmony | [Version and release guide](docs/FASTDDS_VERSIONS_AND_RELEASE.md), `scripts/release/`, `integrations/ros2/stock/` | Stock Fast DDS 2.14.5, 3.6.2 or 3.2.5; version-specific libraries and device suite |
 | Develop the cores and inspect interface contracts on Windows | Root `CMakeLists.txt`; commands below | Default `SOURCE_PROBE` binding, SDK-free components and host fixtures |
+| Run unmodified ROS 2 nodes on two boards | [Hub deployment guide](docs/ROS2_HUB_DEPLOYMENT.md), [Stage 2 record](docs/STAGE2_ROS2_DEVICE_20261105.md) | `2.14.5-ros` only; bounded `DEVICE_TESTED`, `NOT_PRODUCTION_QUALIFIED` |
 | Work with the earlier installed package or experimental consumer | [Installation guide](docs/INSTALL.md), [input preflight](docs/INSTALL_PREFLIGHT.md) | Separate root `CONFIG` and historical integration paths; follow their exact dependency and ABI requirements |
 
 The default root build is for host development. A device runtime requires the
@@ -126,7 +127,9 @@ or deployment configuration.
   [ROS 2 capability matrix](docs/ROS2_CAPABILITY_MATRIX.md). Stage 2 is bounded
   `DEVICE_TESTED` and `NOT_PRODUCTION_QUALIFIED` on `2.14.5-ros` only, which is
   Fast DDS 2.14.5 plus one approved patch; see the
-  [Stage 2 record](docs/STAGE2_ROS2_DEVICE_20261105.md). It remains `NOT_RUN` on
+  [Stage 2 record](docs/STAGE2_ROS2_DEVICE_20261105.md). The
+  [hub deployment guide](docs/ROS2_HUB_DEPLOYMENT.md) covers several ROS processes per
+  board, its limits, and what production qualification would need. Stage 2 remains `NOT_RUN` on
   stock 2.14.5, 3.6.2 and 3.2.5. ROS applications must not create
   ContentFilteredTopics while writers are active, because the workaround cannot be
   applied through `rmw_fastrtps`. Earlier ROS runs do not qualify a newly built
@@ -146,7 +149,7 @@ own evidence scope.
 | --- | --- |
 | `include/fastdds_dsoftbus/`, `src/` | Transport interfaces, implementation and supporting components |
 | `integrations/ros2/stock/` | Stock Fast DDS transport bootstrap and native library build |
-| `integrations/ros2/` | ROS 2 integration, historical adapters and diagnostics |
+| `integrations/ros2/` | ROS 2 integration, per-board hub (`hub/`), preload library (`autoload/`), historical adapters and diagnostics |
 | `scripts/release/` | Native dependency builds, transport builds and cross-board runner |
 | `examples/`, `tests/`, `probes/` | Consumers, host contracts, device scenarios and probes |
 | `docs/` | Architecture, installation, support contracts and acceptance records |

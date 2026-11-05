@@ -16,8 +16,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <fcntl.h>
 #include <memory>
 #include <sstream>
+#include <sys/file.h>
 #include <thread>
 #include <unistd.h>
 
@@ -48,10 +50,20 @@ State* g_state = nullptr; // deliberately never freed: exit paths may still refe
     _exit(kRefusedExit);
 }
 
+// One config names one native socket, so a second process would fail inside the SDK while looking healthy, and
+// hear nothing. The kernel releases the lock with the process, however it ends.
+void TakeConfigLock(const char* path)
+{
+    const int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) Refuse("config not readable");
+    if (flock(fd, LOCK_EX | LOCK_NB) != 0) Refuse("config already in use by another process: use the hub for more than one process per board");
+}
+
 std::string ReadConfigFile()
 {
     const char* path = std::getenv("FASTDDS_DSOFTBUS_AUTOLOAD_CONFIG");
     if (path == nullptr || path[0] != '/') Refuse("FASTDDS_DSOFTBUS_AUTOLOAD_CONFIG must be an absolute path");
+    TakeConfigLock(path);
     std::ifstream in(path);
     if (!in) Refuse("config not readable");
     std::ostringstream text; text << in.rdbuf();

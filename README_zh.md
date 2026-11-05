@@ -36,6 +36,7 @@ OpenHarmony DSoftBus Socket API
 | --- | --- | --- |
 | 为 OpenHarmony 构建原生传输层 | [版本与发布指南](docs/FASTDDS_VERSIONS_AND_RELEASE.md)、`scripts/release/`、`integrations/ros2/stock/` | Stock Fast DDS 2.14.5、3.6.2 或 3.2.5；各版本独立的运行库和设备测试套件 |
 | 在 Windows 开发核心组件、检查接口契约 | 根目录 `CMakeLists.txt`；命令见下文 | 默认 `SOURCE_PROBE` 绑定、不依赖 SDK 的组件和主机测试夹具 |
+| 在两块开发板上运行未修改的 ROS 2 节点 | [Hub 部署指南](docs/ROS2_HUB_DEPLOYMENT.md)、[Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md) | 仅 `2.14.5-ros`；限定范围的 `DEVICE_TESTED`，`NOT_PRODUCTION_QUALIFIED` |
 | 使用较早的安装包或实验性 consumer | [安装指南](docs/INSTALL.md)、[安装输入预检](docs/INSTALL_PREFLIGHT.md) | 独立的根 `CONFIG` 与历史集成路径；须遵守各自精确的依赖和 ABI 要求 |
 
 根目录默认构建用于主机开发。设备运行时需要按版本与发布指南显式选择原生构建、
@@ -109,8 +110,9 @@ ROS 2 发行版或部署配置都已通过验收。
 - ROS 2 验收单独记录在 [ROS 2 能力矩阵](docs/ROS2_CAPABILITY_MATRIX.md)。
   Stage 2 仅在 `2.14.5-ros`（Fast DDS 2.14.5 加一项已批准的补丁）上为限定范围的
   `DEVICE_TESTED`，且为 `NOT_PRODUCTION_QUALIFIED`，详见
-  [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)。stock 2.14.5、3.6.2、3.2.5
-  上仍为 `NOT_RUN`。规避方式无法通过 `rmw_fastrtps` 应用，因此 ROS 应用不得在
+  [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)。每板多个 ROS 进程的用法、限制
+  和生产资格尚缺的工作见 [Hub 部署指南](docs/ROS2_HUB_DEPLOYMENT.md)（英文）。
+  stock 2.14.5、3.6.2、3.2.5 上仍为 `NOT_RUN`。规避方式无法通过 `rmw_fastrtps` 应用，因此 ROS 应用不得在
   writer 活动期间创建 ContentFilteredTopic。
   较早的 ROS 测试不会自动使新构建的 Fast DDS 或传输层二进制通过验收。
 - 平台部署契约、生产资格和分发权利有各自要求，参见
@@ -125,7 +127,7 @@ ROS 2 发行版或部署配置都已通过验收。
 | --- | --- |
 | `include/fastdds_dsoftbus/`、`src/` | 传输层接口、实现和支撑组件 |
 | `integrations/ros2/stock/` | Stock Fast DDS 传输层 bootstrap 和原生库构建 |
-| `integrations/ros2/` | ROS 2 集成、历史适配器和诊断工具 |
+| `integrations/ros2/` | ROS 2 集成、每板 hub（`hub/`）、预加载库（`autoload/`）、历史适配器和诊断工具 |
 | `scripts/release/` | 原生依赖构建、传输层构建和跨板运行工具 |
 | `examples/`、`tests/`、`probes/` | Consumer、主机契约、设备场景和探针 |
 | `docs/` | 架构、安装、支持契约和验收记录 |
