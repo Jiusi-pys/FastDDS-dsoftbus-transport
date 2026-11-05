@@ -1,3 +1,7 @@
+## Supported Fast DDS versions (2026-11-05)
+
+Fast DDS **2.14.5** (ROS 2 Jazzy), **3.6.2** (ROS 2 Lyrical and Rolling) and **3.2.5** (ROS 2 Kilted) are supported and tested on two RK3588A OpenHarmony boards. For the version matrix, API/ABI differences, reproducible OHOS builds (`scripts/release/`), deployment and the cross-board test procedure, see [docs/FASTDDS_VERSIONS_AND_RELEASE.md](docs/FASTDDS_VERSIONS_AND_RELEASE.md).
+
 ## 2026-10-31 evaluator rejection evidence — COMPLETE LOCAL / SYNTHETIC ONLY
 
 UTC 2026-10-30T16:57:12.512168+00:00. Bounded offline repair COMPLETE_LOCAL: source-owned safe rejection reason plus durable pre-rethrow checkpoint. FINAL_TEST_RESULT_D01.json SHA2565d23e1aa5428020f1c3a897d7bd1625a3f99d80309ba57703a9856cbae7cc073 is distinct final7 targeted synthetic/native outer0,12pins matched. Formal review finds no actionable issue. Six original parser/evaluator ASTs and58 guards remain unchanged; command/predicates did not receive a syntax fix. This does not identify historical readonly2 rejection cause, which remains UNKNOWN without serialized predicate.

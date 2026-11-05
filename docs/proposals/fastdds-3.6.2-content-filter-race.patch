@@ -1,0 +1,55 @@
+diff --git a/src/cpp/fastdds/publisher/DataWriterImpl.cpp b/src/cpp/fastdds/publisher/DataWriterImpl.cpp
+index 56dfa27..96db45e 100644
+--- a/src/cpp/fastdds/publisher/DataWriterImpl.cpp
++++ b/src/cpp/fastdds/publisher/DataWriterImpl.cpp
+@@ -2550,6 +2550,8 @@ void DataWriterImpl::process_reader_filter_info(
+             !writer_->is_datasharing_compatible_with(reader_info.data_sharing) &&
+             reader_info.remote_locators.multicast.empty())
+     {
++        // Same guard as remove_reader_filter: write() evaluates the filter collection under it.
++        std::lock_guard<RecursiveTimedMutex> guard(writer_->getMutex());
+         reader_filters_->process_reader_filter_info(reader_guid, reader_info.content_filter,
+                 publisher_->get_participant_impl(), topic_);
+     }
+diff --git a/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.cpp b/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.cpp
+index 69ba6c7..d319ff7 100644
+--- a/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.cpp
++++ b/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.cpp
+@@ -625,6 +625,7 @@ ReturnCode_t DDSFilterFactory::delete_content_filter(
+     {
+         auto expr = static_cast<DDSFilterExpression*>(filter_instance);
+         expr->clear();
++        std::lock_guard<std::mutex> guard(expression_pool_mutex_);
+         expression_pool_.put(expr);
+     }
+     return RETCODE_OK;
+diff --git a/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp b/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp
+index 99c44d8..0cb6441 100644
+--- a/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp
++++ b/src/cpp/fastdds/topic/DDSSQLFilter/DDSFilterFactory.hpp
+@@ -19,6 +19,8 @@
+ #ifndef _FASTDDS_TOPIC_DDSSQLFILTER_DDSFILTERFACTORY_HPP_
+ #define _FASTDDS_TOPIC_DDSSQLFILTER_DDSFILTERFACTORY_HPP_
+ 
++#include <mutex>
++
+ #include <fastdds/dds/topic/IContentFilter.hpp>
+ #include <fastdds/dds/topic/IContentFilterFactory.hpp>
+ #include <fastdds/dds/topic/TopicDataType.hpp>
+@@ -88,6 +90,7 @@ private:
+      */
+     DDSFilterExpression* get_expression()
+     {
++        std::lock_guard<std::mutex> guard(expression_pool_mutex_);
+         return expression_pool_.get([]
+                        {
+                            return new DDSFilterExpression();
+@@ -111,6 +114,8 @@ private:
+     DDSFilterEmptyExpression empty_expression_;
+     /// Pool of DDSFilterExpression objects
+     ObjectPool<DDSFilterExpression*> expression_pool_;
++    /// Protects expression_pool_: user threads and discovery threads both create/delete filters
++    std::mutex expression_pool_mutex_;
+     /// Maximum number of sub-expressions allowed in a filter expression
+     const size_t max_subexpressions_ = DEFAULT_MAX_SUBEXPRESSIONS;
+     /// Maximum length of a filter expression

@@ -26,7 +26,15 @@ DSoftBusSenderResource::DSoftBusSenderResource(std::shared_ptr<RuntimeSendPath> 
             return false;
         }
     };
+#elif FASTDDS_VERSION_MAJOR == 3 && FASTDDS_VERSION_MINOR < 4
+    // Fast DDS 3.0-3.3 (ROS 2 Kilted ships 3.2.x): scatter/gather without a transport priority.
+    send_buffers_lambda_ = [this](const std::vector<NetworkBuffer>& buffers, std::uint32_t bytes,
+            RuntimeSendPath::Iterator* begin, RuntimeSendPath::Iterator* end,
+            const RuntimeSendPath::Clock::time_point& deadline) {
+        return Send(buffers, bytes, begin, end, deadline, 0);
+    };
 #else
+    // Fast DDS >= 3.4 (3.6.x for ROS 2 Lyrical/Rolling) also passes the writer's transport priority.
     send_lambda_ = [this](const std::vector<NetworkBuffer>& buffers, std::uint32_t bytes,
             RuntimeSendPath::Iterator* begin, RuntimeSendPath::Iterator* end,
             const RuntimeSendPath::Clock::time_point& deadline, std::int32_t priority) {

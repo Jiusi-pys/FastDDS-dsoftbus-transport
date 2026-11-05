@@ -14,7 +14,7 @@ inline BootstrapResult InstallStockTransport(StockTransportBootstrap& bootstrap,
     const auto domain = config.directory.identities.front().domain;
     auto descriptor = runtime.MakeStockDescriptor(config);
     if (!descriptor) return BootstrapResult::InvalidConfiguration;
-    std::vector<eprosima::fastrtps::rtps::Locator_t> peers;
+    std::vector<fastdds_dsoftbus::binding::Locator_t> peers;
     peers.reserve(config.directory.routes.size());
     for (const auto& route : config.directory.routes) peers.push_back(route.key.remote_locator);
     return bootstrap.Install(domain, std::move(descriptor), config.default_user_unicast, peers);
