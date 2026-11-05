@@ -218,6 +218,8 @@ Conclusion: the defect is still present in Fast DDS 3.6.2. It does not depend on
 
 `docs/proposals/fastdds-3.6.2-content-filter-race.patch` adds the writer-mutex guard on the add path and a mutex on the expression pool. It is **not applied**, because changing Fast DDS needs approval. It is also not upstream on 3.6.2.
 
+**Decision (2026-11-05, project owner):** keep the workaround only; do not patch Fast DDS. The 2.14.5 and 3.6.2 proposal patches remain reference material. Deployments and Stage 2 must disable writer-side content filtering (`writer_resource_limits().reader_filters_allocation.maximum = 0`, or the equivalent XML profile) wherever ContentFilteredTopics can be created or removed while writers are active, and must serialize the application's own content-filter calls.
+
 ## 7. Limitations and open items
 
 - **Content-filter race:** unresolved upstream in 2.14.5 and 3.6.2.
