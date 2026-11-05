@@ -10,10 +10,15 @@
   已有构建和两块 RK3588A 的设备测试记录；Host 范围按版本分别标注，不能由设备结果推定。
   参见 [Stage 1 验收](docs/STAGE1_DIRECT_GOAL_DEVICE_20261104.md) 和
   [完整构建与 CFT 调查](docs/FASTDDS_FULL_BUILD_AND_CFT_RACE_20261105.md)。
-- **Stage 2：这些新 stock 构建上的 ROS 2 集成仍为 NOT_RUN。** 历史 ROS 2 结果保留其原
-  二进制和配置范围，见 [ROS 2 能力矩阵](docs/ROS2_CAPABILITY_MATRIX.md)。
+- **Stage 2：在 `2.14.5-ros` 上为限定范围的 DEVICE_TESTED，NOT_PRODUCTION_QUALIFIED。**
+  `2.14.5-ros` 是 v2.14.5 加一项经用户批准的补丁，不是 stock 构建。未修改的 ROS 2 Jazzy
+  节点已在两块 RK3588A 之间通过传输层运行，范围和限制见
+  [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)。stock 2.14.5、3.6.2、3.2.5 上的
+  Stage 2 仍为 NOT_RUN。历史 ROS 2 结果保留其原二进制和配置范围，见
+  [ROS 2 能力矩阵](docs/ROS2_CAPABILITY_MATRIX.md)。
 - **仍有限制：** 3.6.2 root CONFIG Host 有 87 项链接阻塞，3.2.5 没有已记录的 Host 测试；
-  3.2.5 的双次路由中断场景未运行。2.14.5/3.6.2 的 CFT race 仍依赖文档中的 workaround。
+  3.2.5 的双次路由中断场景未运行。2.14.5/3.6.2 的 CFT race 仍依赖文档中的 workaround；
+  该 workaround 无法用于 ROS 路径，ROS 应用不得在 writer 活动期间创建 ContentFilteredTopic。
   有限设备通过不代表生产资格或当前工作树的全局 PRE_COMMIT gate 通过。
 
 ## 历史计划与检查点

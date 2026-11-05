@@ -123,10 +123,14 @@ or deployment configuration.
   [CFT results and workaround](docs/FASTDDS_VERSIONS_AND_RELEASE.md#64-content-filter-race-on-fast-dds-3x-re-evaluated-not-assumed)
   and the [2.14.5 investigation](docs/FASTDDS_FULL_BUILD_AND_CFT_RACE_20261105.md).
 - ROS 2 acceptance is recorded separately in the
-  [ROS 2 capability matrix](docs/ROS2_CAPABILITY_MATRIX.md). ROS 2 validation of
-  the current stock version builds is recorded as `NOT_RUN` (Stage 2) in the
-  version guide. Earlier ROS runs do not qualify a newly built Fast DDS or
-  transport binary automatically.
+  [ROS 2 capability matrix](docs/ROS2_CAPABILITY_MATRIX.md). Stage 2 is bounded
+  `DEVICE_TESTED` and `NOT_PRODUCTION_QUALIFIED` on `2.14.5-ros` only, which is
+  Fast DDS 2.14.5 plus one approved patch; see the
+  [Stage 2 record](docs/STAGE2_ROS2_DEVICE_20261105.md). It remains `NOT_RUN` on
+  stock 2.14.5, 3.6.2 and 3.2.5. ROS applications must not create
+  ContentFilteredTopics while writers are active, because the workaround cannot be
+  applied through `rmw_fastrtps`. Earlier ROS runs do not qualify a newly built
+  Fast DDS or transport binary automatically.
 - Platform deployment contracts, production qualification and distribution rights
   have separate requirements; consult the
   [production support contract](docs/PRODUCTION_SUPPORT_CONTRACT_V1.md).

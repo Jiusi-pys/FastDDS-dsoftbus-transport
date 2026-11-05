@@ -103,7 +103,7 @@ def wait_until(pred, seconds):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--version', required=True, choices=['2.14.5', '3.6.2', '3.2.5'])
+    ap.add_argument('--version', required=True, choices=['2.14.5', '2.14.5-ros', '3.6.2', '3.2.5'])
     ap.add_argument('--work', required=True)
     ap.add_argument('--a', required=True); ap.add_argument('--b', required=True)
     ap.add_argument('--board-root', default='/data/local/tmp/fdds_dsb')

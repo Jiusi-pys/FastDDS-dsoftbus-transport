@@ -20,6 +20,8 @@ This project now supports three Fast DDS lines from one source tree:
 | **3.6.2** (selected 3.x) | Lyrical, Rolling | BUILDS; HOST_TESTED with the root CONFIG gaps in section 6.3; DEVICE_TESTED by the full device suite, Security, Statistics, outage and restart cases. CFT race results and workaround are in section 6.4. |
 | 3.2.5 | Kilted (EOL 2026-11) | BUILDS; DEVICE_TESTED by the full suite (see section 6). Host test evidence is NOT_RECORDED; the two-outage case is NOT_RUN. |
 
+`2.14.5-ros` is a separate build, not a fourth stock line: v2.14.5 plus one user-approved patch (the `TopicDescription` key function). It exists because unmodified `rmw_fastrtps` needs it on OHOS. Stage 2 is bounded DEVICE_TESTED and NOT_PRODUCTION_QUALIFIED on this build only. See the [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md).
+
 ## 2. ROS 2 to Fast DDS matrix (evidence)
 
 Every row comes from three upstream sources:
@@ -105,10 +107,12 @@ Release tooling (`scripts/release/`):
 
 | Script | Purpose |
 | --- | --- |
-| `build_fastdds_ohos.sh <2.14.5\|3.6.2\|3.2.5> <work>` | Fetches pinned upstream tags and builds the closure (OpenSSL 3.5.9, foonathan_memory v0.7-4, tinyxml2 8c8293b, asio ed6aa8a, Fast CDR, Fast DDS) with SECURITY, FASTDDS_STATISTICS, TLS, SQLITE3 and COMPILE_TOOLS. Writes `BUILD_INFO.txt` with commits and SHA-256. |
+| `build_fastdds_ohos.sh <2.14.5\|2.14.5-ros\|3.6.2\|3.2.5> <work>` | Fetches pinned upstream tags and builds the closure (OpenSSL 3.5.9, foonathan_memory v0.7-4, tinyxml2 8c8293b, asio ed6aa8a, Fast CDR, Fast DDS) with SECURITY, FASTDDS_STATISTICS, TLS, SQLITE3 and COMPILE_TOOLS. Writes `BUILD_INFO.txt` with commits and SHA-256. |
 | `pull_platform_libs.py <target> <dir>` | Copies the board's `libsoftbus_client.z.so` closure. It is used only for link-time `rpath-link`; nothing on the board changes. |
 | `build_transport_ohos.sh <version> <work> <platform dir>` | Builds the Transport, `dsb_suite` and `cft_race`. |
 | `run_cross_board.py` | Deploys to `/data/local/tmp/fdds_dsb/<version>/` and runs one of: the suite (`--groups`), a route outage (`--route 1\|2`), the DSoftBus CFT stress (`--stress wsf1\|wsf0`), or the UDP/TCP race reproducer (`--cft-race udp\|tcp`). |
+| `build_ros2_ohos.py --work <work>` | Builds pinned, unmodified ROS 2 Jazzy for OHOS against `2.14.5-ros`. |
+| `run_ros2_cross_board.py --mode <suite\|smoke\|components\|route\|restart\|negative>` | Runs ROS 2 nodes between the boards over the Transport. See the [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md). |
 
 Device suite (`tests/device_suite/`):
 
@@ -222,12 +226,17 @@ Conclusion: the defect is still present in Fast DDS 3.6.2. It does not depend on
 
 `docs/proposals/fastdds-3.6.2-content-filter-race.patch` adds the writer-mutex guard on the add path and a mutex on the expression pool. It is **not applied**, because changing Fast DDS needs approval. It is also not upstream on 3.6.2.
 
-**Decision (2026-11-05, project owner):** keep the workaround only; do not patch Fast DDS. The 2.14.5 and 3.6.2 proposal patches remain reference material. Deployments and Stage 2 must disable writer-side content filtering (`writer_resource_limits().reader_filters_allocation.maximum = 0`, or the equivalent XML profile) wherever ContentFilteredTopics can be created or removed while writers are active, and must serialize the application's own content-filter calls.
+**Decision (2026-11-05, project owner):** keep the workaround only; do not patch Fast DDS. The 2.14.5 and 3.6.2 proposal patches remain reference material. Direct Fast DDS applications must disable writer-side content filtering wherever ContentFilteredTopics can be created or removed while writers are active, and must serialize the application's own content-filter calls. The workaround is set in code on `DataWriterQos`: `writer_resource_limits().reader_filters_allocation.maximum = 0`.
+
+**Correction (2026-11-05):** this section previously said the workaround had an equivalent XML profile. That was false. Neither the Fast DDS 2.14.5 nor the 3.6.2 XML parser or XSD has `reader_filters_allocation`. The dated [CFT investigation](FASTDDS_FULL_BUILD_AND_CFT_RACE_20261105.md) (Answers, item 6) still shows that XML snippet; do not use it.
+
+**ROS path:** `rmw_fastrtps` never sets `reader_filters_allocation`, so the workaround cannot be applied there. ROS applications must not create ContentFilteredTopics while writers are active.
 
 ## 7. Limitations and open items
 
 - **Content-filter race:** unresolved upstream in 2.14.5 and 3.6.2.
-  - Use the workaround. It can also be set in XML: `writer_resource_limits/reader_filters_allocation/maximum = 0`.
+  - Use the workaround, set in code on `DataWriterQos`: `writer_resource_limits().reader_filters_allocation.maximum = 0`. It has no XML form.
+  - `rmw_fastrtps` never sets it, so it cannot be applied on the ROS path: ROS applications must not create ContentFilteredTopics while writers are active.
   - Alternatively, apply the proposed patch once it is approved.
   - Making content-filter calls from several application threads still needs serialization.
 - **Secure Participants:** they still require a transport `maxMessageSize` of 65535 or less on 3.6.2 (the same `uint16` cap).
@@ -246,4 +255,4 @@ Conclusion: the defect is still present in Fast DDS 3.6.2. It does not depend on
 - **Device suite prerequisites:**
   - It requires the provisioned native token and the `com.kaihong.mdds.*` permission entry on both boards. Provisioning them is outside these scripts.
   - The token lookup parses `nativetoken.json` in the field order these boards use.
-- **ROS 2 over these lines:** NOT_RUN. That is Stage 2.
+- **ROS 2 over these lines:** Stage 2 is NOT_RUN on stock 2.14.5, 3.6.2 and 3.2.5. It is bounded DEVICE_TESTED and NOT_PRODUCTION_QUALIFIED on `2.14.5-ros` only, which is not those binaries. See the [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md).

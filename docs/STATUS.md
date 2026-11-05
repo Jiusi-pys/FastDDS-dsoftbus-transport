@@ -12,6 +12,7 @@ sync did not rerun them or qualify the current working tree for release.
 | 2.14.5 | BUILDS | HOST_TESTED: stock suite 67/67 PASS | DEVICE_TESTED: four full-suite runs, 70/70 each; one and two route outages PASS |
 | 3.6.2 | BUILDS | HOST_TESTED with gaps: root CONFIG 303/391 PASS; 87 link-blocked NOT_RUN; one missing-submodule failure passed separately after initialization | DEVICE_TESTED: four full-suite runs, 70/70 each; one and two route outages PASS |
 | 3.2.5 | BUILDS | NOT_RECORDED: no corresponding Host test result is recorded | DEVICE_TESTED: three full-suite runs, 70/70 each; one route outage PASS; two outages NOT_RUN |
+| 2.14.5-ros (one approved patch, not stock) | BUILDS | Host stock suite on the Stage 2 working tree 68/68 serial and `-j 4`; it does not run these OHOS binaries | DEVICE_TESTED: Stage 1 12 full-suite runs, 70/70 each; core route 8/8; bounded Stage 2 (below) |
 
 Each full suite has 35 cases per board: core 3, QoS 15, feature 14, Security 2 and
 Statistics 1. The Host 3.6.2 row is a partial result, not a whole-suite PASS; the
@@ -24,9 +25,19 @@ recorded 2.14.5 and 3.6.2 binaries were byte-identical before and after those ed
 See the [version matrix, build procedure and original results](FASTDDS_VERSIONS_AND_RELEASE.md)
 for the ROS distribution dependency mapping, exact configurations and evidence paths.
 
-**Stage 2 / ROS 2 on these stock builds: NOT_RUN.** Earlier ROS acceptance applies
-to its original package and does not qualify these binaries. Stage 1's bounded
+**Stage 2 / ROS 2 on stock 2.14.5, 3.6.2 and 3.2.5: NOT_RUN.** Earlier ROS acceptance
+applies to its original package and does not qualify these binaries. Stage 1's bounded
 DDS device closure does not grant production qualification or a global commit gate.
+
+**Stage 2 on `2.14.5-ros`: DEVICE_TESTED (bounded) / NOT_PRODUCTION_QUALIFIED.** This build
+is v2.14.5 plus one user-approved patch, so its results do not transfer to any stock line.
+Unmodified ROS 2 Jazzy nodes ran between both RK3588A boards with the Transport selected by
+a preload library: suite 5/5 at 20/20, smoke 2/2, components 3/3, 15 s route outage 2/2,
+peer process restart 2/2, negative 24/24 refused. A 70 s outage does not recover until the
+boards reboot. `ros2` CLI, daemon, rosbag, multi-process graphs, SROS2 and ROS on Fast DDS
+3.x are NOT_RUN. The CFT workaround cannot be applied on the ROS path, so ROS applications
+must not create ContentFilteredTopics while writers are active. See the
+[Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md).
 
 The CFT filter-factory race remains on Fast DDS 2.14.5 and 3.6.2. On 3.6.2 the
 recorded UDP/TCP/DSoftBus stress windows crashed 2/3, 1/3 and 3/3 respectively;

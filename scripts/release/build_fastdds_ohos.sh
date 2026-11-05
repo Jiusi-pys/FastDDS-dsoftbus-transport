@@ -1,8 +1,11 @@
 #!/bin/bash
-# Reproducible OpenHarmony (SDK 23, arm64-v8a, shared libc++) build of an unmodified Fast DDS
-# release plus every dependency, all fetched from pinned upstream tags/commits.
+# Reproducible OpenHarmony (SDK 23, arm64-v8a, shared libc++) build of a Fast DDS release plus
+# every dependency, all fetched from pinned upstream tags/commits. Releases are unmodified, except
+# the ROS 2 Jazzy variant 2.14.5-ros, which has exactly one change: the TopicDescription key
+# function (integrations/ros2/apply_topic_rtti_key.py). Unmodified rmw_fastrtps needs it on OHOS,
+# otherwise its dynamic_cast to Topic returns null and Participants cannot be deleted.
 #
-#   scripts/release/build_fastdds_ohos.sh <2.14.5|3.6.2|3.2.5> <work_dir>
+#   scripts/release/build_fastdds_ohos.sh <2.14.5|2.14.5-ros|3.6.2|3.2.5> <work_dir>
 #
 # Every Fast DDS feature that applies to the boards is enabled: SECURITY (OpenSSL 3.5.9),
 # FASTDDS_STATISTICS, TLS (NO_TLS=OFF), SQLITE3_SUPPORT and COMPILE_TOOLS.
@@ -12,21 +15,21 @@
 # Host: Windows + Git Bash with git, perl, GNU make (scoop install make), python.
 # Environment overrides: OHOS_NATIVE (SDK native dir), CMAKE, NINJA, JOBS.
 set -euo pipefail
-VER=${1:?usage: build_fastdds_ohos.sh <2.14.5|3.6.2> <work_dir>}
-WORK=${2:?usage: build_fastdds_ohos.sh <2.14.5|3.6.2> <work_dir>}
+VER=${1:?usage: build_fastdds_ohos.sh <2.14.5|2.14.5-ros|3.6.2|3.2.5> <work_dir>}
+WORK=${2:?usage: build_fastdds_ohos.sh <2.14.5|2.14.5-ros|3.6.2|3.2.5> <work_dir>}
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 OHOS_NATIVE=${OHOS_NATIVE:-C:/Users/$USERNAME/AppData/Local/OpenHarmony/Sdk/23/native}
 CMAKE=${CMAKE:-$OHOS_NATIVE/build-tools/cmake/bin/cmake.exe}
 NINJA=${NINJA:-$OHOS_NATIVE/build-tools/cmake/bin/ninja.exe}
 JOBS=${JOBS:-16}
 case "$VER" in
-  2.14.5) FASTDDS_REF=v2.14.5; FASTDDS_SHA=ebcb5c05e9da9e262041e8616bbaff61ab40a296
+  2.14.5|2.14.5-ros) FASTDDS_REF=v2.14.5; FASTDDS_SHA=ebcb5c05e9da9e262041e8616bbaff61ab40a296
           FASTCDR_REF=v2.2.5;  FASTCDR_SHA=9f4e60f7ac958e0fbbfe949102de3929cbbc226f ;;
   3.6.2)  FASTDDS_REF=v3.6.2;  FASTDDS_SHA=39303846fb8534ef69fa65f9fa4bcc9e6a7c995a
           FASTCDR_REF=v2.3.7;  FASTCDR_SHA=0801699ef5232ced3ddb2b713d6c04527bcb5a6c ;;
   3.2.5)  FASTDDS_REF=v3.2.5;  FASTDDS_SHA=a060352adec20671add3e6e488b6037bd9cea09f   # ROS 2 Kilted (EOL 2026-11)
           FASTCDR_REF=v2.3.7;  FASTCDR_SHA=0801699ef5232ced3ddb2b713d6c04527bcb5a6c ;;
-  *) echo "unsupported Fast DDS version $VER (2.14.5, 3.6.2 or 3.2.5)"; exit 2 ;;
+  *) echo "unsupported Fast DDS version $VER (2.14.5, 2.14.5-ros, 3.6.2 or 3.2.5)"; exit 2 ;;
 esac
 # Shared pins (identical for both versions; asio and tinyxml2 match the Fast DDS thirdparty pins).
 OPENSSL_REF=openssl-3.5.9
@@ -96,6 +99,16 @@ fi
 [ -f "$PREFIX/lib/libtinyxml2.so" ] || cm tinyxml2 "$SRC/tinyxml2" -DBUILD_TESTS=OFF -DBUILD_TESTING=OFF
 [ -f "$PREFIX/lib/libfastcdr.so" ] || cm fastcdr "$SRC/fastcdr-$FASTCDR_REF" -DBUILD_TESTING=OFF
 FD=$SRC/fastdds-$FASTDDS_REF
+if [ "$VER" = 2.14.5-ros ]; then
+  # The patch tool accepts only an isolated copy under the repository's build/ directory.
+  PATCHED=$REPO/build/stage2/fastdds-2.14.5-ros-src
+  if [ ! -f "$PATCHED/FDDST_TOPIC_RTTI_PATCH.json" ]; then
+    test ! -e "$PATCHED" || { echo "unfinished patched source: $PATCHED"; exit 3; }
+    mkdir -p "$PATCHED"; ( cd "$FD" && tar --exclude=.git -cf - . ) | ( cd "$PATCHED" && tar -xf - )
+    python "$REPO/integrations/ros2/apply_topic_rtti_key.py" --source "$(cygpath -m "$PATCHED")" >> "$OUT/BUILD_INFO.txt"
+  fi
+  FD=$PATCHED
+fi
 cm fastdds "$FD" -DSECURITY=ON -DFASTDDS_STATISTICS=ON -DNO_TLS=OFF -DSQLITE3_SUPPORT=ON \
   -DCOMPILE_TOOLS=ON -DCOMPILE_EXAMPLES=OFF -DBUILD_TESTING=OFF -DBUILD_DOCUMENTATION=OFF \
   -DTHIRDPARTY=OFF -DTHIRDPARTY_UPDATE=OFF -DTINYXML2_FROM_SOURCE=OFF \

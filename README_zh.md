@@ -107,7 +107,11 @@ ROS 2 发行版或部署配置都已通过验收。
   [CFT 结果与规避方式](docs/FASTDDS_VERSIONS_AND_RELEASE.md#64-content-filter-race-on-fast-dds-3x-re-evaluated-not-assumed)
   和 [2.14.5 调查记录](docs/FASTDDS_FULL_BUILD_AND_CFT_RACE_20261105.md)。
 - ROS 2 验收单独记录在 [ROS 2 能力矩阵](docs/ROS2_CAPABILITY_MATRIX.md)。
-  版本指南将当前 stock 各版本构建的 ROS 2 验证标为 `NOT_RUN`（Stage 2）。
+  Stage 2 仅在 `2.14.5-ros`（Fast DDS 2.14.5 加一项已批准的补丁）上为限定范围的
+  `DEVICE_TESTED`，且为 `NOT_PRODUCTION_QUALIFIED`，详见
+  [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)。stock 2.14.5、3.6.2、3.2.5
+  上仍为 `NOT_RUN`。规避方式无法通过 `rmw_fastrtps` 应用，因此 ROS 应用不得在
+  writer 活动期间创建 ContentFilteredTopic。
   较早的 ROS 测试不会自动使新构建的 Fast DDS 或传输层二进制通过验收。
 - 平台部署契约、生产资格和分发权利有各自要求，参见
   [生产支持契约](docs/PRODUCTION_SUPPORT_CONTRACT_V1.md)。

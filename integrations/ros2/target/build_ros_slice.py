@@ -18,7 +18,7 @@ PURE_TOOLS = {'rosidl_adapter', 'rosidl_cmake', 'rosidl_parser',
 
 def synchronize_vendor_libraries(name,folder,install):
     """Copy actual relinked outputs; CMake timestamp-only install can miss <1s edits."""
-    patterns={'libyaml_vendor':'libyaml.so*','spdlog_vendor':'libspdlog.so*'}
+    patterns={'libyaml_vendor':'libyaml.so*','spdlog_vendor':'libspdlog.so*','console_bridge_vendor':'lib/libconsole_bridge.so*'}
     if name not in patterns:raise ValueError('Unsupported vendor install verification')
     folder=Path(folder).resolve();install=Path(install).resolve()
     child=folder/(name+'-prefix/src/'+name+'-build')
@@ -72,6 +72,7 @@ def main():
     p.add_argument('--ninja', type=Path, help='Explicit installed Host generator; target compiler still belongs to SDK')
     p.add_argument('--package', action='append', required=True)
     p.add_argument('--rebuild-package', action='append', default=[], help='Reconfigure/rebuild this selected package after newly installed generators; no deletion')
+    p.add_argument('--exe-linker-flag', action='append', default=[], help='Extra link flag for executables; never a source change')
     p.add_argument('--resume', action='store_true', help='Append to this explicit local build output, never overwrite receipts')
     args = p.parse_args()
     for name in ('source', 'output', 'target_prefix', 'host_tools', 'sdk', 'cmake', 'python'):
@@ -156,7 +157,7 @@ def main():
                             if (prefix / leaf).is_dir()]
             search_flags = ' '.join('-L"' + path.as_posix() + '"' for path in library_dirs)
             argv.extend(['-DCMAKE_SHARED_LINKER_FLAGS=' + search_flags,
-                         '-DCMAKE_EXE_LINKER_FLAGS=' + search_flags])
+                         '-DCMAKE_EXE_LINKER_FLAGS=' + ' '.join([search_flags] + args.exe_linker_flag)])
             # The upstream legacy FindFastRTPS module uses find_path/library;
             # OHOS's root policy must not reinterpret declared target prefixes
             # as sysroot-relative paths. Bind existing target files explicitly.
@@ -200,7 +201,7 @@ def main():
         rc, _ = command(name + '-build', [args.cmake, '--build', folder, '--parallel', '4', '--verbose'])
         if rc:
             raise RuntimeError(name + ': actual build failure, not a device result')
-        if name in ('libyaml_vendor', 'spdlog_vendor'):
+        if name in ('libyaml_vendor', 'spdlog_vendor', 'console_bridge_vendor'):
             # Upstream ExternalProject does not inherit the parent's project
             # include. Apply the same ELF configuration to its actual existing
             # target cache; do not patch vendor or ROS source implementations.
@@ -225,7 +226,7 @@ def main():
         rc, _ = command(name + '-install', [args.cmake, '--install', folder])
         if rc:
             raise RuntimeError(name + ': install failed')
-        if name in ('libyaml_vendor','spdlog_vendor'):
+        if name in ('libyaml_vendor','spdlog_vendor','console_bridge_vendor'):
             rows=synchronize_vendor_libraries(name,folder,install)
             count=len(list(args.output.glob(name+'-install-sync-*.json')))+1
             (args.output/f'{name}-install-sync-{count}.json').write_text(json.dumps(rows,indent=2)+'\n')
