@@ -59,7 +59,7 @@ def artifacts(work):
     prefix, install = Path(work) / VERSION / 'prefix', Path(work) / VERSION / 'transport-install'
     ros = Path(work) / 'ros/install'
     libs = {}
-    for folder in [prefix / 'lib', install / 'lib', ros / 'lib', *sorted((ros / 'opt').glob('*/lib'))]:
+    for folder in [prefix / 'lib', install / 'lib', ros / 'lib', *sorted((ros / 'opt').glob('*/lib')), Path(work) / 'third-party/install/lib']:
         # Longest name first: the fully versioned file is the installed one, without the build RUNPATH.
         for f in sorted(folder.glob('*.so*'), reverse=True):
             if f.is_file() and not f.is_symlink():
@@ -99,13 +99,57 @@ def local_sha(path):
 def deploy(target, root, libs, bins, ros_install):
     sh(target, 'mkdir -p %s/lib %s/bin %s/work' % (root, root, root))
     remote = dict(reversed(l.split()) for l in sh(target, 'cd %s && sha256sum lib/* bin/* 2>/dev/null' % root, 300).splitlines() if len(l.split()) == 2)
-    sent = 0
+    sent = deploy_python_layer(target, root, ros_install)
     for folder, items in (('lib', libs), ('bin', bins)):
         for name, f in sorted(items.items()):
             if remote.get('%s/%s' % (folder, name)) != local_sha(f):
                 send(target, f, '%s/%s/%s' % (root, folder, name)); sent += 1
     sh(target, 'chmod 755 %s/bin/*' % root)
+    if (Path(ros_install) / 'lib/python3.12/site-packages/rclpy').exists():
+        return sent  # the layer carries share/, the index included
     return sent + deploy_index(target, root, ros_install)
+
+
+def deploy_python_layer(target, root, ros_install):
+    """The Python runtime and the installed ROS tree beside the libraries. Absent from a C++ only build."""
+    work = Path(ros_install).parents[1]
+    python = work / 'python-target'
+    if not (Path(ros_install) / 'lib/python3.12/site-packages/rclpy').exists():
+        return 0
+    # Rewritten on every deploy, in a fixed order with fixed metadata: equal content gives an equal digest, and a rebuilt
+    # package can never deploy beside older Python files.
+    layer = work / PYTHON_LAYER
+    partial = layer.with_suffix('.partial')
+    install = Path(ros_install)
+    members = [('bin/ros2', install / 'bin/ros2')]
+    for name, source in [('python/usr/bin', python / 'usr/bin'), ('python/usr/lib', python / 'usr/lib'), ('python/third_party', python / 'third_party'),
+                         ('lib/python3.12', install / 'lib/python3.12')]:
+        members += [('%s/%s' % (name, p.relative_to(source).as_posix()), p) for p in sorted(source.rglob('*')) if p.is_file() and '__pycache__' not in p.parts]
+    for folder in sorted((install / 'lib').iterdir()):
+        if folder.is_dir() and folder.name != 'python3.12' and not folder.name.startswith('cmake'):
+            members += [('lib/%s/%s' % (folder.name, p.relative_to(folder).as_posix()), p) for p in sorted(folder.rglob('*')) if p.is_file() and not p.name.endswith('.so')]
+    members += [('share/' + p.relative_to(install / 'share').as_posix(), p) for p in sorted((install / 'share').rglob('*'))
+                if p.is_file() and not p.name.endswith(('.cmake', '.in', '.pc')) and '/cmake/' not in p.as_posix()]
+    with tarfile.open(partial, 'w') as tar:
+        for name, path in members:
+            data = path.read_bytes()
+            if '/ament_index/' in name:
+                data = data.replace(b'\r\n', b'\n')  # a CR left in a library path breaks dlopen
+            info = tarfile.TarInfo(name)
+            info.size, info.mode = len(data), 0o755
+            tar.addfile(info, io.BytesIO(data))
+    partial.replace(layer)
+    digest = local_sha(layer)
+    # The marker is written after extraction, so a failed extraction is never taken for a deployed layer.
+    if sh(target, 'cat %s/python-layer.done 2>/dev/null' % root).strip() == digest:
+        return 0
+    send(target, layer, '%s/%s' % (root, PYTHON_LAYER))
+    # Files archived on Windows carry no execute bit, and ros2 run only offers executable files.
+    text = sh(target, 'cd %s && rm -f python-layer.done && rm -rf python share lib/python3.12 && tar xf %s && echo %s > python-layer.done && '
+                      'rm -f %s && echo LAYER_OK' % (root, PYTHON_LAYER, digest, PYTHON_LAYER), 600)
+    if 'LAYER_OK' not in text:
+        sys.exit('python layer did not extract on %s: %s' % (target, text[-200:]))
+    return 1
 
 
 def deploy_index(target, root, ros_install):
@@ -232,11 +276,11 @@ class Pair:
         for target in self.boards.values():
             sh(target, 'touch %s/go' % self.work)
 
-    def begin(self, runs, watched, outage=False):
+    def begin(self, runs, watched, may_drop=False):
         """Start the socket watcher before any traffic, so a short run still has samples, then open the gate.
-        outage says the run breaks the link on purpose, so the hub may drop frames during it."""
+        may_drop says the run breaks or overloads the link on purpose, so the hub may drop frames, as a network would."""
         counters = self.hubs.stats() if self.hubs else None
-        watch = SocketWatch(watched, self.hubs, counters, outage)
+        watch = SocketWatch(watched, self.hubs, counters, may_drop)
         if self.hubs:
             return watch
         wait_until(lambda: all(r.seen('FDDS_AUTOLOAD_READY') or r.p.poll() is not None for r in runs), 60)
@@ -293,9 +337,9 @@ def udp_socket_count(target, program):
 class SocketWatch:
     """Samples both boards until stopped, so a socket opened late in a run is seen too."""
 
-    def __init__(self, boards_programs, hubs=None, counters=None, outage=False):
+    def __init__(self, boards_programs, hubs=None, counters=None, may_drop=False):
         self.boards_programs, self.samples, self.stopping = boards_programs, {s: [] for s in boards_programs}, threading.Event()
-        self.hubs, self.counters, self.outage = hubs, counters, outage
+        self.hubs, self.counters, self.may_drop = hubs, counters, may_drop
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
 
@@ -316,7 +360,7 @@ class SocketWatch:
         self.stopping.set(); self.thread.join()
         sockets = {s: {'samples': len(v), 'max_udp': max(v, default=None)} for s, v in self.samples.items()}
         transport = self.hub_counts() if self.hubs else {s: transport_counts(run) for s, run in runs.items()}
-        clean = self.outage or all(v.get('lost', 0) == 0 for v in transport.values())
+        clean = self.may_drop or all(v.get('lost', 0) == 0 for v in transport.values())
         # A process can end before its first sample, so one sampled board is enough; the counters are required of both.
         ok = clean and (any(v['samples'] > 0 for v in sockets.values()) and all(v['max_udp'] in (0, None) for v in sockets.values()) and
               all(v['sdk_sends'] >= minimum_records and v['received_records'] >= minimum_records for v in transport.values()))
@@ -421,7 +465,9 @@ def mode_features(a, pair_factory):
         pair = pair_factory()
         limit = '' if a.hub else ' 25'  # the direct path's known limit for a second Participant: the 20 s lease
         runs = [pair.start('A', 'stage2_features 0 %s%s' % (group, limit)), pair.start('B', 'stage2_features 1 %s%s' % (group, limit))]
-        watch = pair.begin(runs, {s: (t, 'stage2_features') for s, t in pair.boards.items()})
+        # large writes two 16 MiB samples at once, more than the hub's 32 MiB link queue holds at link speed, so frames can
+        # drop and RELIABLE repairs them. The cases still require every sample intact, and the count is reported.
+        watch = pair.begin(runs, {s: (t, 'stage2_features') for s, t in pair.boards.items()}, may_drop=group == 'large')
         wait_runs(runs, a.timeout)
         result = check_pair(runs, ['A', 'B'])
         result.update(watch.verdict({'A': runs[0], 'B': runs[1]}, 10))
@@ -495,7 +541,7 @@ def mode_hub_restart(a, pair):
     """SIGKILL a board's hub under live traffic. Its worker restarts and the ROS processes reattach by themselves."""
     seconds = 60
     runs = [pair.start('A', 'stage2_node stream 0 %d' % seconds), pair.start('B', 'stage2_node stream 1 %d' % seconds)]
-    watch = pair.begin(runs, {s: (t, 'stage2_node') for s, t in pair.boards.items()}, outage=True)
+    watch = pair.begin(runs, {s: (t, 'stage2_node') for s, t in pair.boards.items()}, may_drop=True)
     matched = wait_until(lambda: all(r.seen('S2_STREAM_MATCHED') for r in runs), 120)
     time.sleep(8)
     victim = worker_pid(pair.boards['B'])
@@ -682,7 +728,7 @@ def mode_long_outage(a, pair):
     so the check is that traffic returns by itself once the route does, with no process restarted."""
     seconds = a.seconds or 45
     runs = [pair.start('A', 'talker'), pair.start('B', 'listener')]
-    watch = pair.begin(runs, {'A': (pair.boards['A'], 'talker'), 'B': (pair.boards['B'], 'listener')}, outage=True)
+    watch = pair.begin(runs, {'A': (pair.boards['A'], 'talker'), 'B': (pair.boards['B'], 'listener')}, may_drop=True)
     hearing = wait_until(lambda: heard(runs[1]) >= 5, 60)
     sh(pair.boards['B'], outage_rules(pair, True))
     time.sleep(seconds)
@@ -731,10 +777,9 @@ def mode_no_hub(a, pair):
     return result
 
 
-# The Python tree already deployed on the boards: rclpy 7.1.11 and ros2cli 0.32.11, one patch release behind the
-# revisions built here. Its native libraries come after ours, so rcl, rmw_fastrtps and Fast DDS are always ours.
-PYTHON_ROOT = '/data/local/tmp/python312-rk3588a/usr'
-ROS_PYTHON_TREE = '/data/local/tmp/ros2'
+# Below the board root: everything Python runs from there, built by build_ros2_ohos.py --python-target and
+# build_ros2_python.py. Nothing outside it is on any path, so a missing file fails rather than finding an older copy.
+PYTHON_LAYER = 'python-layer.tar'
 # (case, command, what its output must contain). Every command runs on B; the nodes it talks about run on A.
 CLI_CASES = [
     ('pkg_list', 'pkg list', 'rclcpp'),
@@ -765,6 +810,7 @@ CLI_CASES = [
     ('component_load', 'component load /ComponentManager composition composition::Listener', 'Loaded component'),
     ('component_list', 'component list /ComponentManager', '/listener'),
     ('doctor', 'doctor --report', 'middleware name'),
+    ('rclpy_client', 'run demo_nodes_py add_two_ints_client', 'Result of add_two_ints'),
     ('daemon_stop', 'daemon stop', 'daemon'),
 ]
 
@@ -778,8 +824,10 @@ LONG_CASES = [
     ('launch', 'launch {work}/s2.launch.py', 14, 'I heard', None),
     ('bag_record_sqlite3', 'bag record -o {work}/bag_sql -s sqlite3 /chatter', 10, 'Recording', None),
     ('bag_record_mcap', 'bag record -o {work}/bag_mcap -s mcap /chatter', 10, 'Recording', None),
+    ('bag_record_zstd', 'bag record -o {work}/bag_zstd -s sqlite3 --compression-mode file --compression-format zstd /chatter', 10, 'Recording', None),
 ]
-BAG_CASES = [('bag_info_sqlite3', 'bag info {work}/bag_sql', 'Messages:'), ('bag_info_mcap', 'bag info {work}/bag_mcap', 'Messages:')]
+BAG_CASES = [('bag_info_sqlite3', 'bag info {work}/bag_sql', 'Messages:'), ('bag_info_mcap', 'bag info {work}/bag_mcap', 'Messages:'),
+             ('bag_info_zstd', 'bag info {work}/bag_zstd', 'zstd')]
 BAG_PLAY = [('bag_play_sqlite3', 'bag play {work}/bag_sql --remap /chatter:=/s2bag'), ('bag_play_mcap', 'bag play {work}/bag_mcap --remap /chatter:=/s2bag')]
 LAUNCH_FILE = ("from launch import LaunchDescription\\nfrom launch_ros.actions import Node\\n"
                "def generate_launch_description():\\n    return LaunchDescription(["
@@ -787,31 +835,36 @@ LAUNCH_FILE = ("from launch import LaunchDescription\\nfrom launch_ros.actions i
                "Node(package='demo_nodes_py', executable='listener', name='launched_py_listener', output='screen')])\\n")
 
 
+ORIGIN_PROBE = ("import sys\\nimport rclpy, rclpy.node, yaml, numpy, rosbag2_py, launch, ros2cli.cli\\nrclpy.init()\\n"
+                "node = rclpy.create_node('s2_origin')\\nfiles = {l.split()[-1] for l in open('/proc/self/maps') if '/' in l and '.so' in l}\\n"
+                "files |= {getattr(m, '__file__', None) or '/system/builtin' for m in list(sys.modules.values())}\\n"
+                "files |= {sys.prefix + '/', sys.exec_prefix + '/'} | {p + '/' for p in sys.path if p}\\n"
+                "[print('S2_ORIGIN', p) for p in sorted(files)]\\nnode.destroy_node()\\nrclpy.shutdown()\\n")
+
+
 class PythonOnBoard:
-    """Launch lines for the Python tree, attached to the hub like any other ROS process."""
+    """Launch lines for the Python layer, attached to the hub like any other ROS process."""
 
     def __init__(self, pair, side):
         self.pair, self.side = pair, side
         root, hub = pair.root, pair.hubs
-        third_party = sh(pair.boards[side], 'ls -d /data/local/tmp/mdds_dds_*/package/python | tail -1').strip()
+        runtime = root + '/python/usr'
         self.env = ' '.join('%s=%s' % kv for kv in [
-            ('PATH', '%s/bin:/system/bin:/bin' % PYTHON_ROOT),  # rclpy entry scripts start through env python3.12
-            ('LD_LIBRARY_PATH', '%s/lib:%s/Lib:%s/lib:%s/lib' % (root, ROS_PYTHON_TREE, ROS_PYTHON_TREE, PYTHON_ROOT)),
-            ('PYTHONPATH', ROS_PYTHON_TREE + '/Lib/site-packages:' + third_party), ('PYTHONDONTWRITEBYTECODE', '1'), ('PYTHONUNBUFFERED', '1'),
-            ('AMENT_PREFIX_PATH', ROS_PYTHON_TREE), ('HOME', pair.work), ('ROS_HOME', pair.work), ('ROS_LOG_DIR', pair.work + '/log'),
+            ('PATH', '%s/bin:/system/bin:/bin' % runtime),  # rclpy entry scripts start through env python3.12
+            ('LD_LIBRARY_PATH', '%s/lib:%s/lib' % (root, runtime)),
+            ('PYTHONPATH', '%s/lib/python3.12/site-packages:%s/python/third_party' % (root, root)), ('PYTHONDONTWRITEBYTECODE', '1'), ('PYTHONUNBUFFERED', '1'),
+            ('AMENT_PREFIX_PATH', root), ('HOME', pair.work), ('ROS_HOME', pair.work), ('ROS_LOG_DIR', pair.work + '/log'),
             ('ROS_DISTRO', 'jazzy'), ('ROS_VERSION', '2'), ('ROS_PYTHON_VERSION', '3'), ('RMW_IMPLEMENTATION', 'rmw_fastrtps_cpp'),
             ('ROS_DOMAIN_ID', pair.a.domain), ('ROS_AUTOMATIC_DISCOVERY_RANGE', 'SYSTEM_DEFAULT'),
-            # python3.12 is a thin launcher: extension modules resolve the interpreter through a global libpython.
-            ('FASTDDS_DSOFTBUS_HUB', hub.socket), ('LD_PRELOAD', '%s/lib/libpython3.12.so.1.0:%s/lib/%s' % (PYTHON_ROOT, root, HUB_PRELOAD))])
-        self.python = '%s/bin/python3.12' % PYTHON_ROOT
+            # python3.12 is a thin launcher, and NumPy's prebuilt modules find the interpreter through this global copy.
+            ('FASTDDS_DSOFTBUS_HUB', hub.socket), ('LD_PRELOAD', '%s/lib/libpython3.12.so.1.0:%s/lib/%s' % (runtime, root, HUB_PRELOAD))])
+        self.python = '%s/bin/python3.12' % runtime
 
     def line(self, arguments):
-        launcher = "import os,sys; sys.setdlopenflags(sys.getdlopenflags() | os.RTLD_GLOBAL); sys.argv[0]='ros2'; from ros2cli.cli import main; sys.exit(main())"
-        return 'cd %s && %s %s -c "%s" %s; echo S2_EXIT=$?' % (self.pair.work, self.env, self.python, launcher, arguments)
+        return 'cd %s && %s %s/bin/ros2 %s; echo S2_EXIT=$?' % (self.pair.work, self.env, self.pair.root, arguments)
 
     def script(self, path, arguments=''):
-        launcher = "import os,runpy,sys; sys.setdlopenflags(sys.getdlopenflags() | os.RTLD_GLOBAL); sys.argv=sys.argv[1:]; runpy.run_path(sys.argv[0],run_name='__main__')"
-        return 'cd %s && %s %s -c "%s" %s %s; echo S2_EXIT=$?' % (self.pair.work, self.env, self.python, launcher, path, arguments)
+        return 'cd %s && %s %s %s %s; echo S2_EXIT=$?' % (self.pair.work, self.env, self.python, path, arguments)
 
     def start(self, arguments):
         return Run(self.pair.boards[self.side], self.line(arguments), self.pair.log)
@@ -839,6 +892,15 @@ def mode_cli(a, pair):
             'container': pair.start('A', 'component_container')}
     time.sleep(5)
     python = PythonOnBoard(pair, 'B')
+    # Where the code really loads from: every mapped library and every imported Python file of a process with the ROS stack
+    # loaded, and the interpreter's own prefix and path, so an older tree on the board cannot be in use unnoticed.
+    sh(pair.boards['B'], 'printf "%s" > %s/s2_origin.py' % (ORIGIN_PROBE, pair.work))
+    origin = Run(pair.boards['B'], python.script(pair.work + '/s2_origin.py'), pair.log)
+    wait_runs([origin], 30)
+    origins = [l.split()[1] for l in origin.lines if l.startswith('S2_ORIGIN')]
+    foreign = [p for p in origins if not p.startswith((pair.root + '/', pair.work, '/system/', '/vendor/', '/chip_prod/', '/lib/ld-musl'))]
+    rooted = len(origins) > 400 and not foreign and exit_code(origin) == 0  # the ROS stack is well over this many files
+    print('origin files', len(origins), 'outside the deployment', foreign[:8], 'rooted', rooted, flush=True)
     chosen = [c for c in CLI_CASES if a.groups == 'all' or c[0] in a.groups.split(',')]
     rows = []
     for name, command, expected in chosen:
@@ -884,14 +946,14 @@ def mode_cli(a, pair):
     for name in ('talker', 'add_two_ints_server', 'parameter_blackboard', 'listener', 'minimal_action_server', 'lifecycle_talker', 'component_container'):
         sh(pair.boards['A'], 'p=$(pidof %s); [ -z "$p" ] || kill -INT $p' % name)
     wait_runs(list(runs.values()), 30)
-    return {'rows': rows, 'topic_pub_delivered': delivered, 'exits': {n: exit_code(r) for n, r in runs.items()},
-            'ok': bool(rows) and all(r['ok'] for r in rows) and delivered}
+    return {'rows': rows, 'topic_pub_delivered': delivered, 'origin_files': len(origins), 'origin_foreign': foreign, 'exits': {n: exit_code(r) for n, r in runs.items()},
+            'ok': bool(rows) and all(r['ok'] for r in rows) and delivered and rooted}
 
 
 def mode_route(a, pair):
     seconds = 60
     runs = [pair.start('A', 'stage2_node stream 0 %d' % seconds), pair.start('B', 'stage2_node stream 1 %d' % seconds)]
-    watch = pair.begin(runs, {s: (t, 'stage2_node') for s, t in pair.boards.items()}, outage=True)
+    watch = pair.begin(runs, {s: (t, 'stage2_node') for s, t in pair.boards.items()}, may_drop=True)
     matched = wait_until(lambda: all(r.seen('S2_STREAM_MATCHED') for r in runs), 120)
     ips = ipv4(pair.boards['A'])
     add = '; '.join('iptables -I INPUT -s %s -j DROP; iptables -I OUTPUT -d %s -j DROP' % (p, p) for p in ips)
@@ -907,7 +969,8 @@ def mode_route(a, pair):
     # A stall shorter than the outage means the outage did not touch this data path.
     stalled = bool(a_numbers and b_numbers) and min(a_numbers['max_silence'], b_numbers['max_silence']) >= OUTAGE_SECONDS - 5
     result.update(delivered_all=delivered, stalled_by_outage=stalled)
-    result.update(watch.verdict({'A': runs[0], 'B': runs[1]}, min(a_numbers['received'], b_numbers['received']) if a_numbers and b_numbers else 1))
+    # Half, not all: repairs after the outage batch many samples into one record.
+    result.update(watch.verdict({'A': runs[0], 'B': runs[1]}, max(1, min(a_numbers['received'], b_numbers['received']) // 2) if a_numbers and b_numbers else 1))
     result['ok'] = result['ok'] and matched and delivered and stalled and result['path_ok']
     return result
 

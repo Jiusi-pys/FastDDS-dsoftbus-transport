@@ -14,7 +14,7 @@ service is NOT_RUN**, so this guide has no service definition.
 | Need | Path |
 | --- | --- |
 | One ROS process per board, one domain | Direct path or hub |
-| Several ROS processes on a board, `ros2` CLI, launch, rosbag2, SROS2 | Hub. These were tested on the hub only. |
+| Several ROS processes on a board, `ros2` CLI, rclpy, launch, rosbag2, SROS2 | Hub. These were tested on the hub only. |
 
 No RTPS, RMW or ROS source changes on either path. The hub path needs Fast DDS `2.14.5-ros` and works with exactly two boards.
 
@@ -27,15 +27,29 @@ On each board:
 
 ## 3. Build
 
-Build on the Windows host, as in the [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#4-build-and-run):
+Build on the Windows host. Host needs: Git Bash, the OHOS SDK, `ros2/src` with the pinned sources, the pixi Python
+(default `C:/pixi_ws/.pixi/envs/default/python.exe`) with setuptools, wheel, pip and pybind11 2.11.1, the host ROS tools
+(default `C:/pixi_ws/ros2-windows`), and network access, because third-party sources and rosbag2's `mcap_vendor` download.
 
 ```bash
-W=E:/s2   # any work directory
+W=E:/s2   # any empty work directory
+# Fast DDS, Transport and hub
 bash scripts/release/build_fastdds_ohos.sh 2.14.5-ros $W
 python scripts/release/pull_platform_libs.py <board A target> $W/platform
 bash scripts/release/build_transport_ohos.sh 2.14.5-ros $W $W/platform
-python scripts/release/build_ros2_ohos.py --work $W
+# ROS 2 with the Python layer
+python scripts/release/pull_python_target.py <board A target> $W
+python scripts/release/build_ros2_thirdparty.py --work $W
+python scripts/release/build_ros2_ohos.py --work $W --python-target $W/python-target
+python scripts/release/build_ros2_python.py --work $W
 ```
+
+The last four took 22, 41, 916 and 80 s from empty, on top of an existing Fast DDS and Transport build. Without the Python layer,
+skip them and run `build_ros2_ohos.py --work $W`.
+
+`pull_python_target.py` copies CPython and third-party modules from a board, so a clone needs a board with that Python, or an
+equivalent copy. It refuses a libpython or NumPy header that differs from the recorded digests. CPython is not built here.
+Two builds are not byte-identical (314 of 448 ELF files identical, the rest the same size), so verify what you ship.
 
 The hub is built only for `2.14.5-ros`. Outputs:
 
@@ -44,7 +58,9 @@ The hub is built only for `2.14.5-ros`. Outputs:
 | Hub and test tools | `$W/2.14.5-ros/transport-install/bin/` (`fdds_dsb_hub`, `dsb_suite`) |
 | Transport and preload libraries | `$W/2.14.5-ros/transport-install/lib/` |
 | Fast DDS closure | `$W/2.14.5-ros/prefix/lib/` |
-| ROS 2 | `$W/ros/install/` |
+| ROS 2 and its Python layer | `$W/ros/install/` |
+| Python runtime and third-party modules | `$W/python-target/` |
+| yaml-cpp, zstd, lz4, sqlite | `$W/third-party/install/` |
 
 Your ROS application must be built against this tree. Fast CDR symbols differ between patch releases, so a typesupport
 library built against another Fast CDR fails to load. `build_ros2_ohos.py` builds the common message packages for this reason.
@@ -55,7 +71,8 @@ library built against another Fast CDR fails to load. `build_ros2_ohos.py` build
 with `ohos.permission.DISTRIBUTED_DATASYNC` and the `softbus_trans_permission.json` entry for `com.kaihong.mdds.*`.
 See [section 5 of the version guide](FASTDDS_VERSIONS_AND_RELEASE.md#5-reproducing-from-a-clean-clone).
 
-The simple way to deploy is one hub test run. It copies whatever differs, by SHA-256, and proves the pair works:
+The simple way to deploy is one hub test run. It copies whatever differs, by SHA-256, and proves the pair works. The Python
+layer goes as one archive of about 209 MiB, and needs about that much free space again to unpack:
 
 ```bash
 python scripts/release/run_ros2_cross_board.py --work $W --a <A> --b <B> --hub --mode smoke
@@ -65,11 +82,16 @@ This fills `/data/local/tmp/fdds_dsb/2.14.5-ros/`:
 
 | Board path | Content |
 | --- | --- |
-| `lib/` | Every library from `prefix/lib`, `transport-install/lib`, `ros/install/lib`, `ros/install/opt/*/lib`, plus `libc++_shared.so` |
-| `bin/` | `fdds_dsb_hub`, `dsb_suite`, test programs, unmodified ROS programs |
-| `share/ament_index/` | The ament resource index, with CRLF stripped |
+| `lib/` | Every library from `prefix/lib`, `transport-install/lib`, `ros/install/lib`, `ros/install/opt/*/lib`, `third-party/install/lib`, plus `libc++_shared.so` |
+| `lib/<package>/` | Package executables and scripts, such as the entry points `ros2 run` finds |
+| `lib/python3.12/site-packages/` | The ROS Python packages and `sitecustomize.py` |
+| `bin/` | `fdds_dsb_hub`, `dsb_suite`, `ros2`, test programs, unmodified ROS programs |
+| `python/usr/` | The Python runtime |
+| `python/third_party/` | NumPy, PyYAML and the other third-party modules |
+| `share/` | Package resources and the ament index, with CRLF stripped |
 
-If you copy files by hand, strip CRLF from the ament index. A CR left in a resource file breaks `dlopen`.
+If you copy files by hand, strip CRLF from the ament index, because a CR left in a resource file breaks `dlopen`. Files archived
+on Windows have no execute bit, and `ros2 run` only offers executable files.
 
 The runner kills every `fdds_dsb_hub` on both boards when it starts and ends, so do not run it against a hub you are using.
 
@@ -113,7 +135,7 @@ token=<token>
 go_file=/dev/null
 ```
 
-This deployed form was tested with the hubs started 20 s apart, `go_file=/dev/null` and a placeholder `peer_network`: `--start-apart 20` gave `sigterm` 2/2 and `suite` 1/1 (`E:/s2/runs/deployed-*`). The other recorded runs used a real go file. Boards started at other intervals, and rebooted boards, are NOT_RUN.
+This deployed form was tested with the hubs started 20 s apart, `go_file=/dev/null` and a placeholder `peer_network`: `--start-apart 20` gave `sigterm` 2/2 and `suite` 1/1 (`E:/s2/runs/deployed-*`), and `suite` again on the from-empty build. The other recorded runs used a real go file. Boards started at other intervals, and rebooted boards, are NOT_RUN.
 
 The file holds the token, so restrict who can read it.
 
@@ -195,34 +217,48 @@ See [section 6.4 of the version guide](FASTDDS_VERSIONS_AND_RELEASE.md#64-conten
 
 ## 7. Python, `ros2` CLI, launch and rosbag2
 
-**This repository does not build the Python layer**, and a clone cannot reproduce it. The tests used the older tree already
-on the boards: rclpy 7.1.11, ros2cli 0.32.11, launch, rosbag2 and sros2 from `/data/local/tmp/ros2`, third-party modules
-from `/data/local/tmp/mdds_dds_*/package/python`, and Python at `/data/local/tmp/python312-rk3588a/usr`. It is one patch
-release behind the checkout. Treat it as a test convenience and not as a shipped component.
+This repository builds the ROS Python layer from pinned sources (section 3), and everything runs from the deployed root. Nothing
+outside it is on any path, so a missing file fails rather than finding an older copy. `--mode cli` passed 42 of 42 checks, twice,
+with 755 loaded files and none outside the deployment or system paths.
 
-On top of section 6:
+Python processes use section 6 with these differences, where `R` is the deployed root:
 
 | Variable | Value |
 | --- | --- |
-| `PATH` | `<python>/bin:/system/bin:/bin`. rclpy entry scripts start through `env python3.12`. |
-| `LD_LIBRARY_PATH` | `<root>/lib:<ros tree>/Lib:<ros tree>/lib:<python>/lib`, so our rcl, `rmw_fastrtps` and Fast DDS come first |
-| `PYTHONPATH` | `<ros tree>/Lib/site-packages:<third-party modules>` |
-| `AMENT_PREFIX_PATH` | `<ros tree>` |
+| `PATH` | `$R/python/usr/bin:/system/bin:/bin`. Entry scripts start through `/bin/env python3.12`. |
+| `LD_LIBRARY_PATH` | `$R/lib:$R/python/usr/lib`, in this order |
+| `PYTHONPATH` | `$R/lib/python3.12/site-packages:$R/python/third_party` |
+| `AMENT_PREFIX_PATH` | `$R` |
 | `ROS_DISTRO`, `ROS_VERSION`, `ROS_PYTHON_VERSION` | `jazzy`, `2`, `3` |
-| `LD_PRELOAD` | `<python>/lib/libpython3.12.so.1.0:<root>/lib/libfastdds_dsoftbus_ros2_hub.so` |
+| `LD_PRELOAD` | `$R/python/usr/lib/libpython3.12.so.1.0:$R/lib/libfastdds_dsoftbus_ros2_hub.so`, libpython first |
 
-`python3.12` here is a thin launcher, so extension modules need libpython global. Start `ros2` like this:
+`ros2` is an ordinary command:
 
 ```bash
-python3.12 -c "import os,sys; sys.setdlopenflags(sys.getdlopenflags() | os.RTLD_GLOBAL); sys.argv[0]='ros2'; from ros2cli.cli import main; sys.exit(main())" topic list
+R=/data/local/tmp/fdds_dsb/2.14.5-ros
+PATH=$R/python/usr/bin:/system/bin:/bin LD_LIBRARY_PATH=$R/lib:$R/python/usr/lib \
+  PYTHONPATH=$R/lib/python3.12/site-packages:$R/python/third_party AMENT_PREFIX_PATH=$R \
+  HOME=/data/local/tmp/app ROS_HOME=/data/local/tmp/app ROS_LOG_DIR=/data/local/tmp/app/log \
+  ROS_DISTRO=jazzy ROS_VERSION=2 ROS_PYTHON_VERSION=3 RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=151 \
+  ROS_AUTOMATIC_DISCOVERY_RANGE=SYSTEM_DEFAULT FASTDDS_DSOFTBUS_HUB=<socket path> \
+  LD_PRELOAD=$R/python/usr/lib/libpython3.12.so.1.0:$R/lib/libfastdds_dsoftbus_ros2_hub.so \
+  $R/bin/ros2 topic list
 ```
 
-`run_ros2_cross_board.py` class `PythonOnBoard` holds the exact lines. `--mode cli` passed 39 checks with these. `ros2 bag
-play` delivered 7 of 8 and 8 of 9 recorded messages, because the first goes before the player's publisher matches.
+The tests also set `PYTHONDONTWRITEBYTECODE=1` and `PYTHONUNBUFFERED=1`. `run_ros2_cross_board.py` class `PythonOnBoard` holds the exact lines.
+
+libpython stays in `LD_PRELOAD` because `python3.12` is a thin launcher and NumPy's prebuilt modules find the interpreter through a
+global libpython. C++ nodes need neither of these: installed C++ programs have no dependency on Python, so section 6 is enough for them.
+
+`ros2 bag` works with sqlite3, mcap and zstd file compression. A play can deliver 1 message fewer than recorded, because the first
+goes before the player's publisher matches.
+
+`ros2 security` does not work on the board, because `cryptography` and `lxml` are absent there. See section 8.
 
 ## 8. SROS2
 
-Create the keystore off the board, with `ROS_DOMAIN_ID` already set to the domain you will run:
+Create the keystore on the host, because `ros2 security` needs `cryptography` and `lxml`, which the target Python lacks. Set
+`ROS_DOMAIN_ID` to the domain you will run first:
 
 ```bash
 ROS_DOMAIN_ID=151 ros2 security create_keystore keystore
@@ -277,6 +313,11 @@ Counters restart with each worker, so compare two samples from one worker.
 | `malformed` | Frames with a bad header, or sent before attaching | 0. Otherwise something other than the preload is writing to the socket. |
 
 A drop behaves like a network drop: RTPS repairs reliable data, and best-effort data is gone. The 30-minute soak ended with all drops at 0.
+
+**Sustained or burst traffic above link throughput is dropped by the hub.** Link throughput for large samples was about 9 to 13
+MiB/s in these runs. In 3 of 5 runs, writing two 16 MiB samples at once overflowed the 32 MiB link queue and dropped 90 to 129
+frames on one side. RELIABLE repaired them and every sample arrived intact. BEST_EFFORT data would have been lost. So size traffic
+below link throughput, use RELIABLE for data that must arrive, and watch `dropped_out`.
 
 ### Log lines
 
@@ -346,14 +387,17 @@ Without it:
 - **Status:** bounded DEVICE_TESTED on `2.14.5-ros`, NOT_PRODUCTION_QUALIFIED. Stock 2.14.5, 3.6.2, 3.2.5 and Fast DDS 3.x are NOT_RUN for ROS.
 - **Two boards only.** The hub has one peer.
 - **Local access is the only protection on the socket.** Mode 0660, no other authentication. Any process with that access can inject frames. Use SROS2 where that matters.
+- **Traffic above link throughput is dropped** like on a network (section 9). Watch `dropped_out`.
 - **Every frame is copied through a local socket**, and same-board traffic crosses the hub too. Latency was not measured. Large-message rates in the [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#5-results) are small samples that vary between runs.
-- **The soak is 30 minutes:** 17980/17980 each way, hub memory growth 28 KB. Days are NOT_RUN.
+- **The soak is 30 minutes:** 17980/17981 each way, 0 gaps, hub memory growth 28 KB. Days are NOT_RUN.
 - **Scale tested:** 16 processes, 8 per board, at 1 Hz.
 - **Hub restart stalls traffic about 7 s.**
 - **Long outage** recovery needs the opt-in flag (section 5.4).
-- **Python layer** is not built here (section 7).
+- **CPython and third-party modules** are a declared input pulled from a board, not built here (section 3). `ros2 security` works only off-board.
+- **Direct-path second Participant** falls back to the 20 s lease, root cause not found. The hub is not affected.
+- **`--recover-bus-after` of 120 s or more** never grows the backoff (section 5.4).
 - **ContentFilteredTopics** must not be created while writers are active (section 6).
-- **NOT_RUN:** rviz and rqt GUIs, `ros2 trace`, bag compression, the hub as a system service.
+- **NOT_RUN:** rviz and rqt GUIs, `ros2 trace`, the hub as a system service.
 - **Not proven:** SDK drain, epoch and cancellation behaviour.
 - **Unique flows** set to STRICTLY_REQUIRED would fail. `No unicast locators to create unique flows` appears once per process and is expected.
 
@@ -369,7 +413,7 @@ None of the following is done. This list is the work the evidence does not cover
 - Run the hub as a system service with a defined identity, not root over `hdc`: start order, restart policy, log capture, permission to set the token.
 - Choose a path outside `/data/local/tmp` and define the socket's owner and group.
 - Decide how the token and config are provisioned and protected.
-- Build the Python layer from pinned sources if you ship it, or leave it out.
+- Decide how CPython and its third-party modules are supplied and maintained, since they are pulled from a board and not built here.
 
 **Endurance and failure**
 

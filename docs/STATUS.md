@@ -12,7 +12,7 @@ sync did not rerun them or qualify the current working tree for release.
 | 2.14.5 | BUILDS | HOST_TESTED: stock suite 67/67 PASS | DEVICE_TESTED: four full-suite runs, 70/70 each; one and two route outages PASS |
 | 3.6.2 | BUILDS | HOST_TESTED with gaps: root CONFIG 303/391 PASS; 87 link-blocked NOT_RUN; one missing-submodule failure passed separately after initialization | DEVICE_TESTED: four full-suite runs, 70/70 each; one and two route outages PASS |
 | 3.2.5 | BUILDS | NOT_RECORDED: no corresponding Host test result is recorded | DEVICE_TESTED: three full-suite runs, 70/70 each; one route outage PASS; two outages NOT_RUN |
-| 2.14.5-ros (one approved patch, not stock) | BUILDS | Host stock suite on the Stage 2 working tree 69/69 serial and `-j 4`; root facade 23 groups, 0 failures; these do not run the OHOS binaries | DEVICE_TESTED: Stage 1 3 full-suite runs on the current tree, 70/70 each; core route 8/8; bounded Stage 2 (below) |
+| 2.14.5-ros (one approved patch, not stock) | BUILDS | Host stock suite on the Stage 2 working tree 70/70 serial, `-j 4` not rerun; root facade 23 groups, 0 failures at `46e6615c`; these do not run the OHOS binaries | DEVICE_TESTED: Stage 1 3 full-suite runs, 70/70 each, core route 8/8, on Transport binaries that are still current; bounded Stage 2 (below) |
 
 Each full suite has 35 cases per board: core 3, QoS 15, feature 14, Security 2 and
 Statistics 1. The Host 3.6.2 row is a partial result, not a whole-suite PASS; the
@@ -33,21 +33,26 @@ DDS device closure does not grant production qualification or a global commit ga
 build is v2.14.5 plus one user-approved patch, so its results do not transfer to any stock line.
 Unmodified ROS 2 Jazzy nodes ran between both RK3588A boards on two paths, with no RTPS, RMW or ROS change:
 
-- **Direct path**, one process per board per config: suite 20/20 ×2, features 70/70 ×2, demos 8/8, 15 s route outage
-  600/600, restart, kill, SIGTERM, dispose 3/3, negative 26/26 refused. A second process on one config is now refused.
-- **Hub path**, `fdds_dsb_hub` per board with any number of processes: suite 20/20 ×2, features 72/72, demos 8/8, route
-  600/600 ×2, multi-process 3/3, hub worker SIGKILL 600/600 ×3 with a stall of about 7 s, SROS2 Enforce, 16 processes,
-  `ros2` CLI, launch and rosbag2 39 checks, soak 1800 s with 0 gaps.
+- **Direct path**, one process per board per config: all 12 modes pass, including suite 20/20, features 70/70, demos 8/8,
+  15 s route outage 600/600 and negative 26 rows refused. A second process on one config is refused.
+- **Hub path**, `fdds_dsb_hub` per board with any number of processes: suite 20/20, features 72/72 ×3, demos 8/8, route
+  600/600 ×3 plus one, multi-process 3/3, hub worker SIGKILL 600/600 ×2 with a stall of about 7 s, SROS2 Enforce,
+  16 processes, `ros2` CLI, rclpy, launch and rosbag2 42 checks ×2, soak 1800 s with 0 gaps.
 
-On the same tree the Stage 1 regression passed: `2.14.5-ros` 70/70 ×3 and core route 8/8; stock 2.14.5, 3.6.2 and 3.2.5
-70/70 once each.
+These ran on a ROS and Python tree built from empty (`E:/s2q`). **The ROS Python layer is now built by this repository from
+pinned sources** and replaces the older tree on the boards. CPython and third-party modules are a declared input pulled from
+a board, so a clone needs a board with that Python, or an equivalent copy. Numbers recorded at `46e6615c` used the older tree and
+stand as history.
+
+Stage 1 was not rerun, because the Transport, hub and preload binaries are unchanged. The results for those binaries stand:
+`2.14.5-ros` 70/70 ×3 and core route 8/8; stock 2.14.5, 3.6.2 and 3.2.5 70/70 once each.
 
 Long outages: 15 s recovers by itself. 45 s and 70 s take the boards off DSoftBus (`remote device num = 0`) until
 `softbus_server` restarts, which the opt-in `--recover-bus-after` does. A reboot is not required, as this file said earlier.
 
 Limits include: two boards only; a 30-minute soak; a direct-path second Participant that falls back to the 20 s lease
-with root cause not found; a Python layer this repository does not build; the hub as a system service, ROS on Fast DDS
-3.x and ROS on stock lines NOT_RUN. The CFT workaround cannot be applied on the ROS path, so ROS applications must not
+with root cause not found; hub drops when traffic exceeds link throughput, about 9 to 13 MiB/s for large samples; the hub as
+a system service, ROS on Fast DDS 3.x and ROS on stock lines NOT_RUN. The CFT workaround cannot be applied on the ROS path, so ROS applications must not
 create ContentFilteredTopics while writers are active. See the [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md) and the
 [hub deployment guide](ROS2_HUB_DEPLOYMENT.md), which lists what production qualification would need.
 

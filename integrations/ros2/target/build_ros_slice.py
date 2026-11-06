@@ -14,7 +14,8 @@ import xml.etree.ElementTree as ET
 
 
 PURE_TOOLS = {'rosidl_adapter', 'rosidl_cmake', 'rosidl_parser',
-              'rosidl_generator_c', 'rosidl_generator_cpp', 'fastrtps_cmake_module'}
+              'rosidl_generator_c', 'rosidl_generator_cpp', 'fastrtps_cmake_module',
+              'python_cmake_module', 'pybind11_vendor'}
 
 def synchronize_vendor_libraries(name,folder,install):
     """Copy actual relinked outputs; CMake timestamp-only install can miss <1s edits."""
@@ -73,6 +74,7 @@ def main():
     p.add_argument('--package', action='append', required=True)
     p.add_argument('--rebuild-package', action='append', default=[], help='Reconfigure/rebuild this selected package after newly installed generators; no deletion')
     p.add_argument('--exe-linker-flag', action='append', default=[], help='Extra link flag for executables; never a source change')
+    p.add_argument('--python-target', type=Path, help='python-target directory of pull_python_target.py: build Python bindings too')
     p.add_argument('--resume', action='store_true', help='Append to this explicit local build output, never overwrite receipts')
     args = p.parse_args()
     for name in ('source', 'output', 'target_prefix', 'host_tools', 'sdk', 'cmake', 'python'):
@@ -138,9 +140,23 @@ def main():
                     '-DBUILD_SHARED_LIBS=ON', '-DBUILD_TESTING=OFF', '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
                     '-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF', '-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF',
                     '-DCMAKE_INSTALL_PREFIX=' + str(install),
-                    '-DCMAKE_PROJECT_INCLUDE=' + str(repo / 'integrations/ros2/target/RosTargetBuildOptions.cmake'),
+                    '-DCMAKE_PROJECT_INCLUDE=' + str(repo / 'integrations/ros2/target' / ('python/Ros2PythonTarget.cmake' if args.python_target else 'RosTargetBuildOptions.cmake')),
                     '-DPython3_EXECUTABLE=' + str(args.python),
                     '-DCMAKE_PREFIX_PATH=' + ';'.join(str(x) for x in inputs)]
+            if args.python_target:
+                # Upstream's own find_package(Python3) calls land on this module: see its header.
+                argv.extend(['-DCMAKE_MODULE_PATH=' + (repo / 'integrations/ros2/target/python').as_posix(),
+                             '-DOHOS_DEPENDENCY_ROOTS=' + ';'.join(p.as_posix() for p in args.dependency_prefix),
+                             '-DOHOS_PYTHON_HOST=' + Path(args.python).as_posix(),
+                             # pybind11 asks the host interpreter unless these are set, and it clears them on the
+                             # first configure unless it believes this interpreter was already used.
+                             '-DPYTHON_MODULE_EXTENSION=.cpython-312-aarch64-linux-ohos.so', '-DPYTHON_IS_DEBUG=0',
+                             '-DPYBIND11_PYTHON_EXECUTABLE_LAST=' + Path(args.python).as_posix(),
+                             '-DOHOS_PYTHON_INCLUDE=' + (args.python_target / 'usr/include/python3.12').as_posix(),
+                             '-DOHOS_PYTHON_LIBRARY=' + (args.python_target / 'usr/lib/libpython3.12.so.1.0').as_posix(),
+                             '-DOHOS_NUMPY_INCLUDE=' + (args.python_target / 'third_party/numpy/core/include').as_posix(),
+                             # The package's own copy: the Library one shares an include directory with every Host library.
+                             '-Dpybind11_DIR=' + (Path(args.python).parent / 'Lib/site-packages/pybind11/share/cmake/pybind11').as_posix()])
             argv.extend('-D' + key + '_DIR:PATH=' + value.as_posix() for key, value in sorted(current.items()))
             for prefix in args.dependency_prefix:
                 if (prefix/'include/openssl/opensslv.h').is_file():
@@ -155,8 +171,15 @@ def main():
             # linker lookup, never the Host ROS/Python library directories.
             library_dirs = [prefix / leaf for prefix in inputs for leaf in ('lib', 'Lib')
                             if (prefix / leaf).is_dir()]
+            if args.python_target:
+                # rclpy links -latomic on Clang. OHOS has no such library: the compiler runtime provides atomics, so an
+                # empty archive answers the request and adds nothing to the module.
+                stubs = args.output / 'link-stubs'
+                stubs.mkdir(parents=True, exist_ok=True)
+                (stubs / 'libatomic.a').write_bytes(b'!<arch>'+bytes([10]))
+                library_dirs.append(stubs)
             search_flags = ' '.join('-L"' + path.as_posix() + '"' for path in library_dirs)
-            argv.extend(['-DCMAKE_SHARED_LINKER_FLAGS=' + search_flags,
+            argv.extend(['-DCMAKE_SHARED_LINKER_FLAGS=' + search_flags, '-DCMAKE_MODULE_LINKER_FLAGS=' + search_flags,
                          '-DCMAKE_EXE_LINKER_FLAGS=' + ' '.join([search_flags] + args.exe_linker_flag)])
             # The upstream legacy FindFastRTPS module uses find_path/library;
             # OHOS's root policy must not reinterpret declared target prefixes

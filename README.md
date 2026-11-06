@@ -129,7 +129,8 @@ or deployment configuration.
   Fast DDS 2.14.5 plus one approved patch; see the
   [Stage 2 record](docs/STAGE2_ROS2_DEVICE_20261105.md). The
   [hub deployment guide](docs/ROS2_HUB_DEPLOYMENT.md) covers several ROS processes per
-  board, its limits, and what production qualification would need. Stage 2 remains `NOT_RUN` on
+  board, the Python layer built from pinned sources, its limits, and what production
+  qualification would need. Stage 2 remains `NOT_RUN` on
   stock 2.14.5, 3.6.2 and 3.2.5. ROS applications must not create
   ContentFilteredTopics while writers are active, because the workaround cannot be
   applied through `rmw_fastrtps`. Earlier ROS runs do not qualify a newly built

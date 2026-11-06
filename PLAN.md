@@ -15,7 +15,8 @@
   节点已在两块 RK3588A 之间通过传输层运行，有两条路径：每板每配置一个进程的直连路径，
   以及每板一个 `fdds_dsb_hub`、可接入多个 ROS 进程的 hub 路径。范围和限制见
   [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)，部署方法和生产资格尚缺的工作见
-  [hub 部署指南](docs/ROS2_HUB_DEPLOYMENT.md)。45 s 和 70 s 断链后开发板会离开 DSoftBus 网络，
+  [hub 部署指南](docs/ROS2_HUB_DEPLOYMENT.md)。ROS Python 层现由本仓库从固定版本源码构建，
+  不修改 ROS 源码；CPython 和第三方模块是从开发板拉取的声明输入。45 s 和 70 s 断链后开发板会离开 DSoftBus 网络，
   需要重启 `softbus_server`（可选参数 `--recover-bus-after`），无需重启开发板。
   stock 2.14.5、3.6.2、3.2.5 上的 Stage 2 仍为 NOT_RUN。历史 ROS 2 结果保留其原二进制和配置范围，见
   [ROS 2 能力矩阵](docs/ROS2_CAPABILITY_MATRIX.md)。

@@ -111,7 +111,10 @@ Release tooling (`scripts/release/`):
 | `pull_platform_libs.py <target> <dir>` | Copies the board's `libsoftbus_client.z.so` closure. It is used only for link-time `rpath-link`; nothing on the board changes. |
 | `build_transport_ohos.sh <version> <work> <platform dir>` | Builds the Transport, `dsb_suite` and `cft_race`. On `2.14.5-ros` it also builds the ROS preload libraries and `fdds_dsb_hub`. |
 | `run_cross_board.py` | Deploys to `/data/local/tmp/fdds_dsb/<version>/` and runs one of: the suite (`--groups`), a route outage (`--route 1\|2`), the DSoftBus CFT stress (`--stress wsf1\|wsf0`), or the UDP/TCP race reproducer (`--cft-race udp\|tcp`). |
-| `build_ros2_ohos.py --work <work>` | Builds pinned, unmodified ROS 2 Jazzy for OHOS against `2.14.5-ros`. |
+| `pull_python_target.py <target> <work>` | Copies the Python runtime and third-party modules from a board. Refused unless libpython and the NumPy header match recorded digests. |
+| `build_ros2_thirdparty.py --work <work>` | Builds yaml-cpp, zstd, lz4 and sqlite for OHOS, pinned. |
+| `build_ros2_ohos.py --work <work> [--python-target <dir>]` | Builds pinned, unmodified ROS 2 Jazzy for OHOS against `2.14.5-ros`, with Python bindings when given the target. |
+| `build_ros2_python.py --work <work>` | Adds the pure Python packages from pinned sources. |
 | `run_ros2_cross_board.py --mode <mode> [--hub]` | Runs ROS 2 nodes between the boards, one process per board or through the per-board hub. The [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#4-build-and-run) lists the modes. |
 
 Device suite (`tests/device_suite/`):

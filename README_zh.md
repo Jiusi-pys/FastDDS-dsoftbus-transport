@@ -110,7 +110,7 @@ ROS 2 发行版或部署配置都已通过验收。
 - ROS 2 验收单独记录在 [ROS 2 能力矩阵](docs/ROS2_CAPABILITY_MATRIX.md)。
   Stage 2 仅在 `2.14.5-ros`（Fast DDS 2.14.5 加一项已批准的补丁）上为限定范围的
   `DEVICE_TESTED`，且为 `NOT_PRODUCTION_QUALIFIED`，详见
-  [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)。每板多个 ROS 进程的用法、限制
+  [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)。每板多个 ROS 进程的用法、由固定版本源码构建的 Python 层、限制
   和生产资格尚缺的工作见 [Hub 部署指南](docs/ROS2_HUB_DEPLOYMENT.md)（英文）。
   stock 2.14.5、3.6.2、3.2.5 上仍为 `NOT_RUN`。规避方式无法通过 `rmw_fastrtps` 应用，因此 ROS 应用不得在
   writer 活动期间创建 ContentFilteredTopic。
