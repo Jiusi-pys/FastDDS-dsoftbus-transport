@@ -115,7 +115,7 @@ Release tooling (`scripts/release/`):
 | `build_ros2_thirdparty.py --work <work>` | Builds yaml-cpp, zstd, lz4 and sqlite for OHOS, pinned. |
 | `build_ros2_ohos.py --work <work> [--python-target <dir>]` | Builds pinned, unmodified ROS 2 Jazzy for OHOS against `2.14.5-ros`, with Python bindings when given the target. |
 | `build_ros2_python.py --work <work>` | Adds the pure Python packages from pinned sources. |
-| `run_ros2_cross_board.py --mode <mode> [--hub]` | Runs ROS 2 nodes between the boards, one process per board or through the per-board hub. The [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#4-build-and-run) lists the modes. Since 2026-11-09 the deploy prunes files the current build does not produce, verifies what it sent and writes `manifest.sha256` on the board. |
+| `run_ros2_cross_board.py --mode <mode> [--hub]` | Runs ROS 2 nodes between the boards, one process per board or through the per-board hub. The [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#4-build-and-run) lists the modes. Since 2026-11-09 a deploy no longer writes into the running deployment: it stages a complete release under `<root>/releases/<id>/`, validates it by content, and activates it by moving the single symlink `<root>/current`. `--rollback` activates the previous release instead. A `--diagnostic-preload` library must live in `<root>/operator/`, outside any release. HOST_TESTED only; no staged deploy has run on a board ([section 11.5 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#115-staged-releases-with-atomic-activation-and-rollback-2026-11-09)). |
 
 Device suite (`tests/device_suite/`):
 

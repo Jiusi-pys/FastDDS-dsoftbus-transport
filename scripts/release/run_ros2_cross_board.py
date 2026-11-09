@@ -124,70 +124,357 @@ def remote_digests(target, root, paths=None):
     return digests
 
 
-def kept_paths(root, preload):
-    """Manifest-relative paths the prune must leave alone.
+# What a release owns under root. Each is a symlink to the same name inside `current`, and `current` is
+# the one link activation moves, so a deployment can never be left half switched over.
+RELEASE_LINKS = ('lib', 'bin', 'python', 'share', 'manifest.sha256')
+CURRENT = 'current'
+# Everything else directly under root belongs to someone else: work/ holds the mutable runtime data of every
+# run, and operator/ is where an operator keeps artifacts of their own, a --diagnostic-preload library among
+# them. A deploy creates those two if they are absent and does nothing else to either: it never validates
+# them, never removes them, and never writes into them.
 
-    The Python layer's own files, and anything the operator staged under root itself: a
-    --diagnostic-preload library lives on the board before the run and this build does not produce
-    it, so pruning it would leave every ROS process failing on a missing LD_PRELOAD file.
+
+def release_marker(kind, digest, count):
+    """The one line a release carries about whatever its manifest does not cover.
+
+    'layer <digest> <count>' for a build with the Python layer, 'index <digest> <count>' for a C++ only
+    one. It goes into the release id and is written inside the release, so the two can be compared, and
+    the count is what validate_release can check against the board over a tree it does not hash.
     """
-    kept, prefix = set(LAYER_OWNED_FILES), root.rstrip('/') + '/'
+    return '%s %s %d' % (kind, digest, count)
+
+
+def release_id(manifest, marker):
+    """The content address of a release.
+
+    Equal inputs give an equal id, so deploying the same build twice stages nothing, and a release can
+    be named by what it contains rather than by when it was made. The marker is included because the
+    Python layer and the ament index are most of a release by size and are not in the manifest.
+    """
+    import hashlib
+    body = ''.join('%s %s\n' % (p, d) for p, d in sorted(manifest.items()))
+    return hashlib.sha256((body + (marker or '-') + '\n').encode('utf-8')).hexdigest()[:16]
+
+
+def pending_activation(target, root):
+    """The release an interrupted activation was switching to, or '' when there is none.
+
+    main() refuses --no-deploy against a board carrying this: a deploy or a rollback finishes the
+    activation by performing one, and --no-deploy does neither.
+    """
+    return read_state(target, root, 'activating')
+
+
+def half_switched(target, root):
+    """What root/current serves when it disagrees with the release recorded as active, else ''.
+
+    pending_activation only covers a death inside activate_release. A deploy killed between moving the
+    old release aside and putting the new one in place leaves no marker at all and a current that
+    points at nothing, so --no-deploy checks this as well before running against the board.
+    """
+    active = read_state(target, root, 'active')
+    if not active:
+        return ''
+    serving = sh(target, 'readlink %s/%s' % (root, CURRENT), 60).strip()
+    if serving != 'releases/%s' % active:
+        return serving or 'nothing'
+    # The link can name the right release and still serve nothing: a deploy killed between moving the
+    # old release aside and putting the new one in place leaves the directory gone under this name, so
+    # reading the link text alone would report agreement. Its manifest is the cheapest proof it is there.
+    if not sh(target, 'cat %s/manifest.sha256 2>/dev/null' % release_dir(root, active), 120).strip():
+        return 'releases/%s, which is not there' % active
+    return ''
+
+
+def release_dir(root, release):
+    return '%s/releases/%s' % (root, release)
+
+
+def read_state(target, root, name):
+    """One line of recorded deployment state, or '' when it has never been written."""
+    return sh(target, 'cat %s/state/%s 2>/dev/null' % (root, name)).strip()
+
+
+# The trees a release's file count covers. Both sides of the comparison use this one rule: a host rule
+# that counted a different set from the board's would fail every release that carries a layer, which is
+# exactly what happened when one counted lib/<package>/ members and the other did not.
+COUNTED_TREES = ('python', 'share', 'lib')
+
+
+def counted_members(names):
+    """How many of these archive members land in a counted tree, by the rule the board applies.
+
+    Pass regular-file members only. The board counts with find -type f, so a caller that included the
+    directory entries its archive happens to carry would report a number no board can ever reach.
+    """
+    return len([n for n in names if n.split('/')[0] in COUNTED_TREES])
+
+
+def tree_file_count(target, folder):
+    """Files the release holds in the counted trees, as the board sees them.
+
+    This covers the Python layer and the ament index, which are most of a release by size and are not
+    in the manifest, and the manifest's own lib/ entries, which fall inside a counted tree too. It
+    counts rather than hashes: a tree cut short is caught, a file altered inside one is not.
+    """
+    text = sh(target, 'cd %s && find %s -type f 2>/dev/null | wc -l' % (folder, ' '.join(COUNTED_TREES)), 300)
+    digits = ''.join(c for c in text if c.isdigit())
+    return int(digits) if digits else None
+
+
+def validate_release(target, root, release):
+    """[] when the release on the board is exactly what its own name says it should hold.
+
+    The manifest and the marker travel with the release, so this can be asked of a release this run did
+    not build, which is what makes a rollback target checkable rather than assumed. Four things:
+
+      * every manifest path present in lib/ or bin/ with the right content;
+      * nothing else in lib/ or bin/, because a stale library there could satisfy a dependency this
+        build is missing;
+      * the file count outside lib/ and bin/, which is the only cheap check available over the Python
+        layer and the ament index: their contents are not hashed on the board, so a half-removed tree
+        is caught by counting but an altered file inside one is not;
+      * the directory name, which is the content address of the manifest plus the marker, so a release
+        whose manifest or marker has been replaced fails even if every file it does name is intact.
+    """
+    folder = release_dir(root, release)
+    manifest = {}
+    for line in sh(target, 'cat %s/manifest.sha256 2>/dev/null' % folder, 120).splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            manifest[parts[1]] = parts[0]
+    if not manifest:
+        return ['no manifest in %s' % folder]
+    digests = remote_digests(target, folder, sorted(manifest))
+    wrong = ['wrong:' + p for p in sorted(manifest) if digests.get(p) != manifest[p]]
+    # The Python layer's own files are not artifacts of the build and are not in the manifest.
+    extra = ['extra:' + p for p in sorted(set(remote_digests(target, folder)) - set(manifest) - set(LAYER_OWNED_FILES))]
+    marker = sh(target, 'cat %s/release.marker 2>/dev/null' % folder).strip()
+    short = []
+    parts = marker.split()
+    if len(parts) == 3 and parts[2].isdigit():
+        counted = tree_file_count(target, folder)
+        if counted != int(parts[2]):
+            short = ['release holds %s files, not %s' % (counted, parts[2])]
+    named = release.split('.')[0]  # the partial is validated under <id>.partial
+    mismatch = [] if named == release_id(manifest, marker) else ['id does not match its manifest and marker']
+    return wrong + extra + short + mismatch
+
+
+def retire_legacy_layout(target, root):
+    """Move a pre-staging deployment aside, immediately before a validated release replaces it.
+
+    Before staging, root/lib and the rest were real directories a deploy wrote into, and a symlink
+    cannot replace a real directory. This is deliberately the last thing done before activation: moving
+    them earlier would take the running deployment away while a release was still being prepared, which
+    is the failure this whole change exists to remove. Moved, never deleted.
+    """
+    real = []
+    for name in RELEASE_LINKS + (CURRENT,):
+        kind = sh(target, 'ls -ld %s/%s 2>/dev/null' % (root, name), 60).strip()[:1]
+        if kind and kind != 'l':  # l is the symlink a deploy wants here; d or - is the old layout
+            real.append(name)
+    if real:
+        where = '%s/legacy/%s' % (root, secrets.token_hex(4))
+        sh(target, 'mkdir -p %s' % where)
+        for name in real:
+            sh(target, 'mv %s/%s %s/%s' % (root, name, where, name), 600)
+        print('deploy', target[-6:], 'retired the pre-staging layout to', where, real, flush=True)
+    return real
+
+
+def activate_release(target, root, release, names):
+    """Switch the board onto a release by moving one symlink.
+
+    root/<name> points at current/<name> and never changes again; root/current is what moves. So an
+    activation cannot leave lib/ on one release and share/ on another, which would have a process load
+    new libraries against an old ament index. state/activating is written first and removed last, and
+    main() refuses to run against a board that still carries it.
+
+    Only names the release actually has are linked, so a C++ only build leaves no dangling root/python.
+    """
+    sh(target, 'mkdir -p %s/state' % root)
+    sh(target, 'echo %s > %s/state/activating' % (release, root))
+    for name in names:
+        sh(target, 'ln -sfn %s/%s %s/%s' % (CURRENT, name, root, name), 60)
+    # A name this release does not serve must not be left pointing into it from an earlier one.
+    for name in (n for n in RELEASE_LINKS if n not in names):
+        sh(target, 'rm -f %s/%s' % (root, name), 60)
+    sh(target, 'ln -sfn releases/%s %s/%s' % (release, root, CURRENT), 60)
+    # Every link is read back, not only the one that moved: sh() ignores exit codes, so an ln or an
+    # earlier mv that failed silently would leave a name on the old release and still be reported as a
+    # finished activation.
+    wrong = []
+    landed = sh(target, 'readlink %s/%s' % (root, CURRENT), 60).strip()
+    if landed != 'releases/%s' % release:
+        wrong.append('%s -> %s' % (CURRENT, landed or 'nothing'))
+    for name in names:
+        at = sh(target, 'readlink %s/%s' % (root, name), 60).strip()
+        if at != '%s/%s' % (CURRENT, name):
+            wrong.append('%s -> %s' % (name, at or 'nothing'))
+    if wrong:
+        sys.exit('activation did not take on %s: %s' % (target, wrong))
+    sh(target, 'echo %s > %s/state/active && rm -f %s/state/activating' % (release, root, root))
+    return release
+
+
+def release_names(target, root, release):
+    """The release link names this release can actually serve."""
+    present = set(sh(target, 'ls %s 2>/dev/null' % release_dir(root, release), 120).split())
+    return [name for name in RELEASE_LINKS if name in present]
+
+
+def prune_releases(target, root, keep):
+    """Remove release directories that are neither active nor the rollback target.
+
+    This is the only removal a deploy performs, and it never touches either of those two.
+    """
+    present = [n for n in sh(target, 'ls %s/releases 2>/dev/null' % root, 120).split() if n]
+    old = [n for n in present if n not in keep]
+    for name in old:
+        sh(target, 'rm -rf %s' % release_dir(root, name), 300)
+    return old
+
+
+def deploy(target, root, libs, bins, ros_install, preload='', rollback=False):
+    """Stage a complete release, validate it, and activate it only then.
+
+    The running deployment is never written to or removed. The new release is built in a directory of
+    its own, verified against its manifest and marker by content, and only then is the board switched
+    onto it by moving a single symlink. A failure at any earlier point leaves the running deployment
+    exactly as it was, and the release it was running stays on the board as a rollback target.
+    """
+    sh(target, 'mkdir -p %s/releases %s/state %s/work %s/operator' % (root, root, root, root))
+    # An operator library inside a release-managed path would be replaced by a symlink and then be
+    # absent from the staged release, so it has to live outside one. Said plainly rather than ignored.
     for one in (p for p in preload.split(':') if p):
-        if one.startswith(prefix):
-            kept.add(one[len(prefix):])
-    return kept
+        if any(one.startswith('%s/%s/' % (root, name)) for name in RELEASE_LINKS + (CURRENT, 'releases')):
+            sys.exit('--diagnostic-preload %s is inside a release directory, which a deploy replaces; '
+                     'keep it in %s/operator/ instead' % (one, root))
+    active = read_state(target, root, 'active')
 
+    if rollback:
+        previous = read_state(target, root, 'previous')
+        # Checked before anything on the board is touched: a rollback that cannot be served must leave
+        # the running deployment alone, including the pre-staging layout it may still be using.
+        if not previous:
+            sys.exit('no previous release recorded on %s, so there is nothing to roll back to' % target)
+        broken = validate_release(target, root, previous)
+        if broken:
+            sys.exit('the previous release %s on %s does not match its manifest: %s' % (previous, target, broken[:8]))
+        retire_legacy_layout(target, root)
+        activate_release(target, root, previous, release_names(target, root, previous))
+        sh(target, 'echo %s > %s/state/previous' % (active, root))
+        print('deploy', target[-6:], 'rolled back to', previous, flush=True)
+        return 0
 
-def deploy(target, root, libs, bins, ros_install, preload=''):
-    sh(target, 'mkdir -p %s/lib %s/bin %s/work' % (root, root, root))
-    remote = remote_digests(target, root)
-    keep = kept_paths(root, preload)
-    sent = deploy_python_layer(target, root, ros_install)
-    manifest, changed = {}, []
+    manifest = {}
     for folder, items in (('lib', libs), ('bin', bins)):
         for name, f in sorted(items.items()):
-            path = '%s/%s' % (folder, name)
-            manifest[path] = local_sha(f)
-            if remote.get(path) != manifest[path]:
-                send(target, f, '%s/%s' % (root, path)); sent += 1
-                changed.append(path)
-    # A file this build does not produce must not survive on the board. On a board deployed to before, a
-    # left-over library can satisfy a dependency the current build is missing, so the same artifacts pass
-    # here and fail on a clean board. lib/ and bin/ are the only directories that need this: the Python
-    # layer and the ament index are each re-extracted into a directory that is emptied first.
-    stale = sorted(set(remote) - set(manifest) - keep)
-    for start in range(0, len(stale), BATCH_FILES):
-        sh(target, 'cd %s && rm -f %s' % (root, ' '.join("'%s'" % p for p in stale[start:start + BATCH_FILES])), 300)
-    # What actually landed, by content, for the files this deploy sent. The others were hashed on the
-    # board a moment ago and already matched; between then and here, the only things that write into
-    # lib/ or bin/ are the Python layer, whose files are in keep, and the prune just above.
-    after = remote_digests(target, root, changed)
-    wrong = sorted(p for p in changed if after.get(p) != manifest[p])
-    if wrong:
-        sys.exit('deploy did not match its manifest on %s: %s' % (target, wrong[:8]))
-    # A digest comes back for a pruned path only if the file is still there. Nothing outside this list
-    # can be left over, because remote above listed every file the board had.
-    left = sorted(remote_digests(target, root, stale))
-    if left:
-        sys.exit('stale files remain on %s after the prune: %s' % (target, left[:8]))
-    # Beside the artifacts, so the evidence names exactly the set that ran.
-    with tempfile.TemporaryDirectory() as folder:
-        listing = Path(folder) / 'manifest.sha256'
-        listing.write_text(''.join('%s  %s\n' % (d, p) for p, d in sorted(manifest.items())), encoding='utf-8', newline='\n')
-        send(target, listing, root + '/manifest.sha256')
-    print('deploy', target[-6:], 'manifest', len(manifest), 'pruned', len(stale), stale[:6], flush=True)
-    sh(target, 'chmod 755 %s/bin/*' % root)
-    if (Path(ros_install) / 'lib/python3.12/site-packages/rclpy').exists():
-        return sent  # the layer carries share/, the index included
-    return sent + deploy_index(target, root, ros_install)
+            manifest['%s/%s' % (folder, name)] = local_sha(f)
+    layer, layer_digest, counted = build_python_layer(ros_install)
+    index = index_digest = None
+    if layer is None:
+        index, index_digest, counted = build_index(ros_install)
+    # The manifest's own lib/ entries sit inside a counted tree, so they belong in the count as well.
+    counted += sum(1 for path in manifest if path.startswith('lib/'))
+    marker = release_marker('layer' if layer is not None else 'index',
+                            layer_digest if layer is not None else index_digest, counted)
+    release = release_id(manifest, marker)
+    staged = release_dir(root, release)
+    sent = 0
+
+    if validate_release(target, root, release):
+        # Not there, or there and not sound. Either way it is built again from scratch, in a partial
+        # directory: a half-built release must never be mistaken for a complete one.
+        partial = staged + '.partial'
+        sh(target, 'rm -rf %s && mkdir -p %s/lib %s/bin' % (partial, partial, partial), 300)
+        # Files the active release already holds with the right content are hard-linked rather than
+        # uploaded again. Whatever that does not produce is uploaded, so a board with no usable active
+        # release, or one where ln is unavailable, simply receives everything.
+        if active:
+            have = remote_digests(target, release_dir(root, active), sorted(manifest))
+            same = [p for p in sorted(manifest) if have.get(p) == manifest[p]]
+            for start in range(0, len(same), BATCH_FILES):
+                batch = same[start:start + BATCH_FILES]
+                sh(target, 'cd %s && for p in %s; do ln ../%s/$p $p 2>/dev/null || true; done'
+                   % (partial, ' '.join("'%s'" % p for p in batch), active), 300)
+        there = remote_digests(target, partial)
+        for path in sorted(manifest):
+            if there.get(path) != manifest[path]:
+                send(target, (libs if path.startswith('lib/') else bins)[path.split('/', 1)[1]],
+                     '%s/%s' % (partial, path)); sent += 1
+        if layer is not None:
+            sent += extract_python_layer(target, partial, layer)
+        else:
+            sent += extract_index(target, partial, index)
+        with tempfile.TemporaryDirectory() as folder:
+            listing = Path(folder) / 'manifest.sha256'
+            listing.write_text(''.join('%s  %s\n' % (d, p) for p, d in sorted(manifest.items())),
+                               encoding='utf-8', newline='\n')
+            send(target, listing, partial + '/manifest.sha256')
+            note = Path(folder) / 'release.marker'
+            note.write_text(marker + '\n', encoding='utf-8', newline='\n')
+            send(target, note, partial + '/release.marker')
+        sh(target, 'chmod 755 %s/bin/*' % partial)
+        # Validated as a partial, so a release directory never exists in a state that failed its own
+        # check. Only then does it take the name, and whatever was there under that name goes first:
+        # mv onto an existing directory would move the partial inside it and wedge every later run.
+        broken = validate_release(target, root, release + '.partial')
+        if broken:
+            sh(target, 'rm -rf %s' % partial, 300)
+            sys.exit('the staged release for %s did not match its manifest: %s' % (target, broken[:8]))
+        # Whatever holds this name goes aside, not away: when the release being restaged is the running
+        # one, removing it would leave root/current pointing at nothing, with no rollback target
+        # recorded. It is deleted below, once a validated release has been activated.
+        stale = '%s.stale-%s' % (staged, secrets.token_hex(3))
+        sh(target, 'mv %s %s' % (staged, stale), 300)
+        sh(target, 'mv %s %s' % (partial, staged), 300)
+        still = validate_release(target, root, release)
+        if still:
+            # Put the old one back, so a board that was running this release still can, and take the
+            # partial away: a complete one left lying about is indistinguishable from a staging in flight.
+            sh(target, 'mv %s %s' % (staged, partial), 300)
+            sh(target, 'mv %s %s' % (stale, staged), 300)
+            sh(target, 'rm -rf %s' % partial, 300)
+            # sh() ignores exit codes, so the undo is confirmed rather than assumed. What the operator
+            # needs from this message is whether the board can still run what it was running.
+            half = half_switched(target, root)
+            sys.exit('the release %s on %s did not survive being put in place: %s; the board %s'
+                     % (release, target, still[:8],
+                        'still serves the release it was running' if not half else 'now serves %s' % half))
+
+    # Last, because it takes the running deployment away: by here a validated release is ready to serve.
+    retire_legacy_layout(target, root)
+    activate_release(target, root, release, release_names(target, root, release))
+    for name in sh(target, 'ls %s/releases 2>/dev/null' % root, 120).split():
+        if name.startswith(release + '.stale-'):
+            sh(target, 'rm -rf %s' % release_dir(root, name), 300)
+    previous = ''
+    if active and active != release:
+        # After activation, not before: a deploy that died during the swap would otherwise have left
+        # previous naming the release that is still running, making a later rollback a silent no-op.
+        sh(target, 'echo %s > %s/state/previous' % (active, root))
+        previous = active
+    else:
+        previous = read_state(target, root, 'previous')
+    dropped = prune_releases(target, root, {release, previous} - {''})
+    print('deploy', target[-6:], 'release', release, 'manifest', len(manifest), 'sent', sent,
+          'previous', previous or '-', 'dropped', dropped, flush=True)
+    return sent
 
 
-def deploy_python_layer(target, root, ros_install):
-    """The Python runtime and the installed ROS tree beside the libraries. Absent from a C++ only build."""
+def build_python_layer(ros_install):
+    """(archive, digest, file count) for the Python layer, or (None, None, None) for a C++ only build.
+
+    Built on the host and digested before anything is staged, so the digest can go into the release
+    id: a rebuilt Python layer is a different release and can never be activated beside older files.
+    The count is what validate_release can check on the board over a tree it does not hash.
+    """
     work = Path(ros_install).parents[1]
     python = work / 'python-target'
     if not (Path(ros_install) / 'lib/python3.12/site-packages/rclpy').exists():
-        return 0
+        return None, None, None
     # Rewritten on every deploy, in a fixed order with fixed metadata: equal content gives an equal digest, and a rebuilt
     # package can never deploy beside older Python files.
     layer = work / PYTHON_LAYER
@@ -215,40 +502,57 @@ def deploy_python_layer(target, root, ros_install):
         sys.exit('the Python layer writes %s directly into lib/ or bin/: add it to LAYER_OWNED_FILES, '
                  'or deploy() will prune it as stale' % sorted(direct - LAYER_OWNED_FILES))
     partial.replace(layer)
-    digest = local_sha(layer)
-    # The marker is written after extraction, so a failed extraction is never taken for a deployed layer.
-    if sh(target, 'cat %s/python-layer.done 2>/dev/null' % root).strip() == digest:
-        return 0
-    send(target, layer, '%s/%s' % (root, PYTHON_LAYER))
+    return layer, local_sha(layer), counted_members([name for name, _ in members])
+
+
+def extract_python_layer(target, folder, layer):
+    """Extract the layer into a staging directory.
+
+    No removal: the directory is new and empty, so there is nothing of a running deployment here to
+    delete. A failed or truncated extraction prints no LAYER_OK and stops the deploy, and the file
+    count in release.marker catches a tree that was later cut short.
+    """
+    send(target, layer, '%s/%s' % (folder, PYTHON_LAYER))
     # Files archived on Windows carry no execute bit, and ros2 run only offers executable files.
-    text = sh(target, 'cd %s && rm -f python-layer.done && rm -rf python share lib/python3.12 && tar xf %s && echo %s > python-layer.done && '
-                      'rm -f %s && echo LAYER_OK' % (root, PYTHON_LAYER, digest, PYTHON_LAYER), 600)
+    text = sh(target, 'cd %s && tar xf %s && rm -f %s && echo LAYER_OK' % (folder, PYTHON_LAYER, PYTHON_LAYER), 600)
     if 'LAYER_OK' not in text:
         sys.exit('python layer did not extract on %s: %s' % (target, text[-200:]))
     return 1
 
 
-def deploy_index(target, root, ros_install):
-    """The ament resource index: generic pub/sub and class_loader look packages up through it."""
+def build_index(ros_install):
+    """(archive, digest) for the ament resource index, built on the host.
+
+    Generic pub/sub and class_loader look packages up through it. It is digested here rather than on
+    the board so it can enter the release id: on a C++ only build it is the only thing a release holds
+    outside the manifest, and a changed index with unchanged libraries has to be its own release.
+    """
     index = Path(ros_install) / 'share/ament_index'
-    with tempfile.TemporaryDirectory() as folder:
-        archive = Path(folder) / 'ament_index.tar'
-        with tarfile.open(archive, 'w') as tar:
-            for path in sorted(index.rglob('*')):
-                info = tar.gettarinfo(path, arcname='share/ament_index/' + path.relative_to(index).as_posix())
-                info.mtime, info.uid, info.gid, info.uname, info.gname = 0, 0, 0, '', ''
-                info.mode = 0o755 if path.is_dir() else 0o644
-                if path.is_dir():
-                    tar.addfile(info)
-                else:
-                    # Written on the Windows build host. A CR left in rclcpp_components' library path breaks dlopen.
-                    data = path.read_bytes().replace(b'\r\n', b'\n')
-                    info.size = len(data)
-                    tar.addfile(info, io.BytesIO(data))
-        if sh(target, 'sha256sum %s/ament_index.tar 2>/dev/null' % root).split()[:1] == [local_sha(archive)]:
-            return 0
-        send(target, archive, root + '/ament_index.tar')
-    sh(target, 'cd %s && rm -rf share/ament_index && tar xf ament_index.tar' % root, 120)
+    archive = Path(ros_install).parents[1] / 'ament_index.tar'  # beside the other build inputs, not a temp dir
+    with tarfile.open(archive, 'w') as tar:
+        for path in sorted(index.rglob('*')):
+            info = tar.gettarinfo(path, arcname='share/ament_index/' + path.relative_to(index).as_posix())
+            info.mtime, info.uid, info.gid, info.uname, info.gname = 0, 0, 0, '', ''
+            info.mode = 0o755 if path.is_dir() else 0o644
+            if path.is_dir():
+                tar.addfile(info)
+            else:
+                # Written on the Windows build host. A CR left in rclcpp_components' library path breaks dlopen.
+                data = path.read_bytes().replace(bytes([13, 10]), bytes([10]))
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+    with tarfile.open(archive) as tar:
+        # Files only: this archive carries directory entries as well, and find -type f does not see them.
+        counted = counted_members([m.name for m in tar.getmembers() if m.isfile()])
+    return archive, local_sha(archive), counted
+
+
+def extract_index(target, folder, archive):
+    """Extract the index into a staging directory. No removal: the directory is new and empty."""
+    send(target, archive, '%s/ament_index.tar' % folder)
+    text = sh(target, 'cd %s && tar xf ament_index.tar && rm -f ament_index.tar && echo INDEX_OK' % folder, 120)
+    if 'INDEX_OK' not in text:
+        sys.exit('ament index did not extract on %s: %s' % (target, text[-200:]))
     return 1
 
 
@@ -1231,6 +1535,26 @@ def stop_python(target, grace=2):
     sh(target, 'p=$(pidof python3.12 listener talker); [ -z "$p" ] || kill -9 $p')
 
 
+def loaded_from_release(root, active, work):
+    """Prefixes a loaded file may legitimately have, for mode_cli's origin check.
+
+    Two shapes are allowed for the deployment, because the two ways a path reaches the probe differ:
+    /proc/self/maps reports a mapped library by its resolved path, which is inside the active release
+    directory, while Python reports a file it imported by the path it used, which goes through the
+    release links. Everything else under the root is refused on purpose. Before staging, root/lib was
+    the only library directory under the root, so "inside the root" meant "the deployment under test";
+    it no longer does, because the rollback target and any retired pre-staging layout are kept there
+    too, and loading from either would mean the process is not running the release being tested.
+
+    With no recorded active release only the links are allowed, so a board deployed by the older
+    in-place code still reads as rooted while a release directory on it does not.
+    """
+    allowed = tuple('%s/%s/' % (root, name) for name in RELEASE_LINKS)
+    if active:
+        allowed += ('%s/releases/%s/' % (root, active),)
+    return allowed + (work, '/system/', '/vendor/', '/chip_prod/', '/lib/ld-musl')
+
+
 def mode_cli(a, pair):
     runs = {'talker': pair.start('A', 'talker'), 'server': pair.start('A', 'add_two_ints_server'), 'params': pair.start('A', 'parameter_blackboard'),
             'cli_listener': pair.start('A', 'listener --ros-args -r chatter:=/s2cli -r __node:=cli_listener'),
@@ -1248,7 +1572,8 @@ def mode_cli(a, pair):
     origin = Run(pair.boards['B'], python.script(pair.work + '/s2_origin.py'), pair.log)
     wait_runs([origin], 30)
     origins = [l.split()[1] for l in origin.lines if l.startswith('S2_ORIGIN')]
-    foreign = [p for p in origins if not p.startswith((pair.root + '/', pair.work, '/system/', '/vendor/', '/chip_prod/', '/lib/ld-musl'))]
+    allowed = loaded_from_release(pair.root, read_state(pair.boards['B'], pair.root, 'active'), pair.work)
+    foreign = [p for p in origins if not p.startswith(allowed)]
     rooted = len(origins) > 400 and not foreign and exit_code(origin) == 0  # the ROS stack is well over this many files
     print('origin files', len(origins), 'outside the deployment', foreign[:8], 'rooted', rooted, flush=True)
     chosen = [c for c in CLI_CASES if a.groups == 'all' or c[0] in a.groups.split(',')]
@@ -1458,10 +1783,13 @@ def main():
     ap.add_argument('--token-process', default='mdds_actionbag_2e107f51cd7b40218b01437d1e5c4e16')
     ap.add_argument('--diagnostic-preload', default='', help='board path of an extra library loaded before the autoload library')
     ap.add_argument('--no-deploy', action='store_true'); ap.add_argument('--out'); ap.add_argument('--hub', action='store_true')
+    ap.add_argument('--rollback', action='store_true', help='activate the previous release on both boards and run against it')
     ap.add_argument('--seconds', type=int, default=0, help='length of scale, soak or long_outage')
     ap.add_argument('--start-apart', type=int, default=0, help='start the hubs this many seconds apart, with a deployed config: no go file, peer found by UDID')
     ap.add_argument('--recover-bus-after', type=int, default=0, help='passed to the hub: restart softbus_server after this long without the peer')
     a = ap.parse_args()
+    if a.rollback and a.no_deploy:
+        sys.exit('--rollback activates the previous release, which --no-deploy skips: pass one, not both')
     known = {'features': FEATURE_CASES, 'demos': [d[0] for d in DEMOS], 'cli': [c[0] for c in CLI_CASES] + [c[0] for c in LONG_CASES]}.get(a.mode, GROUP_CASES)
     if a.groups != 'all' and not set(a.groups.split(',')) <= set(known):
         sys.exit('unknown group in %s (known: %s)' % (a.groups, ', '.join(known)))
@@ -1470,9 +1798,22 @@ def main():
     root = '%s/%s' % (a.board_root, VERSION)
     boards = {'A': a.a, 'B': a.b}
     libs, a.bins = artifacts(a.work)
-    if not a.no_deploy:
+    if a.no_deploy:
+        # A deploy or a rollback finishes an interrupted activation; --no-deploy does neither, so it
+        # would run against a board whose release links and recorded state disagree.
         for side, target in boards.items():
-            print('deploy', side, 'sent', deploy(target, root, libs, a.bins, Path(a.work) / 'ros/install', a.diagnostic_preload),
+            pending = pending_activation(target, root)
+            if pending:
+                sys.exit('%s has an interrupted activation of %s: deploy or roll back to finish it, '
+                         'rather than running against a board that is half switched over' % (target, pending))
+            half = half_switched(target, root)
+            if half:
+                sys.exit('%s records release %s as active but %s serves %s: deploy or roll back to '
+                         'repair it' % (target, read_state(target, root, 'active'), CURRENT, half))
+    else:
+        for side, target in boards.items():
+            print('deploy', side, 'sent', deploy(target, root, libs, a.bins, Path(a.work) / 'ros/install',
+                                                 a.diagnostic_preload, a.rollback),
                   'of', len(libs) + len(a.bins), flush=True)
     for target in boards.values():
         kill_leftovers(target)

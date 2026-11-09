@@ -2,8 +2,9 @@
 
 First recorded 2026-11-05, updated 2026-11-06 with the per-board hub path and the Python layer built from pinned sources,
 and 2026-11-09 with the runner audit fixes in section 11, including the strict bag playback completeness rows of
-section 11.4. Those fixes are HOST_TESTED only: every device result in sections 5 and 6 was produced by the previous
-runner and was not rerun, and no part of the strict completeness path has run on a board at all.
+section 11.4 and the staged deployment path of section 11.5. Those fixes are HOST_TESTED only: every device result in
+sections 5 and 6 was produced by the previous runner and was not rerun, and neither the strict completeness path nor the
+staged deployment path has run on a board at all.
 Boards: RK3588A A `3e01ff55454d202020104033bf453b00`, B `3e01ff55454d202020104433991c3b00`.
 Status words follow `AGENTS.md`.
 
@@ -32,14 +33,15 @@ production qualification would still need.
 | --- | --- |
 | Direct path (one ROS process per board per config) | Implementation PRESENT; Build PASS; DEVICE_TESTED |
 | Hub path (any number of ROS processes per board) | Implementation PRESENT; Build PASS; DEVICE_TESTED |
-| Host tests | PASS: stock suite 70/70 serial, including `stage2.drop_python_needed`. `-j 4` not rerun on this tree. Root facade suite 23 groups, 0 failures, recorded at `46e6615c`. The 2026-11-09 `stage2.runner_oracle` test passes standalone and under `ctest`, 28 cases (section 11.4); the 70/70 suite was not rerun with it registered (section 11) |
+| Host tests | PASS: stock suite 70/70 serial, including `stage2.drop_python_needed`. `-j 4` not rerun on this tree. Root facade suite 23 groups, 0 failures, recorded at `46e6615c`. The 2026-11-09 `stage2.runner_oracle` test passes standalone and under `ctest`, 49 cases after the staged-release change (section 11.5); the 70/70 suite was not rerun with it registered (section 11) |
 | RK3588A, Stage 1 regression | Not rerun: the Transport, hub and preload binaries are unchanged (section 5). The results for those binaries stand: `2.14.5-ros` 3 runs at 70/70, core route 8/8; stock 2.14.5, 3.6.2, 3.2.5 one run each at 70/70 |
 | RK3588A, cross-device Stage 2 on `2.14.5-ros` | PASS within the scenarios in sections 5 and 6 |
 | Hub as a system service | NOT_RUN: started over `hdc` as root |
 | ROS on stock 2.14.5, 3.6.2, 3.2.5 and on Fast DDS 3.x | NOT_RUN |
 | Python layer | Built from pinned sources by this repository; DEVICE_TESTED on the hub. CPython and third-party modules are a declared input (section 9) |
-| Runner audit fixes (2026-11-09) | Implementation PRESENT; HOST_TESTED, 28 oracle cases; DEVICE_TESTED false, BLOCKED with no board attached; two audit findings OPEN (section 11) |
+| Runner audit fixes (2026-11-09) | Implementation PRESENT; HOST_TESTED, 49 oracle cases after the staged-release change; DEVICE_TESTED false, BLOCKED with no board attached; two audit findings OPEN (section 11) |
 | Strict bag playback completeness (2026-11-09) | Implementation PRESENT; HOST_TESTED against fakes; **UNVERIFIED**: not established on any board, `mode_cli` NOT_RUN (section 11.4, and limit 23 in section 8) |
+| Staged deployment path (2026-11-09) | Implementation PRESENT; HOST_TESTED against a fake board, 49 oracle cases; **UNVERIFIED**: no staging, activation, rollback, prune or legacy migration has run on a real filesystem (section 11.5, and limit 25 in section 8) |
 | Production | NOT_PRODUCTION_QUALIFIED |
 
 `2.14.5-ros` is not the stock 2.14.5 binary (`libfastrtps.so.2.14` `83f50053…`, against `3713bba0…` for the stock
@@ -414,7 +416,7 @@ The operator's manual restart took under 10 s, which is not in a run record; the
 18. **Changed oracle: hub drops in group `large`.** Group `large` now allows hub drops. All other groups stay at zero. 3 of the 5 hub `large` runs on this tree dropped 90 to 129 frames on one side (`final-h-features` 128, `final3-h-features-2` 129, `final3-h-features-3` 90). Two 16 MiB samples exceeded the 32 MiB link queue at link speed. RELIABLE repaired them and every sample arrived intact, which the cases still require. This is a real hub property, not a test artefact, and the deployment guide states the consequence.
 19. **`ros2 security` works only off-board.** `cryptography` and `lxml` are absent on the target, so keystores are made on the host.
 20. **Changed oracles: run verification (2026-11-09).** A run used to pass the DSoftBus-only check when one watched process had been sampled and none had been seen holding a UDP socket, so a process that was never sampled counted as evidence. `udp_socket_count` now returns `('live', n)`, `('nopid', None)` or `('unreadable', None)`, `SocketWatch` counts the misses per side and samples once before its first wait, and the verdict fails any run in which a watched process was never observed (`no socket observation on <side>`). `sockets_ok` is reported apart from `path_ok`, so `mode_long_outage`, which is excused the record counts (limit 13), is no longer thereby excused the socket evidence. A fault in the sampler thread is now named as such instead of reading as an unreadable board. The `ros2` CLI and rosbag2 rows are stricter too: a `bag info` case needs a printed non-zero message count, each `bag play` case is tied to the bag it reads and must replay the whole recording bar `ALLOWED_PLAYBACK_HEAD_LOSS = 1` message, with at least one message arriving whatever the allowance, and a long-running CLI case must have stopped because it was stopped, judged by a crash blacklist (`CRASH_EXITS`: SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV) plus a required exit line. A whitelist of clean SIGINT exits was rejected: which code each entry point really reports is not measured, so it would have failed cases that worked. That one-message allowance exists because limit 2 above gives the cause, not merely the shortfall: `ros2 bag play` publishes its first message before its own publisher has matched the subscriber, and a volatile reader cannot receive that sample however sound the transport. It is also the tightest bound the recorded evidence permits. Limit 2 records six (recorded, replayed) pairs — sqlite3 8/7 twice, mcap 8/8 and 8/7, and 8/7 and 9/8 at `46e6615c` — so the largest observed loss is exactly one message, five of the six pairs show it and none shows more; a bound of 0 would have failed a healthy board five times in six. At least one message has to arrive whatever the allowance, because otherwise a recording small enough for the allowance to cover all of it would pass having delivered nothing (`0 >= 1 - 1`), and the `bag info` row asks only for a printed non-zero count, so both rows would have gone green on a total playback failure. The bags here record about eight messages, so reaching that needs a prior catastrophic failure; it is closed rather than left because it is the same weak-criterion class the audit raised. The row is still far stronger than the one it replaced, which accepted any three messages however many were recorded: a 20-message bag now requires 19. **Consequence:** a run that previously reported PASS on a CLI or bag row may still now report FAIL, because a `bag info` row without a printed non-zero count, a long-running case that did not stop cleanly, and a playback short by two messages or more are each new grounds for failure. None of it has been rerun on a board. **Renamed and bounded later the same day:** the two playback rows described here are the smoke rows, now `bag_play_smoke_sqlite3` and `bag_play_smoke_mcap`. The head-loss allowance is theirs alone and is a smoke criterion, not proof of complete playback; anything naming `bag_play_sqlite3` or `bag_play_mcap` is stale. They are kept because they fail on a playback that broke outright, on any board, without needing the Python layer or the reader probe. Completeness is now measured by rows of its own (limit 23).
-21. **Changed deploy: prune, read-back and manifest (2026-11-09).** An incremental deploy used to leave files from earlier builds in the board's `lib/` and `bin/`, so a dependency this build is missing could be satisfied by a stale library and the same artifacts would fail on a clean board. `deploy()` now builds a path-to-SHA-256 manifest of everything the build produces, deletes every file directly in `lib/` and `bin/` that the manifest does not name, reads back what it sent and exits non-zero on a mismatch, confirms the prune removed the files, and writes `<root>/manifest.sha256`. Spared from the prune: the Python layer's own files (`LAYER_OWNED_FILES`, currently `bin/ros2`, asserted by `deploy_python_layer`) and a library the operator staged under the board root and passed with `--diagnostic-preload`. The [deployment guide](ROS2_HUB_DEPLOYMENT.md#4-deploy-to-each-board) states the operator consequence.
+21. **Changed deploy: prune, read-back and manifest (2026-11-09).** An incremental deploy used to leave files from earlier builds in the board's `lib/` and `bin/`, so a dependency this build is missing could be satisfied by a stale library and the same artifacts would fail on a clean board. `deploy()` now builds a path-to-SHA-256 manifest of everything the build produces, deletes every file directly in `lib/` and `bin/` that the manifest does not name, reads back what it sent and exits non-zero on a mismatch, confirms the prune removed the files, and writes `<root>/manifest.sha256`. Spared from the prune: the Python layer's own files (`LAYER_OWNED_FILES`, currently `bin/ros2`, asserted by `deploy_python_layer`) and a library the operator staged under the board root and passed with `--diagnostic-preload`. **Superseded later the same day by limit 25:** the in-place prune described here is gone, because the deploy that performed it was writing into the deployment it was running. The reason for it stands and is now enforced by `validate_release` against a staged release, which refuses any file in `lib/` or `bin/` that the manifest does not name. The `--diagnostic-preload` library is no longer spared under the board root either: a path inside a release is refused, and it has to live in `<root>/operator/`. The [deployment guide](ROS2_HUB_DEPLOYMENT.md#4-deploy-to-each-board) states the operator consequence.
 22. **Audit findings 2 and 3 are OPEN.** The same audit raised the hub's handling of failed JOIN control messages, and the connection timeout not bounding the blocking `connect()`. Neither is addressed in this change set, and neither can be validated without two boards. They are deferred, not closed.
 23. **Strict bag playback completeness: IMPLEMENTED and HOST_TESTED, UNVERIFIED on device (2026-11-09, later the same day).** The one-message allowance of limit 20 is a smoke criterion, so it cannot stand as proof that a replay carried the recording. Completeness is now measured by rows of its own, `bag_complete_sqlite3` and `bag_complete_mcap` (table `BAG_STRICT`). Each reads its bag back on the board through `rosbag2_py` and compares it message by message with what arrived on a topic of its own.
    - `BAG_READER` is a board-side Python probe in the same form as the existing `ORIGIN_PROBE`. It prints one `S2_BAG <index> <sha256 of the serialized bytes> <payload>` line per stored message of the recorded topic, in storage order, then `S2_BAG_END <count>`. It is given the storage id (`sqlite3` or `mcap`) and the topic (`BAG_RECORD_TOPIC = /chatter`) explicitly rather than detecting them, and reports a message of any other topic as `S2_BAG_OTHER` instead of deserializing it as a `String`.
@@ -425,6 +427,20 @@ The operator's manual restart took under 10 s, which is not in a run record; the
    - **A row that cannot establish completeness reports `UNVERIFIED` and does not pass.** The criterion is not weakened to accommodate a probe that did not run.
    - **Status.** The oracle logic is HOST_TESTED against fakes, 28 cases (section 11.4). **No part of the strict path has run on hardware:** no real `rosbag2_py` read of a real bag, no real `ros2 topic info --verbose`, no real `ros2 bag play`, no real listener output; `mode_cli` is NOT_RUN. The `rosbag2_py` reader API usage is unexercised here. The `--verbose` parse builds on the existing `topic_info` CLI case, which asserts on that same output (`Node name: talker`) and passed in the recorded device runs, so the output format is not a guess; the `Subscription count:` line this gate reads has not itself been read on a board (`AGENTS.md` section 4). Strict completeness is therefore reported as UNVERIFIED, not claimed.
 24. **`mode_cli` is now larger than the runs recorded in section 5 (2026-11-09).** With `--groups all` it runs two cases more than the 42 of those runs, and board A holds 10 long-lived ROS processes instead of 8, because `strict_listener1` (`/s2strict1`) and `strict_listener2` (`/s2strict2`) are up for the whole mode, one per storage, so one storage's replay can never be counted as another's. Ten is above the 8 processes per board the `scale` mode measured, and this mode has not been run on a board since the change. New grounds for failure in it: a strict row reports `UNVERIFIED`, and so does not pass, where the Python layer or `rosbag2_py` is unavailable or the graph shows no subscriber on the measured topic, and reports `FAIL` where the replay was not the recording or the recording itself is damaged. An overrunning `ros2` invocation is now reaped (`PythonOnBoard.finished()`), because an abandoned invocation keeps its hub attachment and an abandoned `bag play` keeps publishing. **Consequence:** a device run that previously reported PASS on the bag rows may report FAIL or UNVERIFIED on the new rows. That is intended, and it has not been rerun on a board.
+25. **Staged deployment: IMPLEMENTED and HOST_TESTED, UNVERIFIED on device (2026-11-09, after limit 21).** Limit 21's deploy mutated the deployment it was running: `deploy_python_layer` removed `python/`, `share/` and `lib/python3.12`, artifacts went straight over the active files one at a time, and the prune then deleted stale files from the active directories, so an interrupted deploy left a half-updated deployment with nothing to go back to. A release is now staged whole and activated only once it has been validated.
+    - `releases/<id>/` holds a complete release, `<id>` being a content address over the sorted artifact manifest plus a one-line `release.marker` (`release_id`, `release_marker`). The index digest is in the marker too, so a changed ament index with unchanged libraries is its own release.
+    - `lib`, `bin`, `python`, `share` and `manifest.sha256` (`RELEASE_LINKS`) are symlinks to the same name under `current`, written once and never moved again. `current -> releases/<id>` is the only link an activation moves, so a deployment cannot end up with `lib/` on one release and `share/` on another, and `activate_release` reads every link back afterwards and fails if any did not take.
+    - Preparation is in `releases/<id>.partial`, validated by content, and only then takes the name; whatever held that name is moved aside as `<id>.stale-<token>`, never removed, and deleted only after a validated release has been activated, because the release being restaged can be the running one. If validation fails after the rename both moves are undone and the exit message says whether the board still serves what it was running.
+    - `validate_release` checks four things: every manifest path present in `lib/` or `bin/` with the right digest; nothing else in `lib/` or `bin/` beyond `LAYER_OWNED_FILES`; the number of files in the counted trees; and the directory name recomputed from the manifest and marker found inside the release.
+    - The count is one rule on both sides: `COUNTED_TREES = ('python', 'share', 'lib')`, `counted_members` on the host and `find python share lib -type f | wc -l` on the board, regular files only. It covers the Python layer and the ament index, which are most of a release by size and are not in the manifest. **It counts rather than hashes: a tree cut short is caught, a file altered inside one is not.**
+    - `work/` (mutable runtime data of every run) and `operator/` (artifacts the operator manages) are created by a deploy if absent and otherwise left alone: their contents are never written, validated or removed. A `--diagnostic-preload` path inside a release directory is refused with a message naming `<root>/operator/`. **That is an operator-visible change of behaviour:** a preload library kept in `<root>/lib` has to move.
+    - A pre-staging layout (real directories where the symlinks now go) is moved to `legacy/<token>/`, never deleted, and that happens last, immediately before activation, so a failed or refused deploy never takes the running deployment away. `--rollback` validates its target before touching anything at all.
+    - `state/active` and `state/previous` record the running and rollback releases, `previous` only after an activation succeeded; `state/activating` is written before the swap and removed after. `main()` consults two guards on the `--no-deploy` path, `pending_activation` (a death inside activation) and `half_switched` (the recorded active release is not what `current` serves, or is not there), and exits rather than running against a half-switched board. `--rollback` with `--no-deploy` is refused.
+    - `--rollback` activates `state/previous` after validating it, refuses an absent or damaged one, and swaps `state/previous` so a rollback can be rolled forward. `prune_releases` removes only releases that are neither active nor the rollback target, so two releases plus `legacy/<token>/` stay on the board.
+    - `deploy_python_layer` is split into `build_python_layer` (host archive, digest, count) and `extract_python_layer` (extraction into a staging directory, removing nothing); `deploy_index` likewise into `build_index` and `extract_index`. Files the active release already holds with the right digest are hard-linked into the staging directory, and whatever that does not produce is uploaded, so a board with no usable active release, or one without `ln`, receives everything.
+    - `mode_cli`'s origin check is narrower (`loaded_from_release`). Before staging, `<root>/lib` was the only library directory under the root, so "inside the root" meant the deployment under test; it no longer does, because the rollback target and a retired layout are kept there. The check now allows the release links and `releases/<active>/` and refuses everything else under the root.
+    - **Known costs, recorded rather than hidden.** The whole Python layer archive is re-uploaded whenever the release id changes: hard-linking thousands of layer files between releases was judged the wrong risk on a path no board has run. Two releases each carrying a full Python layer, plus `legacy/<token>/` kept indefinitely, live under `/data/local/tmp`, so disk use should be watched on first hardware contact. `<root>/python-layer.done`, `<root>/ament_index.tar` and `<root>/python-layer.tar` left by the in-place code are orphaned under the root; nothing reads or removes them, and none is in a counted tree or in `RELEASE_LINKS`.
+    - **Status.** HOST_TESTED only, 49 oracle cases (section 11.5). **No part of this has run against a real filesystem:** no real staging, hard link, rename, symlink swap, activation, rollback, prune or legacy migration. One assumption needs a board before the path can be called DEVICE_TESTED: on a C++ only release `python/` is absent, so `tree_file_count` runs `find python share lib -type f` with a missing operand, and the count depends on `find` reporting it and continuing with the remaining operands. If a board's `find` bails out instead, every C++ only deploy fails validation. Run that one command by hand on a board. A release carrying the layer has all three operands.
 
 Required environment and refusals are in the [deployment guide](ROS2_HUB_DEPLOYMENT.md#6-environment-for-each-ros-process).
 
@@ -464,11 +480,12 @@ Nothing in this section has touched hardware.
 | --- | --- |
 | Implementation | PRESENT |
 | Build | N/A for the runner, which is Python; host configure of the stock integration PASS |
-| Host Test | PASS: 18 oracle cases, standalone and under `ctest`; the neighbour test `stage2.drop_python_needed` PASS. The strict completeness rows added afterwards bring the count to 28, which pass standalone and under `ctest` too (section 11.4) |
+| Host Test | PASS: 18 oracle cases, standalone and under `ctest`; the neighbour test `stage2.drop_python_needed` PASS. The strict completeness rows added afterwards bring the count to 28 (section 11.4), and the staged deployment path brings it to 49 (section 11.5); both pass standalone and under `ctest` too |
 | Submodule pin | VERIFIED at the git object level: the new pin is fetchable from `origin`, and the build input is the identical tree |
 | RK3588A Test | BLOCKED: no board attached, `hdc list targets` returned `[Empty]` |
 | Cross-device Test | BLOCKED |
 | Strict playback completeness | UNVERIFIED: host-tested against fakes only, nothing on a board (section 11.4) |
+| Staged deployment path | UNVERIFIED: host-tested against a fake board only, nothing against a real filesystem (section 11.5) |
 | Audit findings 2 and 3 | OPEN, deferred; both need two boards (limit 22) |
 | Overall | NOT DEVICE-VERIFIED |
 
@@ -637,3 +654,114 @@ unreadable graph as readiness. So none of these oracles is a test that would pas
 - `ALLOWED_PLAYBACK_HEAD_LOSS` and the smoke rows are unchanged in behaviour and remain unverified on device.
 - A device run that previously reported PASS on the bag rows may report FAIL or UNVERIFIED on the new rows. That is
   intended and has not been rerun on a board.
+
+### 11.5 Staged releases with atomic activation and rollback (2026-11-09)
+
+The deploy of 11.1 and limit 21 added a manifest and a prune, but it still mutated the deployment it was running:
+`deploy_python_layer` removed `python/`, `share/` and `lib/python3.12` before extracting the new layer, artifacts were
+uploaded straight over the active files one at a time, and the prune then deleted stale files from the active
+directories. The result was checked afterwards, so an interrupted deploy left a half-updated deployment with nothing to
+go back to. A release is now staged whole, validated by content, and activated by moving a single symlink. Limit 25 in
+section 8 states the mechanism and the operator-visible change; the [deployment guide](ROS2_HUB_DEPLOYMENT.md#4-deploy-to-each-board)
+states what it means for an operator. Nothing in this section has touched hardware either.
+
+| Item | State |
+| --- | --- |
+| Implementation | PRESENT: `scripts/release/run_ros2_cross_board.py`, oracles in `tests/ros2_stage2/runner_oracle_test.py` |
+| Build | N/A: Python only |
+| Host Test | PASS: 49 oracle cases, standalone; 28 before this change |
+| Static check | PASS: pyflakes, zero diagnostics on both files |
+| `ctest` execution | PASS: `100% tests passed out of 2`, with the neighbour test `stage2.drop_python_needed`. Same qualification as 11.2 and 11.4: the build tree is configure-only, and the configure pointed `-DDSOFTBUS_SOURCE_DIR` at the parent checkout's populated submodule clone, because this worktree's submodule is unpopulated |
+| Real staging, activation, rollback, prune, legacy migration | **NOT_RUN**: the evidence is a fake board that interprets the commands `deploy()` sends |
+| RK3588A Test | NOT_RUN: no board attached, `hdc list targets` returned `[Empty]` |
+| Cross-device Test | NOT_RUN |
+| Overall | NOT DEVICE-VERIFIED. This is a redesign of the deployment path, and the first device run should be treated as its first real test |
+
+**Review history, recorded because it bears on how much the host evidence is worth.** Four rounds of independent review.
+The first blocked on four findings, two of them the exact failure class the change exists to remove: `retire_legacy_layout`
+moved the live deployment aside *before* staging, and `mv partial staged` nests on POSIX when the target exists, which
+would have wedged the deploy permanently. The second blocked on two more: the host and board file counts used different
+rules, so no release carrying a layer could ever have staged on a board, and `rm -rf <staged>` could delete the release
+`current` was serving. The third blocked on one: the same counting bug had moved to the index path, because `build_index`
+writes directory entries and the host counted all names while the board counts `find -type f`. The fourth is satisfied
+and does not block.
+
+Each of those was invisible to the test suite for one reason: the fake supplied a number or a behaviour that the
+production code was supposed to derive. The suite now stubs nothing on the host side — the real builders run against an
+on-disk fixture, the fake extracts the archive that was actually sent, and it resolves symlinks, so a case can ask
+whether the deployment is still reachable. The harness also runs every case and names each failure; one exception used
+to abort the run and hide the rest.
+
+The regression cases cover an interrupted upload, a hash mismatch, a stale library, a missing dependency, a release whose
+marker was replaced, a cut-short layer tree, a cut-short ament index, operator artifacts and runtime data surviving a
+deploy, a preload inside a release being refused, a failed activation, a single link failing to be written, rollback, a
+refused rollback to a damaged release, rollback with no target, a refused rollback not retiring the running layout, a
+failed deploy not retiring it either, what the prune keeps, hard-link reuse and its upload fallback, a pre-staging layout
+being moved aside, a restage replacing rather than nesting, a release that could not be renamed into place, a kill
+between the two renames, a release with fewer names leaving no dangling link, and the host and board file counts
+agreeing.
+
+**Evidence.** Host only.
+
+```text
+$ python tests/ros2_stage2/runner_oracle_test.py
+run_ros2_cross_board oracle tests passed (49 cases)      # exit 0   (28 before this change)
+
+$ python tests/ros2_stage2/drop_python_needed_test.py
+drop_python_needed tests passed                          # exit 0
+
+$ python -m pyflakes scripts/release/run_ros2_cross_board.py tests/ros2_stage2/runner_oracle_test.py
+                                                          # exit 0, zero diagnostics
+
+$ ctest -C Release -R "stage2\.(runner_oracle|drop_python_needed)"
+100% tests passed out of 2                                # exit 0
+
+$ hdc list targets
+[Empty]
+```
+
+The `ctest` configure used `-DDSOFTBUS_SOURCE_DIR` pointed at the parent checkout's populated submodule clone, because
+this worktree's submodule is unpopulated; the build tree is configure-only.
+
+**Negative control, tester-executed: a seven-mutant battery, no survivors.** The independent tester mutated the
+production code and ran the suite against each mutant, with the baseline at 49 cases passing:
+
+| Mutant | Result |
+| --- | --- |
+| M1 `build_index` counts directory entries | KILLED, 2 cases failed |
+| M2 `validate_release` ignores the file count | KILLED, 2 |
+| M3 `release_id` ignores the marker | KILLED, 2 |
+| M4 `counted_members` counts every tree | KILLED, 22 |
+| M5 activation points each name at its release, bypassing `current/` | KILLED, 6 |
+| M6 `prune_releases` also removes the rollback target | KILLED, 15 |
+| M7 `deploy` stages into the real release name, with no `.partial` | KILLED, 22 |
+
+The tester also confirmed independently that the suite is not self-satisfying: `run_deploy` patches only `m.sh` and
+`m.send`, so `build_python_layer`, `build_index`, `extract_python_layer` and `extract_index` all execute for real; and
+the host count written into `release.marker` agrees by independent routes with the count the board derives, layer 12 and
+12, C++ only 4 and 4. It re-broke the index rule on purpose, wrapping `build_index` to count all tar names so the host
+count went 2 to 5, and `test_a_cut_short_index_tree_invalidates_a_release` then failed with
+`release holds 4 files, not 7`.
+
+**Negative control, implementer-reported.** The implementer also reverted 37 fixes one at a time in a throwaway copy and
+reports 37 matching named test failures, none masked, with the unreverted copy passing. **This is not tester evidence:**
+the reversion harness is a scratch script outside the repository, no artifact for it is kept in the tree, and the tester
+did not re-run those reverts. Read it as the implementer's report, and the mutant battery above as the executed evidence
+that these oracles are not tests that would pass either way.
+
+**What is not verified.**
+
+- **DEVICE_TESTED = false.** RK3588A NOT_RUN, cross-device NOT_RUN: no board attached, `hdc list targets` returned `[Empty]`.
+- **None of the release machinery has executed against a real filesystem.** No real staging, hard link, rename, symlink
+  swap, activation, rollback, prune or legacy migration. The evidence is a fake board that interprets the commands
+  `deploy()` sends.
+- **One specific assumption a first board run must confirm,** raised by the reviewer: on a C++ only release there is no
+  `python/` directory, so `tree_file_count` runs `find python share lib -type f` with a missing operand. Both GNU and
+  toybox `find` are expected to report the missing operand on stderr, which is suppressed, and continue with the
+  remaining operands, and the count depends on that. If toybox instead bailed out, the count would come back short and
+  **every C++ only deploy would fail validation.** Run that one command by hand on a board before anyone calls the
+  staged-deploy path DEVICE_TESTED. The layer path is unaffected, since all three operands exist there.
+- **The file count catches a tree cut short; it does not catch a file altered inside the layer or the index,** neither of
+  which is hashed on the board.
+- The device results in sections 5 and 6 were produced by the previous, in-place deploy. They remain true of what they
+  measured and are not restated here as validating this change.
