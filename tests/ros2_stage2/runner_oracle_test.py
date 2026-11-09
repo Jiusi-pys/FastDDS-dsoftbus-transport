@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import types
 from pathlib import Path
 
@@ -186,6 +187,214 @@ def test_long_case_must_have_stopped_because_it_was_stopped():
         assert m.stopped_cleanly(code) is False, 'a process killed by a signal (%d) passed' % code
     assert m.stopped_cleanly(None) is False, 'a run that never reported an exit is not a pass'
     assert 137 in m.CRASH_EXITS, 'a process still running when the SIGINT grace ran out must fail'
+
+
+def test_bag_sequence():
+    """The talker's number is the message identity, so a gap in it is a gap in the recording."""
+    assert m.bag_sequence('Hello World: 7') == 7
+    assert m.bag_sequence('Hello World: 0') == 0
+    assert m.bag_sequence('from_cli') is None, 'a payload with no number is compared by text alone'
+    assert m.bag_sequence('Hello World: 7 ') == 7, 'trailing space'
+    assert m.bag_sequence('Hello 7: World') is None, 'the number must end the payload'
+
+
+def test_parse_bag_probe():
+    """A probe that skipped or reordered a message must not read as a bag that did."""
+    good = ['S2_BAG 0 aa Hello World: 1', 'S2_BAG 1 bb Hello World: 2', 'S2_BAG_END 2']
+    assert m.parse_bag_probe(good) == [('aa', 'Hello World: 1'), ('bb', 'Hello World: 2')]
+    assert m.parse_bag_probe(['noise'] + good) == [('aa', 'Hello World: 1'), ('bb', 'Hello World: 2')]
+    gap = ['S2_BAG 0 aa Hello World: 1', 'S2_BAG 2 cc Hello World: 3']
+    assert m.parse_bag_probe(gap) == [('aa', 'Hello World: 1')], 'a skipped index truncates rather than lying'
+    assert m.parse_bag_probe(['S2_BAG 0 aa']) == [], 'a line with no payload is not a message'
+    assert m.parse_bag_probe([]) == []
+
+
+def test_heard_payloads():
+    """Counting lines cannot say which message arrived; strict completeness needs the payloads."""
+    class Fake:
+        lines = ['[INFO] [12.3] [bag_listener]: I heard: [Hello World: 1]',
+                 '[INFO] [13.3] [bag_listener]: I heard: [Hello World: 2]',
+                 '[INFO] [14.3] [bag_listener]: something else']
+    assert m.heard_payloads(Fake()) == ['Hello World: 1', 'Hello World: 2']
+
+    class Bracketed:
+        lines = ['x: I heard: [a [nested] b]']
+    assert m.heard_payloads(Bracketed()) == ['a [nested] b'], 'the payload runs to the last bracket'
+
+
+def test_subscription_count():
+    """Readiness, not a sleep. An output with no count at all is never ready."""
+    verbose = ('Type: std_msgs/msg/String\nPublisher count: 0\n\nSubscription count: 1\n\n'
+               'Node name: strict_listener1\nNode namespace: /\n')
+    assert m.subscription_count(verbose) == 1
+    assert m.subscription_count('Subscription count: 0\n') == 0
+    assert m.subscription_count('Publisher count: 3\n') is None, 'the publisher line is not the count'
+    assert m.subscription_count('') is None
+
+
+class FakePython:
+    """Just enough of PythonOnBoard for the readiness gate: canned probe output, calls recorded."""
+
+    def __init__(self, *texts):
+        self.texts, self.asked = list(texts), []
+
+    def probe(self, arguments, seconds=20):
+        self.asked.append(arguments)
+        return self.texts[min(len(self.asked), len(self.texts)) - 1]
+
+
+def test_wait_for_subscription():
+    """Readiness is established or it is not; no sleep stands in for it, and no output means not ready."""
+    ready = FakePython('Subscription count: 1\n')
+    assert m.wait_for_subscription(ready, '/s2strict1') is True
+    assert len(ready.asked) == 1, 'a subscription already visible costs one invocation'
+    assert '/s2strict1' in ready.asked[0] and '--verbose' in ready.asked[0]
+
+    nobody = FakePython('Subscription count: 0\n')
+    assert m.wait_for_subscription(nobody, '/t', attempts=3) is False, 'nobody listening is not ready'
+    assert len(nobody.asked) == 3, 'the attempts are bounded, not a poll loop'
+
+    blind = FakePython('daemon not running\n')
+    assert m.wait_for_subscription(blind, '/t', attempts=2) is False, 'an unreadable graph is not ready'
+
+    late = FakePython('Subscription count: 0\n', 'Subscription count: 1\n')
+    assert m.wait_for_subscription(late, '/t', attempts=4) is True, 'a subscriber that appears late is ready'
+    assert len(late.asked) == 2, 'it stops asking once ready'
+
+
+def test_finished_reaps_an_overrunning_invocation():
+    """An abandoned ros2 invocation keeps its hub attachment, and a bag player keeps publishing."""
+    stopped, waited = [], []
+
+    class Hung:
+        p = type('P', (), {'poll': staticmethod(lambda: None)})()  # never exits
+        lines = ['Subscription count: 1']
+
+    class Board:
+        boards, side = {'B': 'target-b'}, 'B'
+
+    fake = m.PythonOnBoard.__new__(m.PythonOnBoard)
+    fake.pair, fake.side = Board(), 'B'
+    fake.run = lambda arguments, seconds: Hung()
+    real_stop, real_wait = m.stop_python, m.wait_runs
+    try:
+        m.stop_python = lambda target, grace=2: stopped.append(target)
+        m.wait_runs = lambda runs, seconds: waited.append(len(runs))
+        assert fake.finished('topic info /t --verbose', 20).lines == ['Subscription count: 1']
+        assert stopped == ['target-b'], 'an overrunning invocation was not reaped'
+        assert waited == [1], 'the reaped invocation was not waited for'
+        assert fake.probe('topic info /t --verbose') == 'Subscription count: 1', 'probe reads finished()'
+
+        stopped[:] = []
+
+        class Exited:
+            p = type('P', (), {'poll': staticmethod(lambda: 0)})()
+            lines = ['Subscription count: 2']
+
+        fake.run = lambda arguments, seconds: Exited()
+        assert fake.probe('topic info /t --verbose') == 'Subscription count: 2'
+        assert stopped == [], "a probe that finished on its own must not kill the board's python"
+    finally:
+        m.stop_python, m.wait_runs = real_stop, real_wait
+
+
+def test_playback_completeness():
+    """Strict fidelity: the replay must BE the recording. Nothing is subtracted to reach that."""
+    recorded = [('d1', 'Hello World: 1'), ('d2', 'Hello World: 2'), ('d3', 'Hello World: 3')]
+    whole = m.playback_completeness(recorded, ['Hello World: 1', 'Hello World: 2', 'Hello World: 3'])
+    assert whole['complete'] is True, whole
+    assert whole['recorded'] == 3 and whole['replayed'] == 3
+    assert whole['missing_payloads'] == [] and whole['duplicated'] == [] and whole['unknown'] == []
+    assert whole['out_of_order'] is False and whole['recorded_gaps'] == []
+
+    assert whole['recording_sound'] is True
+    assert 'missing' not in whole, "the smoke row's 'missing' is a count; this key must not collide"
+
+    # The head loss the smoke row tolerates is NOT completeness.
+    head = m.playback_completeness(recorded, ['Hello World: 2', 'Hello World: 3'])
+    assert head['complete'] is False, 'one missing message is not a complete replay'
+    assert head['missing_payloads'] == ['Hello World: 1']
+
+    dup = m.playback_completeness(recorded, ['Hello World: 1', 'Hello World: 1', 'Hello World: 2', 'Hello World: 3'])
+    assert dup['complete'] is False and dup['duplicated'] == ['Hello World: 1'], dup
+
+    corrupt = m.playback_completeness(recorded, ['Hello World: 1', 'Hello Vorld: 2', 'Hello World: 3'])
+    assert corrupt['complete'] is False, 'an altered payload is not the recorded message'
+    assert corrupt['unknown'] == ['Hello Vorld: 2'] and corrupt['missing_payloads'] == ['Hello World: 2']
+
+    swapped = m.playback_completeness(recorded, ['Hello World: 2', 'Hello World: 1', 'Hello World: 3'])
+    assert swapped['complete'] is False and swapped['out_of_order'] is True, swapped
+    assert swapped['missing_payloads'] == [] and swapped['duplicated'] == [], 'order alone, same messages'
+
+    # A damaged recording is reported against the recording, not against the replay that was faithful.
+    gapped = m.playback_completeness([('d1', 'Hello World: 1'), ('d3', 'Hello World: 3')],
+                                     ['Hello World: 1', 'Hello World: 3'])
+    assert gapped['recorded_gaps'] == [2] and gapped['recording_sound'] is False
+    assert gapped['complete'] is True, 'the replay WAS the recording; the recording is the fault'
+
+    collided = m.playback_completeness([('d1', 'same'), ('d2', 'same')], ['same', 'same'])
+    assert collided['recorded_collisions'] == ['same'], 'one payload under two digests is bag corruption'
+    assert collided['recording_sound'] is False and collided['complete'] is True
+
+    empty = m.playback_completeness([], [])
+    assert empty['complete'] is False and empty['recording_sound'] is False, 'an empty bag proves nothing'
+    assert m.playback_completeness(recorded, [])['complete'] is False
+
+
+class Timed:
+    """A stream whose payloads become visible at fixed offsets in time, as a real one would.
+
+    Growth has to be driven by the clock, not by how often the lines are read: a fake that advances
+    on every access would reveal the late duplicate during the final read as well, and could not
+    tell a settle detector apart from a bare count wait.
+    """
+
+    def __init__(self, schedule):
+        self.schedule, self.start = schedule, time.time()
+
+    @property
+    def lines(self):
+        elapsed = time.time() - self.start
+        return ['I heard: [%s]' % p for p, at in self.schedule if elapsed >= at]
+
+
+def test_settled_payloads_sees_a_late_duplicate():
+    """Waiting for a count cannot see a duplicate: it arrives after the count is satisfied."""
+    late = Timed([('a', 0), ('b', 0.1), ('c', 0.2), ('c', 1.0)])
+    arrived = m.settled_payloads(late, 0, 3, seconds=6, quiet=5)
+    assert arrived == ['a', 'b', 'c', 'c'], 'a duplicate arriving after the count was satisfied was missed'
+
+    short = m.settled_payloads(Timed([('a', 0), ('b', 0)]), 0, 3, seconds=1, quiet=2)
+    assert short == ['a', 'b'], 'a shortfall is returned as a shortfall, never padded to the target'
+
+    assert m.settled_payloads(Timed([('x', 0), ('y', 0)]), 1, 1, seconds=2, quiet=2) == ['y'], \
+        'measured from `before` onward, so an earlier case cannot be counted twice'
+
+
+def test_smoke_and_strict_are_separate():
+    """The allowance-bearing row must not be mistaken for the completeness row."""
+    smoke = [c[0] for c in m.BAG_PLAY]
+    assert all('smoke' in name for name in smoke), smoke
+    strict = {name for name, *_ in m.BAG_STRICT}
+    assert strict and not (strict & set(smoke)), 'the strict rows are cases of their own'
+    recorded_bags = {bag for *_, bag in m.BAG_CASES}
+    assert {bag for _, bag, *_ in m.BAG_STRICT} <= recorded_bags, 'a strict case reads a bag nothing records'
+    topics = [topic for *_, topic, _ in m.BAG_STRICT]
+    listeners = [listener for *_, listener in m.BAG_STRICT]
+    assert len(set(topics)) == len(topics), 'two strict cases sharing a topic would count each other'
+    assert len(set(listeners)) == len(listeners), 'two strict cases sharing a listener would count each other'
+    assert 'sys.argv[2]' in m.BAG_READER, 'the reader takes the storage id rather than detecting it'
+    assert all(storage in ('sqlite3', 'mcap') for _, _, storage, _, _ in m.BAG_STRICT)
+
+
+def test_bag_reader_is_in_step_with_what_is_recorded():
+    """The reader deserializes as std_msgs/msg/String, so it must be given the recorded topic."""
+    assert 'sys.argv[3]' in m.BAG_READER and 'S2_BAG_OTHER' in m.BAG_READER, 'the topic is not filtered'
+    recording = [command for name, command, *_ in m.LONG_CASES if name.startswith('bag_record')]
+    assert recording, 'no bag_record case to keep in step with'
+    for command in recording:
+        assert command.rstrip().endswith(m.BAG_RECORD_TOPIC), \
+            'bag_record captures a topic the reader is not told about: %r' % command
 
 
 def digest_of(path):

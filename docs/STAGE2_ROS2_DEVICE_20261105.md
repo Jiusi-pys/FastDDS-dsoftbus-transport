@@ -1,8 +1,9 @@
 # Stage 2: unmodified ROS 2 Jazzy nodes over the DSoftBus Transport on two boards
 
 First recorded 2026-11-05, updated 2026-11-06 with the per-board hub path and the Python layer built from pinned sources,
-and 2026-11-09 with the runner audit fixes in section 11. Those fixes are HOST_TESTED only: every device result in
-sections 5 and 6 was produced by the previous runner and was not rerun.
+and 2026-11-09 with the runner audit fixes in section 11, including the strict bag playback completeness rows of
+section 11.4. Those fixes are HOST_TESTED only: every device result in sections 5 and 6 was produced by the previous
+runner and was not rerun, and no part of the strict completeness path has run on a board at all.
 Boards: RK3588A A `3e01ff55454d202020104033bf453b00`, B `3e01ff55454d202020104433991c3b00`.
 Status words follow `AGENTS.md`.
 
@@ -31,13 +32,14 @@ production qualification would still need.
 | --- | --- |
 | Direct path (one ROS process per board per config) | Implementation PRESENT; Build PASS; DEVICE_TESTED |
 | Hub path (any number of ROS processes per board) | Implementation PRESENT; Build PASS; DEVICE_TESTED |
-| Host tests | PASS: stock suite 70/70 serial, including `stage2.drop_python_needed`. `-j 4` not rerun on this tree. Root facade suite 23 groups, 0 failures, recorded at `46e6615c`. The 2026-11-09 `stage2.runner_oracle` test passes standalone and under `ctest`, 18 cases; the 70/70 suite was not rerun with it registered (section 11) |
+| Host tests | PASS: stock suite 70/70 serial, including `stage2.drop_python_needed`. `-j 4` not rerun on this tree. Root facade suite 23 groups, 0 failures, recorded at `46e6615c`. The 2026-11-09 `stage2.runner_oracle` test passes standalone and under `ctest`, 28 cases (section 11.4); the 70/70 suite was not rerun with it registered (section 11) |
 | RK3588A, Stage 1 regression | Not rerun: the Transport, hub and preload binaries are unchanged (section 5). The results for those binaries stand: `2.14.5-ros` 3 runs at 70/70, core route 8/8; stock 2.14.5, 3.6.2, 3.2.5 one run each at 70/70 |
 | RK3588A, cross-device Stage 2 on `2.14.5-ros` | PASS within the scenarios in sections 5 and 6 |
 | Hub as a system service | NOT_RUN: started over `hdc` as root |
 | ROS on stock 2.14.5, 3.6.2, 3.2.5 and on Fast DDS 3.x | NOT_RUN |
 | Python layer | Built from pinned sources by this repository; DEVICE_TESTED on the hub. CPython and third-party modules are a declared input (section 9) |
-| Runner audit fixes (2026-11-09) | Implementation PRESENT; HOST_TESTED, 18 oracle cases; DEVICE_TESTED false, BLOCKED with no board attached; two audit findings OPEN (section 11) |
+| Runner audit fixes (2026-11-09) | Implementation PRESENT; HOST_TESTED, 28 oracle cases; DEVICE_TESTED false, BLOCKED with no board attached; two audit findings OPEN (section 11) |
+| Strict bag playback completeness (2026-11-09) | Implementation PRESENT; HOST_TESTED against fakes; **UNVERIFIED**: not established on any board, `mode_cli` NOT_RUN (section 11.4, and limit 23 in section 8) |
 | Production | NOT_PRODUCTION_QUALIFIED |
 
 `2.14.5-ros` is not the stock 2.14.5 binary (`libfastrtps.so.2.14` `83f50053…`, against `3713bba0…` for the stock
@@ -92,13 +94,13 @@ ROS sources and is not part of this repository's changes.
 | `integrations/ros2/stock/CMakeLists.txt` | Hub, preload and dispose probe targets under `BUILD_STOCK_ROS2_AUTOLOAD`; Host tests `stage2.autoload.config`, `stage2.hub.router`; `RESOURCE_LOCK` on the UDP loopback tests. |
 | `scripts/release/build_fastdds_ohos.sh` | Variant `2.14.5-ros`: pinned v2.14.5 plus `integrations/ros2/apply_topic_rtti_key.py`. |
 | `scripts/release/build_ros2_ohos.py` | Builds pinned ROS 2 for OHOS. Now also the message packages and `tf2`, composition, QoS, lifecycle and action demos. |
-| `scripts/release/run_ros2_cross_board.py` | Deploys and runs all Stage 2 modes; `--hub`, `--recover-bus-after`; strips CRLF from ament resource files. 2026-11-09: the deploy prunes, reads back and records what it sent, and the socket, `ros2` CLI and rosbag2 oracles are stricter (section 11). |
+| `scripts/release/run_ros2_cross_board.py` | Deploys and runs all Stage 2 modes; `--hub`, `--recover-bus-after`; strips CRLF from ament resource files. 2026-11-09: the deploy prunes, reads back and records what it sent, and the socket, `ros2` CLI and rosbag2 oracles are stricter (section 11). Later the same day the rosbag2 playback check was split into smoke rows, which keep the one-message allowance, and strict completeness rows, which read the bag back on the board and compare it with the replay message by message (section 11.4). |
 | `scripts/release/pull_python_target.py` | New. Pulls the Python runtime and third-party modules from a board. Refused unless libpython and the NumPy config header match recorded digests. |
 | `scripts/release/build_ros2_thirdparty.py` | New. Builds yaml-cpp, zstd and lz4, pinned by commit, and sqlite, pinned by hash. Vendor packages find these and need no change. |
 | `scripts/release/build_ros2_python.py` | New. Builds the pure Python packages into wheels and unpacks them into the install tree. |
 | `integrations/ros2/target/python/` | New. `FindPython3.cmake`, `Ros2PythonTarget.cmake`, `drop_python_needed.py` (section 7). |
 | `tests/ros2_stage2/drop_python_needed_test.py` | New Host test `stage2.drop_python_needed`. |
-| `tests/ros2_stage2/runner_oracle_test.py` | New Host test `stage2.runner_oracle`: 18 cases over the runner's deploy, socket-watch, CLI and bag oracles against a fake board and fake `sh`/`send` (section 11). |
+| `tests/ros2_stage2/runner_oracle_test.py` | New Host test `stage2.runner_oracle`: 28 cases over the runner's deploy, socket-watch, CLI, bag and strict completeness oracles against a fake board and fake `sh`/`send` (sections 11 and 11.4). |
 | `tests/ros2_stage2/` | ROS workloads `stage2_node` and `stage2_features`, `stage2_dispose_probe`, Host tests. The ROS workloads contain no Transport or Fast DDS code. |
 | `tests/device_suite/dsb_suite.cpp` | Uses `DeviceDeployment.hpp`; two tolerances (section 8). |
 
@@ -149,7 +151,7 @@ between lines. Each run writes `run.log` and `result.json`. Exit 0 means every c
 | `scale` | hub | 8 processes per board. |
 | `soak` | hub | Long reliable stream both ways, plus local processes, with hub memory sampled. |
 | `long_outage` | hub | Outage longer than the lease. `--recover-bus-after N` opts in to bus recovery. |
-| `cli` | hub | `ros2` commands, rclpy, launch and rosbag2, plus a check of where every loaded file comes from. |
+| `cli` | hub | `ros2` commands, rclpy, launch and rosbag2, plus a check of where every loaded file comes from. Since 2026-11-09 it also reads each bag back on the board through `rosbag2_py` and compares the replay with it message by message, on a topic and a listener of its own per storage, which takes board A to 10 long-lived ROS processes in this mode (section 11.4). |
 
 ## 5. Results
 
@@ -315,7 +317,8 @@ The rows are from the `E:/s2q` runs in section 5.
 | SROS2 Enforce | NOT_RUN | PASS |
 | `ros2` topic, node, service, param, action, lifecycle, component, interface, pkg, doctor, daemon | NOT_RUN | PASS (section 9) |
 | `ros2 run`, `ros2 launch`, rclpy publisher, subscriber and service client | NOT_RUN | PASS (section 9) |
-| `ros2 bag` record, info, play on sqlite3 and mcap | NOT_RUN | PASS, with plays up to 1 message short (section 8) |
+| `ros2 bag` record, info, play on sqlite3 and mcap, as a smoke check | NOT_RUN | PASS, with plays up to 1 message short (section 8). Recorded as `bag_play_sqlite3` and `bag_play_mcap`; renamed `bag_play_smoke_sqlite3` and `bag_play_smoke_mcap` on 2026-11-09, and not evidence of complete playback |
+| `ros2 bag` play, complete: the replay IS the recording | NOT_RUN | UNVERIFIED: `bag_complete_sqlite3` and `bag_complete_mcap` are new on 2026-11-09 and have run against fakes only (section 11.4) |
 | `ros2 bag` record and info with zstd file compression | NOT_RUN | PASS |
 | rviz, rqt, `ros2 trace` | NOT_RUN | NOT_RUN |
 
@@ -392,7 +395,7 @@ The operator's manual restart took under 10 s, which is not in a run record; the
    - Leaving in turn did not help (`turn-1..5`): one side was at the lease in 4 of 5 runs, and the other side's row ended `left=0` at that run's 30 s limit.
    - On the `E:/s2q` tree the same pattern held: 19.99 and 0.010 s.
    - Root cause not found. A single Participant on the direct path passes `dispose` 3/3. The effect is a delay in graph cleanup, not data loss. The hub is not affected.
-2. **Bag play.** `ros2 bag play` delivered 7 of 8 recorded messages on sqlite3 in both runs, and on mcap 8 of 8 in one run and 7 in the other. At `46e6615c` it was 7 of 8 and 8 of 9. The first message goes before the player's publisher matches. Not investigated further; this is what was observed. The 2026-11-09 playback row allows exactly this one-message head loss and no more, and cites these pairs as its bound (limit 20).
+2. **Bag play.** `ros2 bag play` delivered 7 of 8 recorded messages on sqlite3 in both runs, and on mcap 8 of 8 in one run and 7 in the other. At `46e6615c` it was 7 of 8 and 8 of 9. The first message goes before the player's publisher matches. Not investigated further; this is what was observed. The 2026-11-09 playback row allows exactly this one-message head loss and no more, and cites these pairs as its bound (limit 20). That allowance belongs to the smoke rows alone (`bag_play_smoke_sqlite3`, `bag_play_smoke_mcap`); the strict completeness rows added later the same day allow none (limit 23).
 3. **Content filters.** The race workaround (`reader_filters_allocation.maximum = 0`) is set in code on `DataWriterQos`. It has no XML form and `rmw_fastrtps` never sets it, so it cannot be applied on the ROS path. **ROS applications must not create ContentFilteredTopics while writers are active.** The `content_filter` demo passes but does not exercise the race. See [section 6.4 of the version guide](FASTDDS_VERSIONS_AND_RELEASE.md#64-content-filter-race-on-fast-dds-3x-re-evaluated-not-assumed).
 4. **`second_domain_concurrent` tolerance.** From `wait_for_acknowledgments` onward, the case tolerates a send failure on the first domain and counts it in `teardown_send_failures`. Measured cause (`E:/s2/runs/diag-full-9`): a send during the post-ack barrier hit a channel the peer had closed, with `failure_value=-426114885` (`SOFTBUS_TRANS_TDC_GET_INFO_FAILED`). **It still occurs:** 1 in the 3 `2.14.5-ros` runs (`final-s1-2`) and 1 in the stock 3.6.2 run (`final-s2-362`).
 5. **`peer_process_restart` tolerance.** New in `dsb_suite`: sends from `delete_contained_entities` onward are tolerated, because the dispose goes to a helper that has already exited. Failures before that point still count.
@@ -410,9 +413,18 @@ The operator's manual restart took under 10 s, which is not in a run record; the
 17. **Changed oracle: route record minimum.** The `route` check's record minimum is now half of the samples delivered, floored at 1. It used to be all of them. Records can be fewer than samples because RTPS batches several samples into a record: `final-h-route` had 537 records and `final3-h-route-2` had 555, each for 600 samples delivered. That repair after the outage causes this is inferred, not measured. `delivered_all` still requires 600 of 600.
 18. **Changed oracle: hub drops in group `large`.** Group `large` now allows hub drops. All other groups stay at zero. 3 of the 5 hub `large` runs on this tree dropped 90 to 129 frames on one side (`final-h-features` 128, `final3-h-features-2` 129, `final3-h-features-3` 90). Two 16 MiB samples exceeded the 32 MiB link queue at link speed. RELIABLE repaired them and every sample arrived intact, which the cases still require. This is a real hub property, not a test artefact, and the deployment guide states the consequence.
 19. **`ros2 security` works only off-board.** `cryptography` and `lxml` are absent on the target, so keystores are made on the host.
-20. **Changed oracles: run verification (2026-11-09).** A run used to pass the DSoftBus-only check when one watched process had been sampled and none had been seen holding a UDP socket, so a process that was never sampled counted as evidence. `udp_socket_count` now returns `('live', n)`, `('nopid', None)` or `('unreadable', None)`, `SocketWatch` counts the misses per side and samples once before its first wait, and the verdict fails any run in which a watched process was never observed (`no socket observation on <side>`). `sockets_ok` is reported apart from `path_ok`, so `mode_long_outage`, which is excused the record counts (limit 13), is no longer thereby excused the socket evidence. A fault in the sampler thread is now named as such instead of reading as an unreadable board. The `ros2` CLI and rosbag2 rows are stricter too: a `bag info` case needs a printed non-zero message count, each `bag play` case is tied to the bag it reads and must replay the whole recording bar `ALLOWED_PLAYBACK_HEAD_LOSS = 1` message, with at least one message arriving whatever the allowance, and a long-running CLI case must have stopped because it was stopped, judged by a crash blacklist (`CRASH_EXITS`: SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV) plus a required exit line. A whitelist of clean SIGINT exits was rejected: which code each entry point really reports is not measured, so it would have failed cases that worked. That one-message allowance exists because limit 2 above gives the cause, not merely the shortfall: `ros2 bag play` publishes its first message before its own publisher has matched the subscriber, and a volatile reader cannot receive that sample however sound the transport. It is also the tightest bound the recorded evidence permits. Limit 2 records six (recorded, replayed) pairs — sqlite3 8/7 twice, mcap 8/8 and 8/7, and 8/7 and 9/8 at `46e6615c` — so the largest observed loss is exactly one message, five of the six pairs show it and none shows more; a bound of 0 would have failed a healthy board five times in six. At least one message has to arrive whatever the allowance, because otherwise a recording small enough for the allowance to cover all of it would pass having delivered nothing (`0 >= 1 - 1`), and the `bag info` row asks only for a printed non-zero count, so both rows would have gone green on a total playback failure. The bags here record about eight messages, so reaching that needs a prior catastrophic failure; it is closed rather than left because it is the same weak-criterion class the audit raised. The row is still far stronger than the one it replaced, which accepted any three messages however many were recorded: a 20-message bag now requires 19. **Consequence:** a run that previously reported PASS on a CLI or bag row may still now report FAIL, because a `bag info` row without a printed non-zero count, a long-running case that did not stop cleanly, and a playback short by two messages or more are each new grounds for failure. None of it has been rerun on a board.
+20. **Changed oracles: run verification (2026-11-09).** A run used to pass the DSoftBus-only check when one watched process had been sampled and none had been seen holding a UDP socket, so a process that was never sampled counted as evidence. `udp_socket_count` now returns `('live', n)`, `('nopid', None)` or `('unreadable', None)`, `SocketWatch` counts the misses per side and samples once before its first wait, and the verdict fails any run in which a watched process was never observed (`no socket observation on <side>`). `sockets_ok` is reported apart from `path_ok`, so `mode_long_outage`, which is excused the record counts (limit 13), is no longer thereby excused the socket evidence. A fault in the sampler thread is now named as such instead of reading as an unreadable board. The `ros2` CLI and rosbag2 rows are stricter too: a `bag info` case needs a printed non-zero message count, each `bag play` case is tied to the bag it reads and must replay the whole recording bar `ALLOWED_PLAYBACK_HEAD_LOSS = 1` message, with at least one message arriving whatever the allowance, and a long-running CLI case must have stopped because it was stopped, judged by a crash blacklist (`CRASH_EXITS`: SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV) plus a required exit line. A whitelist of clean SIGINT exits was rejected: which code each entry point really reports is not measured, so it would have failed cases that worked. That one-message allowance exists because limit 2 above gives the cause, not merely the shortfall: `ros2 bag play` publishes its first message before its own publisher has matched the subscriber, and a volatile reader cannot receive that sample however sound the transport. It is also the tightest bound the recorded evidence permits. Limit 2 records six (recorded, replayed) pairs — sqlite3 8/7 twice, mcap 8/8 and 8/7, and 8/7 and 9/8 at `46e6615c` — so the largest observed loss is exactly one message, five of the six pairs show it and none shows more; a bound of 0 would have failed a healthy board five times in six. At least one message has to arrive whatever the allowance, because otherwise a recording small enough for the allowance to cover all of it would pass having delivered nothing (`0 >= 1 - 1`), and the `bag info` row asks only for a printed non-zero count, so both rows would have gone green on a total playback failure. The bags here record about eight messages, so reaching that needs a prior catastrophic failure; it is closed rather than left because it is the same weak-criterion class the audit raised. The row is still far stronger than the one it replaced, which accepted any three messages however many were recorded: a 20-message bag now requires 19. **Consequence:** a run that previously reported PASS on a CLI or bag row may still now report FAIL, because a `bag info` row without a printed non-zero count, a long-running case that did not stop cleanly, and a playback short by two messages or more are each new grounds for failure. None of it has been rerun on a board. **Renamed and bounded later the same day:** the two playback rows described here are the smoke rows, now `bag_play_smoke_sqlite3` and `bag_play_smoke_mcap`. The head-loss allowance is theirs alone and is a smoke criterion, not proof of complete playback; anything naming `bag_play_sqlite3` or `bag_play_mcap` is stale. They are kept because they fail on a playback that broke outright, on any board, without needing the Python layer or the reader probe. Completeness is now measured by rows of its own (limit 23).
 21. **Changed deploy: prune, read-back and manifest (2026-11-09).** An incremental deploy used to leave files from earlier builds in the board's `lib/` and `bin/`, so a dependency this build is missing could be satisfied by a stale library and the same artifacts would fail on a clean board. `deploy()` now builds a path-to-SHA-256 manifest of everything the build produces, deletes every file directly in `lib/` and `bin/` that the manifest does not name, reads back what it sent and exits non-zero on a mismatch, confirms the prune removed the files, and writes `<root>/manifest.sha256`. Spared from the prune: the Python layer's own files (`LAYER_OWNED_FILES`, currently `bin/ros2`, asserted by `deploy_python_layer`) and a library the operator staged under the board root and passed with `--diagnostic-preload`. The [deployment guide](ROS2_HUB_DEPLOYMENT.md#4-deploy-to-each-board) states the operator consequence.
 22. **Audit findings 2 and 3 are OPEN.** The same audit raised the hub's handling of failed JOIN control messages, and the connection timeout not bounding the blocking `connect()`. Neither is addressed in this change set, and neither can be validated without two boards. They are deferred, not closed.
+23. **Strict bag playback completeness: IMPLEMENTED and HOST_TESTED, UNVERIFIED on device (2026-11-09, later the same day).** The one-message allowance of limit 20 is a smoke criterion, so it cannot stand as proof that a replay carried the recording. Completeness is now measured by rows of its own, `bag_complete_sqlite3` and `bag_complete_mcap` (table `BAG_STRICT`). Each reads its bag back on the board through `rosbag2_py` and compares it message by message with what arrived on a topic of its own.
+   - `BAG_READER` is a board-side Python probe in the same form as the existing `ORIGIN_PROBE`. It prints one `S2_BAG <index> <sha256 of the serialized bytes> <payload>` line per stored message of the recorded topic, in storage order, then `S2_BAG_END <count>`. It is given the storage id (`sqlite3` or `mcap`) and the topic (`BAG_RECORD_TOPIC = /chatter`) explicitly rather than detecting them, and reports a message of any other topic as `S2_BAG_OTHER` instead of deserializing it as a `String`.
+   - `parse_bag_probe` requires the indices to be consecutive, so a probe that skipped or reordered a message cannot read as a bag that did, and `S2_BAG_END`'s count must equal the number parsed.
+   - Readiness is established, not waited out: `wait_for_subscription` requires the ROS graph to show a subscriber on the measured topic before playback starts, read with `ros2 topic info <topic> --verbose` from the other board, which makes it a cross-board discovery check as well. An output carrying no count at all is never treated as ready. The attempts are bounded, because each one is a whole `ros2` invocation.
+   - Arrivals are read once they have settled: `settled_payloads` waits for the expected count **and** for the arrivals to stop changing across several consecutive polls. Without that an unexpected duplicate cannot be seen at all, because it arrives after the count is already satisfied and a bare count wait measures just before it lands. A stream still growing at the deadline reports what really arrived, never the target number.
+   - `playback_completeness` reports `complete` (the replay is the recording: same payloads, same count of each, same order, nothing missing, nothing duplicated, nothing never recorded) and `recording_sound` (the bag itself has no sequence gap and no payload stored under two digests) separately. A row needs both, but they are named apart so a fault that happened while recording is not reported as a failure of the replay. Nothing is subtracted to reach a pass.
+   - **A row that cannot establish completeness reports `UNVERIFIED` and does not pass.** The criterion is not weakened to accommodate a probe that did not run.
+   - **Status.** The oracle logic is HOST_TESTED against fakes, 28 cases (section 11.4). **No part of the strict path has run on hardware:** no real `rosbag2_py` read of a real bag, no real `ros2 topic info --verbose`, no real `ros2 bag play`, no real listener output; `mode_cli` is NOT_RUN. The `rosbag2_py` reader API usage is unexercised here. The `--verbose` parse builds on the existing `topic_info` CLI case, which asserts on that same output (`Node name: talker`) and passed in the recorded device runs, so the output format is not a guess; the `Subscription count:` line this gate reads has not itself been read on a board (`AGENTS.md` section 4). Strict completeness is therefore reported as UNVERIFIED, not claimed.
+24. **`mode_cli` is now larger than the runs recorded in section 5 (2026-11-09).** With `--groups all` it runs two cases more than the 42 of those runs, and board A holds 10 long-lived ROS processes instead of 8, because `strict_listener1` (`/s2strict1`) and `strict_listener2` (`/s2strict2`) are up for the whole mode, one per storage, so one storage's replay can never be counted as another's. Ten is above the 8 processes per board the `scale` mode measured, and this mode has not been run on a board since the change. New grounds for failure in it: a strict row reports `UNVERIFIED`, and so does not pass, where the Python layer or `rosbag2_py` is unavailable or the graph shows no subscriber on the measured topic, and reports `FAIL` where the replay was not the recording or the recording itself is damaged. An overrunning `ros2` invocation is now reaped (`PythonOnBoard.finished()`), because an abandoned invocation keeps its hub attachment and an abandoned `bag play` keeps publishing. **Consequence:** a device run that previously reported PASS on the bag rows may report FAIL or UNVERIFIED on the new rows. That is intended, and it has not been rerun on a board.
 
 Required environment and refusals are in the [deployment guide](ROS2_HUB_DEPLOYMENT.md#6-environment-for-each-ros-process).
 
@@ -452,10 +464,11 @@ Nothing in this section has touched hardware.
 | --- | --- |
 | Implementation | PRESENT |
 | Build | N/A for the runner, which is Python; host configure of the stock integration PASS |
-| Host Test | PASS: 18 oracle cases, standalone and under `ctest`; the neighbour test `stage2.drop_python_needed` PASS |
+| Host Test | PASS: 18 oracle cases, standalone and under `ctest`; the neighbour test `stage2.drop_python_needed` PASS. The strict completeness rows added afterwards bring the count to 28, which pass standalone and under `ctest` too (section 11.4) |
 | Submodule pin | VERIFIED at the git object level: the new pin is fetchable from `origin`, and the build input is the identical tree |
 | RK3588A Test | BLOCKED: no board attached, `hdc list targets` returned `[Empty]` |
 | Cross-device Test | BLOCKED |
+| Strict playback completeness | UNVERIFIED: host-tested against fakes only, nothing on a board (section 11.4) |
 | Audit findings 2 and 3 | OPEN, deferred; both need two boards (limit 22) |
 | Overall | NOT DEVICE-VERIFIED |
 
@@ -500,7 +513,9 @@ passed (`0 >= 1 - 1`), so `playback_ok` now also requires `replayed > 0`, pinned
 ### 11.2 Final test evidence
 
 Executed by the independent tester in the `claude/audit-fixes-20261109` worktree on the post-review tree, with `c975ec6f`
-as the base.
+as the base. The counts in this table are those of the tree committed as `73b4536c`. The strict completeness rows added
+after it bring the oracle test to 28 cases, which pass standalone and under `ctest` as well; section 11.4 holds their
+evidence, including the rerun `ctest` row.
 
 | Check | Command | Exit | Verdict |
 | --- | --- | --- | --- |
@@ -531,3 +546,94 @@ configured and ran were this tree's; the rows do not evidence a configure from t
 - The C++ side was not built and the other stock Host tests are NOT_RUN; this change set touches no C++.
 - The device results in sections 5 and 6 were produced by the previous runner. They remain true of what they measured and
   are not restated here as validating this change set.
+- Strict bag playback completeness, added after this evidence was taken, is UNVERIFIED. Section 11.4 records it.
+
+### 11.4 Strict bag playback completeness (2026-11-09, after the evidence in 11.2)
+
+`ALLOWED_PLAYBACK_HEAD_LOSS = 1` was the remaining acceptance gap: a row that tolerates a missing message cannot be
+offered as proof that a replay carried the whole recording. The rosbag2 check is therefore split in two, and only the
+second half speaks to completeness. Nothing in this section has touched hardware either.
+
+| Item | State |
+| --- | --- |
+| Implementation | PRESENT: `scripts/release/run_ros2_cross_board.py`, oracles in `tests/ros2_stage2/runner_oracle_test.py` |
+| Build | N/A: Python only |
+| Host Test | PASS: 28 oracle cases, standalone; 18 before this change |
+| Static check | PASS: pyflakes, zero diagnostics on both files |
+| `ctest` execution | PASS at 28 cases: `100% tests passed out of 2`, with the neighbour test `stage2.drop_python_needed`. Same qualification as 11.2: the build tree is configure-only, and the configure pointed `-DDSOFTBUS_SOURCE_DIR` at the parent checkout's populated submodule clone, because this worktree's submodule is unpopulated |
+| Smoke rows (`bag_play_smoke_*`) | Behaviour unchanged; still not DEVICE_TESTED on this tree |
+| Strict rows (`bag_complete_*`) | **UNVERIFIED**: the oracle logic is host-tested against fakes, and no part of the strict path has run on a board |
+| RK3588A Test | BLOCKED: no board attached, `hdc list targets` returned `[Empty]` |
+| Cross-device Test | BLOCKED |
+| Overall | NOT DEVICE-VERIFIED; strict completeness UNVERIFIED, not claimed |
+
+**What was split.** The smoke rows, renamed `bag_play_sqlite3` to `bag_play_smoke_sqlite3` and `bag_play_mcap` to
+`bag_play_smoke_mcap`, keep the one-message head-loss allowance and the `playback_ok` rule, and are explicitly not
+evidence of complete playback. They are kept because they fail on a playback that broke outright, on any board, without
+needing the Python layer or the reader probe. **Any document listing the old case names is stale.** The strict rows,
+`bag_complete_sqlite3` and `bag_complete_mcap`, are new and allow no loss. Limit 23 in section 8 states their mechanism
+and criterion, and limit 24 states what the mode now costs: two cases and two board-A `listener` processes more, taking
+board A from 8 long-lived ROS processes to 10 in `mode_cli`.
+
+**Review findings, all fixed before this record.** An independent code review of this change raised five, each a way the
+check could have passed without measuring what it claims:
+
+- the duplicate check could not observe a late duplicate, because a duplicate arrives after the count is satisfied; a
+  settle detector (`settled_payloads`) replaced the count wait;
+- the reader deserialized every message as `std_msgs/msg/String` and ignored the topic; it is now given
+  `BAG_RECORD_TOPIC` explicitly and reports a message of another topic as `S2_BAG_OTHER`;
+- the strict row's `missing` key collided with the smoke row's message-count `missing` in the same evidence list; it is
+  now `missing_payloads`;
+- the bag player was not reaped when it overran, leaving it publishing for the rest of the mode; `PythonOnBoard.finished()`
+  reaps it, and `probe()` is `finished()` read as text;
+- a defect in the recording was reported as a playback failure; `recording_sound` is now computed and reported apart from
+  `complete`.
+
+**Evidence.** Host only.
+
+```text
+$ python tests/ros2_stage2/runner_oracle_test.py
+run_ros2_cross_board oracle tests passed (28 cases)      # exit 0   (was 18 before this change)
+
+$ python -m pyflakes scripts/release/run_ros2_cross_board.py tests/ros2_stage2/runner_oracle_test.py
+                                                          # exit 0, zero diagnostics
+
+$ ctest -C Release -R "stage2\.(runner_oracle|drop_python_needed)"
+    Start 3: stage2.drop_python_needed
+1/2 Test #3: stage2.drop_python_needed ........   Passed    0.13 sec
+    Start 4: stage2.runner_oracle
+2/2 Test #4: stage2.runner_oracle .............   Passed    3.58 sec
+
+100% tests passed out of 2
+Total Test time (real) =   3.73 sec       # exit 0
+
+$ hdc list targets
+[Empty]
+```
+
+`stage2.runner_oracle` takes 3.58 s rather than being near-instant: that is the settle-detector test spending real time
+waiting for a stream to stop changing, which is the behaviour it asserts, not a hang. The `ctest` run reused the
+configure-only scratch build tree described in 11.2, with `-DDSOFTBUS_SOURCE_DIR` pointed at the parent checkout's
+populated submodule clone, because this worktree's submodule is unpopulated; the headers were therefore the identical git
+tree and the sources and tests that ran were this tree's.
+
+**Negative control.** Each fix was reverted one at a time in a throwaway copy of the runner, and the matching named test
+failed in every case: 17 reversions, 17 expected failures, with the unreverted copy passing. The strict-oracle reversions
+covered allowing head loss, ignoring order, not reporting a damaged recording, re-colliding the `missing` key, waiting on
+a count instead of settling, not filtering the reader by topic, not reaping an overrunning invocation, and treating an
+unreadable graph as readiness. So none of these oracles is a test that would pass either way.
+
+**What is not verified.**
+
+- **DEVICE_TESTED = false.** RK3588A BLOCKED, cross-device BLOCKED: `hdc list targets` returned `[Empty]`.
+- **Strict completeness is not established.** The oracle logic is host-tested against fakes; there has been no real
+  `rosbag2_py` read of a real bag, no real `ros2 topic info --verbose` readiness check, no real `ros2 bag play` and no
+  real listener output. `mode_cli` is NOT_RUN. Reported as UNVERIFIED rather than claimed.
+- The `rosbag2_py` reader API usage is unexercised here, so nothing confirms it against a real bag. The `--verbose` parse
+  is not a guess at API behaviour (`AGENTS.md` section 4): it builds on the existing `topic_info` CLI case, which runs
+  `topic info /chatter --verbose`, asserts on its output and passed in the recorded device runs. But the
+  `Subscription count:` line this readiness gate reads has not itself been read on a board, and that is the strongest
+  statement the evidence supports.
+- `ALLOWED_PLAYBACK_HEAD_LOSS` and the smoke rows are unchanged in behaviour and remain unverified on device.
+- A device run that previously reported PASS on the bag rows may report FAIL or UNVERIFIED on the new rows. That is
+  intended and has not been rerun on a board.

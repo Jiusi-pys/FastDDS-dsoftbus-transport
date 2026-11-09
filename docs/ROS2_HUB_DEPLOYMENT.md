@@ -107,7 +107,8 @@ What this means for you:
 - the deploy aborts, non-zero with a message on stderr, if what landed does not match the manifest or if a pruned file is still
   there;
 - a run now fails with `no socket observation on <side>` when a watched process was never sampled, and the `ros2` CLI and
-  rosbag2 checks are stricter, so a run that previously reported PASS on those rows may now report FAIL.
+  rosbag2 checks are stricter, so a run that previously reported PASS on those rows may now report FAIL or, on the
+  rosbag2 completeness rows added later the same day, `UNVERIFIED` (section 7).
 
 This behaviour is HOST_TESTED only, by `stage2.runner_oracle` against a fake board. No deploy with it has run against a real
 board; see [section 11 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#11-runner-audit-fixes-2026-11-09).
@@ -236,7 +237,10 @@ See [section 6.4 of the version guide](FASTDDS_VERSIONS_AND_RELEASE.md#64-conten
 
 This repository builds the ROS Python layer from pinned sources (section 3), and everything runs from the deployed root. Nothing
 outside it is on any path, so a missing file fails rather than finding an older copy. `--mode cli` passed 42 of 42 checks, twice,
-with 755 loaded files and none outside the deployment or system paths.
+with 755 loaded files and none outside the deployment or system paths. Those runs predate 2026-11-09: with `--groups all` the mode
+now runs two cases more than those 42, and it starts two more `listener` processes on board A (`strict_listener1` on `/s2strict1`
+and `strict_listener2` on `/s2strict2`), which are up for the whole mode and take board A from 8 long-lived ROS processes to 10.
+The mode has not been rerun on a board since.
 
 Python processes use section 6 with these differences, where `R` is the deployed root:
 
@@ -269,6 +273,23 @@ global libpython. C++ nodes need neither of these: installed C++ programs have n
 
 `ros2 bag` works with sqlite3, mcap and zstd file compression. A play can deliver 1 message fewer than recorded, because the first
 goes before the player's publisher matches.
+
+**The playback check is two checks (since 2026-11-09).** `bag_play_smoke_sqlite3` and `bag_play_smoke_mcap` (renamed from
+`bag_play_sqlite3` and `bag_play_mcap`) keep that one-message allowance; they catch a playback that broke outright and are **not**
+evidence of complete playback. `bag_complete_sqlite3` and `bag_complete_mcap` are the completeness rows: each reads its bag back on
+the board through `rosbag2_py`, waits until the ROS graph shows a subscriber on its own measured topic, plays the bag onto that
+topic and requires the replay to be the recording, with nothing missing, duplicated, reordered or never recorded, and the bag itself
+free of sequence gaps and of a payload stored under two digests. Nothing is subtracted to reach a pass. What this means for you:
+
+- a strict row reports `UNVERIFIED`, and does **not** pass, where the Python layer or `rosbag2_py` is unavailable on the board, or
+  where the graph shows no subscriber on the measured topic;
+- it reports `FAIL` where the replay was not the recording, and names a damaged recording separately from a bad replay, so a fault
+  while recording does not read as a transport fault;
+- a run that previously reported PASS on the bag rows may now report FAIL or UNVERIFIED.
+
+**Strict completeness is UNVERIFIED.** The oracle is HOST_TESTED against fakes only. No real `rosbag2_py` read, no real
+`ros2 topic info --verbose` readiness check, no real `ros2 bag play` and no real listener output have run on a board, and `--mode cli`
+is NOT_RUN since the change. See [section 11.4 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#114-strict-bag-playback-completeness-2026-11-09-after-the-evidence-in-112).
 
 `ros2 security` does not work on the board, because `cryptography` and `lxml` are absent there. See section 8.
 

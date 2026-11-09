@@ -63,8 +63,18 @@ missing socket observation as proof of a UDP-free path, passed `ros2` CLI and ro
 libraries from earlier builds on the boards. The pin is now `dd6037ce`, which is on `origin/master`; its `interfaces` tree, the
 only part the build consumes, is the identical git object `a30132e7…`, so no build output changes. The runner's socket, CLI and
 bag oracles are stricter, and a deploy now prunes what the build does not produce, reads back what it sent and writes
-`manifest.sha256` on the board. New Host test `stage2.runner_oracle` passes, 18 cases, standalone and under `ctest`; the 70/70
-stock suite was not rerun with it registered. **None of the runner's real behaviour has run on hardware:** `hdc list targets`
+`manifest.sha256` on the board. New Host test `stage2.runner_oracle` passes, 28 cases, standalone and under `ctest`
+(`100% tests passed out of 2`, with `stage2.drop_python_needed`); the 70/70 stock suite was not rerun with it registered.
+
+**Bag playback, split in two (2026-11-09): smoke PASS criterion retained, strict completeness UNVERIFIED.** The rows that tolerate
+the documented one-message head loss are now named `bag_play_smoke_sqlite3` and `bag_play_smoke_mcap`, and that allowance is a smoke
+criterion, never proof of complete playback. New rows `bag_complete_sqlite3` and `bag_complete_mcap` read each bag back on the board
+through `rosbag2_py` and compare it with the replay message by message on a topic of their own, requiring the same payloads, the same
+count of each, the same order and no message that was never recorded, with the bag's own soundness reported apart. A row that cannot
+establish completeness reports `UNVERIFIED` and does not pass. **Strict completeness is not established:** its oracle is host-tested
+against fakes only, no part of the strict path has run on hardware, and `mode_cli` is NOT_RUN, so a device run that previously
+reported PASS on the bag rows may report FAIL or UNVERIFIED. The mode also now carries two extra `listener` processes on board A,
+10 instead of 8. **None of the runner's real behaviour has run on hardware:** `hdc list targets`
 returned `[Empty]`, so the RK3588A and cross-device tests are BLOCKED, and the Stage 2 device numbers above were produced by the
 previous runner and are not restated as validating this change. Two audit findings, on the hub's JOIN control-message handling
 and on its blocking `connect()`, are OPEN and deferred; both need two boards. Details in

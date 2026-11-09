@@ -623,6 +623,140 @@ def stopped_cleanly(code):
     return code is not None and code not in CRASH_EXITS
 
 
+def bag_sequence(payload):
+    """The talker's sequence number inside a payload, or None when it carries none.
+
+    demo_nodes_cpp talker publishes 'Hello World: N', so the number is the message identity and a
+    gap in it is a gap in the recording. Payloads without one are compared by text alone.
+    """
+    m = re.search(r':\s*(\d+)\s*$', payload)
+    return int(m.group(1)) if m else None
+
+
+def parse_bag_probe(lines):
+    """[(digest, payload)] in storage order, from the board-side reader's S2_BAG lines.
+
+    Each line is 'S2_BAG <index> <sha256 of the serialized bytes> <payload>'. The index is the
+    reader's own ordering and is checked here, so a probe that skipped or reordered a message
+    cannot be mistaken for a bag that did.
+    """
+    messages = []
+    for line in lines:
+        parts = line.split(' ', 3)
+        if len(parts) == 4 and parts[0] == 'S2_BAG' and parts[1].isdigit() and int(parts[1]) == len(messages):
+            messages.append((parts[2], parts[3].rstrip('\n')))
+    return messages
+
+
+def heard_payloads(run, marker='I heard: ['):
+    """The payloads a demo_nodes_cpp listener logged, in arrival order.
+
+    Counting lines cannot tell which message arrived, so strict completeness needs the payloads
+    themselves: the listener logs 'I heard: [Hello World: 7]'.
+    """
+    out = []
+    for line in run.lines:
+        at = line.find(marker)
+        if at >= 0:
+            rest = line[at + len(marker):]
+            end = rest.rfind(']')
+            out.append(rest[:end] if end >= 0 else rest.rstrip('\n'))
+    return out
+
+
+def subscription_count(text):
+    """The subscription count 'ros2 topic info --verbose' printed, or None when the line is absent.
+
+    None means readiness could not be established, which is never treated as ready.
+    """
+    m = re.search(r'^\s*Subscription count:\s*(\d+)\s*$', text, re.MULTILINE)
+    return int(m.group(1)) if m else None
+
+
+def settled_payloads(run, before, expected, seconds=30, quiet=5):
+    """The payloads that arrived after `before`, read once the stream has stopped growing.
+
+    Waiting for a count cannot see an unexpected duplicate, because the duplicate arrives after the
+    count is already satisfied and the measurement has been taken. So this waits for the expected
+    count AND for the arrivals to stop changing across `quiet` consecutive polls.
+
+    It is a settle detector, not a sleep standing in for synchronisation: a stream still growing is
+    waited on to the deadline and what is returned is whatever really arrived, never a target
+    number. A replay that is still delivering at the deadline reports what it had delivered, which
+    is a shortfall or a surplus, and either fails.
+    """
+    end, stable, last = time.time() + seconds, 0, None
+    while time.time() < end:
+        now = len(heard_payloads(run))
+        stable = stable + 1 if now == last else 0
+        last = now
+        if now - before >= expected and stable >= quiet:
+            break
+        time.sleep(0.2)
+    return heard_payloads(run)[before:]
+
+
+def wait_for_subscription(python, topic, attempts=6):
+    """The readiness gate for a measured replay: the graph must show a subscriber on the topic.
+
+    The player must not publish before the subscriber is matched, and a sleep only guesses at when
+    that is. Subscriptions are visible in the ROS graph without any publisher, so this can be asked
+    before playback starts, and asking it from the other board makes it a cross-board discovery
+    check as well. An output carrying no count at all is never treated as ready.
+
+    Bounded attempts rather than a poll loop, because each attempt is a whole ros2 invocation: it is
+    seconds of work, and probe() has to reap it before the next one starts.
+    """
+    for _ in range(attempts):
+        count = subscription_count(python.probe('topic info %s --verbose' % topic))
+        if count is not None and count >= 1:
+            return True
+    return False
+
+
+def playback_completeness(recorded, replayed):
+    """Strict bag-to-replay fidelity, as a verdict naming every discrepancy.
+
+    recorded: [(digest, payload)] the bag itself holds, in storage order.
+    replayed: [payload] the subscriber logged, in arrival order.
+
+    complete is True only when the replayed sequence IS the recorded one: same payloads, same
+    number of each, same order, nothing missing, nothing duplicated and nothing that was never
+    recorded. Nothing is subtracted to reach that: a shortfall is reported as a shortfall.
+
+    recording_sound is a separate verdict on the bag itself, so a fault that happened while
+    recording is not reported as a failure of the replay:
+      recorded_gaps       missing sequence numbers inside the recording itself
+      recorded_collisions one payload stored under two different digests, i.e. corruption in the bag
+    A case needs both: a faithful replay of a damaged recording is not end-to-end completeness, but
+    the two are named apart so an investigator is pointed at the right half.
+    """
+    want = [payload for _, payload in recorded]
+    counts_want, counts_got = {}, {}
+    for payload in want:
+        counts_want[payload] = counts_want.get(payload, 0) + 1
+    for payload in replayed:
+        counts_got[payload] = counts_got.get(payload, 0) + 1
+    missing = sorted(p for p, n in counts_want.items() if counts_got.get(p, 0) < n)
+    duplicated = sorted(p for p, n in counts_got.items() if p in counts_want and n > counts_want[p])
+    unknown = sorted(p for p in counts_got if p not in counts_want)  # never recorded: corrupted or foreign
+    same_multiset = counts_want == counts_got
+    numbers = [n for n in (bag_sequence(p) for p in want) if n is not None]
+    gaps = sorted(set(range(min(numbers), max(numbers) + 1)) - set(numbers)) if len(numbers) > 1 else []
+    by_payload = {}
+    for digest, payload in recorded:
+        by_payload.setdefault(payload, set()).add(digest)
+    collisions = sorted(p for p, digests in by_payload.items() if len(digests) > 1)
+    # missing_payloads, not missing: the smoke row's 'missing' is a count, and the two must not
+    # share a key in the rows this mode returns as evidence.
+    return {'recorded': len(want), 'replayed': len(replayed), 'missing_payloads': missing[:8],
+            'duplicated': duplicated[:8], 'unknown': unknown[:8],
+            'out_of_order': bool(same_multiset and want != replayed),
+            'recorded_gaps': gaps[:8], 'recorded_collisions': collisions[:8],
+            'recording_sound': bool(want) and not gaps and not collisions,
+            'complete': bool(want) and want == replayed}
+
+
 def playback_ok(code, recorded, replayed):
     """Every message a bag recorded has to arrive on the other board, bar the documented first one.
 
@@ -985,8 +1119,15 @@ LONG_CASES = [
 BAG_CASES = [('bag_info_sqlite3', 'bag info {work}/bag_sql', 'Messages:', 'bag_sql'),
              ('bag_info_mcap', 'bag info {work}/bag_mcap', 'Messages:', 'bag_mcap'),
              ('bag_info_zstd', 'bag info {work}/bag_zstd', 'zstd', 'bag_zstd')]
-BAG_PLAY = [('bag_play_sqlite3', 'bag play {work}/bag_sql --remap /chatter:=/s2bag', 'bag_sql'),
-            ('bag_play_mcap', 'bag play {work}/bag_mcap --remap /chatter:=/s2bag', 'bag_mcap')]
+# The smoke rows. They tolerate ALLOWED_PLAYBACK_HEAD_LOSS and are therefore not evidence of complete
+# playback; BAG_STRICT below is. Keeping them is deliberate: they fail on a playback that broke outright,
+# on any board, without needing the Python layer or the reader probe.
+BAG_PLAY = [('bag_play_smoke_sqlite3', 'bag play {work}/bag_sql --remap /chatter:=/s2bag', 'bag_sql'),
+            ('bag_play_smoke_mcap', 'bag play {work}/bag_mcap --remap /chatter:=/s2bag', 'bag_mcap')]
+# (case, bag, the topic the measured replay is remapped onto, the listener whose lines are the evidence).
+# A topic of its own per storage, so one storage's replay can never be counted as another's.
+BAG_STRICT = [('bag_complete_sqlite3', 'bag_sql', 'sqlite3', '/s2strict1', 'strict_listener1'),
+              ('bag_complete_mcap', 'bag_mcap', 'mcap', '/s2strict2', 'strict_listener2')]
 # A long-running case is stopped by SIGINT, and each entry point reports that in its own way: 0 when it
 # handled the signal, 130 when the default action killed it, 2 where ros2cli turns KeyboardInterrupt into
 # signal.SIGINT. Which of those each case really reports is not measured: cli mode needs two boards and no
@@ -999,6 +1140,26 @@ LAUNCH_FILE = ("from launch import LaunchDescription\\nfrom launch_ros.actions i
                "Node(package='demo_nodes_cpp', executable='listener', name='launched_listener', output='screen'),"
                "Node(package='demo_nodes_py', executable='listener', name='launched_py_listener', output='screen')])\\n")
 
+
+# The topic the bag_record cases capture. The reader is given it explicitly, and a test keeps it in step
+# with the record commands, because the reader deserializes as std_msgs/msg/String and must not be handed
+# a message of another type.
+BAG_RECORD_TOPIC = '/chatter'
+# Reads a bag back through rosbag2_py and prints one line per stored message of that topic, in storage
+# order, with the sha256 of the serialized bytes. The storage id is passed in rather than detected, so a
+# bag whose metadata is unreadable fails here instead of silently reading as empty. S2_BAG_END carries the
+# count the reader itself saw, so a truncated capture cannot pass for a short bag, and any message of
+# another topic is reported rather than deserialized as a String.
+BAG_READER = ("import hashlib, sys\\nimport rosbag2_py\\n"
+              "from rclpy.serialization import deserialize_message\\nfrom std_msgs.msg import String\\n"
+              "reader = rosbag2_py.SequentialReader()\\n"
+              "reader.open(rosbag2_py.StorageOptions(uri=sys.argv[1], storage_id=sys.argv[2]), "
+              "rosbag2_py.ConverterOptions('', ''))\\n"
+              "want = sys.argv[3]\\ni = 0\\nwhile reader.has_next():\\n"
+              "    topic, data, stamp = reader.read_next()\\n"
+              "    if topic != want:\\n        print('S2_BAG_OTHER', topic)\\n        continue\\n"
+              "    print('S2_BAG', i, hashlib.sha256(data).hexdigest(), deserialize_message(data, String).data)\\n"
+              "    i += 1\\nprint('S2_BAG_END', i)\\n")
 
 ORIGIN_PROBE = ("import sys\\nimport rclpy, rclpy.node, yaml, numpy, rosbag2_py, launch, ros2cli.cli\\nrclpy.init()\\n"
                 "node = rclpy.create_node('s2_origin')\\nfiles = {l.split()[-1] for l in open('/proc/self/maps') if '/' in l and '.so' in l}\\n"
@@ -1041,6 +1202,27 @@ class PythonOnBoard:
             time.sleep(0.1)
         return run
 
+    def finished(self, arguments, seconds):
+        """Run a ros2 command and reap it if it overruns, instead of leaving it on the board.
+
+        run() leaves an overrunning process alive, which is right for the CLI cases that read a
+        stream and stop it themselves. Anything else needs this: an abandoned ros2 invocation keeps
+        its hub attachment, and a bag player keeps publishing, for the rest of the mode.
+        """
+        run = self.run(arguments, seconds)
+        if run.p.poll() is None:
+            # stop_python is board-wide: it stops every python3.12, listener and talker on this board by
+            # name. That is only safe because every caller here has already finished measuring whatever
+            # else it started on this side. Do not call this while another run on the same board is
+            # still being measured.
+            stop_python(self.pair.boards[self.side], 2)
+            wait_runs([run], 5)
+        return run
+
+    def probe(self, arguments, seconds=20):
+        """finished(), as text, for a command that is read rather than judged by its exit code."""
+        return '\n'.join(self.finished(arguments, seconds).lines)
+
 
 def stop_python(target, grace=2):
     """Python processes share one name, so these are found by command line."""
@@ -1053,6 +1235,9 @@ def mode_cli(a, pair):
     runs = {'talker': pair.start('A', 'talker'), 'server': pair.start('A', 'add_two_ints_server'), 'params': pair.start('A', 'parameter_blackboard'),
             'cli_listener': pair.start('A', 'listener --ros-args -r chatter:=/s2cli -r __node:=cli_listener'),
             'bag_listener': pair.start('A', 'listener --ros-args -r chatter:=/s2bag -r __node:=bag_listener'),
+            # One per storage, up from the start of the mode so each is matched long before its replay.
+            'strict_listener1': pair.start('A', 'listener --ros-args -r chatter:=/s2strict1 -r __node:=strict_listener1'),
+            'strict_listener2': pair.start('A', 'listener --ros-args -r chatter:=/s2strict2 -r __node:=strict_listener2'),
             'action': pair.start('A', 'minimal_action_server'), 'lifecycle': pair.start('A', 'lifecycle_talker --ros-args -r __node:=lc_talker'),
             'container': pair.start('A', 'component_container')}
     time.sleep(5)
@@ -1126,8 +1311,50 @@ def mode_cli(a, pair):
             ok = playback_ok(exit_code(run), want, got)
             rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'recorded': want, 'replayed': got,
                          'missing': missing, 'tail': run.lines[-3:] if not ok else []})
-            print('cli', name, 'PASS' if ok else 'FAIL',
+            print('cli', name, 'PASS' if ok else 'FAIL', 'smoke',
                   'recorded=%s replayed=%s missing=%s' % (want, got, missing), rows[-1]['tail'], flush=True)
+        # Strict completeness. The smoke rows above tolerate the documented head loss and so cannot show
+        # that a replay carried everything; these read the bag back and compare message by message.
+        # A row that cannot establish completeness reports UNVERIFIED and does not pass: the criterion is
+        # not weakened to accommodate a probe that did not run.
+        sh(pair.boards['B'], 'printf "%s" > %s/s2_bagread.py' % (BAG_READER, work))
+        for name, bag, storage, topic, listener in BAG_STRICT:
+            row = {'case': name, 'ok': False, 'status': 'UNVERIFIED', 'reason': '', 'bag': bag, 'strict': True}
+            if not wait_for_subscription(python, topic):
+                row['reason'] = 'no subscription visible on %s, so a replay could not be measured' % topic
+            else:
+                probe = Run(pair.boards['B'], python.script(work + '/s2_bagread.py',
+                            '%s/%s %s %s' % (work, bag, storage, BAG_RECORD_TOPIC)), pair.log)
+                wait_runs([probe], 180)
+                # stored, not recorded: the BAG_CASES loop above binds `recorded` to a dict of counts,
+                # and shadowing it here would break that the moment the two loops were reordered.
+                stored = parse_bag_probe(probe.lines)
+                ends = [l.split() for l in probe.lines if l.startswith('S2_BAG_END')]
+                counted = int(ends[-1][1]) if ends and len(ends[-1]) == 2 and ends[-1][1].isdigit() else None
+                others = sorted({l.split(' ', 1)[1] for l in probe.lines if l.startswith('S2_BAG_OTHER ')})
+                if exit_code(probe) != 0 or counted is None or counted != len(stored) or not stored or others:
+                    row['reason'] = ('the bag could not be read back: exit=%s parsed=%d reader_count=%s other_topics=%s'
+                                     % (exit_code(probe), len(stored), counted, others[:4]))
+                    row['tail'] = probe.lines[-3:]
+                else:
+                    before = len(heard_payloads(runs[listener]))
+                    play = python.finished('bag play %s/%s --remap %s:=%s'
+                                           % (work, bag, BAG_RECORD_TOPIC, topic), 90)
+                    # Settled, not counted: a duplicate arrives after the count is already satisfied.
+                    # finished() above returned only once the player exited, so this is not racing the
+                    # replay: the window has to cover delivery already in flight, not the gap between
+                    # two replayed messages, which at a 1 Hz recording would be about the same length.
+                    row.update(playback_completeness(stored, settled_payloads(runs[listener], before, len(stored))))
+                    row['exit'] = exit_code(play)
+                    row['ok'] = bool(row['complete']) and bool(row['recording_sound']) and exit_code(play) == 0
+                    row['status'] = 'PASS' if row['ok'] else 'FAIL'
+                    row['reason'] = ('' if row['ok'] else
+                                     'the recording itself is damaged' if not row['recording_sound'] else
+                                     'replay was not the recording')
+            rows.append(row)
+            print('cli', name, row['status'], row['reason'],
+                  {k: row.get(k) for k in ('recorded', 'replayed', 'missing_payloads', 'duplicated', 'unknown',
+                                           'out_of_order', 'recorded_gaps', 'recorded_collisions')}, flush=True)
     stop_python(pair.boards['B'])
     for name in ('talker', 'add_two_ints_server', 'parameter_blackboard', 'listener', 'minimal_action_server', 'lifecycle_talker', 'component_container'):
         sh(pair.boards['A'], 'p=$(pidof %s); [ -z "$p" ] || kill -INT $p' % name)
