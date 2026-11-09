@@ -271,9 +271,14 @@ cd $R && LD_LIBRARY_PATH=$R/lib AMENT_PREFIX_PATH=$R HOME=/data/local/tmp/app RO
 
 The check is the one the direct path uses, and its Host test passes. On the device, per-setting refusal was tested on the direct path only, 26 of 26.
 
-**Hub not there.** The process prints `FDDS_HUB_CLIENT_REFUSED reason=no_hub` and its Participant cannot be created. It
-does not fall back to UDP or shared memory. The test program ended with exit 134 (SIGABRT), and your application's exit
-depends on how it handles that error.
+**Hub not there, or not usable.** The process prints `FDDS_HUB_CLIENT_REFUSED reason=no_usable_hub` and its Participant
+cannot be created. It does not fall back to UDP or shared memory. The test program ended with exit 134 (SIGABRT), and
+your application's exit depends on how it handles that error. The reason word was `no_hub` before 2026-11-10 and the
+recorded runs show that text; it was widened because a hub that accepts and then refuses a control frame reaches the
+same line, and a `FDDS_HUB_CLIENT_JOIN_FAILED` line above it then names the group. Since 2026-11-10 a hub that is
+listening and not accepting is also refused here, at the 5 s deadline, instead of hanging the process; that path is
+HOST_TESTED and its kernel behaviour is DEVICE_TESTED, but no process has been refused by a real wedged
+`fdds_dsb_hub` ([section 11.6 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#116-hub-client-lifecycle-lost-control-frames-and-the-unbounded-connect-2026-11-10)).
 
 **Do not create ContentFilteredTopics while writers are active.** The Fast DDS race has no workaround on the ROS path.
 See [section 6.4 of the version guide](FASTDDS_VERSIONS_AND_RELEASE.md#64-content-filter-race-on-fast-dds-3x-re-evaluated-not-assumed).
@@ -419,6 +424,9 @@ below link throughput, use RELIABLE for data that must arrive, and watch `droppe
 | `FDDS_HUB_WORKER_EXIT code=<n>` | Printed by the supervisor |
 | `FDDS_HUB_REFUSED reason=…` | Stopped for good. See below. |
 | `FDDS_HUB_CLIENT_DISCONNECTED`, `FDDS_HUB_CLIENT_RECONNECTED` | Printed by a ROS process when it loses and regains the hub |
+| `FDDS_HUB_CLIENT_JOIN_FAILED port=<n>` | A ROS process could not get a JOIN out for that group locator, after a bounded retry. It drops the hub socket, and the reconnection rejoins every group it still wants. Treat a repeating line as a hub that is not reading its clients. New 2026-11-10; never seen on a board. |
+| `FDDS_HUB_CLIENT_LEAVE_FAILED port=<n>` | The same for a LEAVE. Until the socket is replaced, the hub keeps routing that group's frames to a process with no receiver for them. New 2026-11-10; never seen on a board. |
+| `FDDS_HUB_CLIENT_REFUSED reason=no_usable_hub` | A ROS process gave up attaching within 5 s: no hub, or one that would not take a control frame. Was `reason=no_hub` before 2026-11-10 (section 6). |
 
 | Worker exit | Meaning | Supervisor |
 | --- | --- | --- |
@@ -485,8 +493,17 @@ Without it:
 - **Unique flows** set to STRICTLY_REQUIRED would fail. `No unicast locators to create unique flows` appears once per process and is expected.
 - **The staged deployment path has never run on a board (2026-11-09).** Staging, activation, `--rollback`, the prune and
   the migration of a pre-staging layout are HOST_TESTED against a fake board only, and a `--diagnostic-preload` library
-  now has to live in `<root>/operator/` (section 4).
-- **Two audit findings are OPEN (2026-11-09):** the hub ignores a failed JOIN control message, and the connection timeout does not bound the blocking `connect()`. Neither is fixed, and neither can be validated without two boards ([limit 22](STAGE2_ROS2_DEVICE_20261105.md#8-limits-workarounds-and-unexplained-behaviour-agentsmd-53)).
+  now has to live in `<root>/operator/` (section 4). The seven toybox and symlink assumptions beneath it were checked by
+  hand on a board on 2026-11-10 and hold; that settles the assumptions, not the path.
+- **The two audit findings of 2026-11-09 are addressed, and the fix is not verified end to end (2026-11-10).** A failed
+  JOIN or LEAVE control message is now retried, reported and resynchronized on a fresh socket instead of being
+  discarded, and one deadline bounds the connect and its retries, so a hub that is listening and not accepting can no
+  longer hang a process. Host tests pin the lifecycle logic and, on both boards, the kernel behaviour the connect
+  depends on; **`HubTransport.cpp`, which wires the two together, is pinned by neither suite, and no ROS 2 or RTPS
+  traffic has run with the change** — no hub started, no JOIN or LEAVE exchanged, no reconnection exercised
+  ([limit 26](STAGE2_ROS2_DEVICE_20261105.md#8-limits-workarounds-and-unexplained-behaviour-agentsmd-53)).
+- **The hub socket directory must be writable.** `/tmp` is read-only on these boards; the recorded deployments use
+  `/data/local/tmp`, and the device socket test takes `S2_SOCKET_DIR` for the same reason (2026-11-10).
 
 The full list with evidence is in [section 8 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#8-limits-workarounds-and-unexplained-behaviour-agentsmd-53).
 
@@ -500,9 +517,10 @@ None of the following is done. This list is the work the evidence does not cover
 - Run the hub as a system service with a defined identity, not root over `hdc`: start order, restart policy, log capture, permission to set the token.
 - Choose a path outside `/data/local/tmp` and define the socket's owner and group.
 - Decide how the token and config are provisioned and protected.
-- Run the staged deploy on real boards: a staging, an activation, a `--rollback`, a restage of the running release, the
-  migration of a pre-staging layout, and the file-count check on a C++ only release, where `python/` is absent
-  (section 4). None of it has touched a real filesystem.
+- Run the staged deploy on real boards: a staging, an activation, a `--rollback`, a restage of the running release and
+  the migration of a pre-staging layout. None of it has touched a real filesystem. The shell behaviour it assumes,
+  including the file count on a C++ only release where `python/` is absent, was checked by hand on a board on
+  2026-11-10 and holds; the machinery itself has still never run.
 - Decide how CPython and its third-party modules are supplied and maintained, since they are pulled from a board and not built here.
 
 **Endurance and failure**

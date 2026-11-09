@@ -274,6 +274,21 @@ if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     target_compile_features(stage2_hub_router_tests PRIVATE cxx_std_17)
     target_include_directories(stage2_hub_router_tests PRIVATE "${_repo}/integrations/ros2/hub")
     add_test(NAME stage2.hub.router COMMAND stage2_hub_router_tests)
+    add_executable(stage2_hub_lifecycle_tests "${_repo}/tests/ros2_stage2/hub_lifecycle_tests.cpp")
+    target_compile_features(stage2_hub_lifecycle_tests PRIVATE cxx_std_17)
+    target_include_directories(stage2_hub_lifecycle_tests PRIVATE "${_repo}/integrations/ros2/hub")
+    add_test(NAME stage2.hub.lifecycle COMMAND stage2_hub_lifecycle_tests)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Real AF_UNIX SOCK_SEQPACKET sockets, which Linux guarantees and POSIX does not: macOS has
+        # AF_UNIX without SOCK_SEQPACKET, so a plain if(UNIX) would register a test that cannot pass.
+        # The behaviour it pins is kernel behaviour the hub client depends on and that no pure logic
+        # can stand in for.
+        add_executable(stage2_hub_connect_tests "${_repo}/tests/ros2_stage2/hub_connect_tests.cpp")
+        target_compile_features(stage2_hub_connect_tests PRIVATE cxx_std_17)
+        target_include_directories(stage2_hub_connect_tests PRIVATE "${_repo}/integrations/ros2/hub")
+        target_link_libraries(stage2_hub_connect_tests PRIVATE Threads::Threads)
+        add_test(NAME stage2.hub.connect COMMAND stage2_hub_connect_tests)
+    endif()
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_test(NAME stage2.drop_python_needed COMMAND Python3::Interpreter "${_repo}/tests/ros2_stage2/drop_python_needed_test.py")

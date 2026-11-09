@@ -78,7 +78,8 @@ reported PASS on the bag rows may report FAIL or UNVERIFIED. The mode also now c
 10 instead of 8. **None of the runner's real behaviour has run on hardware:** `hdc list targets`
 returned `[Empty]`, so the RK3588A and cross-device tests are BLOCKED, and the Stage 2 device numbers above were produced by the
 previous runner and are not restated as validating this change. Two audit findings, on the hub's JOIN control-message handling
-and on its blocking `connect()`, are OPEN and deferred; both need two boards. Details in
+and on its blocking `connect()`, were OPEN and deferred at that point; they are addressed by the 2026-11-10 change
+recorded below. Details in
 [section 11 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#11-runner-audit-fixes-2026-11-09).
 
 **Staged deployment (2026-11-09): HOST_TESTED, nothing on a real filesystem.** The deploy above still mutated the deployment
@@ -105,6 +106,45 @@ must also confirm by hand that `find python share lib -type f` still counts corr
 is absent. Details in
 [section 11.5 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#115-staged-releases-with-atomic-activation-and-rollback-2026-11-09)
 and limit 25 of its section 8.
+
+**Hub client lifecycle (2026-11-10): IMPLEMENTED, host-tested, kernel behaviour DEVICE_TESTED, the change itself NOT
+VERIFIED end to end.** The two audit findings left OPEN above are addressed in the hub client
+(`integrations/ros2/hub/`). A `Membership` class holds what a process WANTS to be joined to apart from what the current
+socket has been TOLD, so a reconnection resynchronizes instead of assuming; a control frame that cannot be written is
+retried a bounded number of times, reported as `FDDS_HUB_CLIENT_JOIN_FAILED` or `FDDS_HUB_CLIENT_LEAVE_FAILED`, and the
+socket is then dropped so the receive thread replaces it and rejoins every wanted group — where before a lost JOIN left
+a process that believed it was attached, heard nothing and reported nothing. The connect is non-blocking and one
+deadline bounds the connect and its retries together, so a hub that is listening and not accepting can no longer hang a
+process and then its receive-thread join for ever; because AF_UNIX has no in-progress connect and a full backlog refuses
+with `EAGAIN`, the deadline bounds a retry of `connect()` rather than a wait on one. `DropSocket` calls `shutdown()` and
+never `close()`, because only the former wakes a thread already blocked in `recv()`. The refusal line is now
+`FDDS_HUB_CLIENT_REFUSED reason=no_usable_hub`. Four rounds of independent review, two blocking: one blocker was a
+permanent silent detach and an unbounded join **introduced by the fix itself**, the other the wrong errno leaving the
+whole mechanism dead code. Evidence: `aarch64-linux-ohos` and host builds at `-Wall -Wextra -Werror` with no warnings;
+`hub_lifecycle_tests` on the Windows host and both suites in a `gcc:13` container; `stage2.hub.lifecycle` registered and
+passing under `ctest` in this worktree, in a run of the five `stage2.*` tests, `100% tests passed out of 5`, which also
+passed `stage2.runner_oracle`, the staged-deploy suite of PR #10, with this change on top — so `HubLifecycle.hpp` has
+been through MSVC, the OHOS SDK clang for aarch64 and gcc 13, which is the point of keeping it free of sockets, Fast DDS
+and the SDK. `stage2.hub.connect` is deliberately absent from that list, being registered only under
+`CMAKE_SYSTEM_NAME STREQUAL "Linux"` because macOS has AF_UNIX without `SOCK_SEQPACKET`; **its `ctest` registration on
+Linux is NOT_RUN**, and the binary was run directly instead. The 70/70 stock suite was **not** rerun: only those five
+tests were. And, on 2026-11-10 over SSH on both RK3588A boards, `hub_connect_tests` exit 0, asserting on the board that a full AF_UNIX `SOCK_SEQPACKET` backlog refuses
+with `EAGAIN` and not `EINPROGRESS`, that a wedged hub fails at the deadline having waited, that the stop flag cancels
+inside 2 s against a 30 s deadline, and that `shutdown()` wakes a blocked `recv()`. A six-reversion negative control
+killed five by named assertion and one at the compiler. **What this does not establish:** no ROS 2 or RTPS traffic has
+run with the change — no hub started, no process attached, no JOIN or LEAVE exchanged with a real `fdds_dsb_hub`, no
+reconnection or outage exercised, cross-board ROS NOT_RUN; and **`HubTransport.cpp` is pinned by neither suite**, which
+need Fast DDS that the host build lacks, so the reviewer could revert five of its changes with both suites staying
+green. The two headers are test-pinned, the file wiring them is not. The Fast DDS compile used two reconstructed
+configuration headers rather than ones Fast DDS's own CMake produced. `/tmp` is read-only on these boards, a
+portability defect the device run itself found, so the suite takes `S2_SOCKET_DIR`; and `iptables` is denied from an SSH
+shell there, so route-outage runs still need another path. The same session settled seven shell assumptions the staged
+deployment above depended on and had recorded as NOT_RUN, including toybox `find` with a missing operand, which holds;
+that settles those assumptions and leaves the release machinery itself still never executed against a real filesystem.
+Details in
+[section 11.6 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#116-hub-client-lifecycle-lost-control-frames-and-the-unbounded-connect-2026-11-10)
+and limit 26 of its section 8. This work sits on `claude/hub-lifecycle-20261109`, based on `claude/audit-fixes-20261109`
+at `425df859` (draft PR #10), and **cannot merge before that branch**.
 
 The CFT filter-factory race remains on Fast DDS 2.14.5 and 3.6.2. On 3.6.2 the
 recorded UDP/TCP/DSoftBus stress windows crashed 2/3, 1/3 and 3/3 respectively;
