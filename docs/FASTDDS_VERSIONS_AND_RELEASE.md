@@ -115,7 +115,7 @@ Release tooling (`scripts/release/`):
 | `build_ros2_thirdparty.py --work <work>` | Builds yaml-cpp, zstd, lz4 and sqlite for OHOS, pinned. |
 | `build_ros2_ohos.py --work <work> [--python-target <dir>]` | Builds pinned, unmodified ROS 2 Jazzy for OHOS against `2.14.5-ros`, with Python bindings when given the target. |
 | `build_ros2_python.py --work <work>` | Adds the pure Python packages from pinned sources. |
-| `run_ros2_cross_board.py --mode <mode> [--hub]` | Runs ROS 2 nodes between the boards, one process per board or through the per-board hub. The [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#4-build-and-run) lists the modes. |
+| `run_ros2_cross_board.py --mode <mode> [--hub]` | Runs ROS 2 nodes between the boards, one process per board or through the per-board hub. The [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#4-build-and-run) lists the modes. Since 2026-11-09 the deploy prunes files the current build does not produce, verifies what it sent and writes `manifest.sha256` on the board. |
 
 Device suite (`tests/device_suite/`):
 
@@ -132,6 +132,15 @@ Prerequisites on the Windows host:
 - Two boards that are already DSoftBus-paired.
 - The native token `mdds_actionbag_…` with `ohos.permission.DISTRIBUTED_DATASYNC`, provisioned on both boards. Select it with `--token-process`.
 - The `softbus_trans_permission.json` entry for `com.kaihong.mdds.*`. The suite's session names derive from the package `com.kaihong.mdds`.
+
+A `--recursive` clone only works if every submodule pin is a commit the submodule's remote serves. At `c975ec6f` the
+`communication_dsoftbus` pin was `b3afc287`, a commit that existed only in one local clone, so the command below failed for
+anyone else. The pin is now `dd6037ce` (`origin/master`; `git describe --tags`: `weekly_20240115-v-11438-gdd6037ce4`). The two
+commits differ only in two lines of the submodule's `.gitignore`, and the `interfaces` tree this project consumes is the
+identical git object `a30132e72fea4ac5a9b9427631818bc0de29e19b` at both, so no build output changes. Do not re-pin to
+`b3afc287`: the rule it carried covers local device-test output that a fresh clone does not have, and the submodule clone's own
+`.git/info/exclude` already carries it. See
+[section 11 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#11-runner-audit-fixes-2026-11-09).
 
 Steps:
 

@@ -56,6 +56,20 @@ a system service, ROS on Fast DDS 3.x and ROS on stock lines NOT_RUN. The CFT wo
 create ContentFilteredTopics while writers are active. See the [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md) and the
 [hub deployment guide](ROS2_HUB_DEPLOYMENT.md), which lists what production qualification would need.
 
+**Runner audit fixes (2026-11-09): HOST_TESTED, DEVICE_TESTED false.** An external audit of `c975ec6f` found that the
+`communication_dsoftbus` pin was a commit that exists only in this machine's clone, so no other checkout could clone the
+repository with its submodules, and that the two-board release runner `scripts/release/run_ros2_cross_board.py` accepted a
+missing socket observation as proof of a UDP-free path, passed `ros2` CLI and rosbag2 rows on a startup marker alone, and left
+libraries from earlier builds on the boards. The pin is now `dd6037ce`, which is on `origin/master`; its `interfaces` tree, the
+only part the build consumes, is the identical git object `a30132e7…`, so no build output changes. The runner's socket, CLI and
+bag oracles are stricter, and a deploy now prunes what the build does not produce, reads back what it sent and writes
+`manifest.sha256` on the board. New Host test `stage2.runner_oracle` passes, 18 cases, standalone and under `ctest`; the 70/70
+stock suite was not rerun with it registered. **None of the runner's real behaviour has run on hardware:** `hdc list targets`
+returned `[Empty]`, so the RK3588A and cross-device tests are BLOCKED, and the Stage 2 device numbers above were produced by the
+previous runner and are not restated as validating this change. Two audit findings, on the hub's JOIN control-message handling
+and on its blocking `connect()`, are OPEN and deferred; both need two boards. Details in
+[section 11 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#11-runner-audit-fixes-2026-11-09).
+
 The CFT filter-factory race remains on Fast DDS 2.14.5 and 3.6.2. On 3.6.2 the
 recorded UDP/TCP/DSoftBus stress windows crashed 2/3, 1/3 and 3/3 respectively;
 the documented writer-side-filtering workaround was clean in the corresponding

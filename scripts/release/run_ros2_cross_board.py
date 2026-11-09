@@ -28,6 +28,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -40,6 +41,7 @@ REFUSED_EXIT = 71
 GROUP_CASES = {'topic': 4, 'service': 1, 'action': 2, 'parameter': 1, 'lifecycle': 1}  # the graph case always runs
 OUTAGE_SECONDS = 15
 ALLOWED_TAIL_LOSS = 10  # samples a peer may still send after the receiver stopped
+ALLOWED_PLAYBACK_HEAD_LOSS = 1  # ros2 bag play publishes its first message before its own publisher has matched
 FEATURE_CASES = {'qos': 5, 'data': 4, 'large': 3, 'scale': 1, 'graph': 4, 'calls': 4, 'exec': 7, 'context': 1, 'domain2': 1, 'services': 6}
 DIRECT_ONLY_LIMIT = {'domain2'}  # a direct process serves the one domain its link was configured for
 PROGRAMS = ['stage2_node', 'stage2_features', 'stage2_dispose_probe', 'minimal_publisher', 'minimal_subscriber', 'minimal_action_server', 'fdds_dsb_hub']
@@ -96,14 +98,84 @@ def local_sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def deploy(target, root, libs, bins, ros_install):
+# Files the Python layer puts straight into lib/ or bin/. They belong to the layer's own digest, not to
+# the artifact manifest, so the prune below must leave them alone. deploy_python_layer asserts this stays true.
+LAYER_OWNED_FILES = {'bin/ros2'}
+
+
+BATCH_FILES = 40  # paths per shell command, so a few hundred of them never make one over-long line
+
+
+def remote_digests(target, root, paths=None):
+    """sha256 of files directly in the board's lib/ and bin/, as {'lib/x.so': digest}.
+
+    paths=None hashes everything there. A list hashes only those, in batches short enough for one
+    command, and leaves out the ones that do not exist, which is also how a removal is confirmed.
+    An empty list runs nothing at all: sha256sum without an operand would read stdin and hang.
+    """
+    if paths is None:
+        batches = ['lib/* bin/*']
+    else:
+        batches = [' '.join("'%s'" % p for p in paths[i:i + BATCH_FILES]) for i in range(0, len(paths), BATCH_FILES)]
+    digests = {}
+    for what in batches:
+        text = sh(target, 'cd %s && sha256sum %s 2>/dev/null' % (root, what), 300)
+        digests.update(dict(reversed(l.split()) for l in text.splitlines() if len(l.split()) == 2))
+    return digests
+
+
+def kept_paths(root, preload):
+    """Manifest-relative paths the prune must leave alone.
+
+    The Python layer's own files, and anything the operator staged under root itself: a
+    --diagnostic-preload library lives on the board before the run and this build does not produce
+    it, so pruning it would leave every ROS process failing on a missing LD_PRELOAD file.
+    """
+    kept, prefix = set(LAYER_OWNED_FILES), root.rstrip('/') + '/'
+    for one in (p for p in preload.split(':') if p):
+        if one.startswith(prefix):
+            kept.add(one[len(prefix):])
+    return kept
+
+
+def deploy(target, root, libs, bins, ros_install, preload=''):
     sh(target, 'mkdir -p %s/lib %s/bin %s/work' % (root, root, root))
-    remote = dict(reversed(l.split()) for l in sh(target, 'cd %s && sha256sum lib/* bin/* 2>/dev/null' % root, 300).splitlines() if len(l.split()) == 2)
+    remote = remote_digests(target, root)
+    keep = kept_paths(root, preload)
     sent = deploy_python_layer(target, root, ros_install)
+    manifest, changed = {}, []
     for folder, items in (('lib', libs), ('bin', bins)):
         for name, f in sorted(items.items()):
-            if remote.get('%s/%s' % (folder, name)) != local_sha(f):
-                send(target, f, '%s/%s/%s' % (root, folder, name)); sent += 1
+            path = '%s/%s' % (folder, name)
+            manifest[path] = local_sha(f)
+            if remote.get(path) != manifest[path]:
+                send(target, f, '%s/%s' % (root, path)); sent += 1
+                changed.append(path)
+    # A file this build does not produce must not survive on the board. On a board deployed to before, a
+    # left-over library can satisfy a dependency the current build is missing, so the same artifacts pass
+    # here and fail on a clean board. lib/ and bin/ are the only directories that need this: the Python
+    # layer and the ament index are each re-extracted into a directory that is emptied first.
+    stale = sorted(set(remote) - set(manifest) - keep)
+    for start in range(0, len(stale), BATCH_FILES):
+        sh(target, 'cd %s && rm -f %s' % (root, ' '.join("'%s'" % p for p in stale[start:start + BATCH_FILES])), 300)
+    # What actually landed, by content, for the files this deploy sent. The others were hashed on the
+    # board a moment ago and already matched; between then and here, the only things that write into
+    # lib/ or bin/ are the Python layer, whose files are in keep, and the prune just above.
+    after = remote_digests(target, root, changed)
+    wrong = sorted(p for p in changed if after.get(p) != manifest[p])
+    if wrong:
+        sys.exit('deploy did not match its manifest on %s: %s' % (target, wrong[:8]))
+    # A digest comes back for a pruned path only if the file is still there. Nothing outside this list
+    # can be left over, because remote above listed every file the board had.
+    left = sorted(remote_digests(target, root, stale))
+    if left:
+        sys.exit('stale files remain on %s after the prune: %s' % (target, left[:8]))
+    # Beside the artifacts, so the evidence names exactly the set that ran.
+    with tempfile.TemporaryDirectory() as folder:
+        listing = Path(folder) / 'manifest.sha256'
+        listing.write_text(''.join('%s  %s\n' % (d, p) for p, d in sorted(manifest.items())), encoding='utf-8', newline='\n')
+        send(target, listing, root + '/manifest.sha256')
+    print('deploy', target[-6:], 'manifest', len(manifest), 'pruned', len(stale), stale[:6], flush=True)
     sh(target, 'chmod 755 %s/bin/*' % root)
     if (Path(ros_install) / 'lib/python3.12/site-packages/rclpy').exists():
         return sent  # the layer carries share/, the index included
@@ -138,6 +210,10 @@ def deploy_python_layer(target, root, ros_install):
             info = tarfile.TarInfo(name)
             info.size, info.mode = len(data), 0o755
             tar.addfile(info, io.BytesIO(data))
+    direct = {n for n, _ in members if n.count('/') == 1 and n.split('/')[0] in ('lib', 'bin')}
+    if direct - LAYER_OWNED_FILES:
+        sys.exit('the Python layer writes %s directly into lib/ or bin/: add it to LAYER_OWNED_FILES, '
+                 'or deploy() will prune it as stale' % sorted(direct - LAYER_OWNED_FILES))
     partial.replace(layer)
     digest = local_sha(layer)
     # The marker is written after extraction, so a failed extraction is never taken for a deployed layer.
@@ -324,14 +400,28 @@ def send_failure_with_peer_alive(log_path):
 
 
 def udp_socket_count(target, program):
-    """UDP sockets of the live process, or None if it could not be read."""
-    script = ('p=$(pidof %s | cut -d" " -f1); [ -n "$p" ] || { echo NOPID; exit; }; '
-              'f=$(ls -l /proc/$p/fd) || { echo FDERR; exit; }; n=0; '
+    """Transport-path evidence for one process, as (state, udp_sockets).
+
+    ('live', n)           the process was found and holds n UDP sockets
+    ('nopid', None)       no such process at this instant: not started yet, or already gone
+    ('unreadable', None)  it exists but could not be sampled: /proc unreadable, or hdc gave nothing
+
+    Only ('live', 0) is evidence of a DSoftBus-only path. A missing observation is not a zero, so the
+    two are kept apart all the way into the verdict.
+    """
+    script = ('p=$(pidof %s | cut -d" " -f1); [ -n "$p" ] || { echo S2_NOPID; exit; }; '
+              'f=$(ls -l /proc/$p/fd) || { echo S2_FDERR; exit; }; n=0; '
               'for i in $(echo "$f" | grep -o "socket:\\[[0-9]*\\]" | grep -o "[0-9]*"); do '
               'grep -q " $i " /proc/net/udp /proc/net/udp6 && n=$((n+1)); done; '
               'echo SOCKETS udp=$n' % program)
-    m = re.search(r'SOCKETS udp=(\d+)', sh(target, script))
-    return int(m.group(1)) if m else None
+    try:
+        text = sh(target, script)
+    except (subprocess.SubprocessError, OSError):  # hdc hung, or could not be run: a missing observation, never a zero
+        return ('unreadable', None)
+    m = re.search(r'SOCKETS udp=(\d+)', text)
+    if m:
+        return ('live', int(m.group(1)))
+    return ('nopid', None) if 'S2_NOPID' in text else ('unreadable', None)
 
 
 class SocketWatch:
@@ -339,16 +429,30 @@ class SocketWatch:
 
     def __init__(self, boards_programs, hubs=None, counters=None, may_drop=False):
         self.boards_programs, self.samples, self.stopping = boards_programs, {s: [] for s in boards_programs}, threading.Event()
+        self.missed = {s: {'nopid': 0, 'unreadable': 0} for s in boards_programs}
+        self.crash = None  # a fault in the sampler itself, kept apart from a board that cannot be read
         self.hubs, self.counters, self.may_drop = hubs, counters, may_drop
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
 
     def _loop(self):
-        while not self.stopping.wait(1):
-            for side, (target, program) in self.boards_programs.items():
-                sample = udp_socket_count(target, program)
-                if sample is not None:
-                    self.samples[side].append(sample)
+        # Sampled before the first wait, so a run that ends in under a second still leaves evidence.
+        # That is what lets the verdict insist on an observation of every watched process.
+        try:
+            while True:
+                for side, (target, program) in self.boards_programs.items():
+                    state, count = udp_socket_count(target, program)
+                    if state == 'live':
+                        self.samples[side].append(count)
+                    else:
+                        self.missed[side][state] += 1
+                if self.stopping.wait(1):
+                    return
+        except Exception:
+            # Without this the thread would die on its own traceback and the run would report a board
+            # that could not be read. The verdict names the sampler instead, and still fails.
+            self.crash = traceback.format_exc()
+            print('socket sampler failed:', self.crash, flush=True)
 
     def hub_counts(self):
         """What each hub's link carried during this run. A hub is shared, so only the difference counts."""
@@ -358,13 +462,31 @@ class SocketWatch:
     def verdict(self, runs, minimum_records):
         """runs: {side: Run}. Each side's Transport must have carried at least minimum_records each way."""
         self.stopping.set(); self.thread.join()
-        sockets = {s: {'samples': len(v), 'max_udp': max(v, default=None)} for s, v in self.samples.items()}
+        sockets = {s: dict({'samples': len(v), 'max_udp': max(v, default=None)}, **self.missed[s]) for s, v in self.samples.items()}
         transport = self.hub_counts() if self.hubs else {s: transport_counts(run) for s, run in runs.items()}
         clean = self.may_drop or all(v.get('lost', 0) == 0 for v in transport.values())
-        # A process can end before its first sample, so one sampled board is enough; the counters are required of both.
-        ok = clean and (any(v['samples'] > 0 for v in sockets.values()) and all(v['max_udp'] in (0, None) for v in sockets.values()) and
-              all(v['sdk_sends'] >= minimum_records and v['received_records'] >= minimum_records for v in transport.values()))
-        return {'sockets': sockets, 'transport': transport, 'minimum_records': minimum_records, 'path_ok': ok}
+        # Every watched process must have been observed at least once. An unobserved process is missing
+        # evidence, not a process free of UDP sockets, so it can never satisfy the DSoftBus-only requirement.
+        unobserved = sorted(s for s, v in sockets.items() if v['samples'] == 0)
+        with_udp = sorted(s for s, v in sockets.items() if v['max_udp'] not in (None, 0))
+        thin = sorted(s for s, v in transport.items()
+                      if v['sdk_sends'] < minimum_records or v['received_records'] < minimum_records)
+        socket_reasons = []
+        if self.crash:
+            socket_reasons.append('socket sampler failed: ' + self.crash.strip().splitlines()[-1])
+        if unobserved:
+            socket_reasons.append('no socket observation on ' + ','.join(unobserved))
+        if with_udp:
+            socket_reasons.append('udp sockets held on ' + ','.join(with_udp))
+        reasons = list(socket_reasons)
+        if thin:
+            reasons.append('transport carried under %d records on %s' % (minimum_records, ','.join(thin)))
+        if not clean:
+            reasons.append('hub lost frames')
+        # sockets_ok is the socket evidence alone, for the one caller whose record counts cannot apply.
+        return {'sockets': sockets, 'transport': transport, 'minimum_records': minimum_records,
+                'path_ok': not reasons, 'path_reasons': reasons,
+                'sockets_ok': not socket_reasons, 'socket_reasons': socket_reasons}
 
 
 def stats_delta(before, after):
@@ -485,6 +607,39 @@ def mode_features(a, pair_factory):
 
 def heard(run, text='I heard'):
     return sum(text in l for l in run.lines)
+
+
+def bag_message_count(text):
+    """The count 'ros2 bag info' prints, or None when the line is absent."""
+    m = re.search(r'^\s*Messages:\s*(\d+)\s*$', text, re.MULTILINE)
+    return int(m.group(1)) if m else None
+
+
+def stopped_cleanly(code):
+    """True when a long-running case ended because it was stopped, not because it died.
+
+    No exit line at all (None) means the run never reported one, which is a failure of its own.
+    """
+    return code is not None and code not in CRASH_EXITS
+
+
+def playback_ok(code, recorded, replayed):
+    """Every message a bag recorded has to arrive on the other board, bar the documented first one.
+
+    A bag that recorded nothing, or whose count could not be read, replays nothing: the info case has
+    already failed it, and comparing 0 against 0 here would report an empty playback as a pass.
+
+    ALLOWED_PLAYBACK_HEAD_LOSS covers the message ros2 bag play publishes before its own publisher has
+    matched the subscriber, which a volatile reader cannot receive however sound the transport. Every
+    recorded run has shown that loss and never more than one message of it; see limit 2 of
+    docs/STAGE2_ROS2_DEVICE_20261105.md. Requiring the whole recording would fail a healthy board.
+
+    Something has to arrive, whatever the allowance: in a recording small enough for the head loss to
+    cover all of it, a playback that delivered nothing would otherwise be indistinguishable from one
+    that worked, and bag info only asks for a non-zero count.
+    """
+    return (code == 0 and bool(recorded) and replayed > 0
+            and replayed >= recorded - ALLOWED_PLAYBACK_HEAD_LOSS)
 
 
 def mode_multiprocess(a, pair):
@@ -745,7 +900,7 @@ def mode_long_outage(a, pair):
               'exit': [exit_code(r) for r in runs], 'hub_restarts': {s: sum('FDDS_HUB_WORKER_EXIT' in l for l in r.lines) for s, r in pair.hubs.runs.items()}}
     result.update(watch.verdict({'A': runs[0], 'B': runs[1]}, 1))
     # The hubs' counters restart with their workers here, so the record counts do not apply.
-    result['ok'] = hearing and recovered and result['exit'] == [0, 0] and all(v['max_udp'] in (0, None) for v in result['sockets'].values())
+    result['ok'] = hearing and recovered and result['exit'] == [0, 0] and result['sockets_ok']
     return result
 
 
@@ -826,9 +981,19 @@ LONG_CASES = [
     ('bag_record_mcap', 'bag record -o {work}/bag_mcap -s mcap /chatter', 10, 'Recording', None),
     ('bag_record_zstd', 'bag record -o {work}/bag_zstd -s sqlite3 --compression-mode file --compression-format zstd /chatter', 10, 'Recording', None),
 ]
-BAG_CASES = [('bag_info_sqlite3', 'bag info {work}/bag_sql', 'Messages:'), ('bag_info_mcap', 'bag info {work}/bag_mcap', 'Messages:'),
-             ('bag_info_zstd', 'bag info {work}/bag_zstd', 'zstd')]
-BAG_PLAY = [('bag_play_sqlite3', 'bag play {work}/bag_sql --remap /chatter:=/s2bag'), ('bag_play_mcap', 'bag play {work}/bag_mcap --remap /chatter:=/s2bag')]
+# (case, command, text its own output must carry, the bag it reads). The bag name keys the recorded count.
+BAG_CASES = [('bag_info_sqlite3', 'bag info {work}/bag_sql', 'Messages:', 'bag_sql'),
+             ('bag_info_mcap', 'bag info {work}/bag_mcap', 'Messages:', 'bag_mcap'),
+             ('bag_info_zstd', 'bag info {work}/bag_zstd', 'zstd', 'bag_zstd')]
+BAG_PLAY = [('bag_play_sqlite3', 'bag play {work}/bag_sql --remap /chatter:=/s2bag', 'bag_sql'),
+            ('bag_play_mcap', 'bag play {work}/bag_mcap --remap /chatter:=/s2bag', 'bag_mcap')]
+# A long-running case is stopped by SIGINT, and each entry point reports that in its own way: 0 when it
+# handled the signal, 130 when the default action killed it, 2 where ros2cli turns KeyboardInterrupt into
+# signal.SIGINT. Which of those each case really reports is not measured: cli mode needs two boards and no
+# run record of it exists, so a whitelist of clean exits would fail cases that worked. What is checkable is
+# that the process did not die on a fatal signal, and was not still running when stop_python's grace ran
+# out and SIGKILL followed.
+CRASH_EXITS = (132, 134, 136, 137, 139)  # SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV
 LAUNCH_FILE = ("from launch import LaunchDescription\\nfrom launch_ros.actions import Node\\n"
                "def generate_launch_description():\\n    return LaunchDescription(["
                "Node(package='demo_nodes_cpp', executable='listener', name='launched_listener', output='screen'),"
@@ -926,22 +1091,43 @@ def mode_cli(a, pair):
         stop_python(pair.boards['B'], 12 if name.startswith('bag') else 4)
         wait_runs([run], 10)
         output = '\n'.join(run.lines)
-        ok = expected in output and (on_a is None or wait_until(lambda: sum(on_a in l for l in runs['cli_listener'].lines) > before + 2, 5))
-        rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'seconds': seconds, 'tail': run.lines[-3:] if not ok else []})
-        print('cli', name, 'PASS' if ok else 'FAIL', rows[-1]['tail'], flush=True)
+        # Printing a startup marker is not passing: the process also has to have stopped because it was
+        # stopped. No exit line at all means the run never reported one, which is a failure of its own.
+        code = exit_code(run)
+        clean = stopped_cleanly(code)
+        ok = (expected in output and clean and
+              (on_a is None or wait_until(lambda: sum(on_a in l for l in runs['cli_listener'].lines) > before + 2, 5)))
+        rows.append({'case': name, 'ok': ok, 'exit': code, 'stopped_cleanly': clean, 'seconds': seconds,
+                     'tail': run.lines[-3:] if not ok else []})
+        print('cli', name, 'PASS' if ok else 'FAIL', 'exit=%s' % code, rows[-1]['tail'], flush=True)
     if a.groups == 'all':
-        for name, command, expected in BAG_CASES:
+        recorded = {}
+        for name, command, expected, bag in BAG_CASES:
             run = python.run(command.format(work=work), 30)
-            ok = expected in '\n'.join(run.lines) and exit_code(run) == 0
-            rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'output': [l for l in run.lines if 'Messages' in l or 'Storage' in l]})
-            print('cli', name, 'PASS' if ok else 'FAIL', rows[-1]['output'] or run.lines[-3:], flush=True)
-        for name, command in BAG_PLAY:
+            output = '\n'.join(run.lines)
+            count = bag_message_count(output)
+            recorded[bag] = count
+            # The number is the check, not the presence of the word: a bag that recorded nothing is a failure.
+            ok = expected in output and exit_code(run) == 0 and count is not None and count > 0
+            rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'messages': count,
+                         'output': [l for l in run.lines if 'Messages' in l or 'Storage' in l]})
+            print('cli', name, 'PASS' if ok else 'FAIL', 'messages=%s' % count, rows[-1]['output'] or run.lines[-3:], flush=True)
+        for name, command, bag in BAG_PLAY:
             before = heard(runs['bag_listener'])
+            want = recorded.get(bag)
             run = python.run(command.format(work=work), 30)
-            played = wait_until(lambda: heard(runs['bag_listener']) >= before + 3, 10)
-            ok = played and exit_code(run) == 0
-            rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'heard': heard(runs['bag_listener']) - before, 'tail': run.lines[-3:] if not ok else []})
-            print('cli', name, 'PASS' if ok else 'FAIL', rows[-1]['heard'], rows[-1]['tail'], flush=True)
+            # Waits for the whole recording and lets playback_ok judge what arrived. Waiting only for the
+            # head-loss allowance would stop a message early and report a shortfall that was merely late.
+            # The subscriber has been up since the start of the mode, so it is matched well before
+            # playback opens its own publisher.
+            wait_until(lambda: want is not None and heard(runs['bag_listener']) - before >= want, 20)
+            got = heard(runs['bag_listener']) - before
+            missing = None if want is None else want - got
+            ok = playback_ok(exit_code(run), want, got)
+            rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'recorded': want, 'replayed': got,
+                         'missing': missing, 'tail': run.lines[-3:] if not ok else []})
+            print('cli', name, 'PASS' if ok else 'FAIL',
+                  'recorded=%s replayed=%s missing=%s' % (want, got, missing), rows[-1]['tail'], flush=True)
     stop_python(pair.boards['B'])
     for name in ('talker', 'add_two_ints_server', 'parameter_blackboard', 'listener', 'minimal_action_server', 'lifecycle_talker', 'component_container'):
         sh(pair.boards['A'], 'p=$(pidof %s); [ -z "$p" ] || kill -INT $p' % name)
@@ -1059,7 +1245,8 @@ def main():
     libs, a.bins = artifacts(a.work)
     if not a.no_deploy:
         for side, target in boards.items():
-            print('deploy', side, 'sent', deploy(target, root, libs, a.bins, Path(a.work) / 'ros/install'), 'of', len(libs) + len(a.bins), flush=True)
+            print('deploy', side, 'sent', deploy(target, root, libs, a.bins, Path(a.work) / 'ros/install', a.diagnostic_preload),
+                  'of', len(libs) + len(a.bins), flush=True)
     for target in boards.values():
         kill_leftovers(target)
     env = 'cd %s && LD_LIBRARY_PATH=%s/lib' % (root, root)

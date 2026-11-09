@@ -95,6 +95,23 @@ on Windows have no execute bit, and `ros2 run` only offers executable files.
 
 The runner kills every `fdds_dsb_hub` on both boards when it starts and ends, so do not run it against a hub you are using.
 
+**A deploy prunes the board (since 2026-11-09).** The runner builds a path-to-SHA-256 manifest of everything the current build
+produces, and deletes every file directly in the board's `lib/` and `bin/` that the manifest does not name. Otherwise a library
+from an earlier build can satisfy a dependency this build is missing, and the same artifacts pass here and fail on a clean board.
+What this means for you:
+
+- anything that must survive a deploy has to be produced by the build, be one of the Python layer's own files
+  (`LAYER_OWNED_FILES`, currently `bin/ros2`), or be named with `--diagnostic-preload`, which spares a library you staged under
+  the deployment root yourself;
+- every deploy leaves `<root>/manifest.sha256`, so a run's evidence names the exact set that ran;
+- the deploy aborts, non-zero with a message on stderr, if what landed does not match the manifest or if a pruned file is still
+  there;
+- a run now fails with `no socket observation on <side>` when a watched process was never sampled, and the `ros2` CLI and
+  rosbag2 checks are stricter, so a run that previously reported PASS on those rows may now report FAIL.
+
+This behaviour is HOST_TESTED only, by `stage2.runner_oracle` against a fake board. No deploy with it has run against a real
+board; see [section 11 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#11-runner-audit-fixes-2026-11-09).
+
 ## 5. Configure and start the hub
 
 ### 5.1 Find the values
@@ -400,6 +417,7 @@ Without it:
 - **NOT_RUN:** rviz and rqt GUIs, `ros2 trace`, the hub as a system service.
 - **Not proven:** SDK drain, epoch and cancellation behaviour.
 - **Unique flows** set to STRICTLY_REQUIRED would fail. `No unicast locators to create unique flows` appears once per process and is expected.
+- **Two audit findings are OPEN (2026-11-09):** the hub ignores a failed JOIN control message, and the connection timeout does not bound the blocking `connect()`. Neither is fixed, and neither can be validated without two boards ([limit 22](STAGE2_ROS2_DEVICE_20261105.md#8-limits-workarounds-and-unexplained-behaviour-agentsmd-53)).
 
 The full list with evidence is in [section 8 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#8-limits-workarounds-and-unexplained-behaviour-agentsmd-53).
 

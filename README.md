@@ -67,6 +67,10 @@ The parent repository pins the submodule commits. Keep those pins when reproduci
 a checkout; updating a submodule to its remote branch changes the source inputs.
 The release scripts fetch their own explicitly selected upstream versions as
 described in the release guide.
+A pin must also be a commit the submodule's remote serves, or the clone above fails
+for everyone else; the DSoftBus pin was corrected on 2026-11-09 for that reason,
+with the consumed headers unchanged (see
+[section 5 of the version guide](docs/FASTDDS_VERSIONS_AND_RELEASE.md#5-reproducing-from-a-clean-clone)).
 
 ## Host development on Windows
 

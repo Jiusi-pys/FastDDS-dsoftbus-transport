@@ -1,6 +1,8 @@
 # Stage 2: unmodified ROS 2 Jazzy nodes over the DSoftBus Transport on two boards
 
-First recorded 2026-11-05, updated 2026-11-06 with the per-board hub path and the Python layer built from pinned sources.
+First recorded 2026-11-05, updated 2026-11-06 with the per-board hub path and the Python layer built from pinned sources,
+and 2026-11-09 with the runner audit fixes in section 11. Those fixes are HOST_TESTED only: every device result in
+sections 5 and 6 was produced by the previous runner and was not rerun.
 Boards: RK3588A A `3e01ff55454d202020104033bf453b00`, B `3e01ff55454d202020104433991c3b00`.
 Status words follow `AGENTS.md`.
 
@@ -15,6 +17,9 @@ git ls-files --others --exclude-standard integrations tests scripts | xargs cat 
 The numbers recorded at `46e6615c` (`E:/s2/runs/final-*`, `final2-*`) ran the Python layer from the older tree on the boards.
 They stand as history and are kept in section 5.
 
+The two hashes above describe the tree at that recording. The 2026-11-09 change to `run_ros2_cross_board.py` (section 11)
+makes the first of them no longer match the working tree; it is kept as the identity of the tree the device runs used.
+
 To run ROS nodes on boards, use the [hub deployment guide](ROS2_HUB_DEPLOYMENT.md). This file is the evidence record.
 
 ## 1. Status
@@ -26,12 +31,13 @@ production qualification would still need.
 | --- | --- |
 | Direct path (one ROS process per board per config) | Implementation PRESENT; Build PASS; DEVICE_TESTED |
 | Hub path (any number of ROS processes per board) | Implementation PRESENT; Build PASS; DEVICE_TESTED |
-| Host tests | PASS: stock suite 70/70 serial, including `stage2.drop_python_needed`. `-j 4` not rerun on this tree. Root facade suite 23 groups, 0 failures, recorded at `46e6615c` |
+| Host tests | PASS: stock suite 70/70 serial, including `stage2.drop_python_needed`. `-j 4` not rerun on this tree. Root facade suite 23 groups, 0 failures, recorded at `46e6615c`. The 2026-11-09 `stage2.runner_oracle` test passes standalone and under `ctest`, 18 cases; the 70/70 suite was not rerun with it registered (section 11) |
 | RK3588A, Stage 1 regression | Not rerun: the Transport, hub and preload binaries are unchanged (section 5). The results for those binaries stand: `2.14.5-ros` 3 runs at 70/70, core route 8/8; stock 2.14.5, 3.6.2, 3.2.5 one run each at 70/70 |
 | RK3588A, cross-device Stage 2 on `2.14.5-ros` | PASS within the scenarios in sections 5 and 6 |
 | Hub as a system service | NOT_RUN: started over `hdc` as root |
 | ROS on stock 2.14.5, 3.6.2, 3.2.5 and on Fast DDS 3.x | NOT_RUN |
 | Python layer | Built from pinned sources by this repository; DEVICE_TESTED on the hub. CPython and third-party modules are a declared input (section 9) |
+| Runner audit fixes (2026-11-09) | Implementation PRESENT; HOST_TESTED, 18 oracle cases; DEVICE_TESTED false, BLOCKED with no board attached; two audit findings OPEN (section 11) |
 | Production | NOT_PRODUCTION_QUALIFIED |
 
 `2.14.5-ros` is not the stock 2.14.5 binary (`libfastrtps.so.2.14` `83f50053…`, against `3713bba0…` for the stock
@@ -86,12 +92,13 @@ ROS sources and is not part of this repository's changes.
 | `integrations/ros2/stock/CMakeLists.txt` | Hub, preload and dispose probe targets under `BUILD_STOCK_ROS2_AUTOLOAD`; Host tests `stage2.autoload.config`, `stage2.hub.router`; `RESOURCE_LOCK` on the UDP loopback tests. |
 | `scripts/release/build_fastdds_ohos.sh` | Variant `2.14.5-ros`: pinned v2.14.5 plus `integrations/ros2/apply_topic_rtti_key.py`. |
 | `scripts/release/build_ros2_ohos.py` | Builds pinned ROS 2 for OHOS. Now also the message packages and `tf2`, composition, QoS, lifecycle and action demos. |
-| `scripts/release/run_ros2_cross_board.py` | Deploys and runs all Stage 2 modes; `--hub`, `--recover-bus-after`; strips CRLF from ament resource files. |
+| `scripts/release/run_ros2_cross_board.py` | Deploys and runs all Stage 2 modes; `--hub`, `--recover-bus-after`; strips CRLF from ament resource files. 2026-11-09: the deploy prunes, reads back and records what it sent, and the socket, `ros2` CLI and rosbag2 oracles are stricter (section 11). |
 | `scripts/release/pull_python_target.py` | New. Pulls the Python runtime and third-party modules from a board. Refused unless libpython and the NumPy config header match recorded digests. |
 | `scripts/release/build_ros2_thirdparty.py` | New. Builds yaml-cpp, zstd and lz4, pinned by commit, and sqlite, pinned by hash. Vendor packages find these and need no change. |
 | `scripts/release/build_ros2_python.py` | New. Builds the pure Python packages into wheels and unpacks them into the install tree. |
 | `integrations/ros2/target/python/` | New. `FindPython3.cmake`, `Ros2PythonTarget.cmake`, `drop_python_needed.py` (section 7). |
 | `tests/ros2_stage2/drop_python_needed_test.py` | New Host test `stage2.drop_python_needed`. |
+| `tests/ros2_stage2/runner_oracle_test.py` | New Host test `stage2.runner_oracle`: 18 cases over the runner's deploy, socket-watch, CLI and bag oracles against a fake board and fake `sh`/`send` (section 11). |
 | `tests/ros2_stage2/` | ROS workloads `stage2_node` and `stage2_features`, `stage2_dispose_probe`, Host tests. The ROS workloads contain no Transport or Fast DDS code. |
 | `tests/device_suite/dsb_suite.cpp` | Uses `DeviceDeployment.hpp`; two tolerances (section 8). |
 
@@ -385,7 +392,7 @@ The operator's manual restart took under 10 s, which is not in a run record; the
    - Leaving in turn did not help (`turn-1..5`): one side was at the lease in 4 of 5 runs, and the other side's row ended `left=0` at that run's 30 s limit.
    - On the `E:/s2q` tree the same pattern held: 19.99 and 0.010 s.
    - Root cause not found. A single Participant on the direct path passes `dispose` 3/3. The effect is a delay in graph cleanup, not data loss. The hub is not affected.
-2. **Bag play.** `ros2 bag play` delivered 7 of 8 recorded messages on sqlite3 in both runs, and on mcap 8 of 8 in one run and 7 in the other. At `46e6615c` it was 7 of 8 and 8 of 9. The first message goes before the player's publisher matches. Not investigated further; this is what was observed.
+2. **Bag play.** `ros2 bag play` delivered 7 of 8 recorded messages on sqlite3 in both runs, and on mcap 8 of 8 in one run and 7 in the other. At `46e6615c` it was 7 of 8 and 8 of 9. The first message goes before the player's publisher matches. Not investigated further; this is what was observed. The 2026-11-09 playback row allows exactly this one-message head loss and no more, and cites these pairs as its bound (limit 20).
 3. **Content filters.** The race workaround (`reader_filters_allocation.maximum = 0`) is set in code on `DataWriterQos`. It has no XML form and `rmw_fastrtps` never sets it, so it cannot be applied on the ROS path. **ROS applications must not create ContentFilteredTopics while writers are active.** The `content_filter` demo passes but does not exercise the race. See [section 6.4 of the version guide](FASTDDS_VERSIONS_AND_RELEASE.md#64-content-filter-race-on-fast-dds-3x-re-evaluated-not-assumed).
 4. **`second_domain_concurrent` tolerance.** From `wait_for_acknowledgments` onward, the case tolerates a send failure on the first domain and counts it in `teardown_send_failures`. Measured cause (`E:/s2/runs/diag-full-9`): a send during the post-ack barrier hit a channel the peer had closed, with `failure_value=-426114885` (`SOFTBUS_TRANS_TDC_GET_INFO_FAILED`). **It still occurs:** 1 in the 3 `2.14.5-ros` runs (`final-s1-2`) and 1 in the stock 3.6.2 run (`final-s2-362`).
 5. **`peer_process_restart` tolerance.** New in `dsb_suite`: sends from `delete_contained_entities` onward are tolerated, because the dispose goes to a helper that has already exited. Failures before that point still count.
@@ -403,6 +410,9 @@ The operator's manual restart took under 10 s, which is not in a run record; the
 17. **Changed oracle: route record minimum.** The `route` check's record minimum is now half of the samples delivered, floored at 1. It used to be all of them. Records can be fewer than samples because RTPS batches several samples into a record: `final-h-route` had 537 records and `final3-h-route-2` had 555, each for 600 samples delivered. That repair after the outage causes this is inferred, not measured. `delivered_all` still requires 600 of 600.
 18. **Changed oracle: hub drops in group `large`.** Group `large` now allows hub drops. All other groups stay at zero. 3 of the 5 hub `large` runs on this tree dropped 90 to 129 frames on one side (`final-h-features` 128, `final3-h-features-2` 129, `final3-h-features-3` 90). Two 16 MiB samples exceeded the 32 MiB link queue at link speed. RELIABLE repaired them and every sample arrived intact, which the cases still require. This is a real hub property, not a test artefact, and the deployment guide states the consequence.
 19. **`ros2 security` works only off-board.** `cryptography` and `lxml` are absent on the target, so keystores are made on the host.
+20. **Changed oracles: run verification (2026-11-09).** A run used to pass the DSoftBus-only check when one watched process had been sampled and none had been seen holding a UDP socket, so a process that was never sampled counted as evidence. `udp_socket_count` now returns `('live', n)`, `('nopid', None)` or `('unreadable', None)`, `SocketWatch` counts the misses per side and samples once before its first wait, and the verdict fails any run in which a watched process was never observed (`no socket observation on <side>`). `sockets_ok` is reported apart from `path_ok`, so `mode_long_outage`, which is excused the record counts (limit 13), is no longer thereby excused the socket evidence. A fault in the sampler thread is now named as such instead of reading as an unreadable board. The `ros2` CLI and rosbag2 rows are stricter too: a `bag info` case needs a printed non-zero message count, each `bag play` case is tied to the bag it reads and must replay the whole recording bar `ALLOWED_PLAYBACK_HEAD_LOSS = 1` message, with at least one message arriving whatever the allowance, and a long-running CLI case must have stopped because it was stopped, judged by a crash blacklist (`CRASH_EXITS`: SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV) plus a required exit line. A whitelist of clean SIGINT exits was rejected: which code each entry point really reports is not measured, so it would have failed cases that worked. That one-message allowance exists because limit 2 above gives the cause, not merely the shortfall: `ros2 bag play` publishes its first message before its own publisher has matched the subscriber, and a volatile reader cannot receive that sample however sound the transport. It is also the tightest bound the recorded evidence permits. Limit 2 records six (recorded, replayed) pairs — sqlite3 8/7 twice, mcap 8/8 and 8/7, and 8/7 and 9/8 at `46e6615c` — so the largest observed loss is exactly one message, five of the six pairs show it and none shows more; a bound of 0 would have failed a healthy board five times in six. At least one message has to arrive whatever the allowance, because otherwise a recording small enough for the allowance to cover all of it would pass having delivered nothing (`0 >= 1 - 1`), and the `bag info` row asks only for a printed non-zero count, so both rows would have gone green on a total playback failure. The bags here record about eight messages, so reaching that needs a prior catastrophic failure; it is closed rather than left because it is the same weak-criterion class the audit raised. The row is still far stronger than the one it replaced, which accepted any three messages however many were recorded: a 20-message bag now requires 19. **Consequence:** a run that previously reported PASS on a CLI or bag row may still now report FAIL, because a `bag info` row without a printed non-zero count, a long-running case that did not stop cleanly, and a playback short by two messages or more are each new grounds for failure. None of it has been rerun on a board.
+21. **Changed deploy: prune, read-back and manifest (2026-11-09).** An incremental deploy used to leave files from earlier builds in the board's `lib/` and `bin/`, so a dependency this build is missing could be satisfied by a stale library and the same artifacts would fail on a clean board. `deploy()` now builds a path-to-SHA-256 manifest of everything the build produces, deletes every file directly in `lib/` and `bin/` that the manifest does not name, reads back what it sent and exits non-zero on a mismatch, confirms the prune removed the files, and writes `<root>/manifest.sha256`. Spared from the prune: the Python layer's own files (`LAYER_OWNED_FILES`, currently `bin/ros2`, asserted by `deploy_python_layer`) and a library the operator staged under the board root and passed with `--diagnostic-preload`. The [deployment guide](ROS2_HUB_DEPLOYMENT.md#4-deploy-to-each-board) states the operator consequence.
+22. **Audit findings 2 and 3 are OPEN.** The same audit raised the hub's handling of failed JOIN control messages, and the connection timeout not bounding the blocking `connect()`. Neither is addressed in this change set, and neither can be validated without two boards. They are deferred, not closed.
 
 Required environment and refusals are in the [deployment guide](ROS2_HUB_DEPLOYMENT.md#6-environment-for-each-ros-process).
 
@@ -432,3 +442,92 @@ A clone also does not provide:
 
 The status stays NOT_PRODUCTION_QUALIFIED. The [deployment guide](ROS2_HUB_DEPLOYMENT.md#12-what-production-qualification-would-need)
 lists the work, and [the production support contract](PRODUCTION_SUPPORT_CONTRACT_V1.md) sets the wider requirements.
+
+## 11. Runner audit fixes (2026-11-09)
+
+An external audit of commit `c975ec6f` raised six findings. Four were addressed, in the order the user approved them.
+Nothing in this section has touched hardware.
+
+| Item | State |
+| --- | --- |
+| Implementation | PRESENT |
+| Build | N/A for the runner, which is Python; host configure of the stock integration PASS |
+| Host Test | PASS: 18 oracle cases, standalone and under `ctest`; the neighbour test `stage2.drop_python_needed` PASS |
+| Submodule pin | VERIFIED at the git object level: the new pin is fetchable from `origin`, and the build input is the identical tree |
+| RK3588A Test | BLOCKED: no board attached, `hdc list targets` returned `[Empty]` |
+| Cross-device Test | BLOCKED |
+| Audit findings 2 and 3 | OPEN, deferred; both need two boards (limit 22) |
+| Overall | NOT DEVICE-VERIFIED |
+
+### 11.1 What was fixed
+
+**Finding 1 (P1): the DSoftBus submodule pin could not be fetched by anyone else.** `b3afc287873022e7ea870fa7d6f8501aa5a3defa`
+exists only in this machine's clone of `communication_dsoftbus` ("chore: ignore local native_dsoftbus_test artifacts",
+Thu Nov 5 2026) and is on no remote branch, so a `--recursive` clone failed for every other checkout. The gitlink now names
+that commit's parent, `dd6037ce496828133bb9af89b37e2d08232a10d9`, which is on `origin/master`, `origin/HEAD` and
+`origin/weekly_20260914`, and which `git describe --tags` reports as `weekly_20240115-v-11438-gdd6037ce4`. The two commits
+differ by two lines of the submodule's `.gitignore`, and the `interfaces` tree, the only part of it the build consumes, is the
+identical git object `a30132e72fea4ac5a9b9427631818bc0de29e19b` at both pins, so no build output changes. The build reads only
+`interfaces/kits/transport` (`socket.h`), `interfaces/kits/bus_center` and `interfaces/kits/common`, as named in
+`integrations/ros2/stock/CMakeLists.txt`. **Do not re-pin to `b3afc287`:** the rule it carried
+(`tools/native_dsoftbus_test/`) is already in the submodule clone's own `.git/info/exclude` independently of the pin,
+`git ls-files --others --exclude-standard --directory tools/` in the submodule returns nothing, and on a fresh clone that
+directory does not exist at all, being local device-test output.
+
+**Finding 4 (P2): a missing observation counted as proof of a UDP-free path.** Limit 20 in section 8 states the change.
+
+**Finding 6 (P2): the `ros2` CLI and rosbag2 PASS criteria were too weak.** Limit 20 in section 8 states the change.
+
+**Finding 5 (P2): incremental deployment kept libraries from earlier builds on the board.** Limit 21 in section 8 states the
+change, and the deployment guide states what it means for an operator.
+
+An independent review (`AGENTS.md` section 8) then found five defects in the above, and all five were fixed before testing: the
+prune deleted the operator's `--diagnostic-preload` library; an empty bag passed its playback row; a whitelist of SIGINT exit
+codes (0, 130) would have failed cases that actually worked, and was replaced with the crash blacklist plus a required exit
+line; the board was hashed twice per deploy; and a bare `except Exception` in the socket sampler made a sampler bug
+indistinguishable from an unreadable board. Each of the five was then reverted one at a time in a throwaway copy of the runner,
+and in every case the matching named test failed while the unreverted copy passed, so none of the five is a test that would
+pass either way.
+
+A sixth defect was found after that review, during this documentation sync, and fixed before any device run: `playback_ok`
+required the whole recording, which limit 2's recorded cause shows would have failed a healthy board on nearly every run.
+The bound is now `ALLOWED_PLAYBACK_HEAD_LOSS = 1`, the test pins it from both sides (8 recorded and 7 replayed passes; 20
+and 18, and 20 and 3, fail; the constant itself is asserted), and the tester re-ran. A seventh followed from it and was
+fixed in the same pass, before any device run: with the allowance alone a one-message recording that replayed nothing
+passed (`0 >= 1 - 1`), so `playback_ok` now also requires `replayed > 0`, pinned by `playback_ok(0, 1, 0)` False and
+`playback_ok(0, 2, 1)` True. Limit 20 in section 8 states the rule.
+
+### 11.2 Final test evidence
+
+Executed by the independent tester in the `claude/audit-fixes-20261109` worktree on the post-review tree, with `c975ec6f`
+as the base.
+
+| Check | Command | Exit | Verdict |
+| --- | --- | --- | --- |
+| New Host oracle test | `python tests/ros2_stage2/runner_oracle_test.py` | 0 | PASS: `run_ros2_cross_board oracle tests passed (18 cases)` |
+| Pre-existing neighbour test | `python tests/ros2_stage2/drop_python_needed_test.py` | 0 | PASS |
+| Byte-compile both Python files | `python -m py_compile <file>` | 0 | PASS |
+| pyflakes both Python files | `python -m pyflakes <file>` (pyflakes 3.2.0) | 0 | PASS, zero diagnostics |
+| `ctest` registration | `ctest -C Release -R "stage2\.(runner_oracle\|drop_python_needed)" -N` | 0 | PASS: Test #3 `stage2.drop_python_needed`, Test #4 `stage2.runner_oracle` |
+| `ctest` execution | `ctest -C Release -R "stage2\.(runner_oracle\|drop_python_needed)" -V` | 0 | PASS: 100% tests passed, 0 failed out of 2 |
+| New pin on `origin` | `git -C communication_dsoftbus branch -r --contains dd6037ce` | 0 | PASS: `origin/master`, `origin/HEAD`, `origin/weekly_20260914` |
+| Old pin local-only | `git -C communication_dsoftbus branch -r --contains b3afc287` | 0, empty | PASS: the finding is confirmed |
+| Consumed headers identical | `git -C communication_dsoftbus rev-parse b3afc287:interfaces dd6037ce:interfaces` | 0 | PASS: both `a30132e72fea4ac5a9b9427631818bc0de29e19b` |
+| Device presence | `hdc list targets` | 0, `[Empty]` | BLOCKED: no board attached |
+
+The tester's final line is `Commit gate: PASS`, qualified as host-level only.
+
+**Qualification on the `ctest` rows.** The submodule is not populated in that worktree (`git submodule status` reports
+`-dd6037ce…`), so the host configure was done in a scratch directory outside it, with `-DDSOFTBUS_SOURCE_DIR` pointed at the
+parent checkout's populated clone. The headers were therefore the identical git tree, and the sources and tests that
+configured and ran were this tree's; the rows do not evidence a configure from this worktree's own submodule.
+
+### 11.3 What is not verified
+
+- **DEVICE_TESTED = false.** RK3588A test BLOCKED, cross-device test BLOCKED.
+- No part of the modified runner's real behaviour has run on hardware: no real `deploy()` against a board, so no real
+  `sha256sum`, prune, `manifest.sha256` or `send`; no real `/proc` sampling over `hdc`; no real `ros2` CLI or rosbag2
+  record, info or play; `mode_cli` and `mode_long_outage` NOT_RUN. All of it is exercised through test doubles only.
+- The C++ side was not built and the other stock Host tests are NOT_RUN; this change set touches no C++.
+- The device results in sections 5 and 6 were produced by the previous runner. They remain true of what they measured and
+  are not restated here as validating this change set.

@@ -59,6 +59,9 @@ git submodule update --init --recursive
 
 父仓库固定子模块提交。复现某个 checkout 时应保留这些提交；把子模块更新到
 远端分支会改变源码输入。发布脚本会按发布指南获取其显式选定的上游版本。
+固定的提交还必须是子模块远端能够提供的提交，否则上面的 clone 对其他人会失败；
+2026-11-09 据此修正了 DSoftBus 子模块的 pin，所消费的头文件没有变化，详见
+[版本与发布指南第 5 节](docs/FASTDDS_VERSIONS_AND_RELEASE.md#5-reproducing-from-a-clean-clone)（英文）。
 
 ## Windows 主机开发
 
