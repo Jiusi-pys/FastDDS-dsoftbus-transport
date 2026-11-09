@@ -18,9 +18,12 @@
   [hub 部署指南](docs/ROS2_HUB_DEPLOYMENT.md)。ROS Python 层现由本仓库从固定版本源码构建，
   不修改 ROS 源码；CPython 和第三方模块是从开发板拉取的声明输入。2026-11-09 按外部审计修正了
   DSoftBus 子模块 pin（此前其他 checkout 无法完成带子模块的克隆），并收紧了两板发布脚本的判定、
-  清理了部署残留；这些改动只有 HOST_TESTED，没有连接开发板（DEVICE_TESTED false），
-  另有两项与 hub 相关的审计发现仍为 OPEN，见
+  清理了部署残留；这些改动只有 HOST_TESTED，没有连接开发板（DEVICE_TESTED false），见
   [Stage 2 验收第 11 节](docs/STAGE2_ROS2_DEVICE_20261105.md#11-runner-audit-fixes-2026-11-09)。
+  当时仍为 OPEN 的两项 hub 审计发现（JOIN 控制帧发送失败被丢弃、连接超时未约束阻塞的 `connect()`）
+  已于 2026-11-10 实现修复：host 测试覆盖纯逻辑部分，其依赖的内核行为已在两块开发板上实测通过，
+  但 **整体仍未端到端验证**——没有跑过任何 ROS 2 / RTPS 流量，`HubTransport.cpp` 本身不被任何测试固定，
+  见 [Stage 2 验收第 11.6 节](docs/STAGE2_ROS2_DEVICE_20261105.md#116-hub-client-lifecycle-lost-control-frames-and-the-unbounded-connect-2026-11-10)。
   45 s 和 70 s 断链后开发板会离开 DSoftBus 网络，
   需要重启 `softbus_server`（可选参数 `--recover-bus-after`），无需重启开发板。
   stock 2.14.5、3.6.2、3.2.5 上的 Stage 2 仍为 NOT_RUN。历史 ROS 2 结果保留其原二进制和配置范围，见

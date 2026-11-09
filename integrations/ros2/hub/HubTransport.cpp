@@ -1,4 +1,5 @@
 #include "HubTransport.hpp"
+#include "HubConnect.hpp"
 #include <fastdds/rtps/common/LocatorSelector.hpp>
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
 #include <fastdds/rtps/common/PortParameters.h>
@@ -22,24 +23,10 @@ namespace {
 using Clock = std::chrono::steady_clock;
 constexpr auto kConnectLimit = std::chrono::seconds(5);
 constexpr auto kReconnectPause = std::chrono::milliseconds(100);
-constexpr int kSocketBufferBytes = 4 << 20;
-
-int OpenSocket(const std::string& path)
-{
-    sockaddr_un where {};
-    if (path.size() >= sizeof(where.sun_path)) return -1;
-    where.sun_family = AF_UNIX;
-    std::memcpy(where.sun_path, path.c_str(), path.size() + 1);
-    const int fd = ::socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
-    if (fd < 0) return -1;
-    if (::connect(fd, reinterpret_cast<const sockaddr*>(&where), sizeof(where)) != 0) { ::close(fd); return -1; }
-    (void)::setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &kSocketBufferBytes, sizeof(kSocketBufferBytes));
-    (void)::setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &kSocketBufferBytes, sizeof(kSocketBufferBytes));
-    // Control frames use a blocking send. This bound keeps a stopped hub from holding a channel open or close.
-    const timeval limit {1, 0};
-    (void)::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &limit, sizeof(limit));
-    return fd;
-}
+// kCancelSlice, kSocketBufferBytes, ConnectWithin and OpenHubSocket live in HubConnect.hpp. They are
+// POSIX only and free of Fast DDS, so they can be compiled for the target on their own, which is the
+// only compile this code can get on a build host with no Fast DDS headers for this line.
+constexpr int kControlAttempts = 3;  // a control frame is one header; a retry is cheap and bounded
 
 Locator GroupLocator(std::uint32_t port)
 {
@@ -96,8 +83,11 @@ void HubTransport::Stop()
         if (fd_ >= 0) ::shutdown(fd_, SHUT_RDWR); // wakes the receive thread
     }
     if (receiver_.joinable()) receiver_.join();
+    // membership_gate_ after the join, never across it, and before socket_gate_ as everywhere else: the
+    // invariant that a retired socket never keeps claiming it was told anything holds without exception.
+    std::lock_guard<std::mutex> membership(membership_gate_);
     std::unique_lock<std::shared_mutex> lock(socket_gate_);
-    if (fd_ >= 0) { ::close(fd_); fd_ = -1; }
+    if (fd_ >= 0) { ::close(fd_); fd_ = -1; membership_.Reset(); }
 }
 
 bool HubTransport::SendControl(int fd, std::uint32_t magic, std::uint32_t port) const
@@ -106,35 +96,89 @@ bool HubTransport::SendControl(int fd, std::uint32_t magic, std::uint32_t port) 
     return ::send(fd, &header, kHeaderBytes, MSG_NOSIGNAL) == static_cast<ssize_t>(kHeaderBytes);
 }
 
-bool HubTransport::Connect()
+bool HubTransport::SendControlBounded(int fd, std::uint32_t magic, std::uint32_t port) const
 {
-    const int fd = OpenSocket(descriptor_.socket_path);
+    // Each attempt can cost SO_SNDTIMEO, so the stop flag is read between them: a shutdown must not
+    // wait out three timeouts per group before the receive thread can be joined.
+    return SendWithRetry([&] { return SendControl(fd, magic, port); }, kControlAttempts, stopping_);
+}
+
+bool HubTransport::SyncMembership(int fd)
+{
+    // membership_gate_ is held by every caller. This is the failure the audit found: a join whose frame
+    // never left used to be discarded, leaving a process that believed it was attached, heard nothing,
+    // and reported no error anywhere. SyncPending holds the policy, so a host test pins it.
+    std::uint32_t failed = 0;
+    const bool all = SyncPending(membership_, [&](std::uint32_t port) {
+        if (SendControlBounded(fd, kJoinMagic, port)) return true;
+        failed = port;
+        return false;
+    });
+    if (!all) {
+        std::fprintf(stderr, "FDDS_HUB_CLIENT_JOIN_FAILED port=%u\n", failed);
+        std::fflush(stderr);
+    }
+    return all;
+}
+
+void HubTransport::DropSocket(int fd)
+{
+    // Shut the socket down; do NOT close it. close() does not wake a thread already blocked in recv()
+    // on the same descriptor, and this runs on an application thread while the receive thread sits in
+    // exactly that call. Closing here would wedge the receive thread for ever: no reconnection, so the
+    // group is never rejoined and Send fails from then on; no disconnect visible to the hub, which goes
+    // on routing frames into a buffer nobody reads; and Stop() would find no socket left to shut down
+    // and join for ever -- the unbounded join this change exists to remove. It would also free the
+    // descriptor number for immediate reuse while the receive thread still holds it.
+    //
+    // shutdown() does wake it. The receive thread then closes the descriptor and clears the membership
+    // it can no longer vouch for, which is the one place that happens.
+    std::shared_lock<std::shared_mutex> lock(socket_gate_);
+    if (fd_ == fd && fd_ >= 0) ::shutdown(fd_, SHUT_RDWR);
+}
+
+bool HubTransport::Connect(const Clock::time_point& deadline)
+{
+    const int fd = OpenHubSocket(descriptor_.socket_path, deadline, stopping_);
     if (fd < 0) return false;
-    if (!SendControl(fd, kHelloMagic, 0)) { ::close(fd); return false; }
+    if (!SendControlBounded(fd, kHelloMagic, 0)) { ::close(fd); return false; }
+    std::lock_guard<std::mutex> membership(membership_gate_);
     {
         std::unique_lock<std::shared_mutex> lock(socket_gate_);
         if (fd_ >= 0) ::close(fd_);
         fd_ = fd;
+        // A new socket has been told nothing, whatever the old one knew.
+        membership_.Reset();
     }
-    // After the socket is published: a group opened from here on joins through it, and one opened earlier is in
-    // this list. A join sent twice is harmless, a lost one would hide this process from discovery.
-    std::shared_lock<std::shared_mutex> receivers(receivers_gate_);
+    // The socket is published first, so a group opened from here on joins through it; one opened earlier
+    // is wanted and is joined now. membership_gate_ is what keeps those two from interleaving.
     std::shared_lock<std::shared_mutex> socket(socket_gate_);
-    for (const auto group : groups_) if (fd_ >= 0) (void)SendControl(fd_, kJoinMagic, group);
-    return true;
+    if (SyncMembership(fd)) return true;
+    // This socket cannot carry this process's membership, so it is replaced rather than used: a
+    // half-joined connection would hide the process from discovery with nothing reported.
+    socket.unlock();
+    DropSocket(fd);
+    return false;
 }
 
 bool HubTransport::init(const eprosima::fastrtps::rtps::PropertyPolicy*, const std::uint32_t&)
 {
+    // One budget for the connect and for the retries together. Before, this deadline bounded only the
+    // retries, and a single connect could sit in the kernel past it without ever being checked.
     const auto end = Clock::now() + kConnectLimit;
-    while (!Connect()) {
+    while (!Connect(end)) {
+        if (stopping_.load()) return false;
         if (Clock::now() >= end) {
-            std::fprintf(stderr, "FDDS_HUB_CLIENT_REFUSED reason=no_hub path=%s\n", descriptor_.socket_path.c_str());
+            // Not necessarily absent: the hub may have accepted and then refused a control frame, in
+            // which case SyncMembership has already said which group on the line above.
+            std::fprintf(stderr, "FDDS_HUB_CLIENT_REFUSED reason=no_usable_hub path=%s\n",
+                    descriptor_.socket_path.c_str());
             std::fflush(stderr);
             return false;
         }
         std::this_thread::sleep_for(kReconnectPause);
     }
+    if (stopping_.load()) return false;  // Stop() ran during the connect: no thread nothing will join
     receiver_ = std::thread([this] { ReceiveLoop(); });
     return true;
 }
@@ -161,7 +205,9 @@ void HubTransport::ReceiveLoop()
         int fd;
         { std::shared_lock<std::shared_mutex> lock(socket_gate_); fd = fd_; }
         if (fd < 0) {
-            if (Connect()) {
+            // A deadline per attempt. The loop itself ends when Stop() sets stopping_, which is checked
+            // above and inside the connect, so the receive thread cannot outlive a shutdown.
+            if (Connect(Clock::now() + kConnectLimit)) {
                 std::fprintf(stderr, "FDDS_HUB_CLIENT_RECONNECTED\n"); std::fflush(stderr);
                 reported = false;
             } else {
@@ -174,8 +220,12 @@ void HubTransport::ReceiveLoop()
             if (got < 0 && errno == EINTR) continue;
             if (stopping_.load()) break;
             if (!reported) { std::fprintf(stderr, "FDDS_HUB_CLIENT_DISCONNECTED\n"); std::fflush(stderr); reported = true; }
+            // membership_gate_ first, the order every path that replaces the socket uses. Retiring a
+            // socket without it would leave membership claiming that groups had been told to a socket
+            // that is gone, which is what makes the fd_ == fd comparisons elsewhere safe.
+            std::lock_guard<std::mutex> membership(membership_gate_);
             std::unique_lock<std::shared_mutex> lock(socket_gate_);
-            if (fd_ == fd) { ::close(fd_); fd_ = -1; }
+            if (fd_ == fd) { ::close(fd_); fd_ = -1; membership_.Reset(); }
             continue;
         }
         FrameHeader header;
@@ -262,30 +312,59 @@ bool HubTransport::OpenInputChannel(const Locator& locator, rt::TransportReceive
     if (!IsLocatorSupported(locator)) return false;
     const bool group = IsGroup(AddressOf(locator));
     if (!group && AddressOf(locator) != address_) return false;
+    // After Stop() there is no receive thread, so nothing would ever reconnect and join this. Saying so
+    // is better than returning true and leaving the caller holding a channel that cannot be served.
+    if (stopping_.load()) return false;
+    // membership_gate_ before receivers_gate_, the order every path here uses.
+    std::unique_lock<std::mutex> membership(membership_gate_, std::defer_lock);
+    if (group) membership.lock();
     {
         std::unique_lock<std::shared_mutex> lock(receivers_gate_);
         if (!receivers_.emplace(locator, receiver).second) return true;
-        if (group) groups_.insert(locator.port);
+        if (group) membership_.Want(locator.port);
     }
-    if (group) {
+    if (!group) return true;
+    int fd = -1;
+    { std::shared_lock<std::shared_mutex> lock(socket_gate_); fd = fd_; }
+    if (fd < 0) return true;  // no socket to tell: the group is wanted, and the reconnect joins it
+    {
         std::shared_lock<std::shared_mutex> lock(socket_gate_);
-        if (fd_ >= 0) (void)SendControl(fd_, kJoinMagic, locator.port); // otherwise the reconnect joins it
+        if (fd_ == fd && SyncMembership(fd)) return true;
     }
+    // The bounded retry did not get the join out. The socket is dropped so the receive thread replaces
+    // it and joins every wanted group again: the membership is recorded, so it is established on
+    // reconnect rather than silently lost, which is what used to happen here.
+    DropSocket(fd);
     return true;
 }
 
 bool HubTransport::CloseInputChannel(const Locator& locator)
 {
+    const bool group = IsGroup(AddressOf(locator));
+    std::unique_lock<std::mutex> membership(membership_gate_, std::defer_lock);
+    if (group) membership.lock();
     bool left = false;
     {
         std::unique_lock<std::shared_mutex> lock(receivers_gate_);
         if (receivers_.erase(locator) == 0) return false;
-        if (IsGroup(AddressOf(locator))) { groups_.erase(locator.port); left = true; }
+        if (group) left = membership_.Unwant(locator.port);
     }
-    if (left) {
+    if (!left) return true;
+    int fd = -1;
+    { std::shared_lock<std::shared_mutex> lock(socket_gate_); fd = fd_; }
+    if (fd < 0) return true;  // nothing to tell: a reconnect joins only what is still wanted
+    // During a shutdown SendWithRetry declines before the first attempt, and reporting that as a lost
+    // LEAVE would put a frame nobody sent into the log an operator reads as evidence of one.
+    if (stopping_.load()) return true;
+    {
         std::shared_lock<std::shared_mutex> lock(socket_gate_);
-        if (fd_ >= 0) (void)SendControl(fd_, kLeaveMagic, locator.port);
+        if (fd_ != fd || SendControlBounded(fd, kLeaveMagic, locator.port)) return true;
     }
+    std::fprintf(stderr, "FDDS_HUB_CLIENT_LEAVE_FAILED port=%u\n", locator.port);
+    std::fflush(stderr);
+    // The hub would keep sending this group's frames to a process with no receiver for them. Replacing
+    // the socket resynchronizes membership from what is still wanted, which no longer includes this.
+    DropSocket(fd);
     return true;
 }
 
