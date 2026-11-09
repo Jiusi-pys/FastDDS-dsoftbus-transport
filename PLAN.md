@@ -16,7 +16,12 @@
   以及每板一个 `fdds_dsb_hub`、可接入多个 ROS 进程的 hub 路径。范围和限制见
   [Stage 2 验收](docs/STAGE2_ROS2_DEVICE_20261105.md)，部署方法和生产资格尚缺的工作见
   [hub 部署指南](docs/ROS2_HUB_DEPLOYMENT.md)。ROS Python 层现由本仓库从固定版本源码构建，
-  不修改 ROS 源码；CPython 和第三方模块是从开发板拉取的声明输入。45 s 和 70 s 断链后开发板会离开 DSoftBus 网络，
+  不修改 ROS 源码；CPython 和第三方模块是从开发板拉取的声明输入。2026-11-09 按外部审计修正了
+  DSoftBus 子模块 pin（此前其他 checkout 无法完成带子模块的克隆），并收紧了两板发布脚本的判定、
+  清理了部署残留；这些改动只有 HOST_TESTED，没有连接开发板（DEVICE_TESTED false），
+  另有两项与 hub 相关的审计发现仍为 OPEN，见
+  [Stage 2 验收第 11 节](docs/STAGE2_ROS2_DEVICE_20261105.md#11-runner-audit-fixes-2026-11-09)。
+  45 s 和 70 s 断链后开发板会离开 DSoftBus 网络，
   需要重启 `softbus_server`（可选参数 `--recover-bus-after`），无需重启开发板。
   stock 2.14.5、3.6.2、3.2.5 上的 Stage 2 仍为 NOT_RUN。历史 ROS 2 结果保留其原二进制和配置范围，见
   [ROS 2 能力矩阵](docs/ROS2_CAPABILITY_MATRIX.md)。

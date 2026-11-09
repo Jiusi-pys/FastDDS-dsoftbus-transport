@@ -78,7 +78,8 @@ layer goes as one archive of about 209 MiB, and needs about that much free space
 python scripts/release/run_ros2_cross_board.py --work $W --a <A> --b <B> --hub --mode smoke
 ```
 
-This fills `/data/local/tmp/fdds_dsb/2.14.5-ros/`:
+This fills `/data/local/tmp/fdds_dsb/2.14.5-ros/`. Since 2026-11-09 each path below is a symlink into the active
+release rather than a directory of its own; the layout under the root is in the staged-release block after the table:
 
 | Board path | Content |
 | --- | --- |
@@ -94,6 +95,68 @@ If you copy files by hand, strip CRLF from the ament index, because a CR left in
 on Windows have no execute bit, and `ros2 run` only offers executable files.
 
 The runner kills every `fdds_dsb_hub` on both boards when it starts and ends, so do not run it against a hub you are using.
+
+**A deploy stages a complete release and activates it by moving one symlink (since 2026-11-09).** This replaces the in-place
+prune of earlier the same day, which removed `python/`, `share/` and `lib/python3.12`, uploaded over the active files and then
+pruned them, all while that deployment was the running one: an interrupted deploy left a half-updated board with nothing to go
+back to. Nothing in the running deployment is now written to or removed while a release is being prepared.
+
+| Board path | What it is | What a deploy does to it |
+| --- | --- | --- |
+| `releases/<id>/` | One complete release. `<id>` is a content address: SHA-256 over the sorted artifact manifest plus the one-line `release.marker` that covers the Python layer or the ament index, so the same build stages nothing twice and a rebuilt layer or a changed ament index is a release of its own. | Writes the new one; keeps the active one and the rollback target |
+| `current` | Symlink to `releases/<id>`. The only link an activation moves. | Moved last, after the new release validated in place |
+| `lib`, `bin`, `python`, `share`, `manifest.sha256` | Symlinks to the same name under `current`, so `lib/` and `share/` can never come from different releases. | Written once, then never moved again |
+| `state/active`, `state/previous` | The running release and the rollback target. `previous` is written only after an activation succeeded. | Written |
+| `state/activating` | Present only during a swap. Its presence means an activation was interrupted. | Written before, removed after |
+| `work/` | Mutable runtime data of every run: configs, logs, `HOME`. | Creates the directory if absent; never writes to, validates or removes what is in it |
+| `operator/` | Artifacts you manage, a `--diagnostic-preload` library among them. | Creates the directory if absent; never writes to, validates or removes what is in it |
+| `legacy/<token>/` | A pre-staging layout (real `lib/`, `bin/`, `python/`, `share/`) moved aside on the first staged deploy. | Moved, never deleted |
+
+A release is prepared in `releases/<id>.partial`, validated there, and only then given its name; whatever held that name is
+moved aside as `<id>.stale-<token>` first, because a restage can be of the release that is running, and is deleted only after a
+validated release has been activated. If validation fails after the rename, both moves are undone and the exit message says
+whether the board still serves what it was running. A pre-staging layout is moved aside **last**, immediately before
+activation, so a deploy that fails or is refused never takes the running deployment away.
+
+What this means for you:
+
+- **A `--diagnostic-preload` library must move to `<root>/operator/`.** A path inside a release directory is refused, with a
+  message naming that directory, because a release replaces those paths with symlinks and the library is not part of the
+  release. This is the one operator-visible change of behaviour: a library kept in `<root>/lib` has to be moved.
+- **`--rollback` is new.** It validates `state/previous` before touching anything at all, activates it, and swaps
+  `state/previous`, so a rollback can be rolled forward. It refuses an absent or damaged target, and it refuses to be combined
+  with `--no-deploy`.
+- **`--no-deploy` now exits rather than running against a half-switched board.** Two guards: `state/activating` present (an
+  activation was interrupted), and the recorded active release not being what `current` serves, or not being there at all. In
+  either case run a deploy or a `--rollback` to finish or repair the switch; `--no-deploy` does neither, so it is refused.
+- **Validation is by content, four checks:** every manifest path present in `lib/` or `bin/` with the right SHA-256; nothing
+  else in `lib/` or `bin/`, because a stale library there could satisfy a dependency this build is missing; the number of files
+  in `python`, `share` and `lib`; and the directory name recomputed from the manifest and the marker found inside the release.
+  The file count is what covers the Python layer and the ament index, which are most of a release by size and are not hashed on
+  the board: **it catches a tree cut short, not a file altered inside one.**
+- **Two releases stay on the board**, the active one and the rollback target; older ones are removed, and `legacy/<token>/` is
+  kept indefinitely. With a full Python layer in each release that is roughly twice the 209 MiB archive unpacked, under
+  `/data/local/tmp`. Watch free space on first hardware contact.
+- **Files the active release already holds with the right digest are hard-linked** into the new release instead of being
+  uploaded again; a board with no usable active release, or one without `ln`, simply receives everything. The Python layer
+  archive is not shared this way: it is re-uploaded in full whenever the release id changes.
+- **`<root>/manifest.sha256` still names the exact set that ran**, now through the release link.
+- **`<root>/python-layer.done`, `<root>/ament_index.tar` and `<root>/python-layer.tar`** left by the earlier in-place code are
+  orphaned: nothing reads or removes them, and they are in no counted tree and in no release link. Harmless, and safe to
+  delete by hand.
+- a run fails with `no socket observation on <side>` when a watched process was never sampled, and the `ros2` CLI and
+  rosbag2 checks are stricter, so a run that previously reported PASS on those rows may now report FAIL or, on the
+  rosbag2 completeness rows, `UNVERIFIED` (section 7).
+
+**None of this has run against a real filesystem.** It is HOST_TESTED only, by `stage2.runner_oracle` against a fake board that
+interprets the commands the deploy sends: no real staging, hard link, rename, symlink swap, activation, rollback, prune or
+legacy migration. Treat the first deploy on hardware as the first real test of the deployment path. One assumption has to be
+confirmed by hand before a C++ only release can be trusted: with `python/` absent,
+`cd releases/<id> && find python share lib -type f | wc -l` must still count the trees that do exist. GNU and toybox `find` are
+expected to report the missing operand on stderr and carry on, and validation depends on that; if a board's `find` bails out
+instead, the count comes back short and every C++ only deploy fails validation. A release carrying the Python layer has all
+three operands and is unaffected. See
+[section 11.5 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#115-staged-releases-with-atomic-activation-and-rollback-2026-11-09).
 
 ## 5. Configure and start the hub
 
@@ -219,7 +282,10 @@ See [section 6.4 of the version guide](FASTDDS_VERSIONS_AND_RELEASE.md#64-conten
 
 This repository builds the ROS Python layer from pinned sources (section 3), and everything runs from the deployed root. Nothing
 outside it is on any path, so a missing file fails rather than finding an older copy. `--mode cli` passed 42 of 42 checks, twice,
-with 755 loaded files and none outside the deployment or system paths.
+with 755 loaded files and none outside the deployment or system paths. Those runs predate 2026-11-09: with `--groups all` the mode
+now runs two cases more than those 42, and it starts two more `listener` processes on board A (`strict_listener1` on `/s2strict1`
+and `strict_listener2` on `/s2strict2`), which are up for the whole mode and take board A from 8 long-lived ROS processes to 10.
+The mode has not been rerun on a board since.
 
 Python processes use section 6 with these differences, where `R` is the deployed root:
 
@@ -252,6 +318,23 @@ global libpython. C++ nodes need neither of these: installed C++ programs have n
 
 `ros2 bag` works with sqlite3, mcap and zstd file compression. A play can deliver 1 message fewer than recorded, because the first
 goes before the player's publisher matches.
+
+**The playback check is two checks (since 2026-11-09).** `bag_play_smoke_sqlite3` and `bag_play_smoke_mcap` (renamed from
+`bag_play_sqlite3` and `bag_play_mcap`) keep that one-message allowance; they catch a playback that broke outright and are **not**
+evidence of complete playback. `bag_complete_sqlite3` and `bag_complete_mcap` are the completeness rows: each reads its bag back on
+the board through `rosbag2_py`, waits until the ROS graph shows a subscriber on its own measured topic, plays the bag onto that
+topic and requires the replay to be the recording, with nothing missing, duplicated, reordered or never recorded, and the bag itself
+free of sequence gaps and of a payload stored under two digests. Nothing is subtracted to reach a pass. What this means for you:
+
+- a strict row reports `UNVERIFIED`, and does **not** pass, where the Python layer or `rosbag2_py` is unavailable on the board, or
+  where the graph shows no subscriber on the measured topic;
+- it reports `FAIL` where the replay was not the recording, and names a damaged recording separately from a bad replay, so a fault
+  while recording does not read as a transport fault;
+- a run that previously reported PASS on the bag rows may now report FAIL or UNVERIFIED.
+
+**Strict completeness is UNVERIFIED.** The oracle is HOST_TESTED against fakes only. No real `rosbag2_py` read, no real
+`ros2 topic info --verbose` readiness check, no real `ros2 bag play` and no real listener output have run on a board, and `--mode cli`
+is NOT_RUN since the change. See [section 11.4 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#114-strict-bag-playback-completeness-2026-11-09-after-the-evidence-in-112).
 
 `ros2 security` does not work on the board, because `cryptography` and `lxml` are absent there. See section 8.
 
@@ -400,6 +483,10 @@ Without it:
 - **NOT_RUN:** rviz and rqt GUIs, `ros2 trace`, the hub as a system service.
 - **Not proven:** SDK drain, epoch and cancellation behaviour.
 - **Unique flows** set to STRICTLY_REQUIRED would fail. `No unicast locators to create unique flows` appears once per process and is expected.
+- **The staged deployment path has never run on a board (2026-11-09).** Staging, activation, `--rollback`, the prune and
+  the migration of a pre-staging layout are HOST_TESTED against a fake board only, and a `--diagnostic-preload` library
+  now has to live in `<root>/operator/` (section 4).
+- **Two audit findings are OPEN (2026-11-09):** the hub ignores a failed JOIN control message, and the connection timeout does not bound the blocking `connect()`. Neither is fixed, and neither can be validated without two boards ([limit 22](STAGE2_ROS2_DEVICE_20261105.md#8-limits-workarounds-and-unexplained-behaviour-agentsmd-53)).
 
 The full list with evidence is in [section 8 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#8-limits-workarounds-and-unexplained-behaviour-agentsmd-53).
 
@@ -413,6 +500,9 @@ None of the following is done. This list is the work the evidence does not cover
 - Run the hub as a system service with a defined identity, not root over `hdc`: start order, restart policy, log capture, permission to set the token.
 - Choose a path outside `/data/local/tmp` and define the socket's owner and group.
 - Decide how the token and config are provisioned and protected.
+- Run the staged deploy on real boards: a staging, an activation, a `--rollback`, a restage of the running release, the
+  migration of a pre-staging layout, and the file-count check on a C++ only release, where `python/` is absent
+  (section 4). None of it has touched a real filesystem.
 - Decide how CPython and its third-party modules are supplied and maintained, since they are pulled from a board and not built here.
 
 **Endurance and failure**

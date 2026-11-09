@@ -56,6 +56,56 @@ a system service, ROS on Fast DDS 3.x and ROS on stock lines NOT_RUN. The CFT wo
 create ContentFilteredTopics while writers are active. See the [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md) and the
 [hub deployment guide](ROS2_HUB_DEPLOYMENT.md), which lists what production qualification would need.
 
+**Runner audit fixes (2026-11-09): HOST_TESTED, DEVICE_TESTED false.** An external audit of `c975ec6f` found that the
+`communication_dsoftbus` pin was a commit that exists only in this machine's clone, so no other checkout could clone the
+repository with its submodules, and that the two-board release runner `scripts/release/run_ros2_cross_board.py` accepted a
+missing socket observation as proof of a UDP-free path, passed `ros2` CLI and rosbag2 rows on a startup marker alone, and left
+libraries from earlier builds on the boards. The pin is now `dd6037ce`, which is on `origin/master`; its `interfaces` tree, the
+only part the build consumes, is the identical git object `a30132e7…`, so no build output changes. The runner's socket, CLI and
+bag oracles are stricter, and the deploy was rewritten twice the same day: first to prune what the build does not produce,
+read back what it sent and write `manifest.sha256` on the board, then into the staged releases described below, which
+replace that in-place prune. New Host test `stage2.runner_oracle` passes, 49 cases, standalone and under `ctest`
+(`100% tests passed out of 2`, with `stage2.drop_python_needed`); the 70/70 stock suite was not rerun with it registered.
+
+**Bag playback, split in two (2026-11-09): smoke PASS criterion retained, strict completeness UNVERIFIED.** The rows that tolerate
+the documented one-message head loss are now named `bag_play_smoke_sqlite3` and `bag_play_smoke_mcap`, and that allowance is a smoke
+criterion, never proof of complete playback. New rows `bag_complete_sqlite3` and `bag_complete_mcap` read each bag back on the board
+through `rosbag2_py` and compare it with the replay message by message on a topic of their own, requiring the same payloads, the same
+count of each, the same order and no message that was never recorded, with the bag's own soundness reported apart. A row that cannot
+establish completeness reports `UNVERIFIED` and does not pass. **Strict completeness is not established:** its oracle is host-tested
+against fakes only, no part of the strict path has run on hardware, and `mode_cli` is NOT_RUN, so a device run that previously
+reported PASS on the bag rows may report FAIL or UNVERIFIED. The mode also now carries two extra `listener` processes on board A,
+10 instead of 8. **None of the runner's real behaviour has run on hardware:** `hdc list targets`
+returned `[Empty]`, so the RK3588A and cross-device tests are BLOCKED, and the Stage 2 device numbers above were produced by the
+previous runner and are not restated as validating this change. Two audit findings, on the hub's JOIN control-message handling
+and on its blocking `connect()`, are OPEN and deferred; both need two boards. Details in
+[section 11 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#11-runner-audit-fixes-2026-11-09).
+
+**Staged deployment (2026-11-09): HOST_TESTED, nothing on a real filesystem.** The deploy above still mutated the deployment
+it was running: it removed `python/`, `share/` and `lib/python3.12`, uploaded over the active files one at a time and pruned
+them, then checked the result, so an interrupted deploy left a half-updated board with nothing to go back to. A deploy now
+stages a complete release in `<root>/releases/<id>/`, where `<id>` is a content address over the artifact manifest plus a
+marker for the Python layer or the ament index, validates it by content, and activates it by moving the single symlink
+`<root>/current`; `lib`, `bin`, `python`, `share` and `manifest.sha256` are symlinks into `current` that never move, so
+`lib/` and `share/` cannot come from different releases. `work/` and `operator/` are created if absent and otherwise
+untouched by a deploy, a pre-staging layout is moved to `legacy/<token>/` rather than deleted and only immediately before
+activation, `--rollback` activates the validated previous release, and `--no-deploy` refuses a board that is half switched
+over. **Operator-visible change:** a `--diagnostic-preload` library must move to `<root>/operator/`, outside any release.
+Four rounds of independent review preceded this record; two of the first round's findings were the same failure class the
+change removes, and each was invisible to the suite because the test fake supplied a value the production code should have
+derived, so the suite now stubs nothing on the host side. Host evidence: 49 oracle cases standalone and under `ctest`,
+pyflakes clean, and a tester-executed seven-mutant battery against the production code in which no mutant survived, the
+baseline passing at 49 cases; the tester also checked that the real builders and extractors run unstubbed and that the host
+and board file counts agree by independent routes. The implementer separately reports reverting 37 fixes one at a time for 37
+matching named failures, which **is not tester evidence**: no artifact for it is kept in the repository and the tester did
+not re-run those reverts. **None of the release machinery has run against a real filesystem** — no real staging, hard link,
+rename, symlink swap, activation, rollback, prune or legacy migration; `hdc list targets` returned `[Empty]`, so RK3588A and
+cross-device are NOT_RUN. This is a redesign of the deployment path and its first device run is its first real test, which
+must also confirm by hand that `find python share lib -type f` still counts correctly on a C++ only release, where `python/`
+is absent. Details in
+[section 11.5 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#115-staged-releases-with-atomic-activation-and-rollback-2026-11-09)
+and limit 25 of its section 8.
+
 The CFT filter-factory race remains on Fast DDS 2.14.5 and 3.6.2. On 3.6.2 the
 recorded UDP/TCP/DSoftBus stress windows crashed 2/3, 1/3 and 3/3 respectively;
 the documented writer-side-filtering workaround was clean in the corresponding

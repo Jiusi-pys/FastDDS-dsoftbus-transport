@@ -28,6 +28,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -40,6 +41,7 @@ REFUSED_EXIT = 71
 GROUP_CASES = {'topic': 4, 'service': 1, 'action': 2, 'parameter': 1, 'lifecycle': 1}  # the graph case always runs
 OUTAGE_SECONDS = 15
 ALLOWED_TAIL_LOSS = 10  # samples a peer may still send after the receiver stopped
+ALLOWED_PLAYBACK_HEAD_LOSS = 1  # ros2 bag play publishes its first message before its own publisher has matched
 FEATURE_CASES = {'qos': 5, 'data': 4, 'large': 3, 'scale': 1, 'graph': 4, 'calls': 4, 'exec': 7, 'context': 1, 'domain2': 1, 'services': 6}
 DIRECT_ONLY_LIMIT = {'domain2'}  # a direct process serves the one domain its link was configured for
 PROGRAMS = ['stage2_node', 'stage2_features', 'stage2_dispose_probe', 'minimal_publisher', 'minimal_subscriber', 'minimal_action_server', 'fdds_dsb_hub']
@@ -96,26 +98,383 @@ def local_sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def deploy(target, root, libs, bins, ros_install):
-    sh(target, 'mkdir -p %s/lib %s/bin %s/work' % (root, root, root))
-    remote = dict(reversed(l.split()) for l in sh(target, 'cd %s && sha256sum lib/* bin/* 2>/dev/null' % root, 300).splitlines() if len(l.split()) == 2)
-    sent = deploy_python_layer(target, root, ros_install)
+# Files the Python layer puts straight into lib/ or bin/. They belong to the layer's own digest, not to
+# the artifact manifest, so the prune below must leave them alone. deploy_python_layer asserts this stays true.
+LAYER_OWNED_FILES = {'bin/ros2'}
+
+
+BATCH_FILES = 40  # paths per shell command, so a few hundred of them never make one over-long line
+
+
+def remote_digests(target, root, paths=None):
+    """sha256 of files directly in the board's lib/ and bin/, as {'lib/x.so': digest}.
+
+    paths=None hashes everything there. A list hashes only those, in batches short enough for one
+    command, and leaves out the ones that do not exist, which is also how a removal is confirmed.
+    An empty list runs nothing at all: sha256sum without an operand would read stdin and hang.
+    """
+    if paths is None:
+        batches = ['lib/* bin/*']
+    else:
+        batches = [' '.join("'%s'" % p for p in paths[i:i + BATCH_FILES]) for i in range(0, len(paths), BATCH_FILES)]
+    digests = {}
+    for what in batches:
+        text = sh(target, 'cd %s && sha256sum %s 2>/dev/null' % (root, what), 300)
+        digests.update(dict(reversed(l.split()) for l in text.splitlines() if len(l.split()) == 2))
+    return digests
+
+
+# What a release owns under root. Each is a symlink to the same name inside `current`, and `current` is
+# the one link activation moves, so a deployment can never be left half switched over.
+RELEASE_LINKS = ('lib', 'bin', 'python', 'share', 'manifest.sha256')
+CURRENT = 'current'
+# Everything else directly under root belongs to someone else: work/ holds the mutable runtime data of every
+# run, and operator/ is where an operator keeps artifacts of their own, a --diagnostic-preload library among
+# them. A deploy creates those two if they are absent and does nothing else to either: it never validates
+# them, never removes them, and never writes into them.
+
+
+def release_marker(kind, digest, count):
+    """The one line a release carries about whatever its manifest does not cover.
+
+    'layer <digest> <count>' for a build with the Python layer, 'index <digest> <count>' for a C++ only
+    one. It goes into the release id and is written inside the release, so the two can be compared, and
+    the count is what validate_release can check against the board over a tree it does not hash.
+    """
+    return '%s %s %d' % (kind, digest, count)
+
+
+def release_id(manifest, marker):
+    """The content address of a release.
+
+    Equal inputs give an equal id, so deploying the same build twice stages nothing, and a release can
+    be named by what it contains rather than by when it was made. The marker is included because the
+    Python layer and the ament index are most of a release by size and are not in the manifest.
+    """
+    import hashlib
+    body = ''.join('%s %s\n' % (p, d) for p, d in sorted(manifest.items()))
+    return hashlib.sha256((body + (marker or '-') + '\n').encode('utf-8')).hexdigest()[:16]
+
+
+def pending_activation(target, root):
+    """The release an interrupted activation was switching to, or '' when there is none.
+
+    main() refuses --no-deploy against a board carrying this: a deploy or a rollback finishes the
+    activation by performing one, and --no-deploy does neither.
+    """
+    return read_state(target, root, 'activating')
+
+
+def half_switched(target, root):
+    """What root/current serves when it disagrees with the release recorded as active, else ''.
+
+    pending_activation only covers a death inside activate_release. A deploy killed between moving the
+    old release aside and putting the new one in place leaves no marker at all and a current that
+    points at nothing, so --no-deploy checks this as well before running against the board.
+    """
+    active = read_state(target, root, 'active')
+    if not active:
+        return ''
+    serving = sh(target, 'readlink %s/%s' % (root, CURRENT), 60).strip()
+    if serving != 'releases/%s' % active:
+        return serving or 'nothing'
+    # The link can name the right release and still serve nothing: a deploy killed between moving the
+    # old release aside and putting the new one in place leaves the directory gone under this name, so
+    # reading the link text alone would report agreement. Its manifest is the cheapest proof it is there.
+    if not sh(target, 'cat %s/manifest.sha256 2>/dev/null' % release_dir(root, active), 120).strip():
+        return 'releases/%s, which is not there' % active
+    return ''
+
+
+def release_dir(root, release):
+    return '%s/releases/%s' % (root, release)
+
+
+def read_state(target, root, name):
+    """One line of recorded deployment state, or '' when it has never been written."""
+    return sh(target, 'cat %s/state/%s 2>/dev/null' % (root, name)).strip()
+
+
+# The trees a release's file count covers. Both sides of the comparison use this one rule: a host rule
+# that counted a different set from the board's would fail every release that carries a layer, which is
+# exactly what happened when one counted lib/<package>/ members and the other did not.
+COUNTED_TREES = ('python', 'share', 'lib')
+
+
+def counted_members(names):
+    """How many of these archive members land in a counted tree, by the rule the board applies.
+
+    Pass regular-file members only. The board counts with find -type f, so a caller that included the
+    directory entries its archive happens to carry would report a number no board can ever reach.
+    """
+    return len([n for n in names if n.split('/')[0] in COUNTED_TREES])
+
+
+def tree_file_count(target, folder):
+    """Files the release holds in the counted trees, as the board sees them.
+
+    This covers the Python layer and the ament index, which are most of a release by size and are not
+    in the manifest, and the manifest's own lib/ entries, which fall inside a counted tree too. It
+    counts rather than hashes: a tree cut short is caught, a file altered inside one is not.
+    """
+    text = sh(target, 'cd %s && find %s -type f 2>/dev/null | wc -l' % (folder, ' '.join(COUNTED_TREES)), 300)
+    digits = ''.join(c for c in text if c.isdigit())
+    return int(digits) if digits else None
+
+
+def validate_release(target, root, release):
+    """[] when the release on the board is exactly what its own name says it should hold.
+
+    The manifest and the marker travel with the release, so this can be asked of a release this run did
+    not build, which is what makes a rollback target checkable rather than assumed. Four things:
+
+      * every manifest path present in lib/ or bin/ with the right content;
+      * nothing else in lib/ or bin/, because a stale library there could satisfy a dependency this
+        build is missing;
+      * the file count outside lib/ and bin/, which is the only cheap check available over the Python
+        layer and the ament index: their contents are not hashed on the board, so a half-removed tree
+        is caught by counting but an altered file inside one is not;
+      * the directory name, which is the content address of the manifest plus the marker, so a release
+        whose manifest or marker has been replaced fails even if every file it does name is intact.
+    """
+    folder = release_dir(root, release)
+    manifest = {}
+    for line in sh(target, 'cat %s/manifest.sha256 2>/dev/null' % folder, 120).splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            manifest[parts[1]] = parts[0]
+    if not manifest:
+        return ['no manifest in %s' % folder]
+    digests = remote_digests(target, folder, sorted(manifest))
+    wrong = ['wrong:' + p for p in sorted(manifest) if digests.get(p) != manifest[p]]
+    # The Python layer's own files are not artifacts of the build and are not in the manifest.
+    extra = ['extra:' + p for p in sorted(set(remote_digests(target, folder)) - set(manifest) - set(LAYER_OWNED_FILES))]
+    marker = sh(target, 'cat %s/release.marker 2>/dev/null' % folder).strip()
+    short = []
+    parts = marker.split()
+    if len(parts) == 3 and parts[2].isdigit():
+        counted = tree_file_count(target, folder)
+        if counted != int(parts[2]):
+            short = ['release holds %s files, not %s' % (counted, parts[2])]
+    named = release.split('.')[0]  # the partial is validated under <id>.partial
+    mismatch = [] if named == release_id(manifest, marker) else ['id does not match its manifest and marker']
+    return wrong + extra + short + mismatch
+
+
+def retire_legacy_layout(target, root):
+    """Move a pre-staging deployment aside, immediately before a validated release replaces it.
+
+    Before staging, root/lib and the rest were real directories a deploy wrote into, and a symlink
+    cannot replace a real directory. This is deliberately the last thing done before activation: moving
+    them earlier would take the running deployment away while a release was still being prepared, which
+    is the failure this whole change exists to remove. Moved, never deleted.
+    """
+    real = []
+    for name in RELEASE_LINKS + (CURRENT,):
+        kind = sh(target, 'ls -ld %s/%s 2>/dev/null' % (root, name), 60).strip()[:1]
+        if kind and kind != 'l':  # l is the symlink a deploy wants here; d or - is the old layout
+            real.append(name)
+    if real:
+        where = '%s/legacy/%s' % (root, secrets.token_hex(4))
+        sh(target, 'mkdir -p %s' % where)
+        for name in real:
+            sh(target, 'mv %s/%s %s/%s' % (root, name, where, name), 600)
+        print('deploy', target[-6:], 'retired the pre-staging layout to', where, real, flush=True)
+    return real
+
+
+def activate_release(target, root, release, names):
+    """Switch the board onto a release by moving one symlink.
+
+    root/<name> points at current/<name> and never changes again; root/current is what moves. So an
+    activation cannot leave lib/ on one release and share/ on another, which would have a process load
+    new libraries against an old ament index. state/activating is written first and removed last, and
+    main() refuses to run against a board that still carries it.
+
+    Only names the release actually has are linked, so a C++ only build leaves no dangling root/python.
+    """
+    sh(target, 'mkdir -p %s/state' % root)
+    sh(target, 'echo %s > %s/state/activating' % (release, root))
+    for name in names:
+        sh(target, 'ln -sfn %s/%s %s/%s' % (CURRENT, name, root, name), 60)
+    # A name this release does not serve must not be left pointing into it from an earlier one.
+    for name in (n for n in RELEASE_LINKS if n not in names):
+        sh(target, 'rm -f %s/%s' % (root, name), 60)
+    sh(target, 'ln -sfn releases/%s %s/%s' % (release, root, CURRENT), 60)
+    # Every link is read back, not only the one that moved: sh() ignores exit codes, so an ln or an
+    # earlier mv that failed silently would leave a name on the old release and still be reported as a
+    # finished activation.
+    wrong = []
+    landed = sh(target, 'readlink %s/%s' % (root, CURRENT), 60).strip()
+    if landed != 'releases/%s' % release:
+        wrong.append('%s -> %s' % (CURRENT, landed or 'nothing'))
+    for name in names:
+        at = sh(target, 'readlink %s/%s' % (root, name), 60).strip()
+        if at != '%s/%s' % (CURRENT, name):
+            wrong.append('%s -> %s' % (name, at or 'nothing'))
+    if wrong:
+        sys.exit('activation did not take on %s: %s' % (target, wrong))
+    sh(target, 'echo %s > %s/state/active && rm -f %s/state/activating' % (release, root, root))
+    return release
+
+
+def release_names(target, root, release):
+    """The release link names this release can actually serve."""
+    present = set(sh(target, 'ls %s 2>/dev/null' % release_dir(root, release), 120).split())
+    return [name for name in RELEASE_LINKS if name in present]
+
+
+def prune_releases(target, root, keep):
+    """Remove release directories that are neither active nor the rollback target.
+
+    This is the only removal a deploy performs, and it never touches either of those two.
+    """
+    present = [n for n in sh(target, 'ls %s/releases 2>/dev/null' % root, 120).split() if n]
+    old = [n for n in present if n not in keep]
+    for name in old:
+        sh(target, 'rm -rf %s' % release_dir(root, name), 300)
+    return old
+
+
+def deploy(target, root, libs, bins, ros_install, preload='', rollback=False):
+    """Stage a complete release, validate it, and activate it only then.
+
+    The running deployment is never written to or removed. The new release is built in a directory of
+    its own, verified against its manifest and marker by content, and only then is the board switched
+    onto it by moving a single symlink. A failure at any earlier point leaves the running deployment
+    exactly as it was, and the release it was running stays on the board as a rollback target.
+    """
+    sh(target, 'mkdir -p %s/releases %s/state %s/work %s/operator' % (root, root, root, root))
+    # An operator library inside a release-managed path would be replaced by a symlink and then be
+    # absent from the staged release, so it has to live outside one. Said plainly rather than ignored.
+    for one in (p for p in preload.split(':') if p):
+        if any(one.startswith('%s/%s/' % (root, name)) for name in RELEASE_LINKS + (CURRENT, 'releases')):
+            sys.exit('--diagnostic-preload %s is inside a release directory, which a deploy replaces; '
+                     'keep it in %s/operator/ instead' % (one, root))
+    active = read_state(target, root, 'active')
+
+    if rollback:
+        previous = read_state(target, root, 'previous')
+        # Checked before anything on the board is touched: a rollback that cannot be served must leave
+        # the running deployment alone, including the pre-staging layout it may still be using.
+        if not previous:
+            sys.exit('no previous release recorded on %s, so there is nothing to roll back to' % target)
+        broken = validate_release(target, root, previous)
+        if broken:
+            sys.exit('the previous release %s on %s does not match its manifest: %s' % (previous, target, broken[:8]))
+        retire_legacy_layout(target, root)
+        activate_release(target, root, previous, release_names(target, root, previous))
+        sh(target, 'echo %s > %s/state/previous' % (active, root))
+        print('deploy', target[-6:], 'rolled back to', previous, flush=True)
+        return 0
+
+    manifest = {}
     for folder, items in (('lib', libs), ('bin', bins)):
         for name, f in sorted(items.items()):
-            if remote.get('%s/%s' % (folder, name)) != local_sha(f):
-                send(target, f, '%s/%s/%s' % (root, folder, name)); sent += 1
-    sh(target, 'chmod 755 %s/bin/*' % root)
-    if (Path(ros_install) / 'lib/python3.12/site-packages/rclpy').exists():
-        return sent  # the layer carries share/, the index included
-    return sent + deploy_index(target, root, ros_install)
+            manifest['%s/%s' % (folder, name)] = local_sha(f)
+    layer, layer_digest, counted = build_python_layer(ros_install)
+    index = index_digest = None
+    if layer is None:
+        index, index_digest, counted = build_index(ros_install)
+    # The manifest's own lib/ entries sit inside a counted tree, so they belong in the count as well.
+    counted += sum(1 for path in manifest if path.startswith('lib/'))
+    marker = release_marker('layer' if layer is not None else 'index',
+                            layer_digest if layer is not None else index_digest, counted)
+    release = release_id(manifest, marker)
+    staged = release_dir(root, release)
+    sent = 0
+
+    if validate_release(target, root, release):
+        # Not there, or there and not sound. Either way it is built again from scratch, in a partial
+        # directory: a half-built release must never be mistaken for a complete one.
+        partial = staged + '.partial'
+        sh(target, 'rm -rf %s && mkdir -p %s/lib %s/bin' % (partial, partial, partial), 300)
+        # Files the active release already holds with the right content are hard-linked rather than
+        # uploaded again. Whatever that does not produce is uploaded, so a board with no usable active
+        # release, or one where ln is unavailable, simply receives everything.
+        if active:
+            have = remote_digests(target, release_dir(root, active), sorted(manifest))
+            same = [p for p in sorted(manifest) if have.get(p) == manifest[p]]
+            for start in range(0, len(same), BATCH_FILES):
+                batch = same[start:start + BATCH_FILES]
+                sh(target, 'cd %s && for p in %s; do ln ../%s/$p $p 2>/dev/null || true; done'
+                   % (partial, ' '.join("'%s'" % p for p in batch), active), 300)
+        there = remote_digests(target, partial)
+        for path in sorted(manifest):
+            if there.get(path) != manifest[path]:
+                send(target, (libs if path.startswith('lib/') else bins)[path.split('/', 1)[1]],
+                     '%s/%s' % (partial, path)); sent += 1
+        if layer is not None:
+            sent += extract_python_layer(target, partial, layer)
+        else:
+            sent += extract_index(target, partial, index)
+        with tempfile.TemporaryDirectory() as folder:
+            listing = Path(folder) / 'manifest.sha256'
+            listing.write_text(''.join('%s  %s\n' % (d, p) for p, d in sorted(manifest.items())),
+                               encoding='utf-8', newline='\n')
+            send(target, listing, partial + '/manifest.sha256')
+            note = Path(folder) / 'release.marker'
+            note.write_text(marker + '\n', encoding='utf-8', newline='\n')
+            send(target, note, partial + '/release.marker')
+        sh(target, 'chmod 755 %s/bin/*' % partial)
+        # Validated as a partial, so a release directory never exists in a state that failed its own
+        # check. Only then does it take the name, and whatever was there under that name goes first:
+        # mv onto an existing directory would move the partial inside it and wedge every later run.
+        broken = validate_release(target, root, release + '.partial')
+        if broken:
+            sh(target, 'rm -rf %s' % partial, 300)
+            sys.exit('the staged release for %s did not match its manifest: %s' % (target, broken[:8]))
+        # Whatever holds this name goes aside, not away: when the release being restaged is the running
+        # one, removing it would leave root/current pointing at nothing, with no rollback target
+        # recorded. It is deleted below, once a validated release has been activated.
+        stale = '%s.stale-%s' % (staged, secrets.token_hex(3))
+        sh(target, 'mv %s %s' % (staged, stale), 300)
+        sh(target, 'mv %s %s' % (partial, staged), 300)
+        still = validate_release(target, root, release)
+        if still:
+            # Put the old one back, so a board that was running this release still can, and take the
+            # partial away: a complete one left lying about is indistinguishable from a staging in flight.
+            sh(target, 'mv %s %s' % (staged, partial), 300)
+            sh(target, 'mv %s %s' % (stale, staged), 300)
+            sh(target, 'rm -rf %s' % partial, 300)
+            # sh() ignores exit codes, so the undo is confirmed rather than assumed. What the operator
+            # needs from this message is whether the board can still run what it was running.
+            half = half_switched(target, root)
+            sys.exit('the release %s on %s did not survive being put in place: %s; the board %s'
+                     % (release, target, still[:8],
+                        'still serves the release it was running' if not half else 'now serves %s' % half))
+
+    # Last, because it takes the running deployment away: by here a validated release is ready to serve.
+    retire_legacy_layout(target, root)
+    activate_release(target, root, release, release_names(target, root, release))
+    for name in sh(target, 'ls %s/releases 2>/dev/null' % root, 120).split():
+        if name.startswith(release + '.stale-'):
+            sh(target, 'rm -rf %s' % release_dir(root, name), 300)
+    previous = ''
+    if active and active != release:
+        # After activation, not before: a deploy that died during the swap would otherwise have left
+        # previous naming the release that is still running, making a later rollback a silent no-op.
+        sh(target, 'echo %s > %s/state/previous' % (active, root))
+        previous = active
+    else:
+        previous = read_state(target, root, 'previous')
+    dropped = prune_releases(target, root, {release, previous} - {''})
+    print('deploy', target[-6:], 'release', release, 'manifest', len(manifest), 'sent', sent,
+          'previous', previous or '-', 'dropped', dropped, flush=True)
+    return sent
 
 
-def deploy_python_layer(target, root, ros_install):
-    """The Python runtime and the installed ROS tree beside the libraries. Absent from a C++ only build."""
+def build_python_layer(ros_install):
+    """(archive, digest, file count) for the Python layer, or (None, None, None) for a C++ only build.
+
+    Built on the host and digested before anything is staged, so the digest can go into the release
+    id: a rebuilt Python layer is a different release and can never be activated beside older files.
+    The count is what validate_release can check on the board over a tree it does not hash.
+    """
     work = Path(ros_install).parents[1]
     python = work / 'python-target'
     if not (Path(ros_install) / 'lib/python3.12/site-packages/rclpy').exists():
-        return 0
+        return None, None, None
     # Rewritten on every deploy, in a fixed order with fixed metadata: equal content gives an equal digest, and a rebuilt
     # package can never deploy beside older Python files.
     layer = work / PYTHON_LAYER
@@ -138,41 +497,62 @@ def deploy_python_layer(target, root, ros_install):
             info = tarfile.TarInfo(name)
             info.size, info.mode = len(data), 0o755
             tar.addfile(info, io.BytesIO(data))
+    direct = {n for n, _ in members if n.count('/') == 1 and n.split('/')[0] in ('lib', 'bin')}
+    if direct - LAYER_OWNED_FILES:
+        sys.exit('the Python layer writes %s directly into lib/ or bin/: add it to LAYER_OWNED_FILES, '
+                 'or deploy() will prune it as stale' % sorted(direct - LAYER_OWNED_FILES))
     partial.replace(layer)
-    digest = local_sha(layer)
-    # The marker is written after extraction, so a failed extraction is never taken for a deployed layer.
-    if sh(target, 'cat %s/python-layer.done 2>/dev/null' % root).strip() == digest:
-        return 0
-    send(target, layer, '%s/%s' % (root, PYTHON_LAYER))
+    return layer, local_sha(layer), counted_members([name for name, _ in members])
+
+
+def extract_python_layer(target, folder, layer):
+    """Extract the layer into a staging directory.
+
+    No removal: the directory is new and empty, so there is nothing of a running deployment here to
+    delete. A failed or truncated extraction prints no LAYER_OK and stops the deploy, and the file
+    count in release.marker catches a tree that was later cut short.
+    """
+    send(target, layer, '%s/%s' % (folder, PYTHON_LAYER))
     # Files archived on Windows carry no execute bit, and ros2 run only offers executable files.
-    text = sh(target, 'cd %s && rm -f python-layer.done && rm -rf python share lib/python3.12 && tar xf %s && echo %s > python-layer.done && '
-                      'rm -f %s && echo LAYER_OK' % (root, PYTHON_LAYER, digest, PYTHON_LAYER), 600)
+    text = sh(target, 'cd %s && tar xf %s && rm -f %s && echo LAYER_OK' % (folder, PYTHON_LAYER, PYTHON_LAYER), 600)
     if 'LAYER_OK' not in text:
         sys.exit('python layer did not extract on %s: %s' % (target, text[-200:]))
     return 1
 
 
-def deploy_index(target, root, ros_install):
-    """The ament resource index: generic pub/sub and class_loader look packages up through it."""
+def build_index(ros_install):
+    """(archive, digest) for the ament resource index, built on the host.
+
+    Generic pub/sub and class_loader look packages up through it. It is digested here rather than on
+    the board so it can enter the release id: on a C++ only build it is the only thing a release holds
+    outside the manifest, and a changed index with unchanged libraries has to be its own release.
+    """
     index = Path(ros_install) / 'share/ament_index'
-    with tempfile.TemporaryDirectory() as folder:
-        archive = Path(folder) / 'ament_index.tar'
-        with tarfile.open(archive, 'w') as tar:
-            for path in sorted(index.rglob('*')):
-                info = tar.gettarinfo(path, arcname='share/ament_index/' + path.relative_to(index).as_posix())
-                info.mtime, info.uid, info.gid, info.uname, info.gname = 0, 0, 0, '', ''
-                info.mode = 0o755 if path.is_dir() else 0o644
-                if path.is_dir():
-                    tar.addfile(info)
-                else:
-                    # Written on the Windows build host. A CR left in rclcpp_components' library path breaks dlopen.
-                    data = path.read_bytes().replace(b'\r\n', b'\n')
-                    info.size = len(data)
-                    tar.addfile(info, io.BytesIO(data))
-        if sh(target, 'sha256sum %s/ament_index.tar 2>/dev/null' % root).split()[:1] == [local_sha(archive)]:
-            return 0
-        send(target, archive, root + '/ament_index.tar')
-    sh(target, 'cd %s && rm -rf share/ament_index && tar xf ament_index.tar' % root, 120)
+    archive = Path(ros_install).parents[1] / 'ament_index.tar'  # beside the other build inputs, not a temp dir
+    with tarfile.open(archive, 'w') as tar:
+        for path in sorted(index.rglob('*')):
+            info = tar.gettarinfo(path, arcname='share/ament_index/' + path.relative_to(index).as_posix())
+            info.mtime, info.uid, info.gid, info.uname, info.gname = 0, 0, 0, '', ''
+            info.mode = 0o755 if path.is_dir() else 0o644
+            if path.is_dir():
+                tar.addfile(info)
+            else:
+                # Written on the Windows build host. A CR left in rclcpp_components' library path breaks dlopen.
+                data = path.read_bytes().replace(bytes([13, 10]), bytes([10]))
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+    with tarfile.open(archive) as tar:
+        # Files only: this archive carries directory entries as well, and find -type f does not see them.
+        counted = counted_members([m.name for m in tar.getmembers() if m.isfile()])
+    return archive, local_sha(archive), counted
+
+
+def extract_index(target, folder, archive):
+    """Extract the index into a staging directory. No removal: the directory is new and empty."""
+    send(target, archive, '%s/ament_index.tar' % folder)
+    text = sh(target, 'cd %s && tar xf ament_index.tar && rm -f ament_index.tar && echo INDEX_OK' % folder, 120)
+    if 'INDEX_OK' not in text:
+        sys.exit('ament index did not extract on %s: %s' % (target, text[-200:]))
     return 1
 
 
@@ -324,14 +704,28 @@ def send_failure_with_peer_alive(log_path):
 
 
 def udp_socket_count(target, program):
-    """UDP sockets of the live process, or None if it could not be read."""
-    script = ('p=$(pidof %s | cut -d" " -f1); [ -n "$p" ] || { echo NOPID; exit; }; '
-              'f=$(ls -l /proc/$p/fd) || { echo FDERR; exit; }; n=0; '
+    """Transport-path evidence for one process, as (state, udp_sockets).
+
+    ('live', n)           the process was found and holds n UDP sockets
+    ('nopid', None)       no such process at this instant: not started yet, or already gone
+    ('unreadable', None)  it exists but could not be sampled: /proc unreadable, or hdc gave nothing
+
+    Only ('live', 0) is evidence of a DSoftBus-only path. A missing observation is not a zero, so the
+    two are kept apart all the way into the verdict.
+    """
+    script = ('p=$(pidof %s | cut -d" " -f1); [ -n "$p" ] || { echo S2_NOPID; exit; }; '
+              'f=$(ls -l /proc/$p/fd) || { echo S2_FDERR; exit; }; n=0; '
               'for i in $(echo "$f" | grep -o "socket:\\[[0-9]*\\]" | grep -o "[0-9]*"); do '
               'grep -q " $i " /proc/net/udp /proc/net/udp6 && n=$((n+1)); done; '
               'echo SOCKETS udp=$n' % program)
-    m = re.search(r'SOCKETS udp=(\d+)', sh(target, script))
-    return int(m.group(1)) if m else None
+    try:
+        text = sh(target, script)
+    except (subprocess.SubprocessError, OSError):  # hdc hung, or could not be run: a missing observation, never a zero
+        return ('unreadable', None)
+    m = re.search(r'SOCKETS udp=(\d+)', text)
+    if m:
+        return ('live', int(m.group(1)))
+    return ('nopid', None) if 'S2_NOPID' in text else ('unreadable', None)
 
 
 class SocketWatch:
@@ -339,16 +733,30 @@ class SocketWatch:
 
     def __init__(self, boards_programs, hubs=None, counters=None, may_drop=False):
         self.boards_programs, self.samples, self.stopping = boards_programs, {s: [] for s in boards_programs}, threading.Event()
+        self.missed = {s: {'nopid': 0, 'unreadable': 0} for s in boards_programs}
+        self.crash = None  # a fault in the sampler itself, kept apart from a board that cannot be read
         self.hubs, self.counters, self.may_drop = hubs, counters, may_drop
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
 
     def _loop(self):
-        while not self.stopping.wait(1):
-            for side, (target, program) in self.boards_programs.items():
-                sample = udp_socket_count(target, program)
-                if sample is not None:
-                    self.samples[side].append(sample)
+        # Sampled before the first wait, so a run that ends in under a second still leaves evidence.
+        # That is what lets the verdict insist on an observation of every watched process.
+        try:
+            while True:
+                for side, (target, program) in self.boards_programs.items():
+                    state, count = udp_socket_count(target, program)
+                    if state == 'live':
+                        self.samples[side].append(count)
+                    else:
+                        self.missed[side][state] += 1
+                if self.stopping.wait(1):
+                    return
+        except Exception:
+            # Without this the thread would die on its own traceback and the run would report a board
+            # that could not be read. The verdict names the sampler instead, and still fails.
+            self.crash = traceback.format_exc()
+            print('socket sampler failed:', self.crash, flush=True)
 
     def hub_counts(self):
         """What each hub's link carried during this run. A hub is shared, so only the difference counts."""
@@ -358,13 +766,31 @@ class SocketWatch:
     def verdict(self, runs, minimum_records):
         """runs: {side: Run}. Each side's Transport must have carried at least minimum_records each way."""
         self.stopping.set(); self.thread.join()
-        sockets = {s: {'samples': len(v), 'max_udp': max(v, default=None)} for s, v in self.samples.items()}
+        sockets = {s: dict({'samples': len(v), 'max_udp': max(v, default=None)}, **self.missed[s]) for s, v in self.samples.items()}
         transport = self.hub_counts() if self.hubs else {s: transport_counts(run) for s, run in runs.items()}
         clean = self.may_drop or all(v.get('lost', 0) == 0 for v in transport.values())
-        # A process can end before its first sample, so one sampled board is enough; the counters are required of both.
-        ok = clean and (any(v['samples'] > 0 for v in sockets.values()) and all(v['max_udp'] in (0, None) for v in sockets.values()) and
-              all(v['sdk_sends'] >= minimum_records and v['received_records'] >= minimum_records for v in transport.values()))
-        return {'sockets': sockets, 'transport': transport, 'minimum_records': minimum_records, 'path_ok': ok}
+        # Every watched process must have been observed at least once. An unobserved process is missing
+        # evidence, not a process free of UDP sockets, so it can never satisfy the DSoftBus-only requirement.
+        unobserved = sorted(s for s, v in sockets.items() if v['samples'] == 0)
+        with_udp = sorted(s for s, v in sockets.items() if v['max_udp'] not in (None, 0))
+        thin = sorted(s for s, v in transport.items()
+                      if v['sdk_sends'] < minimum_records or v['received_records'] < minimum_records)
+        socket_reasons = []
+        if self.crash:
+            socket_reasons.append('socket sampler failed: ' + self.crash.strip().splitlines()[-1])
+        if unobserved:
+            socket_reasons.append('no socket observation on ' + ','.join(unobserved))
+        if with_udp:
+            socket_reasons.append('udp sockets held on ' + ','.join(with_udp))
+        reasons = list(socket_reasons)
+        if thin:
+            reasons.append('transport carried under %d records on %s' % (minimum_records, ','.join(thin)))
+        if not clean:
+            reasons.append('hub lost frames')
+        # sockets_ok is the socket evidence alone, for the one caller whose record counts cannot apply.
+        return {'sockets': sockets, 'transport': transport, 'minimum_records': minimum_records,
+                'path_ok': not reasons, 'path_reasons': reasons,
+                'sockets_ok': not socket_reasons, 'socket_reasons': socket_reasons}
 
 
 def stats_delta(before, after):
@@ -485,6 +911,173 @@ def mode_features(a, pair_factory):
 
 def heard(run, text='I heard'):
     return sum(text in l for l in run.lines)
+
+
+def bag_message_count(text):
+    """The count 'ros2 bag info' prints, or None when the line is absent."""
+    m = re.search(r'^\s*Messages:\s*(\d+)\s*$', text, re.MULTILINE)
+    return int(m.group(1)) if m else None
+
+
+def stopped_cleanly(code):
+    """True when a long-running case ended because it was stopped, not because it died.
+
+    No exit line at all (None) means the run never reported one, which is a failure of its own.
+    """
+    return code is not None and code not in CRASH_EXITS
+
+
+def bag_sequence(payload):
+    """The talker's sequence number inside a payload, or None when it carries none.
+
+    demo_nodes_cpp talker publishes 'Hello World: N', so the number is the message identity and a
+    gap in it is a gap in the recording. Payloads without one are compared by text alone.
+    """
+    m = re.search(r':\s*(\d+)\s*$', payload)
+    return int(m.group(1)) if m else None
+
+
+def parse_bag_probe(lines):
+    """[(digest, payload)] in storage order, from the board-side reader's S2_BAG lines.
+
+    Each line is 'S2_BAG <index> <sha256 of the serialized bytes> <payload>'. The index is the
+    reader's own ordering and is checked here, so a probe that skipped or reordered a message
+    cannot be mistaken for a bag that did.
+    """
+    messages = []
+    for line in lines:
+        parts = line.split(' ', 3)
+        if len(parts) == 4 and parts[0] == 'S2_BAG' and parts[1].isdigit() and int(parts[1]) == len(messages):
+            messages.append((parts[2], parts[3].rstrip('\n')))
+    return messages
+
+
+def heard_payloads(run, marker='I heard: ['):
+    """The payloads a demo_nodes_cpp listener logged, in arrival order.
+
+    Counting lines cannot tell which message arrived, so strict completeness needs the payloads
+    themselves: the listener logs 'I heard: [Hello World: 7]'.
+    """
+    out = []
+    for line in run.lines:
+        at = line.find(marker)
+        if at >= 0:
+            rest = line[at + len(marker):]
+            end = rest.rfind(']')
+            out.append(rest[:end] if end >= 0 else rest.rstrip('\n'))
+    return out
+
+
+def subscription_count(text):
+    """The subscription count 'ros2 topic info --verbose' printed, or None when the line is absent.
+
+    None means readiness could not be established, which is never treated as ready.
+    """
+    m = re.search(r'^\s*Subscription count:\s*(\d+)\s*$', text, re.MULTILINE)
+    return int(m.group(1)) if m else None
+
+
+def settled_payloads(run, before, expected, seconds=30, quiet=5):
+    """The payloads that arrived after `before`, read once the stream has stopped growing.
+
+    Waiting for a count cannot see an unexpected duplicate, because the duplicate arrives after the
+    count is already satisfied and the measurement has been taken. So this waits for the expected
+    count AND for the arrivals to stop changing across `quiet` consecutive polls.
+
+    It is a settle detector, not a sleep standing in for synchronisation: a stream still growing is
+    waited on to the deadline and what is returned is whatever really arrived, never a target
+    number. A replay that is still delivering at the deadline reports what it had delivered, which
+    is a shortfall or a surplus, and either fails.
+    """
+    end, stable, last = time.time() + seconds, 0, None
+    while time.time() < end:
+        now = len(heard_payloads(run))
+        stable = stable + 1 if now == last else 0
+        last = now
+        if now - before >= expected and stable >= quiet:
+            break
+        time.sleep(0.2)
+    return heard_payloads(run)[before:]
+
+
+def wait_for_subscription(python, topic, attempts=6):
+    """The readiness gate for a measured replay: the graph must show a subscriber on the topic.
+
+    The player must not publish before the subscriber is matched, and a sleep only guesses at when
+    that is. Subscriptions are visible in the ROS graph without any publisher, so this can be asked
+    before playback starts, and asking it from the other board makes it a cross-board discovery
+    check as well. An output carrying no count at all is never treated as ready.
+
+    Bounded attempts rather than a poll loop, because each attempt is a whole ros2 invocation: it is
+    seconds of work, and probe() has to reap it before the next one starts.
+    """
+    for _ in range(attempts):
+        count = subscription_count(python.probe('topic info %s --verbose' % topic))
+        if count is not None and count >= 1:
+            return True
+    return False
+
+
+def playback_completeness(recorded, replayed):
+    """Strict bag-to-replay fidelity, as a verdict naming every discrepancy.
+
+    recorded: [(digest, payload)] the bag itself holds, in storage order.
+    replayed: [payload] the subscriber logged, in arrival order.
+
+    complete is True only when the replayed sequence IS the recorded one: same payloads, same
+    number of each, same order, nothing missing, nothing duplicated and nothing that was never
+    recorded. Nothing is subtracted to reach that: a shortfall is reported as a shortfall.
+
+    recording_sound is a separate verdict on the bag itself, so a fault that happened while
+    recording is not reported as a failure of the replay:
+      recorded_gaps       missing sequence numbers inside the recording itself
+      recorded_collisions one payload stored under two different digests, i.e. corruption in the bag
+    A case needs both: a faithful replay of a damaged recording is not end-to-end completeness, but
+    the two are named apart so an investigator is pointed at the right half.
+    """
+    want = [payload for _, payload in recorded]
+    counts_want, counts_got = {}, {}
+    for payload in want:
+        counts_want[payload] = counts_want.get(payload, 0) + 1
+    for payload in replayed:
+        counts_got[payload] = counts_got.get(payload, 0) + 1
+    missing = sorted(p for p, n in counts_want.items() if counts_got.get(p, 0) < n)
+    duplicated = sorted(p for p, n in counts_got.items() if p in counts_want and n > counts_want[p])
+    unknown = sorted(p for p in counts_got if p not in counts_want)  # never recorded: corrupted or foreign
+    same_multiset = counts_want == counts_got
+    numbers = [n for n in (bag_sequence(p) for p in want) if n is not None]
+    gaps = sorted(set(range(min(numbers), max(numbers) + 1)) - set(numbers)) if len(numbers) > 1 else []
+    by_payload = {}
+    for digest, payload in recorded:
+        by_payload.setdefault(payload, set()).add(digest)
+    collisions = sorted(p for p, digests in by_payload.items() if len(digests) > 1)
+    # missing_payloads, not missing: the smoke row's 'missing' is a count, and the two must not
+    # share a key in the rows this mode returns as evidence.
+    return {'recorded': len(want), 'replayed': len(replayed), 'missing_payloads': missing[:8],
+            'duplicated': duplicated[:8], 'unknown': unknown[:8],
+            'out_of_order': bool(same_multiset and want != replayed),
+            'recorded_gaps': gaps[:8], 'recorded_collisions': collisions[:8],
+            'recording_sound': bool(want) and not gaps and not collisions,
+            'complete': bool(want) and want == replayed}
+
+
+def playback_ok(code, recorded, replayed):
+    """Every message a bag recorded has to arrive on the other board, bar the documented first one.
+
+    A bag that recorded nothing, or whose count could not be read, replays nothing: the info case has
+    already failed it, and comparing 0 against 0 here would report an empty playback as a pass.
+
+    ALLOWED_PLAYBACK_HEAD_LOSS covers the message ros2 bag play publishes before its own publisher has
+    matched the subscriber, which a volatile reader cannot receive however sound the transport. Every
+    recorded run has shown that loss and never more than one message of it; see limit 2 of
+    docs/STAGE2_ROS2_DEVICE_20261105.md. Requiring the whole recording would fail a healthy board.
+
+    Something has to arrive, whatever the allowance: in a recording small enough for the head loss to
+    cover all of it, a playback that delivered nothing would otherwise be indistinguishable from one
+    that worked, and bag info only asks for a non-zero count.
+    """
+    return (code == 0 and bool(recorded) and replayed > 0
+            and replayed >= recorded - ALLOWED_PLAYBACK_HEAD_LOSS)
 
 
 def mode_multiprocess(a, pair):
@@ -745,7 +1338,7 @@ def mode_long_outage(a, pair):
               'exit': [exit_code(r) for r in runs], 'hub_restarts': {s: sum('FDDS_HUB_WORKER_EXIT' in l for l in r.lines) for s, r in pair.hubs.runs.items()}}
     result.update(watch.verdict({'A': runs[0], 'B': runs[1]}, 1))
     # The hubs' counters restart with their workers here, so the record counts do not apply.
-    result['ok'] = hearing and recovered and result['exit'] == [0, 0] and all(v['max_udp'] in (0, None) for v in result['sockets'].values())
+    result['ok'] = hearing and recovered and result['exit'] == [0, 0] and result['sockets_ok']
     return result
 
 
@@ -826,14 +1419,51 @@ LONG_CASES = [
     ('bag_record_mcap', 'bag record -o {work}/bag_mcap -s mcap /chatter', 10, 'Recording', None),
     ('bag_record_zstd', 'bag record -o {work}/bag_zstd -s sqlite3 --compression-mode file --compression-format zstd /chatter', 10, 'Recording', None),
 ]
-BAG_CASES = [('bag_info_sqlite3', 'bag info {work}/bag_sql', 'Messages:'), ('bag_info_mcap', 'bag info {work}/bag_mcap', 'Messages:'),
-             ('bag_info_zstd', 'bag info {work}/bag_zstd', 'zstd')]
-BAG_PLAY = [('bag_play_sqlite3', 'bag play {work}/bag_sql --remap /chatter:=/s2bag'), ('bag_play_mcap', 'bag play {work}/bag_mcap --remap /chatter:=/s2bag')]
+# (case, command, text its own output must carry, the bag it reads). The bag name keys the recorded count.
+BAG_CASES = [('bag_info_sqlite3', 'bag info {work}/bag_sql', 'Messages:', 'bag_sql'),
+             ('bag_info_mcap', 'bag info {work}/bag_mcap', 'Messages:', 'bag_mcap'),
+             ('bag_info_zstd', 'bag info {work}/bag_zstd', 'zstd', 'bag_zstd')]
+# The smoke rows. They tolerate ALLOWED_PLAYBACK_HEAD_LOSS and are therefore not evidence of complete
+# playback; BAG_STRICT below is. Keeping them is deliberate: they fail on a playback that broke outright,
+# on any board, without needing the Python layer or the reader probe.
+BAG_PLAY = [('bag_play_smoke_sqlite3', 'bag play {work}/bag_sql --remap /chatter:=/s2bag', 'bag_sql'),
+            ('bag_play_smoke_mcap', 'bag play {work}/bag_mcap --remap /chatter:=/s2bag', 'bag_mcap')]
+# (case, bag, the topic the measured replay is remapped onto, the listener whose lines are the evidence).
+# A topic of its own per storage, so one storage's replay can never be counted as another's.
+BAG_STRICT = [('bag_complete_sqlite3', 'bag_sql', 'sqlite3', '/s2strict1', 'strict_listener1'),
+              ('bag_complete_mcap', 'bag_mcap', 'mcap', '/s2strict2', 'strict_listener2')]
+# A long-running case is stopped by SIGINT, and each entry point reports that in its own way: 0 when it
+# handled the signal, 130 when the default action killed it, 2 where ros2cli turns KeyboardInterrupt into
+# signal.SIGINT. Which of those each case really reports is not measured: cli mode needs two boards and no
+# run record of it exists, so a whitelist of clean exits would fail cases that worked. What is checkable is
+# that the process did not die on a fatal signal, and was not still running when stop_python's grace ran
+# out and SIGKILL followed.
+CRASH_EXITS = (132, 134, 136, 137, 139)  # SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV
 LAUNCH_FILE = ("from launch import LaunchDescription\\nfrom launch_ros.actions import Node\\n"
                "def generate_launch_description():\\n    return LaunchDescription(["
                "Node(package='demo_nodes_cpp', executable='listener', name='launched_listener', output='screen'),"
                "Node(package='demo_nodes_py', executable='listener', name='launched_py_listener', output='screen')])\\n")
 
+
+# The topic the bag_record cases capture. The reader is given it explicitly, and a test keeps it in step
+# with the record commands, because the reader deserializes as std_msgs/msg/String and must not be handed
+# a message of another type.
+BAG_RECORD_TOPIC = '/chatter'
+# Reads a bag back through rosbag2_py and prints one line per stored message of that topic, in storage
+# order, with the sha256 of the serialized bytes. The storage id is passed in rather than detected, so a
+# bag whose metadata is unreadable fails here instead of silently reading as empty. S2_BAG_END carries the
+# count the reader itself saw, so a truncated capture cannot pass for a short bag, and any message of
+# another topic is reported rather than deserialized as a String.
+BAG_READER = ("import hashlib, sys\\nimport rosbag2_py\\n"
+              "from rclpy.serialization import deserialize_message\\nfrom std_msgs.msg import String\\n"
+              "reader = rosbag2_py.SequentialReader()\\n"
+              "reader.open(rosbag2_py.StorageOptions(uri=sys.argv[1], storage_id=sys.argv[2]), "
+              "rosbag2_py.ConverterOptions('', ''))\\n"
+              "want = sys.argv[3]\\ni = 0\\nwhile reader.has_next():\\n"
+              "    topic, data, stamp = reader.read_next()\\n"
+              "    if topic != want:\\n        print('S2_BAG_OTHER', topic)\\n        continue\\n"
+              "    print('S2_BAG', i, hashlib.sha256(data).hexdigest(), deserialize_message(data, String).data)\\n"
+              "    i += 1\\nprint('S2_BAG_END', i)\\n")
 
 ORIGIN_PROBE = ("import sys\\nimport rclpy, rclpy.node, yaml, numpy, rosbag2_py, launch, ros2cli.cli\\nrclpy.init()\\n"
                 "node = rclpy.create_node('s2_origin')\\nfiles = {l.split()[-1] for l in open('/proc/self/maps') if '/' in l and '.so' in l}\\n"
@@ -876,6 +1506,27 @@ class PythonOnBoard:
             time.sleep(0.1)
         return run
 
+    def finished(self, arguments, seconds):
+        """Run a ros2 command and reap it if it overruns, instead of leaving it on the board.
+
+        run() leaves an overrunning process alive, which is right for the CLI cases that read a
+        stream and stop it themselves. Anything else needs this: an abandoned ros2 invocation keeps
+        its hub attachment, and a bag player keeps publishing, for the rest of the mode.
+        """
+        run = self.run(arguments, seconds)
+        if run.p.poll() is None:
+            # stop_python is board-wide: it stops every python3.12, listener and talker on this board by
+            # name. That is only safe because every caller here has already finished measuring whatever
+            # else it started on this side. Do not call this while another run on the same board is
+            # still being measured.
+            stop_python(self.pair.boards[self.side], 2)
+            wait_runs([run], 5)
+        return run
+
+    def probe(self, arguments, seconds=20):
+        """finished(), as text, for a command that is read rather than judged by its exit code."""
+        return '\n'.join(self.finished(arguments, seconds).lines)
+
 
 def stop_python(target, grace=2):
     """Python processes share one name, so these are found by command line."""
@@ -884,10 +1535,33 @@ def stop_python(target, grace=2):
     sh(target, 'p=$(pidof python3.12 listener talker); [ -z "$p" ] || kill -9 $p')
 
 
+def loaded_from_release(root, active, work):
+    """Prefixes a loaded file may legitimately have, for mode_cli's origin check.
+
+    Two shapes are allowed for the deployment, because the two ways a path reaches the probe differ:
+    /proc/self/maps reports a mapped library by its resolved path, which is inside the active release
+    directory, while Python reports a file it imported by the path it used, which goes through the
+    release links. Everything else under the root is refused on purpose. Before staging, root/lib was
+    the only library directory under the root, so "inside the root" meant "the deployment under test";
+    it no longer does, because the rollback target and any retired pre-staging layout are kept there
+    too, and loading from either would mean the process is not running the release being tested.
+
+    With no recorded active release only the links are allowed, so a board deployed by the older
+    in-place code still reads as rooted while a release directory on it does not.
+    """
+    allowed = tuple('%s/%s/' % (root, name) for name in RELEASE_LINKS)
+    if active:
+        allowed += ('%s/releases/%s/' % (root, active),)
+    return allowed + (work, '/system/', '/vendor/', '/chip_prod/', '/lib/ld-musl')
+
+
 def mode_cli(a, pair):
     runs = {'talker': pair.start('A', 'talker'), 'server': pair.start('A', 'add_two_ints_server'), 'params': pair.start('A', 'parameter_blackboard'),
             'cli_listener': pair.start('A', 'listener --ros-args -r chatter:=/s2cli -r __node:=cli_listener'),
             'bag_listener': pair.start('A', 'listener --ros-args -r chatter:=/s2bag -r __node:=bag_listener'),
+            # One per storage, up from the start of the mode so each is matched long before its replay.
+            'strict_listener1': pair.start('A', 'listener --ros-args -r chatter:=/s2strict1 -r __node:=strict_listener1'),
+            'strict_listener2': pair.start('A', 'listener --ros-args -r chatter:=/s2strict2 -r __node:=strict_listener2'),
             'action': pair.start('A', 'minimal_action_server'), 'lifecycle': pair.start('A', 'lifecycle_talker --ros-args -r __node:=lc_talker'),
             'container': pair.start('A', 'component_container')}
     time.sleep(5)
@@ -898,7 +1572,8 @@ def mode_cli(a, pair):
     origin = Run(pair.boards['B'], python.script(pair.work + '/s2_origin.py'), pair.log)
     wait_runs([origin], 30)
     origins = [l.split()[1] for l in origin.lines if l.startswith('S2_ORIGIN')]
-    foreign = [p for p in origins if not p.startswith((pair.root + '/', pair.work, '/system/', '/vendor/', '/chip_prod/', '/lib/ld-musl'))]
+    allowed = loaded_from_release(pair.root, read_state(pair.boards['B'], pair.root, 'active'), pair.work)
+    foreign = [p for p in origins if not p.startswith(allowed)]
     rooted = len(origins) > 400 and not foreign and exit_code(origin) == 0  # the ROS stack is well over this many files
     print('origin files', len(origins), 'outside the deployment', foreign[:8], 'rooted', rooted, flush=True)
     chosen = [c for c in CLI_CASES if a.groups == 'all' or c[0] in a.groups.split(',')]
@@ -926,22 +1601,85 @@ def mode_cli(a, pair):
         stop_python(pair.boards['B'], 12 if name.startswith('bag') else 4)
         wait_runs([run], 10)
         output = '\n'.join(run.lines)
-        ok = expected in output and (on_a is None or wait_until(lambda: sum(on_a in l for l in runs['cli_listener'].lines) > before + 2, 5))
-        rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'seconds': seconds, 'tail': run.lines[-3:] if not ok else []})
-        print('cli', name, 'PASS' if ok else 'FAIL', rows[-1]['tail'], flush=True)
+        # Printing a startup marker is not passing: the process also has to have stopped because it was
+        # stopped. No exit line at all means the run never reported one, which is a failure of its own.
+        code = exit_code(run)
+        clean = stopped_cleanly(code)
+        ok = (expected in output and clean and
+              (on_a is None or wait_until(lambda: sum(on_a in l for l in runs['cli_listener'].lines) > before + 2, 5)))
+        rows.append({'case': name, 'ok': ok, 'exit': code, 'stopped_cleanly': clean, 'seconds': seconds,
+                     'tail': run.lines[-3:] if not ok else []})
+        print('cli', name, 'PASS' if ok else 'FAIL', 'exit=%s' % code, rows[-1]['tail'], flush=True)
     if a.groups == 'all':
-        for name, command, expected in BAG_CASES:
+        recorded = {}
+        for name, command, expected, bag in BAG_CASES:
             run = python.run(command.format(work=work), 30)
-            ok = expected in '\n'.join(run.lines) and exit_code(run) == 0
-            rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'output': [l for l in run.lines if 'Messages' in l or 'Storage' in l]})
-            print('cli', name, 'PASS' if ok else 'FAIL', rows[-1]['output'] or run.lines[-3:], flush=True)
-        for name, command in BAG_PLAY:
+            output = '\n'.join(run.lines)
+            count = bag_message_count(output)
+            recorded[bag] = count
+            # The number is the check, not the presence of the word: a bag that recorded nothing is a failure.
+            ok = expected in output and exit_code(run) == 0 and count is not None and count > 0
+            rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'messages': count,
+                         'output': [l for l in run.lines if 'Messages' in l or 'Storage' in l]})
+            print('cli', name, 'PASS' if ok else 'FAIL', 'messages=%s' % count, rows[-1]['output'] or run.lines[-3:], flush=True)
+        for name, command, bag in BAG_PLAY:
             before = heard(runs['bag_listener'])
+            want = recorded.get(bag)
             run = python.run(command.format(work=work), 30)
-            played = wait_until(lambda: heard(runs['bag_listener']) >= before + 3, 10)
-            ok = played and exit_code(run) == 0
-            rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'heard': heard(runs['bag_listener']) - before, 'tail': run.lines[-3:] if not ok else []})
-            print('cli', name, 'PASS' if ok else 'FAIL', rows[-1]['heard'], rows[-1]['tail'], flush=True)
+            # Waits for the whole recording and lets playback_ok judge what arrived. Waiting only for the
+            # head-loss allowance would stop a message early and report a shortfall that was merely late.
+            # The subscriber has been up since the start of the mode, so it is matched well before
+            # playback opens its own publisher.
+            wait_until(lambda: want is not None and heard(runs['bag_listener']) - before >= want, 20)
+            got = heard(runs['bag_listener']) - before
+            missing = None if want is None else want - got
+            ok = playback_ok(exit_code(run), want, got)
+            rows.append({'case': name, 'ok': ok, 'exit': exit_code(run), 'recorded': want, 'replayed': got,
+                         'missing': missing, 'tail': run.lines[-3:] if not ok else []})
+            print('cli', name, 'PASS' if ok else 'FAIL', 'smoke',
+                  'recorded=%s replayed=%s missing=%s' % (want, got, missing), rows[-1]['tail'], flush=True)
+        # Strict completeness. The smoke rows above tolerate the documented head loss and so cannot show
+        # that a replay carried everything; these read the bag back and compare message by message.
+        # A row that cannot establish completeness reports UNVERIFIED and does not pass: the criterion is
+        # not weakened to accommodate a probe that did not run.
+        sh(pair.boards['B'], 'printf "%s" > %s/s2_bagread.py' % (BAG_READER, work))
+        for name, bag, storage, topic, listener in BAG_STRICT:
+            row = {'case': name, 'ok': False, 'status': 'UNVERIFIED', 'reason': '', 'bag': bag, 'strict': True}
+            if not wait_for_subscription(python, topic):
+                row['reason'] = 'no subscription visible on %s, so a replay could not be measured' % topic
+            else:
+                probe = Run(pair.boards['B'], python.script(work + '/s2_bagread.py',
+                            '%s/%s %s %s' % (work, bag, storage, BAG_RECORD_TOPIC)), pair.log)
+                wait_runs([probe], 180)
+                # stored, not recorded: the BAG_CASES loop above binds `recorded` to a dict of counts,
+                # and shadowing it here would break that the moment the two loops were reordered.
+                stored = parse_bag_probe(probe.lines)
+                ends = [l.split() for l in probe.lines if l.startswith('S2_BAG_END')]
+                counted = int(ends[-1][1]) if ends and len(ends[-1]) == 2 and ends[-1][1].isdigit() else None
+                others = sorted({l.split(' ', 1)[1] for l in probe.lines if l.startswith('S2_BAG_OTHER ')})
+                if exit_code(probe) != 0 or counted is None or counted != len(stored) or not stored or others:
+                    row['reason'] = ('the bag could not be read back: exit=%s parsed=%d reader_count=%s other_topics=%s'
+                                     % (exit_code(probe), len(stored), counted, others[:4]))
+                    row['tail'] = probe.lines[-3:]
+                else:
+                    before = len(heard_payloads(runs[listener]))
+                    play = python.finished('bag play %s/%s --remap %s:=%s'
+                                           % (work, bag, BAG_RECORD_TOPIC, topic), 90)
+                    # Settled, not counted: a duplicate arrives after the count is already satisfied.
+                    # finished() above returned only once the player exited, so this is not racing the
+                    # replay: the window has to cover delivery already in flight, not the gap between
+                    # two replayed messages, which at a 1 Hz recording would be about the same length.
+                    row.update(playback_completeness(stored, settled_payloads(runs[listener], before, len(stored))))
+                    row['exit'] = exit_code(play)
+                    row['ok'] = bool(row['complete']) and bool(row['recording_sound']) and exit_code(play) == 0
+                    row['status'] = 'PASS' if row['ok'] else 'FAIL'
+                    row['reason'] = ('' if row['ok'] else
+                                     'the recording itself is damaged' if not row['recording_sound'] else
+                                     'replay was not the recording')
+            rows.append(row)
+            print('cli', name, row['status'], row['reason'],
+                  {k: row.get(k) for k in ('recorded', 'replayed', 'missing_payloads', 'duplicated', 'unknown',
+                                           'out_of_order', 'recorded_gaps', 'recorded_collisions')}, flush=True)
     stop_python(pair.boards['B'])
     for name in ('talker', 'add_two_ints_server', 'parameter_blackboard', 'listener', 'minimal_action_server', 'lifecycle_talker', 'component_container'):
         sh(pair.boards['A'], 'p=$(pidof %s); [ -z "$p" ] || kill -INT $p' % name)
@@ -1045,10 +1783,13 @@ def main():
     ap.add_argument('--token-process', default='mdds_actionbag_2e107f51cd7b40218b01437d1e5c4e16')
     ap.add_argument('--diagnostic-preload', default='', help='board path of an extra library loaded before the autoload library')
     ap.add_argument('--no-deploy', action='store_true'); ap.add_argument('--out'); ap.add_argument('--hub', action='store_true')
+    ap.add_argument('--rollback', action='store_true', help='activate the previous release on both boards and run against it')
     ap.add_argument('--seconds', type=int, default=0, help='length of scale, soak or long_outage')
     ap.add_argument('--start-apart', type=int, default=0, help='start the hubs this many seconds apart, with a deployed config: no go file, peer found by UDID')
     ap.add_argument('--recover-bus-after', type=int, default=0, help='passed to the hub: restart softbus_server after this long without the peer')
     a = ap.parse_args()
+    if a.rollback and a.no_deploy:
+        sys.exit('--rollback activates the previous release, which --no-deploy skips: pass one, not both')
     known = {'features': FEATURE_CASES, 'demos': [d[0] for d in DEMOS], 'cli': [c[0] for c in CLI_CASES] + [c[0] for c in LONG_CASES]}.get(a.mode, GROUP_CASES)
     if a.groups != 'all' and not set(a.groups.split(',')) <= set(known):
         sys.exit('unknown group in %s (known: %s)' % (a.groups, ', '.join(known)))
@@ -1057,9 +1798,23 @@ def main():
     root = '%s/%s' % (a.board_root, VERSION)
     boards = {'A': a.a, 'B': a.b}
     libs, a.bins = artifacts(a.work)
-    if not a.no_deploy:
+    if a.no_deploy:
+        # A deploy or a rollback finishes an interrupted activation; --no-deploy does neither, so it
+        # would run against a board whose release links and recorded state disagree.
         for side, target in boards.items():
-            print('deploy', side, 'sent', deploy(target, root, libs, a.bins, Path(a.work) / 'ros/install'), 'of', len(libs) + len(a.bins), flush=True)
+            pending = pending_activation(target, root)
+            if pending:
+                sys.exit('%s has an interrupted activation of %s: deploy or roll back to finish it, '
+                         'rather than running against a board that is half switched over' % (target, pending))
+            half = half_switched(target, root)
+            if half:
+                sys.exit('%s records release %s as active but %s serves %s: deploy or roll back to '
+                         'repair it' % (target, read_state(target, root, 'active'), CURRENT, half))
+    else:
+        for side, target in boards.items():
+            print('deploy', side, 'sent', deploy(target, root, libs, a.bins, Path(a.work) / 'ros/install',
+                                                 a.diagnostic_preload, a.rollback),
+                  'of', len(libs) + len(a.bins), flush=True)
     for target in boards.values():
         kill_leftovers(target)
     env = 'cd %s && LD_LIBRARY_PATH=%s/lib' % (root, root)
