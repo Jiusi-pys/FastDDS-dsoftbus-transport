@@ -19,6 +19,8 @@ CMAKE=${CMAKE:-$OHOS_NATIVE/build-tools/cmake/bin/cmake.exe}
 NINJA=${NINJA:-$OHOS_NATIVE/build-tools/cmake/bin/ninja.exe}
 case "$VER" in
   2.14.5) LINE=2.14; FD_PKG="-Dfastrtps_DIR=$WORK/$VER/prefix/share/fastrtps/cmake"; SRC=$WORK/src/fastdds-v2.14.5 ;;
+  2.14.5-ros) LINE=2.14; FD_PKG="-Dfastrtps_DIR=$WORK/$VER/prefix/share/fastrtps/cmake"; SRC=$REPO/build/stage2/fastdds-2.14.5-ros-src
+              AUTOLOAD=-DBUILD_STOCK_ROS2_AUTOLOAD=ON ;;
   3.6.2)  LINE=3.6;  FD_PKG="-Dfastdds_DIR=$WORK/$VER/prefix/share/fastdds/cmake"; SRC=$WORK/src/fastdds-v3.6.2 ;;
   3.2.5)  LINE=3.2;  FD_PKG="-Dfastdds_DIR=$WORK/$VER/prefix/share/fastdds/cmake"; SRC=$WORK/src/fastdds-v3.2.5 ;;
   *) echo "unsupported version $VER"; exit 2 ;;
@@ -40,7 +42,7 @@ B=$WORK/$VER/build-transport
   -DDSOFTBUS_SOURCE_DIR="$REPO/communication_dsoftbus" -DFASTDDS_DSOFTBUS_FASTDDS_SOURCE_DIR="$SRC" \
   -DFASTDDS_DSOFTBUS_SOCKET_LIBRARY="$SOCKET" -DFASTDDS_DSOFTBUS_SOCKET_SHA256="$SOCKET_SHA" \
   "-DFASTDDS_DSOFTBUS_PLATFORM_LINK_DIRECTORIES=$PLAT;$P/lib" \
-  -DCMAKE_INSTALL_PREFIX="$WORK/$VER/transport-install"
+  ${AUTOLOAD:-} -DCMAKE_INSTALL_PREFIX="$WORK/$VER/transport-install"
 "$CMAKE" --build "$B" --parallel "${JOBS:-16}"
 "$CMAKE" --install "$B"
 echo "installed: $WORK/$VER/transport-install"

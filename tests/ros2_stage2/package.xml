@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>ros2_stage2</name>
+  <version>0.1.0</version>
+  <description>Ordinary rclcpp workload for the Stage 2 device runs</description>
+  <maintainer email="noreply@example.com">FastDDS DSoftBus Transport</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>std_msgs</depend>
+  <depend>example_interfaces</depend>
+  <depend>lifecycle_msgs</depend>
+  <depend>type_description_interfaces</depend>
+  <depend>tf2_ros</depend>
+  <depend>statistics_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

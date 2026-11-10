@@ -93,6 +93,7 @@ public:
     // cancellation or revocation of taken records is implied.
     void shutdown() override;
 private:
+    void Close();
     friend class DSoftBusTransportTestAccess;
 #if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
     friend class HostFacadeTestAccess;

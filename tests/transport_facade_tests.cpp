@@ -485,6 +485,16 @@ int RunTransportFacadeTests(int argc, char** argv) {
         auto* sender = dynamic_cast<DSoftBusSenderResource*>(original); FCHECK(sender && sender->Release());
         FCHECK(!t->OpenOutputChannel(list, FL(11)) && t->last_error().error == FacadeError::SenderAttachRejected);
     });
+    cases.emplace_back("FCD-13a-close-at-destruction-keeps-sending-through-shutdown", [] {
+        rtps::SendResourceList list; std::shared_ptr<RuntimeSendPath> runtime;
+        {
+            auto d = FD(); d.close_at_destruction = true; auto t = FM(d); FCHECK(t->init()); runtime = DSoftBusTransportTestAccess::Runtime(*t);
+            FCHECK(t->OpenOutputChannel(list, FL(11)));
+            t->shutdown(); // Fast DDS sends the Participant dispose after this
+            FCHECK(FSend(*list.front(), {FL(11)})); FCHECK(runtime->TryTake());
+        }
+        FCHECK(!FSend(*list.front(), {FL(11)})); // destruction still closes
+    });
     cases.emplace_back("FCD-13-held-record-and-senders-outlive-facade", [] {
         rtps::SendResourceList a, b; std::shared_ptr<RuntimeSendPath> runtime; std::optional<OwnedSendRecord> held;
         {

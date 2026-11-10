@@ -144,8 +144,9 @@ Reproducer `tests/stage1_native_successor/cft_race/cft_race.cpp` (Fast DDS only,
 6. **Compatible workaround (no Fast DDS change), verified on the boards with UDP, TCP and DSoftBus:** disable
    writer-side content filtering. Filtering then happens in the readers, with the same results but more bandwidth.
    - Public API: `DataWriterQos::writer_resource_limits().reader_filters_allocation.maximum = 0`.
-   - XML profile, applicable without code changes:
-     `<writer_resource_limits><reader_filters_allocation><maximum>0</maximum></reader_filters_allocation></writer_resource_limits>`.
+   - Correction (2026-11-05): this report originally listed an XML form of this setting. It does not exist: the
+     Fast DDS 2.14.5 and 3.6.2 XML parsers and schemas have no `reader_filters_allocation` element. See
+     [the version guide](FASTDDS_VERSIONS_AND_RELEASE.md#64-content-filter-race-on-fast-dds-3x-re-evaluated-not-assumed).
    - What remains: R2 between user threads only, i.e. ContentFilteredTopic create/delete/`set_expression_parameters`
      issued concurrently from several application threads. Serialise those calls in the application.
 7. **Proposed Fast DDS fix, NOT applied (needs approval):** `docs/proposals/fastdds-2.14.5-content-filter-race.patch`

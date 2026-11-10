@@ -39,6 +39,7 @@ in the repository with their own build instructions and evidence.
 | --- | --- | --- |
 | Build the native transport for OpenHarmony | [Version and release guide](docs/FASTDDS_VERSIONS_AND_RELEASE.md), `scripts/release/`, `integrations/ros2/stock/` | Stock Fast DDS 2.14.5, 3.6.2 or 3.2.5; version-specific libraries and device suite |
 | Develop the cores and inspect interface contracts on Windows | Root `CMakeLists.txt`; commands below | Default `SOURCE_PROBE` binding, SDK-free components and host fixtures |
+| Run unmodified ROS 2 nodes on two boards | [Hub deployment guide](docs/ROS2_HUB_DEPLOYMENT.md), [Stage 2 record](docs/STAGE2_ROS2_DEVICE_20261105.md) | `2.14.5-ros` only; bounded `DEVICE_TESTED`, `NOT_PRODUCTION_QUALIFIED` |
 | Work with the earlier installed package or experimental consumer | [Installation guide](docs/INSTALL.md), [input preflight](docs/INSTALL_PREFLIGHT.md) | Separate root `CONFIG` and historical integration paths; follow their exact dependency and ABI requirements |
 
 The default root build is for host development. A device runtime requires the
@@ -66,6 +67,10 @@ The parent repository pins the submodule commits. Keep those pins when reproduci
 a checkout; updating a submodule to its remote branch changes the source inputs.
 The release scripts fetch their own explicitly selected upstream versions as
 described in the release guide.
+A pin must also be a commit the submodule's remote serves, or the clone above fails
+for everyone else; the DSoftBus pin was corrected on 2026-11-09 for that reason,
+with the consumed headers unchanged (see
+[section 5 of the version guide](docs/FASTDDS_VERSIONS_AND_RELEASE.md#5-reproducing-from-a-clean-clone)).
 
 ## Host development on Windows
 
@@ -123,10 +128,17 @@ or deployment configuration.
   [CFT results and workaround](docs/FASTDDS_VERSIONS_AND_RELEASE.md#64-content-filter-race-on-fast-dds-3x-re-evaluated-not-assumed)
   and the [2.14.5 investigation](docs/FASTDDS_FULL_BUILD_AND_CFT_RACE_20261105.md).
 - ROS 2 acceptance is recorded separately in the
-  [ROS 2 capability matrix](docs/ROS2_CAPABILITY_MATRIX.md). ROS 2 validation of
-  the current stock version builds is recorded as `NOT_RUN` (Stage 2) in the
-  version guide. Earlier ROS runs do not qualify a newly built Fast DDS or
-  transport binary automatically.
+  [ROS 2 capability matrix](docs/ROS2_CAPABILITY_MATRIX.md). Stage 2 is bounded
+  `DEVICE_TESTED` and `NOT_PRODUCTION_QUALIFIED` on `2.14.5-ros` only, which is
+  Fast DDS 2.14.5 plus one approved patch; see the
+  [Stage 2 record](docs/STAGE2_ROS2_DEVICE_20261105.md). The
+  [hub deployment guide](docs/ROS2_HUB_DEPLOYMENT.md) covers several ROS processes per
+  board, the Python layer built from pinned sources, its limits, and what production
+  qualification would need. Stage 2 remains `NOT_RUN` on
+  stock 2.14.5, 3.6.2 and 3.2.5. ROS applications must not create
+  ContentFilteredTopics while writers are active, because the workaround cannot be
+  applied through `rmw_fastrtps`. Earlier ROS runs do not qualify a newly built
+  Fast DDS or transport binary automatically.
 - Platform deployment contracts, production qualification and distribution rights
   have separate requirements; consult the
   [production support contract](docs/PRODUCTION_SUPPORT_CONTRACT_V1.md).
@@ -142,7 +154,7 @@ own evidence scope.
 | --- | --- |
 | `include/fastdds_dsoftbus/`, `src/` | Transport interfaces, implementation and supporting components |
 | `integrations/ros2/stock/` | Stock Fast DDS transport bootstrap and native library build |
-| `integrations/ros2/` | ROS 2 integration, historical adapters and diagnostics |
+| `integrations/ros2/` | ROS 2 integration, per-board hub (`hub/`), preload library (`autoload/`), historical adapters and diagnostics |
 | `scripts/release/` | Native dependency builds, transport builds and cross-board runner |
 | `examples/`, `tests/`, `probes/` | Consumers, host contracts, device scenarios and probes |
 | `docs/` | Architecture, installation, support contracts and acceptance records |

@@ -1,6 +1,8 @@
 #include <fastdds_dsoftbus/dsoftbus/DSoftBusTransport.hpp>
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
+#include <thread>
 #include <utility>
 #ifdef FASTDDS_DSOFTBUS_STARTUP_OBSERVATION
 #include "../probes/PublicSocketRuntimeTrace.hpp"
@@ -17,7 +19,7 @@ DSoftBusTransport::DSoftBusTransport(const DSoftBusTransportDescriptor& descript
         std::shared_ptr<const ConnectionGenerationSource> source)
     : TransportInterface(LocatorCodec::kind), frozen_(descriptor), report_(descriptor),
       mode_(FacadeMode::HostModel), generations_(std::move(source)) {}
-DSoftBusTransport::~DSoftBusTransport() { shutdown(); }
+DSoftBusTransport::~DSoftBusTransport() { Close(); }
 #if defined(FASTDDS_DSOFTBUS_HOST_BACKEND_TESTING) || defined(FASTDDS_DSOFTBUS_PUBLIC_SOCKET_DDS_EXPERIMENT)
 DSoftBusTransport::DSoftBusTransport(const DSoftBusTransportDescriptor& descriptor, HostBackendTag,
         std::shared_ptr<HostFacadeBackend> backend)
@@ -401,8 +403,18 @@ bool DSoftBusTransport::fillUnicastLocator(Locator& local, std::uint32_t) const 
 std::uint32_t DSoftBusTransport::max_recv_buffer_size() const { return ReadyLease() ? frozen_.maxMessageSize : 0; }
 bool DSoftBusTransport::is_localhost_allowed() const { return false; }
 void DSoftBusTransport::update_network_interfaces() {}
-void DSoftBusTransport::shutdown()
+void DSoftBusTransport::shutdown() { if (!frozen_.close_at_destruction) Close(); }
+void DSoftBusTransport::Close()
 {
+    // Records still queued are discarded below, and the Participant's dispose was queued just before this. The wait is
+    // bounded and best effort: a peer that misses the dispose still ends this Participant by its lease.
+    if (frozen_.close_at_destruction) {
+        if (const auto lease = ReadyLease(); lease && lease->runtime) {
+            const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
+            while (lease->runtime->SnapshotUsage().records != 0 && std::chrono::steady_clock::now() < end)
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
     if (domain_guard_) domain_guard_->Close();
     std::shared_ptr<Ready> r;
     { std::lock_guard<std::mutex> lock(lifecycle_); state_ = FacadeState::Closing; r = ready_; }

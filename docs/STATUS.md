@@ -12,6 +12,7 @@ sync did not rerun them or qualify the current working tree for release.
 | 2.14.5 | BUILDS | HOST_TESTED: stock suite 67/67 PASS | DEVICE_TESTED: four full-suite runs, 70/70 each; one and two route outages PASS |
 | 3.6.2 | BUILDS | HOST_TESTED with gaps: root CONFIG 303/391 PASS; 87 link-blocked NOT_RUN; one missing-submodule failure passed separately after initialization | DEVICE_TESTED: four full-suite runs, 70/70 each; one and two route outages PASS |
 | 3.2.5 | BUILDS | NOT_RECORDED: no corresponding Host test result is recorded | DEVICE_TESTED: three full-suite runs, 70/70 each; one route outage PASS; two outages NOT_RUN |
+| 2.14.5-ros (one approved patch, not stock) | BUILDS | Host stock suite on the Stage 2 working tree 70/70 serial, `-j 4` not rerun; root facade 23 groups, 0 failures at `46e6615c`; these do not run the OHOS binaries | DEVICE_TESTED: Stage 1 3 full-suite runs, 70/70 each, core route 8/8, on Transport binaries that are still current; bounded Stage 2 (below) |
 
 Each full suite has 35 cases per board: core 3, QoS 15, feature 14, Security 2 and
 Statistics 1. The Host 3.6.2 row is a partial result, not a whole-suite PASS; the
@@ -24,9 +25,126 @@ recorded 2.14.5 and 3.6.2 binaries were byte-identical before and after those ed
 See the [version matrix, build procedure and original results](FASTDDS_VERSIONS_AND_RELEASE.md)
 for the ROS distribution dependency mapping, exact configurations and evidence paths.
 
-**Stage 2 / ROS 2 on these stock builds: NOT_RUN.** Earlier ROS acceptance applies
-to its original package and does not qualify these binaries. Stage 1's bounded
+**Stage 2 / ROS 2 on stock 2.14.5, 3.6.2 and 3.2.5: NOT_RUN.** Earlier ROS acceptance
+applies to its original package and does not qualify these binaries. Stage 1's bounded
 DDS device closure does not grant production qualification or a global commit gate.
+
+**Stage 2 on `2.14.5-ros`: DEVICE_TESTED (bounded) / NOT_PRODUCTION_QUALIFIED (updated 2026-11-06).** This
+build is v2.14.5 plus one user-approved patch, so its results do not transfer to any stock line.
+Unmodified ROS 2 Jazzy nodes ran between both RK3588A boards on two paths, with no RTPS, RMW or ROS change:
+
+- **Direct path**, one process per board per config: all 12 modes pass, including suite 20/20, features 70/70, demos 8/8,
+  15 s route outage 600/600 and negative 26 rows refused. A second process on one config is refused.
+- **Hub path**, `fdds_dsb_hub` per board with any number of processes: suite 20/20, features 72/72 ×3, demos 8/8, route
+  600/600 ×3 plus one, multi-process 3/3, hub worker SIGKILL 600/600 ×2 with a stall of about 7 s, SROS2 Enforce,
+  16 processes, `ros2` CLI, rclpy, launch and rosbag2 42 checks ×2, soak 1800 s with 0 gaps.
+
+These ran on a ROS and Python tree built from empty (`E:/s2q`). **The ROS Python layer is now built by this repository from
+pinned sources** and replaces the older tree on the boards. CPython and third-party modules are a declared input pulled from
+a board, so a clone needs a board with that Python, or an equivalent copy. Numbers recorded at `46e6615c` used the older tree and
+stand as history.
+
+Stage 1 was not rerun, because the Transport, hub and preload binaries are unchanged. The results for those binaries stand:
+`2.14.5-ros` 70/70 ×3 and core route 8/8; stock 2.14.5, 3.6.2 and 3.2.5 70/70 once each.
+
+Long outages: 15 s recovers by itself. 45 s and 70 s take the boards off DSoftBus (`remote device num = 0`) until
+`softbus_server` restarts, which the opt-in `--recover-bus-after` does. A reboot is not required, as this file said earlier.
+
+Limits include: two boards only; a 30-minute soak; a direct-path second Participant that falls back to the 20 s lease
+with root cause not found; hub drops when traffic exceeds link throughput, about 9 to 13 MiB/s for large samples; the hub as
+a system service, ROS on Fast DDS 3.x and ROS on stock lines NOT_RUN. The CFT workaround cannot be applied on the ROS path, so ROS applications must not
+create ContentFilteredTopics while writers are active. See the [Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md) and the
+[hub deployment guide](ROS2_HUB_DEPLOYMENT.md), which lists what production qualification would need.
+
+**Runner audit fixes (2026-11-09): HOST_TESTED, DEVICE_TESTED false.** An external audit of `c975ec6f` found that the
+`communication_dsoftbus` pin was a commit that exists only in this machine's clone, so no other checkout could clone the
+repository with its submodules, and that the two-board release runner `scripts/release/run_ros2_cross_board.py` accepted a
+missing socket observation as proof of a UDP-free path, passed `ros2` CLI and rosbag2 rows on a startup marker alone, and left
+libraries from earlier builds on the boards. The pin is now `dd6037ce`, which is on `origin/master`; its `interfaces` tree, the
+only part the build consumes, is the identical git object `a30132e7…`, so no build output changes. The runner's socket, CLI and
+bag oracles are stricter, and the deploy was rewritten twice the same day: first to prune what the build does not produce,
+read back what it sent and write `manifest.sha256` on the board, then into the staged releases described below, which
+replace that in-place prune. New Host test `stage2.runner_oracle` passes, 49 cases, standalone and under `ctest`
+(`100% tests passed out of 2`, with `stage2.drop_python_needed`); the 70/70 stock suite was not rerun with it registered.
+
+**Bag playback, split in two (2026-11-09): smoke PASS criterion retained, strict completeness UNVERIFIED.** The rows that tolerate
+the documented one-message head loss are now named `bag_play_smoke_sqlite3` and `bag_play_smoke_mcap`, and that allowance is a smoke
+criterion, never proof of complete playback. New rows `bag_complete_sqlite3` and `bag_complete_mcap` read each bag back on the board
+through `rosbag2_py` and compare it with the replay message by message on a topic of their own, requiring the same payloads, the same
+count of each, the same order and no message that was never recorded, with the bag's own soundness reported apart. A row that cannot
+establish completeness reports `UNVERIFIED` and does not pass. **Strict completeness is not established:** its oracle is host-tested
+against fakes only, no part of the strict path has run on hardware, and `mode_cli` is NOT_RUN, so a device run that previously
+reported PASS on the bag rows may report FAIL or UNVERIFIED. The mode also now carries two extra `listener` processes on board A,
+10 instead of 8. **None of the runner's real behaviour has run on hardware:** `hdc list targets`
+returned `[Empty]`, so the RK3588A and cross-device tests are BLOCKED, and the Stage 2 device numbers above were produced by the
+previous runner and are not restated as validating this change. Two audit findings, on the hub's JOIN control-message handling
+and on its blocking `connect()`, were OPEN and deferred at that point; they are addressed by the 2026-11-10 change
+recorded below. Details in
+[section 11 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#11-runner-audit-fixes-2026-11-09).
+
+**Staged deployment (2026-11-09): HOST_TESTED, nothing on a real filesystem.** The deploy above still mutated the deployment
+it was running: it removed `python/`, `share/` and `lib/python3.12`, uploaded over the active files one at a time and pruned
+them, then checked the result, so an interrupted deploy left a half-updated board with nothing to go back to. A deploy now
+stages a complete release in `<root>/releases/<id>/`, where `<id>` is a content address over the artifact manifest plus a
+marker for the Python layer or the ament index, validates it by content, and activates it by moving the single symlink
+`<root>/current`; `lib`, `bin`, `python`, `share` and `manifest.sha256` are symlinks into `current` that never move, so
+`lib/` and `share/` cannot come from different releases. `work/` and `operator/` are created if absent and otherwise
+untouched by a deploy, a pre-staging layout is moved to `legacy/<token>/` rather than deleted and only immediately before
+activation, `--rollback` activates the validated previous release, and `--no-deploy` refuses a board that is half switched
+over. **Operator-visible change:** a `--diagnostic-preload` library must move to `<root>/operator/`, outside any release.
+Four rounds of independent review preceded this record; two of the first round's findings were the same failure class the
+change removes, and each was invisible to the suite because the test fake supplied a value the production code should have
+derived, so the suite now stubs nothing on the host side. Host evidence: 49 oracle cases standalone and under `ctest`,
+pyflakes clean, and a tester-executed seven-mutant battery against the production code in which no mutant survived, the
+baseline passing at 49 cases; the tester also checked that the real builders and extractors run unstubbed and that the host
+and board file counts agree by independent routes. The implementer separately reports reverting 37 fixes one at a time for 37
+matching named failures, which **is not tester evidence**: no artifact for it is kept in the repository and the tester did
+not re-run those reverts. **None of the release machinery has run against a real filesystem** — no real staging, hard link,
+rename, symlink swap, activation, rollback, prune or legacy migration; `hdc list targets` returned `[Empty]`, so RK3588A and
+cross-device are NOT_RUN. This is a redesign of the deployment path and its first device run is its first real test, which
+must also confirm by hand that `find python share lib -type f` still counts correctly on a C++ only release, where `python/`
+is absent. Details in
+[section 11.5 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#115-staged-releases-with-atomic-activation-and-rollback-2026-11-09)
+and limit 25 of its section 8.
+
+**Hub client lifecycle (2026-11-10): IMPLEMENTED, host-tested, kernel behaviour DEVICE_TESTED, the change itself NOT
+VERIFIED end to end.** The two audit findings left OPEN above are addressed in the hub client
+(`integrations/ros2/hub/`). A `Membership` class holds what a process WANTS to be joined to apart from what the current
+socket has been TOLD, so a reconnection resynchronizes instead of assuming; a control frame that cannot be written is
+retried a bounded number of times, reported as `FDDS_HUB_CLIENT_JOIN_FAILED` or `FDDS_HUB_CLIENT_LEAVE_FAILED`, and the
+socket is then dropped so the receive thread replaces it and rejoins every wanted group — where before a lost JOIN left
+a process that believed it was attached, heard nothing and reported nothing. The connect is non-blocking and one
+deadline bounds the connect and its retries together, so a hub that is listening and not accepting can no longer hang a
+process and then its receive-thread join for ever; because AF_UNIX has no in-progress connect and a full backlog refuses
+with `EAGAIN`, the deadline bounds a retry of `connect()` rather than a wait on one. `DropSocket` calls `shutdown()` and
+never `close()`, because only the former wakes a thread already blocked in `recv()`. The refusal line is now
+`FDDS_HUB_CLIENT_REFUSED reason=no_usable_hub`. Four rounds of independent review, two blocking: one blocker was a
+permanent silent detach and an unbounded join **introduced by the fix itself**, the other the wrong errno leaving the
+whole mechanism dead code. Evidence: `aarch64-linux-ohos` and host builds at `-Wall -Wextra -Werror` with no warnings;
+`hub_lifecycle_tests` on the Windows host and both suites in a `gcc:13` container; `stage2.hub.lifecycle` registered and
+passing under `ctest` in this worktree, in a run of the five `stage2.*` tests, `100% tests passed out of 5`, which also
+passed `stage2.runner_oracle`, the staged-deploy suite of PR #10, with this change on top — so `HubLifecycle.hpp` has
+been through MSVC, the OHOS SDK clang for aarch64 and gcc 13, which is the point of keeping it free of sockets, Fast DDS
+and the SDK. `stage2.hub.connect` is deliberately absent from that list, being registered only under
+`CMAKE_SYSTEM_NAME STREQUAL "Linux"` because macOS has AF_UNIX without `SOCK_SEQPACKET`; **its `ctest` registration on
+Linux is NOT_RUN**, and the binary was run directly instead. The 70/70 stock suite was **not** rerun: only those five
+tests were. And, on 2026-11-10 over SSH on both RK3588A boards, `hub_connect_tests` exit 0, asserting on the board that a full AF_UNIX `SOCK_SEQPACKET` backlog refuses
+with `EAGAIN` and not `EINPROGRESS`, that a wedged hub fails at the deadline having waited, that the stop flag cancels
+inside 2 s against a 30 s deadline, and that `shutdown()` wakes a blocked `recv()`. A six-reversion negative control
+killed five by named assertion and one at the compiler. **What this does not establish:** no ROS 2 or RTPS traffic has
+run with the change — no hub started, no process attached, no JOIN or LEAVE exchanged with a real `fdds_dsb_hub`, no
+reconnection or outage exercised, cross-board ROS NOT_RUN; and **`HubTransport.cpp` is pinned by neither suite**, which
+need Fast DDS that the host build lacks, so the reviewer could revert five of its changes with both suites staying
+green. The two headers are test-pinned, the file wiring them is not. The Fast DDS compile used two reconstructed
+configuration headers rather than ones Fast DDS's own CMake produced. `/tmp` is read-only on these boards, a
+portability defect the device run itself found, so the suite takes `S2_SOCKET_DIR`; and `iptables` is denied from an SSH
+shell there, so route-outage runs still need another path. The same session settled seven shell assumptions the staged
+deployment above depended on and had recorded as NOT_RUN, including toybox `find` with a missing operand, which holds;
+that settles those assumptions and leaves the release machinery itself still never executed against a real filesystem.
+Details in
+[section 11.6 of the Stage 2 record](STAGE2_ROS2_DEVICE_20261105.md#116-hub-client-lifecycle-lost-control-frames-and-the-unbounded-connect-2026-11-10)
+and limit 26 of its section 8. This work sits on `claude/hub-lifecycle-20261109`, based on `claude/audit-fixes-20261109`
+at `425df859` (draft PR #10), and **cannot merge before that branch**.
 
 The CFT filter-factory race remains on Fast DDS 2.14.5 and 3.6.2. On 3.6.2 the
 recorded UDP/TCP/DSoftBus stress windows crashed 2/3, 1/3 and 3/3 respectively;

@@ -47,6 +47,10 @@ struct DSoftBusTransportDescriptor final : eprosima::fastdds::rtps::TransportDes
     // Participant without initial peers (Discovery Server) needs this. Default off: the
     // view stays unconfirmed (Await) until an initial peer confirms the domain.
     bool bind_declared_domain_at_open = false;
+    // Fast DDS calls shutdown() before it sends the Participant dispose, so closing there loses the dispose and peers
+    // wait out the lease. With this set shutdown() does nothing and destruction closes, as on UDP. Default off: shutdown()
+    // closes, which callers that drive the Transport directly rely on.
+    bool close_at_destruction = false;
     v1::Profile profile = v1::Profile::BytesNative;
     v1::NativeNameScope native_name_scope;
     // Absent preserves the legacy unscoped Transport. Stock assembly opts in

@@ -15,7 +15,7 @@
 #include "compat.hpp"
 #include "sample_types.hpp"
 #include "../stage1_native_successor/security_pki.hpp"
-#include <fastdds_dsoftbus/dsoftbus/ExperimentalRuntime.hpp>
+#include "../../integrations/ros2/autoload/DeviceDeployment.hpp"
 #include <softbus_bus_center.h>
 #if defined(FASTDDS_STATISTICS)
 #include <fastdds/statistics/dds/domain/DomainParticipant.hpp>
@@ -50,6 +50,7 @@
 #include <unistd.h>
 
 namespace ds = fastdds_dsoftbus::dsoftbus;
+namespace dd = fastdds_dsoftbus::device_deployment;
 using namespace dsb;
 using Clock = std::chrono::steady_clock;
 static constexpr char kPackage[] = "com.kaihong.mdds";
@@ -62,82 +63,16 @@ static std::map<std::string, std::string> kv(int argc, char** argv, int from)
     for (int i = from; i < argc; ++i) { std::string a = argv[i]; auto e = a.find('='); if (e != std::string::npos) m[a.substr(0, e)] = a.substr(e + 1); }
     return m;
 }
-static void set_token(const std::string& token)
-{
-    if (token.empty()) return;
-    void* h = dlopen("libtokensetproc_shared.z.so", RTLD_NOW);
-    need(h != nullptr, "dlopen libtokensetproc_shared.z.so");
-    auto set = reinterpret_cast<int (*)(std::uint64_t)>(dlsym(h, "SetSelfTokenID"));
-    auto get = reinterpret_cast<std::uint64_t (*)()>(dlsym(h, "GetSelfTokenID"));
-    need(set && get, "SetSelfTokenID/GetSelfTokenID");
-    const std::uint64_t id = std::strtoull(token.c_str(), nullptr, 10);
-    need(set(id) == 0 && get() == id, "SetSelfTokenID");
-}
+static void set_token(const std::string& token) { dd::SetSelfToken(token); }
 
 // ---------------------------------------------------------------- deployment / transport
-struct Deploy {
-    std::string name_space, udid, peer_udid, peer_network, prefix, initiator, peer_initiator;
-    std::uint32_t domain = 151, slot = 0, peer_slot = 0;
-};
+using Deploy = dd::Deploy;
+using Pumped = dd::PumpedRuntime;
 static Deploy make_deploy(unsigned side, const std::string& run, std::uint32_t domain, const std::string& udid,
         const std::string& peer_udid, const std::string& peer_network)
-{
-    Deploy d; d.name_space = "md_" + run + run + run + run; d.domain = domain; d.udid = udid; d.peer_udid = peer_udid;
-    d.peer_network = peer_network; d.prefix = std::string(kPackage) + ".dds." + run;
-    d.slot = side ? 102 : 101; d.peer_slot = side ? 101 : 102;
-    d.initiator = d.prefix + (side ? ".TB" : ".TA"); d.peer_initiator = d.prefix + (side ? ".TA" : ".TB");
-    return d;
-}
-static ds::DSoftBusTransportDescriptor configuration(const Deploy& q, bool feature_limits)
-{
-    ds::V1Deployment d; d.identity = {q.name_space, q.domain, q.udid}; d.slot = q.slot; d.callback_namespace = "dsb.suite";
-    d.native_name_scope = {ds::v1::NativeNameContract::PackageScopedV1, kPackage, q.prefix};
-    ds::V1PeerDeployment p; p.identity = {q.name_space, q.domain, q.peer_udid}; p.slot = q.peer_slot; p.network_id = q.peer_network;
-    p.local_initiator_name = q.initiator; p.expected_remote_initiator_names = {q.peer_initiator}; p.native_name_scope = d.native_name_scope; d.peers = {p};
-    ds::DSoftBusTransportDescriptor c(65536); need(c.ConfigureV1(d).code == ds::DirectoryError::None, "ConfigureV1");
-    if (feature_limits) {
-        c.max_participants = 4; c.receive_records = 256; c.receive_bytes = 2u << 20;
-        // Secure Participants receive into buffers of at most 65535 bytes (Fast DDS uint16 cap).
-        c.maxMessageSize = 65500; c.send_limits.max_record_bytes = 65500;
-        c.send_limits.peer_records = 256; c.send_limits.peer_bytes = 2u << 20; c.send_limits.global_records = 256; c.send_limits.global_bytes = 2u << 20;
-    }
-    return c;
-}
-static ds::phase0::PublicSocketConfiguration backend(const ds::DSoftBusTransportDescriptor& c)
-{
-    const auto& r = c.directory.routes.at(0).fields; ds::phase0::PublicSocketConfiguration b;
-    b.package_name = kPackage; b.identity = {r.local_initiator_name, {1}, {1}}; b.listener_identity = {c.directory.locals.at(0).local_listen_name, {2}, {2}};
-    b.peer_name = r.remote_listen_name; b.peer_network_id = r.remote_network_id; b.expected_peer_initiator_name = r.expected_remote_initiator_names.at(0);
-    b.max_message_size = 65536; b.listen_qos = {{0, 80}, {1, 2000}}; b.bind_qos = b.listen_qos; return b;
-}
-// One Runtime plus its pump thread.
-struct Pumped {
-    std::unique_ptr<ds::experimental::Runtime> rt; std::thread pump; std::atomic<bool> failed{false}, tolerate{false};
-    std::atomic<std::uint32_t> send_failures{0};
-    void start()
-    {
-        pump = std::thread([this] { try { for (;;) {
-            auto g = rt->WorkGeneration();
-            for (;;) { auto r = rt->PumpSend();
-                if (r.outcome == ds::NativeSendOutcome::ReturnedInvalidCode || r.outcome == ds::NativeSendOutcome::ReturnedByException ||
-                        (r.actual_return_code && *r.actual_return_code != 0)) {
-                    if (tolerate.load() && r.outcome != ds::NativeSendOutcome::ReturnedByException) ++send_failures; else failed = true; }
-                if (r.status != ds::NativeStatus::None) break; }
-            ds::phase0::BackendStatus rx; do { rx = rt->PumpReceive(); } while (rx == ds::phase0::BackendStatus::None);
-            if (rx != ds::phase0::BackendStatus::NoWork && rx != ds::phase0::BackendStatus::InvalidState) failed = true;
-            auto w = rt->WaitForWork(g);
-            if (w != ds::WorkWaitResult::Work && w != ds::WorkWaitResult::Deadline) {
-                if (w != ds::WorkWaitResult::StopRequested && w != ds::WorkWaitResult::Closed) failed = true; return; }
-        } } catch (...) { failed = true; } });
-    }
-    bool stop_and_close(std::vector<std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface>>& descs)
-    {
-        if (rt) rt->RequestPumpStop(); if (pump.joinable()) pump.join();
-        descs.clear(); bool closed = false; try { closed = rt && rt->Close(); } catch (...) {}
-        if (!closed) (void)rt.release(); // never destroy a Runtime that may still be in use
-        return closed;
-    }
-};
+{ return dd::MakeDeploy(kPackage, "dsb.suite", side, run, domain, udid, peer_udid, peer_network); }
+static ds::DSoftBusTransportDescriptor configuration(const Deploy& q, bool feature_limits) { return dd::Configuration(q, feature_limits); }
+static ds::phase0::PublicSocketConfiguration backend(const ds::DSoftBusTransportDescriptor& c) { return dd::Backend(kPackage, c); }
 static void participant_locators(fd::DomainParticipantQos& qos, const ds::DSoftBusTransportDescriptor& c,
         std::shared_ptr<eprosima::fastdds::rtps::TransportDescriptorInterface> desc, bool initial_peer = true)
 {
@@ -880,11 +815,22 @@ static void second_domain_case(Suite& s)
         const bool m = s.matched(w3, r3, 1, 1, 30000); s.barrier();
         for (std::uint32_t n = 1; n <= 3; ++n) { auto v = s.lay(s.run + 32, n); need(write(w3, &v), "domain1 write"); }
         std::uint32_t next = 1; const bool got = m && s.waitp([&] { s.take_layers(r3, s.run + 32, next); return next == 4; }, 10000);
-        const bool acked = ok(w3->wait_for_acknowledgments(seconds(5))); s.barrier();
+        // Once every sample is acknowledged this domain has nothing left to deliver. The peer may pass the
+        // barrier below and close first, so a later send can reach a channel that is already gone
+        // (measured: SOFTBUS_TRANS_TDC_GET_INFO_FAILED during the barrier). Only failures up to here fail
+        // the case; later send failures are counted in the detail.
+        const bool acked = ok(w3->wait_for_acknowledgments(seconds(5)));
+        d1.tolerate = true;
+        const bool exchange_failed = d1.failed.load();
+        s.barrier();
         const bool deleted = ok(p->delete_contained_entities()) && ok(s.factory->delete_participant(p));
         const bool closed = deleted && d1.stop_and_close(descs);
-        okay = got && acked && closed && !d1.failed.load();
-        detail += " matched=" + std::to_string(m) + " received=" + std::to_string(next - 1) + " second_runtime_closed=" + std::to_string(closed);
+        okay = got && acked && closed && !exchange_failed && !d1.failed.load();
+        detail += " matched=" + std::to_string(m) + " received=" + std::to_string(next - 1) + " acked=" + std::to_string(acked) +
+            " exchange_failed=" + std::to_string(exchange_failed) +
+            " failure_source=" + std::to_string(d1.failure_source.load()) + " failure_value=" + std::to_string(d1.failure_value.load()) +
+            " teardown_send_failures=" + std::to_string(d1.send_failures.load()) +
+            " second_runtime_closed=" + std::to_string(closed);
     } else { s.barrier(); s.barrier(); go = true; d1.stop_and_close(descs); }
     s.report(G, "second_domain_concurrent", okay, detail);
     s.barrier();
@@ -975,8 +921,11 @@ static void restart_case(Suite& s)
         s.barrier();
         const unsigned got2 = exchange(2);
         s.barrier(); s.barrier();
+        // The dispose goes to a helper that has already exited, so a send can fail from here on; failures before this count.
+        const bool pump_ok = !hs.failed.load();
+        hs.tolerate = true;
         const bool deleted = ok(p->delete_contained_entities()) && ok(s.factory->delete_participant(p));
-        const bool pump_ok = !hs.failed.load(); const bool closed = deleted && hs.stop_and_close(descs);
+        const bool closed = deleted && hs.stop_and_close(descs);
         okay = got1 == 3 && gone && got2 == 3 && pump_ok && closed;
         detail = "role=LIVE_PROCESS inc1_received=" + std::to_string(got1) + " unmatched_after_kill=" + std::to_string(gone) + " inc2_received=" + std::to_string(got2) +
             " runtime_closed=" + std::to_string(closed);
