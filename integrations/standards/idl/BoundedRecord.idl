@@ -1,0 +1,9 @@
+module Standards {
+    @final
+    struct BoundedRecord {
+        @key unsigned long id;
+        unsigned long sequence_number;
+        string<64> label;
+        sequence<octet, 256> payload;
+    };
+};

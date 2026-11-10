@@ -1,6 +1,7 @@
 #!/bin/bash
-# Reproducible OpenHarmony (SDK 23, arm64-v8a, shared libc++) build of an unmodified Fast DDS
-# release plus every dependency, all fetched from pinned upstream tags/commits.
+# Reproducible OpenHarmony (SDK 23, arm64-v8a, shared libc++) build of a pinned Fast DDS
+# release -- unmodified by default, or patched when FASTDDS_PATCH_DIR is set (see below) --
+# plus every dependency, all fetched from pinned upstream tags/commits.
 #
 #   scripts/release/build_fastdds_ohos.sh <2.14.5|3.6.2|3.2.5> <work_dir>
 #
@@ -10,7 +11,11 @@
 # <work_dir>/<version>/BUILD_INFO.txt with the pins and the SHA-256 of every installed .so.
 #
 # Host: Windows + Git Bash with git, perl, GNU make (scoop install make), python.
-# Environment overrides: OHOS_NATIVE (SDK native dir), CMAKE, NINJA, JOBS.
+# Environment overrides: OHOS_NATIVE (SDK native dir), CMAKE, NINJA, JOBS,
+#   FASTDDS_PATCH_DIR (directory of *.patch files applied to the Fast DDS source,
+#     in sorted order, after the pinned checkout; unset means an unmodified release).
+# A patched build must use its own <work_dir>, so a patched prefix can never be
+# mistaken for a stock one. The applied set is recorded in BUILD_INFO.txt.
 set -euo pipefail
 VER=${1:?usage: build_fastdds_ohos.sh <2.14.5|3.6.2> <work_dir>}
 WORK=${2:?usage: build_fastdds_ohos.sh <2.14.5|3.6.2> <work_dir>}
@@ -19,6 +24,7 @@ OHOS_NATIVE=${OHOS_NATIVE:-C:/Users/$USERNAME/AppData/Local/OpenHarmony/Sdk/23/n
 CMAKE=${CMAKE:-$OHOS_NATIVE/build-tools/cmake/bin/cmake.exe}
 NINJA=${NINJA:-$OHOS_NATIVE/build-tools/cmake/bin/ninja.exe}
 JOBS=${JOBS:-16}
+FASTDDS_PATCH_DIR=${FASTDDS_PATCH_DIR:-}
 case "$VER" in
   2.14.5) FASTDDS_REF=v2.14.5; FASTDDS_SHA=ebcb5c05e9da9e262041e8616bbaff61ab40a296
           FASTCDR_REF=v2.2.5;  FASTCDR_SHA=9f4e60f7ac958e0fbbfe949102de3929cbbc226f ;;
@@ -96,6 +102,25 @@ fi
 [ -f "$PREFIX/lib/libtinyxml2.so" ] || cm tinyxml2 "$SRC/tinyxml2" -DBUILD_TESTS=OFF -DBUILD_TESTING=OFF
 [ -f "$PREFIX/lib/libfastcdr.so" ] || cm fastcdr "$SRC/fastcdr-$FASTCDR_REF" -DBUILD_TESTING=OFF
 FD=$SRC/fastdds-$FASTDDS_REF
+# Return the pinned checkout to a known state before patching, so a rerun never
+# stacks a patch on top of itself and a stock rerun never inherits a patch.
+git -C "$FD" checkout -q -f "$FASTDDS_SHA"
+git -C "$FD" clean -qfd
+if [ -n "$FASTDDS_PATCH_DIR" ]; then
+  test -d "$FASTDDS_PATCH_DIR" || { echo "FASTDDS_PATCH_DIR not found: $FASTDDS_PATCH_DIR"; exit 2; }
+  shopt -s nullglob
+  PATCHES=("$FASTDDS_PATCH_DIR"/*.patch)
+  shopt -u nullglob
+  [ ${#PATCHES[@]} -gt 0 ] || { echo "no *.patch in $FASTDDS_PATCH_DIR"; exit 2; }
+  echo "fastdds_patch_dir $FASTDDS_PATCH_DIR" >> "$OUT/BUILD_INFO.txt"
+  for pf in "${PATCHES[@]}"; do
+    log "apply patch $(basename "$pf")"
+    git -C "$FD" apply --verbose "$pf" || { echo "patch failed: $pf"; exit 4; }
+    echo "fastdds_patch $(sha256sum "$pf" | cut -c1-64) $(basename "$pf")" >> "$OUT/BUILD_INFO.txt"
+  done
+else
+  echo "fastdds_patch none" >> "$OUT/BUILD_INFO.txt"
+fi
 cm fastdds "$FD" -DSECURITY=ON -DFASTDDS_STATISTICS=ON -DNO_TLS=OFF -DSQLITE3_SUPPORT=ON \
   -DCOMPILE_TOOLS=ON -DCOMPILE_EXAMPLES=OFF -DBUILD_TESTING=OFF -DBUILD_DOCUMENTATION=OFF \
   -DTHIRDPARTY=OFF -DTHIRDPARTY_UPDATE=OFF -DTINYXML2_FROM_SOURCE=OFF \

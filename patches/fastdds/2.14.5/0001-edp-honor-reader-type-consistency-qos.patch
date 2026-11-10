@@ -1,0 +1,171 @@
+From: FastDDS-dsoftbus-Transport standards work
+Subject: [PATCH 0001] EDP: let a reader opt into its own type consistency QoS
+
+Fast DDS 2.14.5 cannot match a DDS-XTypes 1.3 appendable or mutable type
+against a reader that declares fewer members, whatever QoS the reader sets.
+
+EDP::checkTypeIdentifier and EDP::checkTypeObject each construct a local
+TypeConsistencyEnforcementQosPolicy fixed to DISALLOW_TYPE_COERCION with
+m_prevent_type_widening true, and pass that to consistent() in place of
+rdata->m_qos.type_consistency. The intended call is present in both
+functions but commented out. CompleteStructType::consistent
+(src/cpp/dynamic-types/TypeObject.cpp) already implements the assignable
+case correctly, so only the policy plumbing is missing.
+
+The commented-out call cannot simply be restored.
+TypeConsistencyEnforcementQosPolicy defaults to ALLOW_TYPE_COERCION with
+m_ignore_sequence_bounds and m_ignore_string_bounds true and
+m_prevent_type_widening false, so honouring the reader's policy
+unconditionally would relax endpoint matching for every reader that never
+touched the policy, including readers created by rmw_fastrtps. That is a
+behaviour change for existing deployments and is out of scope here.
+
+This patch therefore gates the correct behaviour behind an environment
+variable that defaults to off:
+
+    FASTDDS_XTYPES_HONOR_TYPE_CONSISTENCY=1
+
+With the variable unset, or set to anything other than exactly "1", every
+matching decision is identical to stock 2.14.5. With it set to "1", a
+reader's TypeConsistencyEnforcementQosPolicy reaches consistent() as
+DDS-XTypes 1.3 specifies.
+
+Scope notes, gate OFF:
+  - No DDS or RTPS semantics change. Verified A/B on the host and on two
+    RK3588A boards in both board directions: with the variable unset the
+    patched library reproduces stock 2.14.5 case for case.
+  - No transport-specific behaviour is introduced.
+
+Scope notes, gate ON. The relaxation is WIDER than appendable/mutable
+assignability, and an operator must understand all three points:
+
+  - THE GATE IS PER-PROCESS, NOT PER-READER. It is a function-local static
+    read once, so every reader in the process has its
+    TypeConsistencyEnforcementQosPolicy honoured, not only the reader that
+    wanted it. A process that sets the variable and also hosts rmw_fastrtps
+    readers relaxes matching for those readers too. Do not set it in a shared
+    launcher environment.
+
+  - EXTENSIBILITY KIND IS NOT ENFORCED. In stock 2.14.5
+    CompleteStructType::consistent (src/cpp/dynamic-types/TypeObject.cpp)
+    compares m_struct_flags, which carry IS_FINAL / IS_APPENDABLE /
+    IS_MUTABLE, only in operator==, never in consistent(); and
+    CompleteStructHeader::consistent is effectively vacuous because
+    CompleteTypeDetail::consistent returns true unconditionally. With
+    DISALLOW_TYPE_COERCION the equal-size requirement masks this. Once the
+    reader's default ALLOW policy is honoured, size no longer matters, so a
+    reader declaring a FINAL struct can match a wider writer, which
+    DDS-XTypes 1.3 forbids. This is upstream behaviour, not introduced here,
+    but it is reachable ONLY when this gate is on.
+
+  - A reader that deliberately sets DISALLOW_TYPE_COERCION is unaffected.
+    Every other policy field that any consistent() overload reads is either
+    guarded by m_kind == ALLOW_TYPE_COERCION or subsumed by the kind, and
+    m_force_type_validation is never read inside consistent(). Member-ID
+    equality and type-identifier consistency remain unconditional, so a
+    genuinely incompatible member is still rejected.
+
+  - This does not implement the XTypes assignability algorithm. It only
+    stops the EDP from discarding the policy that selects it. The positional
+    member comparison upstream fails closed, never open: a mutable reader
+    omitting a middle member is rejected rather than wrongly matched.
+
+Intended direction: an environment variable is the coarsest correct mechanism
+for this. A participant PropertyPolicyQos property, or honouring the policy
+only when the reader explicitly set a non-default one, would scope the opt-in
+to the endpoint that asked for it and survive co-tenancy with rmw_fastrtps.
+
+KNOWN DISCREPANCY between this header and the inserted source comment. The
+doc comment added to EDP.cpp ends with "so no existing deployment or transport
+changes behaviour". Read with its own preceding clause ("unless
+FASTDDS_XTYPES_HONOR_TYPE_CONSISTENCY is exactly \"1\"") that is true of a
+deployment which does not set the variable, but on its own it is broader than
+the gate-ON scope notes above, and the independent review rejected it as a
+standalone claim. It is deliberately left as it is: correcting it would change
+the diff hunks, which would invalidate the libraries already built and
+device-verified from this patch. Treat the gate-OFF and gate-ON scope notes in
+this header, and docs/standards/ARCHITECTURE.md, as authoritative over that
+sentence. Fold the correction into the next change that touches these hunks for
+another reason.
+
+Applies to: Fast DDS v2.14.5 (tag v2.14.5)
+Verified with: git apply --check against a pristine v2.14.5 tree
+---
+--- a/src/cpp/rtps/builtin/discovery/endpoint/EDP.cpp
++++ b/src/cpp/rtps/builtin/discovery/endpoint/EDP.cpp
+@@ -52,6 +52,8 @@
+ 
+ #include <utils/collections/node_size_helpers.hpp>
+ 
++#include <cstdlib>
++#include <cstring>
+ #include <mutex>
+ 
+ using namespace eprosima::fastrtps;
+@@ -73,6 +75,33 @@
+     return partition.size() <= 1 && 0 == strlen(partition.name());
+ }
+ 
++/**
++ * Whether endpoint type validation honours the reader's own
++ * TypeConsistencyEnforcementQosPolicy instead of the hardcoded strict policy.
++ *
++ * checkTypeIdentifier() and checkTypeObject() discard the reader's policy and
++ * substitute DISALLOW_TYPE_COERCION with m_prevent_type_widening, so a reader
++ * cannot opt into the type assignability that DDS-XTypes 1.3 defines, however
++ * it configures its QoS. The correct call is present in both functions but
++ * commented out.
++ *
++ * It cannot simply be enabled. TypeConsistencyEnforcementQosPolicy defaults to
++ * ALLOW_TYPE_COERCION with m_ignore_sequence_bounds and m_ignore_string_bounds
++ * true, so honouring it unconditionally would relax matching for every reader
++ * that never set the policy. This opt-in leaves the stock decision unchanged
++ * unless FASTDDS_XTYPES_HONOR_TYPE_CONSISTENCY is exactly "1", so no existing
++ * deployment or transport changes behaviour.
++ */
++static bool honor_reader_type_consistency()
++{
++    static const bool enabled = []() -> bool
++            {
++                const char* const value = std::getenv("FASTDDS_XTYPES_HONOR_TYPE_CONSISTENCY");
++                return value != nullptr && 0 == std::strcmp(value, "1");
++            }();
++    return enabled;
++}
++
+ EDP::EDP(
+         PDP* p,
+         RTPSParticipantImpl* part)
+@@ -1580,8 +1609,8 @@
+     coercion.m_ignore_sequence_bounds = false;
+     return wdata->type_id().m_type_identifier._d() != static_cast<uint8_t>(0x00) &&
+            wdata->type_id().m_type_identifier.consistent(
+-        //rdata->type_id().m_type_identifier, rdata->m_qos.type_consistency);
+-        rdata->type_id().m_type_identifier, coercion);
++        rdata->type_id().m_type_identifier,
++        honor_reader_type_consistency() ? rdata->m_qos.type_consistency : coercion);
+ }
+ 
+ bool EDP::hasTypeIdentifier(
+@@ -1637,8 +1666,8 @@
+             coercion.m_force_type_validation = true;
+             coercion.m_prevent_type_widening = true;
+             coercion.m_ignore_sequence_bounds = false;
+-            //return wtype->consistent(*rtype, rdata->m_qos.type_consistency);
+-            return wtype->consistent(*rtype, coercion);
++            return wtype->consistent(*rtype,
++                            honor_reader_type_consistency() ? rdata->m_qos.type_consistency : coercion);
+         }
+ 
+         return false;
+@@ -1663,8 +1692,8 @@
+         coercion.m_force_type_validation = true;
+         coercion.m_prevent_type_widening = true;
+         coercion.m_ignore_sequence_bounds = false;
+-        //return wdata->type().m_type_object.consistent(rdata->type().m_type_object, rdata->m_qos.type_consistency);
+-        return wdata->type().m_type_object.consistent(rdata->type().m_type_object, coercion);
++        return wdata->type().m_type_object.consistent(rdata->type().m_type_object,
++                        honor_reader_type_consistency() ? rdata->m_qos.type_consistency : coercion);
+     }
+ 
+     return false;
