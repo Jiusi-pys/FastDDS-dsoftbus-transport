@@ -2,3 +2,9 @@
 scripts/public_socket/capture-load.sh text eol=lf
 scripts/public_socket/shared_reattach/** text eol=lf
 scripts/release/** text eol=lf
+
+# A patch file's exact bytes are its identity: docs/standards records its
+# sha256 and scripts/standards/check_docs_consistency.py measures it at run
+# time, so a CRLF conversion on a Windows clone would change the digest and
+# break `git apply` for no real reason.
+patches/** text eol=lf

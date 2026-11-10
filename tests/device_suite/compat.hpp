@@ -211,6 +211,22 @@ struct DynRecord {
         pst->auto_fill_type_information(type_information); pst->auto_fill_type_object(false);
         return fd::TypeSupport(pst);
     }
+    // Propagate the full TypeObject and no TypeInformation.
+    //
+    // EDP::hasTypeObject prefers the TypeInformation branch whenever both ends
+    // have it assigned, and that branch makes TypeIdentifier::consistent resolve
+    // BOTH identifiers through the local TypeObjectFactory, which has no entry
+    // for the remote type and so refuses the match. Suppressing TypeInformation
+    // makes EDP::checkTypeObject fall through to comparing the two TypeObjects
+    // carried in the discovery data directly, which needs no factory lookup.
+    // Required for the XTypes assignability cases; not used by dsb_suite, whose
+    // TypeLookup probe depends on the TypeInformation path above.
+    fd::TypeSupport support_with_type_object() const
+    {
+        auto* pst = new eprosima::fastrtps::types::DynamicPubSubType(type);
+        pst->auto_fill_type_information(false); pst->auto_fill_type_object(true);
+        return fd::TypeSupport(pst);
+    }
     Data create() const { return eprosima::fastrtps::types::DynamicDataFactory::get_instance()->create_data(type); }
     static void release(Data d) { if (d) eprosima::fastrtps::types::DynamicDataFactory::get_instance()->delete_data(d); }
     static void* ptr(Data& d) { return d; }
@@ -243,6 +259,10 @@ struct DynRecord {
     DynRecord(const std::string& name, bool text) : type(build(name, text)) {}
     // XTypes 1.3: DynamicPubSubType always registers its TypeObject/TypeInformation.
     fd::TypeSupport support(bool) const { return fd::TypeSupport(new eprosima::fastdds::dds::DynamicPubSubType(type)); }
+    // 3.6.2 has no per-type propagation switches, so this is the same registration.
+    // EDP::valid_matching compares TypeIdentifiers for equality and never reads
+    // TypeConsistencyEnforcementQosPolicy, so assignability cannot match here.
+    fd::TypeSupport support_with_type_object() const { return support(true); }
     Data create() const { return eprosima::fastdds::dds::DynamicDataFactory::get_instance()->create_data(type); }
     static void release(Data& d) { if (d) eprosima::fastdds::dds::DynamicDataFactory::get_instance()->delete_data(d); d.reset(); }
     static void* ptr(Data& d) { return &d; }
