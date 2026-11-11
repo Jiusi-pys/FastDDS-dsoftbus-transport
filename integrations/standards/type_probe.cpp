@@ -5,6 +5,7 @@
 #include <fastdds/rtps/transport/UDPv4TransportDescriptor.hpp>
 #endif
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -117,14 +118,30 @@ int run(const std::string& scenario, bool writer, unsigned domain, const std::st
         require(sub != nullptr, "create subscriber");
         fd::DataReaderQos q;
         q.reliability().kind = fd::RELIABLE_RELIABILITY_QOS;
+        // The recorded baselines force type validation. With
+        // DDS_STANDARDS_FORCE_TYPE_VALIDATION=0 the reader does not touch
+        // m_force_type_validation, leaving whatever the linked Fast DDS
+        // release defaults to: the configuration the 2026-11-10 mixed-version
+        // investigation named as untested, where 2.14.5
+        // EDP::checkTypeValidation step 2 can accept a peer that supplies no
+        // legacy TypeIdentifier/TypeObject. Absent or any other value keeps
+        // the forced validation, so existing evidence stands.
+        const char* const force_env = std::getenv("DDS_STANDARDS_FORCE_TYPE_VALIDATION");
+        const bool force_validation = !(force_env && std::string(force_env) == "0");
+        std::cout << "DDS_STANDARDS_NOTE force_type_validation="
+                  << (force_validation ? 1 : 0) << std::endl;
 #if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
         q.type_consistency().representation.m_value = {representation};
         q.type_consistency().type_consistency.m_kind = fd::ALLOW_TYPE_COERCION;
-        q.type_consistency().type_consistency.m_force_type_validation = true;
+        if (force_validation) {
+            q.type_consistency().type_consistency.m_force_type_validation = true;
+        }
 #else
         q.representation().m_value = {representation};
         q.type_consistency().m_kind = fd::ALLOW_TYPE_COERCION;
-        q.type_consistency().m_force_type_validation = true;
+        if (force_validation) {
+            q.type_consistency().m_force_type_validation = true;
+        }
 #endif
         r = sub->create_datareader(t, q);
         require(r != nullptr, "create reader");
