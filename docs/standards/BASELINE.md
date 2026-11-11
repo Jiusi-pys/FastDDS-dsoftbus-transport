@@ -1,6 +1,6 @@
 # Standards baseline evidence
 
-Date: 2026-11-10
+Date: 2026-11-10, updated 2026-11-11
 
 Branch: `codex/dds-standards-product`
 
@@ -23,11 +23,16 @@ standards probe. Existing-tree DSoftBus `dsb_suite` state is recorded in
 | `build/ssh-device-tester-20261110/` | stock dual-board UDP matrix, device roundtrips, mixed-version originals, faultlogger |
 | `build/crash-rootcause-20261110/`, `build/mixed-isolated-20261110/` | exit 139 root cause and the isolated-path rerun |
 | `build/final-tester/` | an **earlier** pass. Its `unit.log` records `Ran 12 tests` from the then-current suite and is not the current unit-test count |
+| `build/dsb-exec-20261110/` | the executed DSoftBus `dsb_suite` runs: `214-all/` and `36-all/` run directories with `run.log` (88 `DSB_CASE` lines each) and `result.json`, deployment receipts, and `FINDING.md` |
+| `build/mixed-default-20261111/` | the mixed-version UDP re-run with the reader at default type validation: raw per-peer `.out`/`.err`, `summary.log`, `deploy-sha.log`, the post-review `confirm-*` re-run, and `FINDING.md` |
 
 Fix-pass and review records: `build/tester-fix-20261110/FINDING.md`,
 `build/fix-pass2-20261110/FINDING.md`,
 `build/review-fix-20261110/FINDING.md`,
-`build/final-fix-20261110/FINDING.md`.
+`build/final-fix-20261110/FINDING.md`,
+`build/tester-20261111/FINDING.md`,
+`build/review-fix-20261111/FINDING.md`,
+`build/final-tester-20261111/FINDING.md`.
 
 ## Requirements and platform boundary
 
@@ -135,17 +140,19 @@ python scripts/standards/run_type_baseline.py `
 | Mutable added-member case, patched 2.14.5, gate on | PASS | **not addressed** | DEVICE_TESTED, 130 received in each board direction; 3.6.2 is not patched |
 | XML data representation case | asserted **rejection** | asserted **rejection** | **Documented non-conformance, NOT a conformance pass**; see below |
 | Reader with no writer | exit 3 / BLOCKED | exit 3 / BLOCKED | Evidence guard |
-| Python evidence and failure-path tests | 65/65 PASS | 65/65 PASS | UNIT_TESTED; version-independent, measured today |
+| Python evidence and failure-path tests | 93/93 PASS | 93/93 PASS | UNIT_TESTED; version-independent, measured today |
 | Mixed-version UDP, original four attempts | INVALID | INVALID | Exit 139 was a Fast CDR ABI collision created by the launcher, not a Fast DDS defect; see `build/crash-rootcause-20261110/FINDING.md` |
-| Mixed-version UDP, rerun with isolated library paths | BLOCKED | BLOCKED | No crash in any of 8 processes; no live-peer control established in either direction; see `build/mixed-isolated-20261110/FINDING.md` |
-| Existing-tree DSoftBus `dsb_suite` execution | UNVERIFIED | NOT_RUN | Builds and launch logs only; no per-case result line is retained in this tree. See [`DEVICE_EVIDENCE_20261110.md`](DEVICE_EVIDENCE_20261110.md) |
+| Mixed-version UDP, isolated library paths, reader forcing type validation | BLOCKED | BLOCKED | No crash in any of 8 processes; no live-peer control established in either direction for that configuration, which remains its result; see `build/mixed-isolated-20261110/FINDING.md` |
+| Mixed-version UDP XCDR1, reader at default validation (`DDS_STANDARDS_FORCE_TYPE_VALIDATION=0`) | PASS | PASS | DEVICE_TESTED with a live peer in both board directions: `received: 514` (2.14.5 writer, 3.6.2 reader), `received: 495` (reverse); post-review confirm re-run `received: 513`, `received: 496`; see `build/mixed-default-20261111/FINDING.md` |
+| Mixed-version UDP XCDR2, reader at default validation | FAIL | FAIL | Genuine FAIL with a live peer in both directions: the matched 3.6.2 reader records `received: 0`; the 2.14.5 reader receives samples that decode to wrong values (sample value mismatch); see `build/mixed-default-20261111/FINDING.md` |
+| Existing-tree DSoftBus `dsb_suite` execution | PASS | PASS | DEVICE_TESTED 2026-11-10 over DSoftBus between both boards: 70 passed, 0 failed per version (35 per board), `DSB_EXIT=0` on both boards, 88 `DSB_CASE` lines retained per `run.log` plus `result.json`; nine same-host-only cases NOT_APPLICABLE (recorded, not passes); route-outage scenarios NOT run; see `build/dsb-exec-20261110/FINDING.md` |
 | New standards probe over DSoftBus | NOT_RUN | NOT_RUN | The probe is UDP-only and has no DSoftBus deployment runner |
 | HDC target enumeration | N/A | N/A | `hdc list targets` was empty; SSH/Tailscale was the executed device path |
 
 The unit-test count is the one measured in this working tree:
 
 ```
-python -m pytest tests/standards_runner_tests.py -q   ->   65 passed
+python -m pytest tests/standards_runner_tests.py -q   ->   93 passed
 ```
 
 It must be re-measured, not copied from another document, whenever this file is
@@ -266,15 +273,31 @@ The baseline demonstrates that the probe can distinguish successful delivery,
 a live-peer rejection, and an unavailable peer. It does not demonstrate full
 XTypes conformance.
 
-## Shared header: compiled, not executed
+## Shared header: compiled, then executed
+
+*Updated 2026-11-11.*
 
 `tests/device_suite/compat.hpp` is shared with `dsb_suite` and `cft_race`, and
-both version branches of it are modified in this change set. All five
-compilations passed with zero errors, and `cft_race` was fully linked on the
-host (MSVC 19.44 x64 Release), with `-fsyntax-only` checks under OHOS SDK 23
-clang for `cft_race` and `dsb_suite` on both Fast DDS branches. `dsb_suite` was
-**not executed** against the modified header: that needs the full OHOS
-stock-transport and DSoftBus deployment and is `NOT_RUN`. `COMPILED != TESTED`.
+both version branches of it are modified in this change set. At the 2026-11-10
+gate the state was COMPILED only: all five compilations passed with zero
+errors, `cft_race` was fully linked on the host (MSVC 19.44 x64 Release), with
+`-fsyntax-only` checks under OHOS SDK 23 clang for `cft_race` and `dsb_suite`
+on both Fast DDS branches, and `dsb_suite` had **not** been executed against
+the modified header.
+
+That gap is now closed. After the gate, `dsb_suite` was rebuilt from this tree
+(so the binaries correspond to the modified `compat.hpp`), deployed to both
+boards over the Tailscale SSH channel, and executed over DSoftBus between them
+by the unmodified `scripts/release/run_cross_board.py` driven through an
+hdc-to-ssh shim: 70 passed, 0 failed on 2.14.5 and again on 3.6.2 (35 per
+board per version), `DSB_EXIT=0` on both boards, with 88 `DSB_CASE` lines
+retained in each run's `run.log` plus the parsed `result.json`. The nine
+same-host-only cases are recorded `NOT_APPLICABLE`, which the runner counts as
+a record, not a pass. Route-outage scenarios were NOT run (iptables is denied
+over the SSH channel) and keep their earlier evidence; Fast DDS 3.2.5 was not
+run for this tree. See `build/dsb-exec-20261110/FINDING.md`. `cft_race`
+remains compiled and host-linked only, not executed: `COMPILED != TESTED`
+still applies to it.
 
 ## What is not implemented
 
@@ -289,7 +312,9 @@ Not started:
 - a DSoftBus-backed standards probe (the probe is UDP-only and has no DSoftBus
   deployment runner).
 
-## Mixed-version UDP is BLOCKED
+## Mixed-version UDP: XCDR1 PASS, XCDR2 FAIL; forced validation stays BLOCKED
+
+*Updated 2026-11-11.*
 
 The earlier mixed-version exit 139 is **resolved and was not a Fast DDS
 defect**. The launcher recorded in
@@ -308,18 +333,44 @@ iteration counts come from the run record
 `build/crash-rootcause-20261110/FINDING.md`; the raw per-iteration logs behind
 them were not pulled off the board.
 
-With isolated library paths the rerun produced no crash in any of eight
-processes. Mixed-version delivery is `BLOCKED`, neither `FAIL` nor `PASS`: in
-every attempt the 3.6.2 endpoint reported `matched: true` and the 2.14.5
-endpoint `matched: false`, no live-peer control was established in either
-direction, and the probe therefore declines to grade the case. 2.14.5
-`EDP::checkTypeValidation` refuses when the reader sets
+With isolated library paths and the probe's reader still forcing type
+validation, the 2026-11-10 rerun produced no crash in any of eight processes
+but established no live-peer control in either direction: the 3.6.2 endpoint
+reported `matched: true`, the 2.14.5 endpoint `matched: false`, and the probe
+declined to grade the case. That configuration was and remains `BLOCKED`:
+2.14.5 `EDP::checkTypeValidation` refuses when the reader sets
 `m_force_type_validation` and the peer supplies no legacy
 `TypeIdentifier`/`TypeObject`, while 3.6.2 `EDP::valid_matching` never reads
-`TypeConsistencyEnforcementQosPolicy`. This is a result about these two
-endpoint configurations only; it is not a verdict that the two releases cannot
-interoperate, and a reader leaving `m_force_type_validation` at its default has
-not been tested. See `build/mixed-isolated-20261110/FINDING.md`.
+`TypeConsistencyEnforcementQosPolicy`. The verdict stands unchanged for its
+own configuration. See `build/mixed-isolated-20261110/FINDING.md`.
+
+The configuration that record named as untested — a reader leaving
+`m_force_type_validation` at its default — was executed on 2026-11-11. The
+probe now reads `DDS_STANDARDS_FORCE_TYPE_VALIDATION`: with the value exactly
+`0` the reader QoS is left untouched at the Fast DDS release default (no
+assignment at all), and with the variable absent or any other value it keeps
+forcing validation, so all earlier evidence stands for its configuration.
+With `=0` on the reader, domain 203, a live peer establishes in both board
+directions and the probe grades the case instead of declining:
+
+- **XCDR1 interoperates**: DEVICE_TESTED PASS in both directions,
+  `received: 514` with the 2.14.5 writer and 3.6.2 reader, `received: 495`
+  the other way, `peer_alive: true`, exit 0. The post-review probe rebuild
+  re-ran both XCDR1 directions on domain 204: PASS again, `received: 513`
+  then `received: 496`.
+- **XCDR2 does not interoperate**: genuine FAIL with a live peer, not
+  BLOCKED, in both directions. The matched 3.6.2 reader of a 2.14.5 writer
+  records `received: 0`, and the 2.14.5 reader of a 3.6.2 writer receives
+  samples that decode to wrong values (`sample value mismatch`, exit 2).
+  The observation is recorded at the level of what was measured, delivery
+  and value comparison, not as a conformance diagnosis of either release.
+
+Scope: the probe's keyed bounded record, these two releases, UDPv4 between
+these boards, stock isolated deployments. It does not cover the patched
+2.14.5 library, other types, or DSoftBus. Raw per-peer `.out`/`.err`,
+`summary.log` and deployment receipts are retained under
+`build/mixed-default-20261111/`; the hashes are in its `FINDING.md` and
+`deploy-sha.log`.
 
 ## Overall status
 
@@ -327,9 +378,9 @@ not been tested. See `build/mixed-isolated-20261110/FINDING.md`.
 | --- | --- |
 | Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded IDL generation path, generated C++ roundtrip, OpenHarmony arm64 build path, one gated 2.14.5 patch |
 | Build | PASS — host MSVC and OHOS arm64, both Fast DDS releases |
-| Host Test | PASS — 65/65 unit tests, CTest 1/1 per release, three-way gate comparison reproduced by the final tester |
-| RK3588A Test | PASS for the UDPv4 scopes and the patched matrix; `dsb_suite` execution UNVERIFIED in this tree; `dsb_suite` against the modified header NOT_RUN; DSoftBus-backed standards probe NOT_RUN |
-| Cross-device Test | PASS for same-version UDPv4 and for the patched 2.14.5 matrix in both board directions; mixed-version UDPv4 BLOCKED |
+| Host Test | PASS — 93/93 unit tests, CTest 1/1 per release, three-way gate comparison reproduced by the final tester |
+| RK3588A Test | PASS for the UDPv4 scopes, the patched matrix, and the executed DSoftBus `dsb_suite` on 2.14.5 and 3.6.2 against the modified header (route-outage scenarios not re-run); DSoftBus-backed standards probe NOT_RUN |
+| Cross-device Test | PASS for same-version UDPv4, for the patched 2.14.5 matrix, and for the `dsb_suite` runs between both boards; mixed-version UDPv4 at default reader validation XCDR1 PASS and XCDR2 FAIL; the forced-validation configuration stays BLOCKED |
 | Overall | **NOT VERIFIED** — the delivered scope is evidenced on host and device, but 3.6.2 assignability, IDL 4.2, DDS-WEB, DDS-OPCUA and a DSoftBus-backed standards probe are not implemented |
 
 `SKIPPED != PASS`, `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`,

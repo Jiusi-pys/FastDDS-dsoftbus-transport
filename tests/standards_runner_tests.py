@@ -621,7 +621,24 @@ class DocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(docs_check.check_domain_references(), [])
 
     def test_every_cited_digest_is_declared(self):
+        """Also covers attribution: each digest in its own artifact's context."""
         self.assertEqual(docs_check.check_digests(), [])
+
+    def test_reserved_port_table_columns_agree(self):
+        self.assertEqual(docs_check.check_reserved_port_table(), [])
+
+    def test_patched_matrix_counts_match_the_evidence(self):
+        if not docs_check.DEVICE_PATCHED.is_dir():
+            self.skipTest("patched-matrix evidence not present")
+        self.assertEqual(docs_check.check_patched_matrix(), [])
+
+    def test_schema_census_matches_the_retained_files(self):
+        if not docs_check.BUILD_ROOT.is_dir():
+            self.skipTest("build evidence root not present")
+        self.assertEqual(docs_check.check_schema_census(), [])
+
+    def test_each_document_carries_its_required_claims(self):
+        self.assertEqual(docs_check.check_required_claims(), [])
 
 
 class DocumentationGuardSelfTests(unittest.TestCase):
@@ -729,6 +746,222 @@ class DocumentationGuardSelfTests(unittest.TestCase):
             docs = self.mutated(directory, "| 230 | 64900 | free | PASS |",
                                 "| 230 | 64900 | free | PASS |\n\nStray hash: `cafebabe0123456789abcdef`.")
             self.assertTrue(docs_check.check_digests(docs))
+
+    # Mutation self-tests for the guards added for the five limitations the
+    # 2026-11-10 gate-4 review declared. Each guard is shown to fail on a
+    # deliberately corrupted document or artifact, to pass on the real ones
+    # (DocumentationConsistencyTests), and to fire independently of the
+    # corpus-level guards.
+
+    def synthetic_matrix(self, directory, received=(129, 130, 130, 130)):
+        """A patched-matrix evidence directory with a known shape."""
+        evidence = Path(directory) / "matrix"
+        evidence.mkdir()
+        gateon = ["AtoB-on-appendable_added_member-r.out",
+                  "BtoA-on-appendable_added_member-r.out",
+                  "AtoB-on-mutable_added_member-r.out",
+                  "BtoA-on-mutable_added_member-r.out"]
+        for name, value in zip(gateon, received):
+            (evidence / name).write_text(
+                'DDS_STANDARDS_RESULT {"case":"x","received":%d}\n' % value,
+                encoding="utf-8")
+        for index in range(44 - len(gateon)):
+            (evidence / ("AtoB-off-filler_%02d-w.out" % index)).write_text(
+                "", encoding="utf-8")
+        f9 = Path(directory) / "f9"
+        f9.mkdir()
+        (f9 / "gateon-reader-B.out").write_text(
+            'DDS_STANDARDS_RESULT {"case":"x","received":251}\n', encoding="utf-8")
+        return evidence, f9
+
+    def synthetic_build(self, directory, v1_count=25, gate_off=False, gate_on=True):
+        """A build evidence root with a known schema census and gate pair."""
+        root = Path(directory) / "build"
+        named = list(docs_check.SCHEMA_V1_EVIDENCE)
+        for index in range(v1_count - len(named)):
+            named.append("extra-%02d" % index)
+        for name in named:
+            target = root / name
+            target.mkdir(parents=True)
+            (target / "results.json").write_text('{"schema_version": 1}',
+                                                 encoding="utf-8")
+        for name, value in (("review-fix-gate-off", gate_off),
+                            ("review-fix-gate-on", gate_on)):
+            target = root / name
+            target.mkdir(parents=True)
+            (target / "results.json").write_text(
+                json.dumps({"schema_version": 2, "gate_on": value}), encoding="utf-8")
+        return root
+
+    def test_attribution_guard_fires_on_a_prose_swap(self):
+        """The libfastcdr digest presented as libfastrtps's must report."""
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "`libfastrtps.so.2.14` `416179dd29e033d9",
+                                "`libfastrtps.so.2.14` `113f8ef51c667c29")
+            problems = docs_check.check_digests(docs)
+            self.assertTrue(any("attribute" in problem for problem in problems))
+
+    def test_attribution_guard_fires_on_a_table_row_swap(self):
+        """The Fast CDR 2.3.7 digest in the 2.2.5 row must report."""
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory,
+                                "| `2.14.5/lib/libfastcdr.so.2` | `113f8ef51c667c29",
+                                "| `2.14.5/lib/libfastcdr.so.2` | `d735d942b10df5e6")
+            problems = docs_check.check_digests(docs)
+            self.assertTrue(any("attribute" in problem for problem in problems))
+
+    def test_attribution_guard_fires_on_a_patch_version_swap(self):
+        """The as-built patch hash in the disclosure row must report."""
+        as_built = docs_check.DECLARED_DIGESTS["patch, as built and deployed"]
+        disclosure = docs_check.DECLARED_DIGESTS["patch, after the gate-scope disclosure"]
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, disclosure, as_built)
+            problems = docs_check.check_digests(docs)
+            self.assertTrue(any("attribute" in problem for problem in problems))
+
+    def test_reserved_table_guard_fires_on_a_free_row_marked_blocked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "| 230 | 64900 | free | PASS |",
+                                "| 230 | 64900 | free | BLOCKED |")
+            self.assertTrue(docs_check.check_reserved_port_table(docs))
+
+    def test_reserved_table_guard_fires_on_a_reserved_row_marked_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "| 226 | 63900 | 63898-63997 | BLOCKED |",
+                                "| 226 | 63900 | 63898-63997 | PASS |")
+            self.assertTrue(docs_check.check_reserved_port_table(docs))
+
+    def test_reserved_table_guard_fires_on_a_port_outside_its_range(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "| 231 | 65150 | 65105-65204 | BLOCKED |",
+                                "| 231 | 65150 | 65160-65204 | BLOCKED |")
+            self.assertTrue(docs_check.check_reserved_port_table(docs))
+
+    def test_domain_guard_now_checks_232(self):
+        """With the 232 table row gone, the '231 and 232' list must report.
+
+        232 was blanket-exempt before, so this corruption passed; the cap
+        uses ('capped at 232', '0..232') must stay silent, which the
+        real-document run asserts.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "| 232 | 65400 | 65316-65415 | BLOCKED |", "")
+            problems = docs_check.check_domain_references(docs)
+            self.assertTrue(any("232" in problem for problem in problems))
+
+    def test_matrix_guard_accepts_a_true_synthetic_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, f9 = self.synthetic_matrix(directory)
+            self.assertEqual(docs_check.check_patched_matrix(None, evidence, f9), [])
+
+    def test_matrix_guard_fires_on_a_corrupted_artifact(self):
+        """A received count the documents do not claim must report."""
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, f9 = self.synthetic_matrix(directory, received=(129, 130, 130, 999))
+            self.assertTrue(docs_check.check_patched_matrix(None, evidence, f9))
+
+    def test_matrix_guard_fires_on_a_wrong_received_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "129 received", "133 received")
+            self.assertTrue(docs_check.check_patched_matrix(docs))
+
+    def test_matrix_guard_fires_on_a_wrong_run_count(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "22 cross-board case runs",
+                                "23 cross-board case runs")
+            self.assertTrue(docs_check.check_patched_matrix(docs))
+
+    def test_matrix_guard_reports_missing_evidence(self):
+        self.assertTrue(docs_check.check_patched_matrix(
+            None, Path("does-not-exist-anywhere"), None))
+
+    def test_census_guard_accepts_a_true_synthetic_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.synthetic_build(directory)
+            self.assertEqual(docs_check.check_schema_census(None, root), [])
+
+    def test_census_guard_fires_when_the_census_drifts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.synthetic_build(directory, v1_count=26)
+            self.assertTrue(docs_check.check_schema_census(None, root))
+
+    def test_census_guard_fires_on_a_flipped_gate_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.synthetic_build(directory, gate_on=False)
+            self.assertTrue(docs_check.check_schema_census(None, root))
+
+    def test_census_guard_fires_on_a_wrong_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "25 of them at the", "26 of them at the")
+            root = self.synthetic_build(Path(directory) / "evidence")
+            self.assertTrue(docs_check.check_schema_census(docs, root))
+
+    def test_reserved_table_guard_fires_on_a_malformed_result_cell(self):
+        """A Result cell that is neither PASS nor BLOCKED must report, not skip."""
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "| 226 | 63900 | 63898-63997 | BLOCKED |",
+                                "| 226 | 63900 | 63898-63997 | BLOCKED (retest) |")
+            problems = docs_check.check_reserved_port_table(docs)
+            self.assertTrue(any("neither PASS nor BLOCKED" in p for p in problems))
+
+    def test_received_claims_accept_the_f9_rerun_phrasing(self):
+        """Rephrasing the f9 'received: 251' as '251 received' must stay silent."""
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "`received: 251`", "`251 received`")
+            self.assertEqual(docs_check.check_patched_matrix(docs), [])
+
+    def test_received_claims_accept_the_mixed_rerun_values(self):
+        """A count the mixed-default re-run recorded (514) must stay silent."""
+        if not docs_check.MIXED_DEFAULT.is_dir():
+            self.skipTest("mixed-default evidence not present")
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "`received: 251`",
+                                "`received: 251` and `received: 514`")
+            self.assertEqual(docs_check.check_patched_matrix(docs), [])
+
+    def test_received_claims_still_fire_on_an_unrecorded_value(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "`received: 251`", "`received: 515`")
+            self.assertTrue(docs_check.check_patched_matrix(docs))
+
+    def test_matrix_guard_fires_on_an_odd_out_count(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, f9 = self.synthetic_matrix(directory)
+            (evidence / "stray-extra-file.out").write_text("", encoding="utf-8")
+            problems = docs_check.check_patched_matrix(None, evidence, f9)
+            self.assertTrue(any("odd number" in p for p in problems))
+
+    def test_matrix_guard_fires_on_malformed_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, f9 = self.synthetic_matrix(directory)
+            (evidence / "AtoB-on-appendable_added_member-r.out").write_text(
+                "DDS_STANDARDS_RESULT {not json}\n", encoding="utf-8")
+            problems = docs_check.check_patched_matrix(None, evidence, f9)
+            self.assertTrue(any("malformed JSON" in p for p in problems))
+
+    def test_missing_evidence_is_marked_for_the_optional_skip_path(self):
+        """Only a missing evidence root carries the MISSING_EVIDENCE prefix."""
+        problems = docs_check.check_patched_matrix(None, Path("does-not-exist"), None)
+        self.assertTrue(problems)
+        self.assertTrue(all(p.startswith(docs_check.MISSING_EVIDENCE) for p in problems))
+        with tempfile.TemporaryDirectory() as directory:
+            problems = docs_check.check_schema_census(None, Path(directory))
+            self.assertTrue(problems)
+            self.assertTrue(all(p.startswith(docs_check.MISSING_EVIDENCE)
+                                for p in problems))
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.synthetic_build(directory, v1_count=26)
+            self.assertTrue(any(not p.startswith(docs_check.MISSING_EVIDENCE)
+                                for p in docs_check.check_schema_census(None, root)))
+
+    def test_per_document_ctest_loss_fires_while_the_corpus_guard_stays_silent(self):
+        """Losing one document's only CTest claim must report per-document."""
+        with tempfile.TemporaryDirectory() as directory:
+            docs = self.mutated(directory, "CTest 1/1 per version",
+                                "CTest checks per version")
+            self.assertEqual(docs_check.check_ctest_count(docs), [])
+            problems = docs_check.check_required_claims(docs)
+            self.assertTrue(any("ctest" in problem for problem in problems))
 
     def test_guards_report_on_an_empty_document_set(self):
         """Absence of documents must not read as consistency."""

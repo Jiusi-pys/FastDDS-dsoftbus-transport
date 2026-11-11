@@ -169,27 +169,34 @@ argument and its own approval under section 2.1.
 | DDS-OPCUA gateway | PLANNED | NOT_RUN |
 | Native arm64 probe and generated roundtrip | PRESENT | BUILDS for 2.14.5 and 3.6.2 |
 | New dual-board standards tests | PRESENT | DEVICE_TESTED for the UDPv4 matrix; no DSoftBus deployment runner |
-| Existing DSoftBus `dsb_suite` core and feature probes | PRESENT in current tree | BUILDS for both Fast DDS versions and COMPILED against the modified `compat.hpp`; the 2.14.5 suite was launched on both boards but **no per-case result line is retained in this tree**, so execution is UNVERIFIED. `COMPILED != TESTED` |
+| Existing DSoftBus `dsb_suite` core and feature probes | PRESENT in current tree | DEVICE_TESTED: executed over DSoftBus between both boards against the modified `compat.hpp`, 70 passed, 0 failed on each of 2.14.5 and 3.6.2 with per-case `DSB_CASE` lines retained; route-outage scenarios not re-run; see `build/dsb-exec-20261110/FINDING.md` |
 
 The HDC channel was empty, but it did not establish device unavailability:
 the canonical run used Tailscale SSH to reach both KaihongOS boards
 (`root@100.97.6.8` and `root@100.97.143.74`, KaihongOS 6.1.0.04,
-kernel 6.6.101). All device evidence for this change set is UDPv4 between the
-two boards; none of it is DSoftBus evidence. The existing DSoftBus `dsb_suite`
-builds for both versions and was launched on both boards for 2.14.5, but no
-`DSB_CASE` or `DSB_SUMMARY` result line was retained in this tree, so its
-execution status is UNVERIFIED here and no per-case pass count is claimed; see
-[`DEVICE_EVIDENCE_20261110.md`](DEVICE_EVIDENCE_20261110.md). The new standards
+kernel 6.6.101). The standards-probe device evidence is UDPv4 between the two
+boards. The existing DSoftBus `dsb_suite`, rebuilt from this tree against the
+modified `compat.hpp`, was executed over DSoftBus between both boards for
+2.14.5 and 3.6.2 (70 passed, 0 failed each, `DSB_EXIT=0` on both boards) with
+per-case `DSB_CASE` result lines retained under `build/dsb-exec-20261110/`;
+before those runs its execution status here was UNVERIFIED, and the earlier
+withdrawn per-case claim stays withdrawn, superseded by this fresh evidence;
+see [`DEVICE_EVIDENCE_20261110.md`](DEVICE_EVIDENCE_20261110.md). The new standards
 probe remains UDP-only and has no DSoftBus deployment runner, so it does not
 prove a DSoftBus-backed standards transport or complete XTypes support.
 
-Mixed-version UDP is `BLOCKED`, not `FAIL`. The earlier exit 139 was a Fast CDR
-ABI collision created by the launcher, not a Fast DDS defect: the 2.14.5
+Mixed-version UDP is graded since 2026-11-11. The earlier exit 139 was a Fast
+CDR ABI collision created by the launcher, not a Fast DDS defect: the 2.14.5
 endpoint was given a search path with Fast CDR 2.3.7 ahead of Fast CDR 2.2.5,
-both shipped as `libfastcdr.so.2`. With isolated library paths no endpoint
-crashes, and no live-peer control is established in either direction, so the
-probe declines to grade the case. See
-[`DEVICE_EVIDENCE_20261110.md`](DEVICE_EVIDENCE_20261110.md) and
+both shipped as `libfastcdr.so.2`. With isolated library paths and the probe
+reader forcing type validation, no endpoint crashes but no live-peer control
+is established, so that configuration was and stays `BLOCKED`. With the
+reader left at the Fast DDS default (`DDS_STANDARDS_FORCE_TYPE_VALIDATION=0`
+on the probe), a live peer establishes in both board directions: XCDR1
+delivery is DEVICE_TESTED PASS both ways, while XCDR2 is a genuine FAIL with
+a live peer both ways, failing differently per direction. See
+[`DEVICE_EVIDENCE_20261110.md`](DEVICE_EVIDENCE_20261110.md),
+`build/mixed-default-20261111/FINDING.md` and
 `build/crash-rootcause-20261110/FINDING.md`.
 
 Fast DDS 2.14.5 carrying
@@ -281,9 +288,9 @@ started:
 | --- | --- |
 | Implementation | PRESENT for the delivered scope above |
 | Build | PASS, host MSVC and OHOS arm64, both Fast DDS releases |
-| Host Test | PASS, 65/65 unit tests and CTest 1/1 per release |
-| RK3588A Test | PASS for the UDPv4 scopes and the patched 2.14.5 matrix; `dsb_suite` execution UNVERIFIED; `dsb_suite` against the modified `compat.hpp` NOT_RUN; DSoftBus-backed standards probe NOT_RUN |
-| Cross-device Test | PASS same-version UDPv4 and patched 2.14.5 in both board directions; mixed-version UDPv4 BLOCKED |
+| Host Test | PASS, 93/93 unit tests and CTest 1/1 per release |
+| RK3588A Test | PASS for the UDPv4 scopes, the patched 2.14.5 matrix, and the executed `dsb_suite` against the modified `compat.hpp` on 2.14.5 and 3.6.2; DSoftBus-backed standards probe NOT_RUN |
+| Cross-device Test | PASS same-version UDPv4, patched 2.14.5 and `dsb_suite` in both board directions; mixed-version UDPv4 XCDR1 PASS at default reader validation, XCDR2 FAIL; forced-validation configuration BLOCKED |
 | Overall | **NOT VERIFIED** for the product scope |
 
 `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`, `BUILDS != TESTED`,
