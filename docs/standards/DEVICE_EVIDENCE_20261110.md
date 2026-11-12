@@ -118,8 +118,9 @@ correct for what they describe, and neither should be "corrected" to the other.
 
 What the gate relaxes, including the facts that it is **process-wide** and that
 **extensibility kind is not enforced while it is on**, is disclosed in
-[`ARCHITECTURE.md`](ARCHITECTURE.md). Fast DDS 3.6.2 is not patched and is not
-addressed by this result.
+[`ARCHITECTURE.md`](ARCHITECTURE.md). This retained 2.14.5 result does not
+address the separate bounded A1 3.6.2 patch; see
+[`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
 
 ## Mixed-version result
 
@@ -278,6 +279,13 @@ fresh evidence; they do not reinstate it. Until those runs existed,
 `IMPLEMENTED != VERIFIED`, and `BUILDS != TESTED`.
 
 ## Overall status
+
+The final A1.0 3.6.2 bounded-assignability execution is recorded separately
+in [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md), with canonical
+rebuild, review-resolution, host, and dual-board candidate evidence under
+`build/a1-36/`. It does not convert this document's broader product status or
+the retained mixed-version and route-fault limits into a full XTypes or
+DSoftBus-standards completion claim.
 
 | Dimension | State |
 | --- | --- |

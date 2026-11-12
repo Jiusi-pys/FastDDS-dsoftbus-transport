@@ -1,0 +1,264 @@
+From: FastDDS standards A1 work
+Subject: [PATCH] 3.6.2 EDP: opt into bounded TypeObject assignability
+
+Applies to pristine v3.6.2. A1.0 architecture exception explicitly approved
+by the project owner on 2026-11-11. No Transport-specific behaviour.
+Reference: https://www.omg.org/spec/DDS-XTypes/1.3/PDF
+Sections 7.2.4.4.8 and 7.6.3.4.2.
+
+FASTDDS_XTYPES_HONOR_TYPE_CONSISTENCY must equal exactly "1". The gate is
+process-wide, read once; unset/other values retain stock decisions. Gate ON
+honours each reader's type consistency policy: equivalent types retain the
+stock fast path; non-equivalent types require ALLOW_TYPE_COERCION and
+registered TypeObjects. Forced validation rejects missing TypeInformation.
+
+A1 subset: non-inherited final/appendable/mutable structs, at most 256 members
+in each non-equivalent definition; member correspondence by ID and optionally
+name (or name hash); equal extensibility; appendable/final ordering; final
+member-set equality; required/key members; prevent_type_widening for non-optional writer-only
+members. Corresponding optional/key flags must agree (a conservative subset,
+including mutable structs). Matched
+member types must be equivalent or same-encoding-width string identifiers
+whose bounds satisfy reader policy (key string bounds always checked).
+Other non-equivalent member types, inheritance and constructs fail closed.
+This is NOT a complete XTypes assignability implementation. Numeric coercion,
+alias expansion, recursive type evolution, unions and differing collection
+bounds are not claimed. TypeLookup and all other matching/QoS paths are
+unchanged. No asynchronous requests, registry lock retention or new resources.
+
+--- a/src/cpp/rtps/builtin/discovery/endpoint/EDP.cpp
++++ b/src/cpp/rtps/builtin/discovery/endpoint/EDP.cpp
+@@ -18,8 +18,11 @@
+  */
+ 
+ #include <rtps/builtin/discovery/endpoint/EDP.h>
++#include <rtps/builtin/discovery/endpoint/TypeAssignability.hpp>
+ 
+ #include <cassert>
++#include <cstdlib>
++#include <cstring>
+ #include <mutex>
+ 
+ #include <foonathan/memory/container.hpp>
+@@ -69,6 +72,63 @@
+ using reader_map_helper = utilities::collections::map_size_helper<GUID_t, SubscriptionMatchedStatus>;
+ using writer_map_helper = utilities::collections::map_size_helper<GUID_t, PublicationMatchedStatus>;
+ 
++// A1 opt-in: process-wide, sampled once. Never enable in a shared launcher
++// unless every reader in that process is intended to honour its policy.
++static bool honor_type_consistency()
++{
++    static const bool enabled = []()
++            {
++#ifdef _MSC_VER
++                char* value = nullptr;
++                size_t length = 0;
++                const bool gate_set = _dupenv_s(&value, &length,
++                                "FASTDDS_XTYPES_HONOR_TYPE_CONSISTENCY") == 0 &&
++                        value != nullptr && std::strcmp(value, "1") == 0;
++                std::free(value);
++                return gate_set;
++#else
++                const char* value = std::getenv("FASTDDS_XTYPES_HONOR_TYPE_CONSISTENCY");
++                return value != nullptr && std::strcmp(value, "1") == 0;
++#endif
++            }();
++    return enabled;
++}
++
++namespace {
++using namespace dds::xtypes;
++using type_assignability::struct_assignable;
++
++bool assignable_type_information(
++        const TypeInformation& reader,
++        const TypeInformation& writer,
++        const dds::TypeConsistencyEnforcementQosPolicy& policy)
++{
++    if (policy.m_kind != dds::ALLOW_TYPE_COERCION)
++    {
++        return false; // Equivalence is checked by the caller first.
++    }
++    auto& registry = RTPSDomainImpl::get_instance()->type_object_registry();
++    TypeObject r, w;
++    // TypeLookup finishes before EDP pairing. Read owned copies from the
++    // thread-safe registry; do not issue requests or retain registry locks.
++    if (dds::RETCODE_OK == registry.get_type_object(reader.complete().typeid_with_size().type_id(), r) &&
++            dds::RETCODE_OK == registry.get_type_object(writer.complete().typeid_with_size().type_id(), w))
++    {
++        return r._d() == EK_COMPLETE && w._d() == EK_COMPLETE &&
++               r.complete()._d() == TK_STRUCTURE && w.complete()._d() == TK_STRUCTURE &&
++               struct_assignable(r.complete().struct_type(), w.complete().struct_type(), policy);
++    }
++    if (dds::RETCODE_OK == registry.get_type_object(reader.minimal().typeid_with_size().type_id(), r) &&
++            dds::RETCODE_OK == registry.get_type_object(writer.minimal().typeid_with_size().type_id(), w))
++    {
++        return r._d() == EK_MINIMAL && w._d() == EK_MINIMAL &&
++               r.minimal()._d() == TK_STRUCTURE && w.minimal()._d() == TK_STRUCTURE &&
++               struct_assignable(r.minimal().struct_type(), w.minimal().struct_type(), policy);
++    }
++    return false;
++}
++} // anonymous namespace
++
+ static bool is_same_type(
+         const dds::xtypes::TypeInformation& t1,
+         const dds::xtypes::TypeInformation& t2)
+@@ -871,7 +931,10 @@
+     if ((wdata->has_type_information() && wdata->type_information.assigned()) &&
+             (rdata->has_type_information() && rdata->type_information.assigned()))
+     {
+-        if (!is_same_type(wdata->type_information.type_information, rdata->type_information.type_information))
++        if (!is_same_type(wdata->type_information.type_information, rdata->type_information.type_information) &&
++                !(honor_type_consistency() && assignable_type_information(
++                    rdata->type_information.type_information, wdata->type_information.type_information,
++                    rdata->type_consistency)))
+         {
+             reason.set(MatchingFailureMask::different_typeinfo);
+             return false;
+@@ -879,7 +942,8 @@
+     }
+     else
+     {
+-        if (wdata->type_name != rdata->type_name)
++        if ((honor_type_consistency() && rdata->type_consistency.m_force_type_validation) ||
++                wdata->type_name != rdata->type_name)
+         {
+             reason.set(MatchingFailureMask::inconsistent_topic);
+             return false;
+--- /dev/null
++++ b/src/cpp/rtps/builtin/discovery/endpoint/TypeAssignability.hpp
+@@ -0,0 +1,133 @@
++// A1 bounded XTypes assignability, shared by EDP and contract tests.
++#ifndef RTPS_BUILTIN_DISCOVERY_ENDPOINT_TYPE_ASSIGNABILITY_HPP
++#define RTPS_BUILTIN_DISCOVERY_ENDPOINT_TYPE_ASSIGNABILITY_HPP
++#include <fastdds/dds/core/policy/QosPolicies.hpp>
++#include <fastdds/dds/xtypes/type_representation/TypeObject.hpp>
++namespace eprosima { namespace fastdds { namespace rtps {
++namespace type_assignability {
++using namespace dds::xtypes;
++
++inline const MemberName& member_name(const CompleteStructMember& member)
++{
++    return member.detail().name();
++}
++
++inline const NameHash& member_name(const MinimalStructMember& member)
++{
++    return member.detail().name_hash();
++}
++
++// The A1 coercion subset is flat structs with equivalent member types or
++// bounded strings. Other non-equivalent member types fail closed; this is
++// deliberately not a claim of the full XTypes assignability algorithm.
++inline bool member_type_assignable(
++        const TypeIdentifier& reader,
++        const TypeIdentifier& writer,
++        const dds::TypeConsistencyEnforcementQosPolicy& policy,
++        bool key)
++{
++    if (reader == writer)
++    {
++        return true;
++    }
++    if (reader._d() != writer._d())
++    {
++        return false;
++    }
++    const bool ignore_bounds = policy.m_ignore_string_bounds && !key;
++    switch (reader._d())
++    {
++        case TI_STRING8_SMALL:
++        case TI_STRING16_SMALL:
++            return ignore_bounds || reader.string_sdefn().bound() == 0 ||
++                   (writer.string_sdefn().bound() != 0 &&
++                   reader.string_sdefn().bound() >= writer.string_sdefn().bound());
++        case TI_STRING8_LARGE:
++        case TI_STRING16_LARGE:
++            return ignore_bounds || reader.string_ldefn().bound() == 0 ||
++                   (writer.string_ldefn().bound() != 0 &&
++                   reader.string_ldefn().bound() >= writer.string_ldefn().bound());
++        default:
++            return false;
++    }
++}
++
++template<typename Struct>
++bool struct_assignable(
++        const Struct& reader,
++        const Struct& writer,
++        const dds::TypeConsistencyEnforcementQosPolicy& policy)
++{
++    const auto extent_mask = IS_FINAL | IS_APPENDABLE | IS_MUTABLE;
++    const auto extent = reader.struct_flags() & extent_mask;
++    if (extent != (writer.struct_flags() & extent_mask) ||
++            (extent != IS_FINAL && extent != IS_APPENDABLE && extent != IS_MUTABLE) ||
++            reader.header().base_type()._d() != TK_NONE || writer.header().base_type()._d() != TK_NONE)
++    {
++        return false;
++    }
++    const auto& rm = reader.member_seq();
++    const auto& wm = writer.member_seq();
++    // Bound the quadratic name/ID checks performed on untrusted remote types.
++    if (rm.empty() || wm.empty() || rm.size() > 256 || wm.size() > 256 ||
++            (extent == IS_FINAL && rm.size() != wm.size()))
++    {
++        return false;
++    }
++    bool common = false;
++    for (size_t i = 0; i < rm.size(); ++i)
++    {
++        const auto& r = rm[i];
++        const auto rf = r.common().member_flags();
++        bool found = false;
++        for (size_t j = 0; j < wm.size(); ++j)
++        {
++            const auto& w = wm[j];
++            const bool same_id = r.common().member_id() == w.common().member_id();
++            if (!policy.m_ignore_member_names && (same_id != (member_name(r) == member_name(w))))
++            {
++                return false;
++            }
++            if (!same_id)
++            {
++                continue;
++            }
++            const auto wf = w.common().member_flags();
++            if ((extent != IS_MUTABLE && i != j) ||
++                    ((rf ^ wf) & (IS_KEY | IS_OPTIONAL)) != 0 ||
++                    !member_type_assignable(r.common().member_type_id(), w.common().member_type_id(),
++                    policy, ((rf | wf) & IS_KEY) != 0))
++            {
++                return false;
++            }
++            found = common = true;
++        }
++        if (!found && (((rf & IS_KEY) != 0) ||
++                ((rf & IS_MUST_UNDERSTAND) != 0 && (rf & IS_OPTIONAL) == 0) ||
++                (extent != IS_MUTABLE && i < wm.size())))
++        {
++            return false;
++        }
++    }
++    for (size_t j = 0; j < wm.size(); ++j)
++    {
++        const auto& w = wm[j];
++        const auto wf = w.common().member_flags();
++        bool found = false;
++        for (const auto& r : rm)
++        {
++            found = found || r.common().member_id() == w.common().member_id();
++        }
++        if (!found && ((policy.m_prevent_type_widening && (wf & IS_OPTIONAL) == 0) || (wf & IS_KEY) != 0 ||
++                ((wf & IS_MUST_UNDERSTAND) != 0 && (wf & IS_OPTIONAL) == 0) ||
++                (extent != IS_MUTABLE && j < rm.size())))
++        {
++            return false;
++        }
++    }
++    return common;
++}
++
++} // namespace type_assignability
++}}}
++#endif
