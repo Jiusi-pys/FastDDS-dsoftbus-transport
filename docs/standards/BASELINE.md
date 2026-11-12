@@ -1,17 +1,18 @@
 # Standards baseline evidence
 
-Date: 2026-11-10, updated 2026-11-11; documentation sync: 2026-11-12
+Date: 2026-11-10, updated 2026-11-11; documentation sync: 2026-11-13
 
 Branch: `codex/dds-standards-product`
 
-This worktree delivers a UDP baseline probe and bounded IDL generation with
-version-bound C++ roundtrip tests, plus gated upstream patches for Fast DDS
+This worktree delivers a UDP baseline probe, a bounded host-only B1 IDL
+frontend, and bounded IDL generation with version-bound C++ roundtrip tests,
+plus gated upstream patches for Fast DDS
 2.14.5 (including the bounded A2 XCDR2 framing repair) and the bounded A1 3.6.2 assignability subset. The complete capability
 status is listed in the architecture table and
 [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
 This document does not claim DDS-XTypes Complete, full IDL 4.2 language
-coverage, DDS-WEB, DDS-OPCUA, or DSoftBus integration for the new UDP-only
-standards probe. Existing-tree DSoftBus `dsb_suite` state is recorded in
+coverage beyond the B1 core, DDS-WEB, DDS-OPCUA, or DSoftBus integration for
+the new UDP-only standards probe. Existing-tree DSoftBus `dsb_suite` state is recorded in
 [`DEVICE_EVIDENCE_20261110.md`](DEVICE_EVIDENCE_20261110.md).
 
 ## Evidence roots
@@ -313,7 +314,8 @@ The original product plan covers considerably more than this worktree delivers.
 Not started:
 
 - full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
-- the complete IDL 4.2 frontend and the C and Java language mappings;
+- the complete IDL 4.2 frontend beyond the bounded B1 core and the C and Java
+  language mappings;
 - the DDS-WEB gateway;
 - the DDS-OPCUA gateway;
 - a DSoftBus-backed standards probe (the probe is UDP-only and has no DSoftBus
@@ -401,12 +403,12 @@ these boards, stock isolated deployments. It does not cover the patched
 
 | Dimension | State |
 | --- | --- |
-| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded IDL generation path, generated C++ roundtrip, OpenHarmony arm64 build path, gated 2.14.5 patches and bounded A1 3.6.2 patch |
+| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded B1 host frontend, bounded IDL generation path, generated C++ roundtrip, OpenHarmony arm64 build path, gated 2.14.5 patches and bounded A1 3.6.2 patch |
 | Build | PASS — host MSVC and OHOS arm64, both Fast DDS releases |
-| Host Test | PASS — 93/93 unit tests, CTest 1/1 per release, three-way gate comparison reproduced by the final tester |
+| Host Test | PASS — 93/93 unit tests, CTest 1/1 per release, and the recorded three-way gate comparison; B1 host evidence is in the [canonical final-tester finding](../../build/b1-20261113/final-tester/FINDING.md) |
 | RK3588A Test | PASS for the UDPv4 scopes, the patched matrix, and the executed DSoftBus `dsb_suite` on 2.14.5 and 3.6.2 against the modified header (route-outage scenarios not re-run); DSoftBus-backed standards probe NOT_RUN |
 | Cross-device Test | PASS for same-version UDPv4, the A1/A2 gated matrices, and the `dsb_suite` runs between both boards; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration stays BLOCKED |
-| Overall | **NOT VERIFIED** — A2 is evidenced within its bounded profile, but full XTypes, A3/A4, IDL 4.2, DDS-WEB, DDS-OPCUA and a DSoftBus-backed standards probe are not implemented |
+| Overall | **NOT VERIFIED** — A2 is evidenced within its bounded profile and B1 is host-tested within its bounded core, but full XTypes, A3/A4, full IDL 4.2, DDS-WEB, DDS-OPCUA and a DSoftBus-backed standards probe are not implemented |
 
 `SKIPPED != PASS`, `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`,
 `BUILDS != TESTED`, `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`.

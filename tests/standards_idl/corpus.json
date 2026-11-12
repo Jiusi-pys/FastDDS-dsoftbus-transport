@@ -1,0 +1,471 @@
+[
+  {
+    "file": "positive/module.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/reopen.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/nested.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/absolute.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/shadow.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/integers.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/operators.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/boolean.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/char.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/string.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/primitive.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/alias.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/sequence.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/array.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/enum.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/union.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/union_enum.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/union_bool.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/union_char.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/recursive.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/forward_union.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/native.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/escaped.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/comments.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "negative/empty.idl",
+    "diagnostic": "E_EMPTY"
+  },
+  {
+    "file": "negative/empty_module.idl",
+    "diagnostic": "E_EMPTY"
+  },
+  {
+    "file": "negative/empty_struct.idl",
+    "diagnostic": "E_EMPTY"
+  },
+  {
+    "file": "negative/empty_union.idl",
+    "diagnostic": "E_EMPTY"
+  },
+  {
+    "file": "negative/syntax.idl",
+    "diagnostic": "E_SYNTAX"
+  },
+  {
+    "file": "negative/trailing.idl",
+    "diagnostic": "E_SYNTAX"
+  },
+  {
+    "file": "negative/badchar.idl",
+    "diagnostic": "E_LEX"
+  },
+  {
+    "file": "negative/comment_eof.idl",
+    "diagnostic": "E_LEX",
+    "preprocess_diagnostic": "E_PREPROCESS"
+  },
+  {
+    "file": "negative/literal_eof.idl",
+    "diagnostic": "E_LEX"
+  },
+  {
+    "file": "negative/keyword.idl",
+    "diagnostic": "E_IDENTIFIER"
+  },
+  {
+    "file": "negative/keyword_case.idl",
+    "diagnostic": "E_IDENTIFIER"
+  },
+  {
+    "file": "negative/duplicate.idl",
+    "diagnostic": "E_DUPLICATE"
+  },
+  {
+    "file": "negative/case_collision.idl",
+    "diagnostic": "E_DUPLICATE"
+  },
+  {
+    "file": "negative/member_duplicate.idl",
+    "diagnostic": "E_DUPLICATE"
+  },
+  {
+    "file": "negative/enclosing_name.idl",
+    "diagnostic": "E_DUPLICATE"
+  },
+  {
+    "file": "negative/missing.idl",
+    "diagnostic": "E_UNRESOLVED"
+  },
+  {
+    "file": "negative/later.idl",
+    "diagnostic": "E_UNRESOLVED"
+  },
+  {
+    "file": "negative/case_reference.idl",
+    "diagnostic": "E_UNRESOLVED"
+  },
+  {
+    "file": "negative/wrong_type.idl",
+    "diagnostic": "E_TYPE"
+  },
+  {
+    "file": "negative/wrong_scope.idl",
+    "diagnostic": "E_SCOPE"
+  },
+  {
+    "file": "negative/shadow_scope.idl",
+    "diagnostic": "E_SCOPE"
+  },
+  {
+    "file": "negative/range.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/unsigned.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/literal_range.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/intermediate.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/octal.idl",
+    "diagnostic": "E_LITERAL"
+  },
+  {
+    "file": "negative/zero_div.idl",
+    "diagnostic": "E_DIV_ZERO"
+  },
+  {
+    "file": "negative/zero_mod.idl",
+    "diagnostic": "E_DIV_ZERO"
+  },
+  {
+    "file": "negative/shift.idl",
+    "diagnostic": "E_SHIFT"
+  },
+  {
+    "file": "negative/negative_shift.idl",
+    "diagnostic": "E_SHIFT"
+  },
+  {
+    "file": "negative/typed_bool.idl",
+    "diagnostic": "E_CONST_TYPE"
+  },
+  {
+    "file": "negative/bool_arithmetic.idl",
+    "diagnostic": "E_CONST_TYPE"
+  },
+  {
+    "file": "negative/const_struct.idl",
+    "diagnostic": "E_PROFILE"
+  },
+  {
+    "file": "negative/bad_const_name.idl",
+    "diagnostic": "E_CONST_TYPE"
+  },
+  {
+    "file": "negative/string_range.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/char_length.idl",
+    "diagnostic": "E_LITERAL"
+  },
+  {
+    "file": "negative/escape.idl",
+    "diagnostic": "E_LITERAL"
+  },
+  {
+    "file": "negative/escape_range.idl",
+    "diagnostic": "E_LITERAL"
+  },
+  {
+    "file": "negative/bound_zero.idl",
+    "diagnostic": "E_BOUND"
+  },
+  {
+    "file": "negative/bound_negative.idl",
+    "diagnostic": "E_BOUND"
+  },
+  {
+    "file": "negative/bound_bool.idl",
+    "diagnostic": "E_BOUND"
+  },
+  {
+    "file": "negative/bound_large.idl",
+    "diagnostic": "E_BOUND"
+  },
+  {
+    "file": "negative/anonymous_sequence.idl",
+    "diagnostic": "E_PROFILE"
+  },
+  {
+    "file": "negative/anonymous_string.idl",
+    "diagnostic": "E_PROFILE"
+  },
+  {
+    "file": "negative/anonymous_array.idl",
+    "diagnostic": "E_PROFILE"
+  },
+  {
+    "file": "negative/forward_missing.idl",
+    "diagnostic": "E_INCOMPLETE"
+  },
+  {
+    "file": "negative/direct_recursive.idl",
+    "diagnostic": "E_INCOMPLETE"
+  },
+  {
+    "file": "negative/forward_direct.idl",
+    "diagnostic": "E_INCOMPLETE"
+  },
+  {
+    "file": "negative/wrong_forward.idl",
+    "diagnostic": "E_DUPLICATE"
+  },
+  {
+    "file": "negative/union_duplicate.idl",
+    "diagnostic": "E_CASE"
+  },
+  {
+    "file": "negative/union_default.idl",
+    "diagnostic": "E_CASE"
+  },
+  {
+    "file": "negative/union_exhaustive.idl",
+    "diagnostic": "E_CASE"
+  },
+  {
+    "file": "negative/union_discriminator.idl",
+    "diagnostic": "E_DISCRIMINATOR"
+  },
+  {
+    "file": "negative/union_case_type.idl",
+    "diagnostic": "E_CONST_TYPE"
+  },
+  {
+    "file": "negative/union_enum_type.idl",
+    "diagnostic": "E_CONST_TYPE"
+  },
+  {
+    "file": "negative/union_case_range.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/union_missing_case.idl",
+    "diagnostic": "E_SYNTAX"
+  },
+  {
+    "file": "negative/union_multi_member.idl",
+    "diagnostic": "E_SYNTAX"
+  },
+  {
+    "file": "negative/enum_empty.idl",
+    "diagnostic": "E_IDENTIFIER"
+  },
+  {
+    "file": "negative/enum_duplicate.idl",
+    "diagnostic": "E_DUPLICATE"
+  },
+  {
+    "file": "negative/interface_deferred.idl",
+    "diagnostic": "E_PROFILE"
+  },
+  {
+    "file": "negative/wide_deferred.idl",
+    "diagnostic": "E_CONST_TYPE"
+  },
+  {
+    "file": "negative/fixed_deferred.idl",
+    "diagnostic": "E_BOUND"
+  },
+  {
+    "file": "negative/extended_deferred.idl",
+    "diagnostic": "E_IDENTIFIER"
+  },
+  {
+    "file": "positive/wide.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/floating.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/fixed.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/inline_typedef.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "positive/complement.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "negative/float_range.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/float_mixed.idl",
+    "diagnostic": "E_CONST_TYPE"
+  },
+  {
+    "file": "negative/float_bitwise.idl",
+    "diagnostic": "E_CONST_TYPE"
+  },
+  {
+    "file": "negative/float_intermediate.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/float_zero.idl",
+    "diagnostic": "E_DIV_ZERO"
+  },
+  {
+    "file": "negative/fixed_digits.idl",
+    "diagnostic": "E_BOUND"
+  },
+  {
+    "file": "negative/fixed_bare.idl",
+    "diagnostic": "E_SYNTAX"
+  },
+  {
+    "file": "negative/fixed_explicit_const.idl",
+    "diagnostic": "E_SYNTAX"
+  },
+  {
+    "file": "negative/fixed_value.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/wide_narrow.idl",
+    "diagnostic": "E_CONST_TYPE"
+  },
+  {
+    "file": "negative/unicode_narrow.idl",
+    "diagnostic": "E_LITERAL"
+  },
+  {
+    "file": "negative/null_string.idl",
+    "diagnostic": "E_LITERAL"
+  },
+  {
+    "file": "negative/int32_intermediate.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "negative/introduced_name.idl",
+    "diagnostic": "E_DUPLICATE"
+  },
+  {
+    "file": "negative/introduced_case.idl",
+    "diagnostic": "E_DUPLICATE"
+  },
+  {
+    "file": "negative/array_incomplete.idl",
+    "diagnostic": "E_INCOMPLETE"
+  },
+  {
+    "file": "negative/indirect_incomplete.idl",
+    "diagnostic": "E_INCOMPLETE"
+  },
+  {
+    "file": "positive/fixed_negative_precision.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "negative/fixed_negative_range.idl",
+    "diagnostic": "E_RANGE"
+  },
+  {
+    "file": "positive/forward_after_complete.idl",
+    "diagnostic": null
+  },
+  {
+    "file": "negative/fixed_exponent.idl",
+    "diagnostic": "E_LITERAL"
+  },
+  {
+    "file": "negative/fixed_exponent_negative.idl",
+    "diagnostic": "E_LITERAL"
+  },
+  {
+    "file": "negative/fixed_exponent_fraction.idl",
+    "diagnostic": "E_LITERAL"
+  },
+  {
+    "file": "positive/fixed_literal_forms.idl",
+    "diagnostic": null
+  }
+]

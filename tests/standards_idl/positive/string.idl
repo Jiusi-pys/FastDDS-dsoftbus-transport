@@ -1,0 +1,1 @@
+const string<5> A="ab" "cd"; typedef string<8> Label; const Label B="//x";

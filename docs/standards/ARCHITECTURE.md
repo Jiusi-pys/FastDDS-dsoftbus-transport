@@ -91,10 +91,12 @@ Web/UA clients and servers. Device roles are reversed. Same-version and mixed
 ## Current implementation boundary
 
 The current implementation adds an exact-version CMake entry, a public
-DynamicData UDP probe using two processes, an evidence runner, and a bounded
-keyed IDL fixture with a hash/version-bound generation command, and the A1
-bounded 3.6.2 assignability patch and contracts. The generated C++
-serialization roundtrip builds for both 2.14.5 and 3.6.2.
+DynamicData UDP probe using two processes, an evidence runner, a bounded
+keyed IDL fixture with a hash/version-bound generation command, and the B1
+host-only IDL frontend core. It also includes the A1 bounded 3.6.2
+assignability patch and contracts. The generated C++ serialization roundtrip
+builds for both 2.14.5 and 3.6.2. B1 does not deliver generated code or change
+Fast DDS, Transport, or device communication.
 
 ## AGENTS.md section 2.1: modifying RTPS endpoint matching
 
@@ -165,6 +167,7 @@ argument and its own approval under section 2.1.
 | Exact-version UDP type probe | PRESENT | Host baseline executed for both versions |
 | IDL generation and output hashes | PRESENT | Fast DDS-Gen 3.3.1/4.3.0 generation PASS |
 | Generated keyed/bounded C++ roundtrip | PRESENT | 2.14.5 and 3.6.2 CTest 1/1 PASS |
+| B1 IDL frontend core | PRESENT | HOST_TESTED PASS; review R1–R3 closed; see [`B1_IDL_FRONTEND.md`](B1_IDL_FRONTEND.md) and final tester evidence |
 | Complete IDL frontend and C/Java mappings | PLANNED | NOT_RUN |
 | XTypes gated 2.14.5 type-consistency patch | PRESENT | DEVICE_TESTED on both boards, both directions, gate off and on |
 | A1 gated 3.6.2 bounded type-assignability patch | PRESENT | BUILDS, HOST_TESTED, and DEVICE_TESTED; see [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md) and final tester evidence |
@@ -285,14 +288,15 @@ it.
 
 The plan above describes the full product. This worktree delivers a small part
 of it. Delivered and evidenced: the exact-version UDP type probe, the evidence
-runner, bounded keyed IDL generation with a verified generator, the generated
-C++ roundtrip on host and device, the OpenHarmony arm64 build path, and one
-gated type-consistency patch for Fast DDS 2.14.5, plus the bounded A1 3.6.2
-assignability patch documented in [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
-Not implemented, and not started:
+runner, bounded keyed IDL generation with a verified generator, the B1
+host-only IDL frontend core, the generated C++ roundtrip on host and device,
+the OpenHarmony arm64 build path, and one gated type-consistency patch for
+Fast DDS 2.14.5, plus the bounded A1 3.6.2 assignability patch documented in
+[`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md). Not implemented:
 
 - full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
-- the complete IDL 4.2 frontend and the C and Java language mappings;
+- the complete IDL 4.2 frontend beyond the bounded B1 core, and the C and Java
+  language mappings;
 - the DDS-WEB gateway;
 - the DDS-OPCUA gateway;
 - a DSoftBus-backed standards probe.

@@ -1,0 +1,1 @@
+const long A=((2+3)*4<<1)|3; const long B=-7/3; const long C=-7%3; const long D=~0 & 7 ^ 2;

@@ -1,0 +1,1 @@
+native Handle; typedef Handle HandleRef; struct S { HandleRef h; };

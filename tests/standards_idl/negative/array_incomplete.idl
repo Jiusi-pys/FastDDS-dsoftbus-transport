@@ -1,0 +1,1 @@
+struct S; typedef sequence<S> Items; typedef Items Grid[2]; struct S { long x; };

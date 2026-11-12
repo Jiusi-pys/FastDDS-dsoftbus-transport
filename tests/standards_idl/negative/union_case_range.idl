@@ -1,0 +1,1 @@
+union U switch(short) { case 65536: long x; };

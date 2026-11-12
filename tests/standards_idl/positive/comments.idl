@@ -1,0 +1,2 @@
+/* comment */ typedef long T; // hello
+struct S { T x; };

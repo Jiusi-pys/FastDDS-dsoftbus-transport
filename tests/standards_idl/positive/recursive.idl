@@ -1,0 +1,1 @@
+struct Node; typedef sequence<Node> Nodes; struct Node { long x; Nodes children; };

@@ -1,0 +1,1 @@
+typedef struct S { long value; } Record; typedef enum E { X,Y } Choice; typedef union U switch(long) { default: long value; } Variant;

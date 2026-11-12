@@ -1,0 +1,1 @@
+typedef long T; module M { struct S { ::T x; }; };

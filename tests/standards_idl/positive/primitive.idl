@@ -1,0 +1,1 @@
+struct S { short a; unsigned short b; long c; unsigned long d; long long e; unsigned long long f; float g; double h; long double i; char j; boolean k; octet l; };

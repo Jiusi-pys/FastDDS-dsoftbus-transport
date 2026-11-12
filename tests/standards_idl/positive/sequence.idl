@@ -1,0 +1,1 @@
+typedef sequence<long,8> Items; struct S { Items values; };

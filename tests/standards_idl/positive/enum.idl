@@ -1,0 +1,1 @@
+enum Color { RED, GREEN }; const Color C=GREEN; struct S { Color c; };

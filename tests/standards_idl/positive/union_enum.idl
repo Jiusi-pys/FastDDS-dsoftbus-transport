@@ -1,0 +1,1 @@
+enum E { A,B }; union U switch(E) { case A: long first; case B: char second; };

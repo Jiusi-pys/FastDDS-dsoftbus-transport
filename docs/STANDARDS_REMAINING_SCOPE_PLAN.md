@@ -125,6 +125,17 @@ Phases:
   building blocks, AST + name resolution + diagnostics. Acceptance: a
   conformance corpus under `tests/standards_idl/` with per-construct
   positive/negative cases; diagnostics asserted by test, not by eye.
+- **B1 status — HOST_TESTED PASS (bounded core only).** The host Python
+  preprocessor/parser, AST, name resolution and diagnostics are present and
+  covered by the canonical final tester. Review findings R1–R3 are closed.
+  See [`B1_IDL_FRONTEND.md`](standards/B1_IDL_FRONTEND.md) and the retained
+  [`build/b1-20261113/final-tester/FINDING.md`](../build/b1-20261113/final-tester/FINDING.md)
+  plus its `summary.json`; this does not claim full IDL 4.2 conformance,
+  non-ASCII identifiers, bit-exact IEEE folding, or any backend/mapping.
+  Full numeric semantic/precision validation remains outside this bounded
+  frontend result and is carried as remaining B2 scope.
+  Native/device and DDS/DSoftBus integration are N/A for B1 and begin at the
+  applicable B3/B4 gates.
 - **B2 — full building-block and annotation coverage.** The remaining
   building blocks (interfaces, components if claimed, templates) and the six
   annotation groups; the seven §9 profiles compile as combination tests.

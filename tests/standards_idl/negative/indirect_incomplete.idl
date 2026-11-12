@@ -1,0 +1,1 @@
+struct S; typedef sequence<S> Items; struct Other { Items values; }; struct Bad { Other value; }; struct S { long x; };

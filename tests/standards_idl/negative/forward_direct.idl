@@ -1,0 +1,1 @@
+struct S; typedef S T; struct S { long x; };

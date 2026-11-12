@@ -1,0 +1,1 @@
+typedef long Grid[2][3]; struct S { Grid x; };

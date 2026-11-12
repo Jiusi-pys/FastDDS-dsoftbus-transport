@@ -1,0 +1,1 @@
+typedef fixed<3,2> Money; const Money M=12.50d;

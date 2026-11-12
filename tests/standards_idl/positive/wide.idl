@@ -1,0 +1,1 @@
+typedef wchar Wide; typedef wstring<8> Text; const Wide C=L'\u3bc'; const Text S=L"a" L"\u0042";

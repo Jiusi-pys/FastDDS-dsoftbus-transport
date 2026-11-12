@@ -1,0 +1,1 @@
+union U switch(boolean) { case 1: long x; };

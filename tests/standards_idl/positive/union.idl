@@ -1,0 +1,1 @@
+union U switch(long) { case 0: case 1: long a; default: short b; };

@@ -1,0 +1,1 @@
+enum A { X }; enum B { Y }; union U switch(A) { case Y: long x; };

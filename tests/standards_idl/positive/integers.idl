@@ -1,0 +1,1 @@
+const long A=0x10+010; const unsigned long long B=18446744073709551615; const long long C=-9223372036854775808;

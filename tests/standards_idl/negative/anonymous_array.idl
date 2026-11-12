@@ -1,0 +1,1 @@
+struct S { long x[2]; };

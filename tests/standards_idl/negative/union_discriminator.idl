@@ -1,0 +1,1 @@
+union U switch(double) { case 0: long x; };

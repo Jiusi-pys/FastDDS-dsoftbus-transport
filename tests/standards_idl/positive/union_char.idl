@@ -1,0 +1,1 @@
+union U switch(char) { case 'x': long a; default: char b; };

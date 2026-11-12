@@ -1,0 +1,1 @@
+union U switch(boolean) { case TRUE: long a; case FALSE: long b; default: long c; };
