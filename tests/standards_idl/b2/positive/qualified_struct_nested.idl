@@ -1,0 +1,1 @@
+struct S { struct Nested { long x; } value; }; struct U { S::Nested value; };

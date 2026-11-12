@@ -1,0 +1,1 @@
+const boolean A=TRUE; const boolean B=FALSE; struct S { @key(TRUE) @optional(FALSE) long x; };

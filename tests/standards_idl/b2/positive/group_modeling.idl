@@ -1,0 +1,1 @@
+@nested struct S { @key long id; @must_understand long important; }; enum E { @default_literal A,B };

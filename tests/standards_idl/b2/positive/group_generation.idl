@@ -1,0 +1,1 @@
+@verbatim(language="c++",placement=BEGIN_FILE,text="// header") struct S { long x; };

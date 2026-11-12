@@ -1,0 +1,1 @@
+@bit_bound(2) enum E { @value(4) A };

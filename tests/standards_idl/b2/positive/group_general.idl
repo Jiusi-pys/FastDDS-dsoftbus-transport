@@ -1,0 +1,1 @@
+@autoid(SEQUENTIAL) @extensibility(APPENDABLE) struct S { @id(3) @optional long value; }; @mutable union U switch(long) { case 0: long x; };

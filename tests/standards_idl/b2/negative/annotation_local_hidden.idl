@@ -1,0 +1,1 @@
+@annotation A { const long N=7; long x; }; const long Outside=A::N;

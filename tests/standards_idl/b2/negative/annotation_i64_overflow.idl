@@ -1,0 +1,1 @@
+@annotation A { long long n; }; @A(9223372036854775808) struct S { long x; };

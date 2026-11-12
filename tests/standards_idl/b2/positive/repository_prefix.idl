@@ -1,0 +1,1 @@
+typeprefix :: "example.org"; module M { typedef long T; }; import "IDL:example.org/M:1.0";

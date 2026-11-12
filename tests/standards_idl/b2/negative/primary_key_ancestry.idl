@@ -1,0 +1,1 @@
+valuetype Key { public long id; }; component C {}; home H manages C primarykey Key {};

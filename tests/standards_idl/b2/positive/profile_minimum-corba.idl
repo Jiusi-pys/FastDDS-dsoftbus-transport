@@ -1,0 +1,1 @@
+module API { exception E { long code; }; interface Base { typedef long Id; }; interface Service:Base { Id call(in Id request_id) raises(E); readonly attribute long count; }; local interface LocalClient:Service {}; typeid Service "IDL:API/Service:1.0"; };

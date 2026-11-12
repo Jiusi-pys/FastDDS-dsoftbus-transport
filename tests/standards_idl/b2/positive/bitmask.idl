@@ -1,0 +1,1 @@
+@bit_bound(16) bitmask Flags { @position(2) A,B }; struct S { Flags bits; };

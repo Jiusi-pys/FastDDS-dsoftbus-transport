@@ -1,0 +1,1 @@
+module RPC { struct Request { uint32 id; string<16> name; }; exception Fault { long code; }; @service(platform="DDS") interface Service { Request call(in Request req) raises(Fault); @oneway void notify(in Request req); }; };

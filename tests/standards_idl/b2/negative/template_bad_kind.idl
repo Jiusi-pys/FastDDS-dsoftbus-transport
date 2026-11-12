@@ -1,0 +1,1 @@
+module T<struct X> { typedef X Value; }; module T<long> Actual;

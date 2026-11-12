@@ -1,0 +1,1 @@
+abstract valuetype A { public long x; };

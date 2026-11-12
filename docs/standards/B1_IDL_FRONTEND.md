@@ -72,6 +72,8 @@ Native MSVC/OHOS compilation, RK3588A/DSoftBus execution, and DDS integration
 are N/A for this host Python frontend milestone: no runtime or generated C/C++
 changes are delivered. Those checks remain required for B3/B4. This is not a
 full IDL 4.2 conformance claim: non-ASCII identifiers, bit-exact IEEE constant
-evaluation, full numeric semantic/precision validation, the remaining B2
-building blocks/annotations/profiles, and C/C++/Java mappings remain
-unverified or planned. The pre-commit gate is owned by the orchestrator.
+evaluation, full numeric semantic/precision validation, and C/C++/Java mappings
+remain outside the B1 mode. The B2 building blocks, annotations and profiles
+are covered by the separate optional host frontend documented in
+[`B2_IDL_LANGUAGE_COVERAGE.md`](B2_IDL_LANGUAGE_COVERAGE.md); that status does
+not alter this B1 evidence. The pre-commit gate is owned by the orchestrator.

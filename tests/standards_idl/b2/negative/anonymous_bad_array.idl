@@ -1,0 +1,1 @@
+struct S { long grid[0]; };

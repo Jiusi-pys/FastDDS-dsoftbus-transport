@@ -1,0 +1,1 @@
+porttype P; porttype Q { port P endpoint; }; porttype P { port Q endpoint; };

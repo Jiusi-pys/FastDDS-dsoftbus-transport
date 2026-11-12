@@ -1,0 +1,1 @@
+interface I { oneway void notify(in long x) context("trace"); }; local interface L:I {}; typeid I "IDL:Example/I:1.0"; typeprefix I "example.org"; typedef Object Handle; import I;

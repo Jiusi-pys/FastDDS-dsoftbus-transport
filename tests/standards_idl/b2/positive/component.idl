@@ -1,0 +1,1 @@
+interface I {}; component Base { provides I endpoint; }; component C:Base { uses I source; readonly attribute long state; };

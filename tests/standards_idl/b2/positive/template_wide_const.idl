@@ -1,0 +1,1 @@
+module T<const uint64 N> { const uint64 V=N; }; module T<4294967296> Actual;

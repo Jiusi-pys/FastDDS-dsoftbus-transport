@@ -1,0 +1,1 @@
+module T<exception E> { interface I { void f() raises(E); }; }; exception Fault {}; module T<Fault> Actual;

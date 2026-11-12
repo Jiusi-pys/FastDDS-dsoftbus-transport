@@ -1,0 +1,1 @@
+interface I {}; typeid I "IDL:Ex/" "I:1.0";

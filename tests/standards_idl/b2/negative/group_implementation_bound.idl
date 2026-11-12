@@ -1,0 +1,1 @@
+@bit_bound(0) enum E { A,B };

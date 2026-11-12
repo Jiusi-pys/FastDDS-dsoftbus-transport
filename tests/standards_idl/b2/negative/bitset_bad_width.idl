@@ -1,0 +1,1 @@
+bitset S { bitfield<9,uint8> field; };

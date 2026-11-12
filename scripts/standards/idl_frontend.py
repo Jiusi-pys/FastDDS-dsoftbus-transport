@@ -48,7 +48,7 @@ def marker_file(raw):
     return raw.replace('\\\\', '\\').replace('\\"', '"')
 
 
-def tokenize(text, filename):
+def tokenize(text, filename, lexeme=LEXEME):
     """Retain preprocessor line markers; do not remove comments inside literals."""
     tokens, block = [], False
     line, file = 1, filename
@@ -74,7 +74,7 @@ def tokenize(text, filename):
                 block, pos = True, pos + 2
                 continue
             token = Token(physical[pos:], file, line, pos + 1)
-            match = LEXEME.match(physical, pos)
+            match = lexeme.match(physical, pos)
             if not match:
                 raise Diagnostic('E_LEX', 'invalid character or unterminated literal', token)
             tokens.append(Token(match[0], file, line, pos + 1))
@@ -87,8 +87,8 @@ def tokenize(text, filename):
 
 
 class Frontend:
-    def __init__(self, text, filename='<input>'):
-        self.tokens = tokenize(text, filename)
+    def __init__(self, text, filename='<input>', lexeme=LEXEME):
+        self.tokens = tokenize(text, filename, lexeme)
         self.index = 0
         self.scope = ()
         self.symbols = {}

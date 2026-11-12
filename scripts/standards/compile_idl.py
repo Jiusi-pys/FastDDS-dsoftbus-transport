@@ -14,15 +14,16 @@ import sys
 import tempfile
 
 from idl_frontend import Diagnostic, LINE_MARKER, Token, marker_file, parse
+from idl_profiles import PROFILES
 
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def compile_file(source, clang, includes=(), defines=()):
+def compile_file(source, clang, includes=(), defines=(), profile='b1', import_bindings=None):
     source, clang = Path(source).resolve(), Path(clang).resolve()
-    evidence = {"source": str(source), "preprocessor": str(clang), "status": "FAIL"}
+    evidence = {"source": str(source), "preprocessor": str(clang), "status": "FAIL", "profile": profile}
     try:
         evidence['source_sha256'] = digest(source)
         evidence['preprocessor_sha256'] = digest(clang)
@@ -52,7 +53,17 @@ def compile_file(source, clang, includes=(), defines=()):
         if process.returncode:
             raise Diagnostic('E_PREPROCESS', 'Clang preprocessing failed; see stderr',
                              Token('', str(source), 1, 1))
-        evidence['ast'] = parse(text, str(source))
+        if profile == 'b1':
+            evidence['ast'] = parse(text, str(source))
+        elif profile in PROFILES:
+            from idl_extended import parse_extended, EXT_LEXEME
+            imports = {}
+            if 'corba-interfaces' in PROFILES[profile][0]:
+                from idl_imports import expand_imports
+                text, imports = expand_imports(text, source, command, import_bindings or {}, evidence, EXT_LEXEME)
+            evidence['ast'] = parse_extended(text, str(source), profile, imports)
+        else:
+            raise Diagnostic('E_PROFILE', f'unknown profile {profile}', Token('', str(source), 1, 1))
         evidence['status'] = 'PASS'
         evidence['diagnostics'] = []
     except Diagnostic as error:
@@ -79,17 +90,27 @@ def main(argv=None):
     parser.add_argument('source', type=Path)
     parser.add_argument('--clang', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--profile', choices=['b1'] + sorted(PROFILES), default='b1')
+    parser.add_argument('--idl-import', action='append', default=[], metavar='REPOSITORY_ID=FILE')
     parser.add_argument('-I', dest='includes', action='append', default=[])
     parser.add_argument('-D', dest='defines', action='append', default=[])
     args = parser.parse_args(argv)
+    bindings = {}
+    for binding in args.idl_import:
+        identity, separator, filename = binding.partition('=')
+        if not separator or not identity or not filename or identity in bindings:
+            parser.error('--idl-import requires unique REPOSITORY_ID=FILE bindings')
+        bindings[identity] = str(Path(filename).resolve())
+    if bindings and args.profile == 'b1':
+        parser.error('--idl-import requires a B2 CORBA-capable profile')
     # The evidence artifact must never overwrite compiler input or tool binaries.
-    protected = {args.source.resolve(), args.clang.resolve()}
+    protected = {args.source.resolve(), args.clang.resolve()} | {Path(p) for p in bindings.values()}
     try:
         if output_conflicts(args.out, protected):
             parser.error('--out must differ from source and Clang executable, including file aliases')
     except OSError as error:
         parser.error(f'cannot verify output file identity: {error}')
-    result = compile_file(args.source, args.clang, args.includes, args.defines)
+    result = compile_file(args.source, args.clang, args.includes, args.defines, args.profile, bindings)
     try:
         if output_conflicts(args.out, result.get('dependencies', {})):
             parser.error('--out must differ from included source files, including file aliases')

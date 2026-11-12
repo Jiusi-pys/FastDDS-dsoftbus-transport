@@ -1,0 +1,1 @@
+@range(min=1,max=10) typedef long Distance; const Distance D=11;

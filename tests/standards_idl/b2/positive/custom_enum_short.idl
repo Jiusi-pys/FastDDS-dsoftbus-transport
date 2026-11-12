@@ -1,0 +1,1 @@
+@annotation A { enum E { X,Y }; E value default X; }; @A(Y) struct S { long x; };

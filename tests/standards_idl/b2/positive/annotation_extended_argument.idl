@@ -1,0 +1,1 @@
+typedef long double Extended; @annotation A { Extended n; }; @A(1.0e400) struct S { long x; };

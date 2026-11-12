@@ -22,7 +22,8 @@ CORPUS = ROOT / 'tests/standards_idl'
 class CorpusTests(unittest.TestCase):
     def test_corpus(self):
         cases = json.loads((CORPUS / 'corpus.json').read_text())
-        self.assertEqual({p.relative_to(CORPUS).as_posix() for p in CORPUS.rglob('*.idl')},
+        self.assertEqual({p.relative_to(CORPUS).as_posix() for folder in ('positive', 'negative')
+                          for p in (CORPUS / folder).rglob('*.idl')},
                          {c['file'] for c in cases})
         for case in cases:
             with self.subTest(case=case['file']):

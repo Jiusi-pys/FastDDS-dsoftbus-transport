@@ -1,0 +1,1 @@
+valuetype V {}; custom valuetype A:truncatable V {};

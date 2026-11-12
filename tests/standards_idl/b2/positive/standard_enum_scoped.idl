@@ -1,0 +1,1 @@
+@autoid(autoid::HASH) @extensibility(::extensibility::FINAL) struct S { long x; };

@@ -1,0 +1,1 @@
+bitset Parent { bitfield<3,uint8> low; bitfield<2>; }; bitset Child:Parent { bitfield<1,boolean> high; };

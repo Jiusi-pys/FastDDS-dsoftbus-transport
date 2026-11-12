@@ -1,0 +1,1 @@
+struct S { long x; }; component C { provides S endpoint; };

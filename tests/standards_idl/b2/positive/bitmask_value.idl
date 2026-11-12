@@ -1,0 +1,1 @@
+@bit_bound(8) bitmask Flags { @value(4) A,B };

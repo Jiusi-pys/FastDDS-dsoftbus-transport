@@ -1,0 +1,1 @@
+module T<typename X> { typedef X Item; }; module U<typename Y> { alias T<long> Inner; };

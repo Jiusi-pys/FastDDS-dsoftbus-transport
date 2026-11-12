@@ -1,0 +1,1 @@
+@service(platform="DDS") @ami interface I { @oneway void notify(in long value); @ami long call(in long value); };

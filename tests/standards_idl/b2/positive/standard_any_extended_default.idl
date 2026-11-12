@@ -1,0 +1,1 @@
+struct S { @default(1.0e400) long double x; @default(4294967296) uint64 y; };

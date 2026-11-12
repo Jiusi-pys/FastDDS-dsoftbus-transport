@@ -1,0 +1,1 @@
+abstract interface I { void call(); }; abstract valuetype A { void call(); }; custom valuetype C { public long x; }; valuetype Concrete { public long state; }; valuetype Box long; valuetype V:truncatable Concrete,A supports I { public ValueBase ref; };

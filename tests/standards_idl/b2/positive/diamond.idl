@@ -1,0 +1,1 @@
+interface A { typedef long T; }; interface B:A {}; interface C:A {}; interface D:B,C { T f(); };

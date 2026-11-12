@@ -1,0 +1,1 @@
+enum E { @default_literal A,@default_literal B };

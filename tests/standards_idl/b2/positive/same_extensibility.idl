@@ -1,0 +1,1 @@
+@final @extensibility(FINAL) struct S { long x; };

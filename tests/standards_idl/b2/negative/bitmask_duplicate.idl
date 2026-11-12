@@ -1,0 +1,1 @@
+bitmask Flags { @position(1) A,@position(1) B };

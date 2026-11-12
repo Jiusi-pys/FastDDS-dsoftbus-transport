@@ -1,0 +1,1 @@
+porttype P; component C { port P endpoint; }; interface I {}; porttype P { provides I facet; };

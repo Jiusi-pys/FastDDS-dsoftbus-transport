@@ -1,0 +1,1 @@
+@bit_bound(8) enum E { A,B }; @nested struct S { @external @optional sequence<long> large; };

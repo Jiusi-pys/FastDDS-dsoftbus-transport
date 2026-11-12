@@ -1,0 +1,1 @@
+module T<typename X> { struct S { Unknown x; }; };

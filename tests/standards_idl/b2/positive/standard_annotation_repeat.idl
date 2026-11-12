@@ -1,0 +1,1 @@
+@annotation key { boolean value default TRUE; }; @annotation oneway { boolean value default TRUE; }; struct S { @key long id; }; interface I { @oneway void f(); };

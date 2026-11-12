@@ -1,0 +1,1 @@
+interface I {}; typeprefix I "example/";

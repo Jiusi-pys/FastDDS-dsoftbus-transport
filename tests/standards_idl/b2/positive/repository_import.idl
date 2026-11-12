@@ -1,0 +1,1 @@
+module M { typedef long T; }; typeid M "IDL:Repo/M:1.0"; import "IDL:Repo/M:1.0";

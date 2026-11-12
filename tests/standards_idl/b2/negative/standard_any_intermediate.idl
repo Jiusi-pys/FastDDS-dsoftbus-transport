@@ -1,0 +1,1 @@
+@max((4294967295+1)-1) typedef long T;

@@ -1,0 +1,1 @@
+interface I {}; component C { provides I endpoint; uses I endpoint; };

@@ -1,0 +1,1136 @@
+[
+  {
+    "file": "positive/latin1.idl",
+    "diagnostic": null,
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/latin1_collision.idl",
+    "diagnostic": "E_DUPLICATE",
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/nonlatin_identifier.idl",
+    "diagnostic": "E_LEX",
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/any.idl",
+    "diagnostic": null,
+    "coverage": "any",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/any_const.idl",
+    "diagnostic": "E_CONST_TYPE",
+    "coverage": "any",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/interface_basic.idl",
+    "diagnostic": null,
+    "coverage": "interfaces-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/bad_direction.idl",
+    "diagnostic": "E_PARAMETER",
+    "coverage": "interfaces-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/bad_exception.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "interfaces-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/interface_full.idl",
+    "diagnostic": null,
+    "coverage": "interfaces-full",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/interface_duplicate.idl",
+    "diagnostic": "E_DUPLICATE",
+    "coverage": "interfaces-full",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/diamond.idl",
+    "diagnostic": null,
+    "coverage": "interfaces-full",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/inherit_conflict.idl",
+    "diagnostic": "E_AMBIGUOUS",
+    "coverage": "interfaces-full",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/inherit_override.idl",
+    "diagnostic": "E_INHERITANCE",
+    "coverage": "interfaces-full",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/forward_interface.idl",
+    "diagnostic": null,
+    "coverage": "interfaces-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/wrong_base.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "interfaces-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/value.idl",
+    "diagnostic": null,
+    "coverage": "value-types",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/value_wrong_state.idl",
+    "diagnostic": "E_SYNTAX",
+    "coverage": "value-types",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/value_factory_direction.idl",
+    "diagnostic": "E_PARAMETER",
+    "coverage": "value-types",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/corba_interface.idl",
+    "diagnostic": null,
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/oneway_bad_result.idl",
+    "diagnostic": "E_ONEWAY",
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/oneway_bad_direction.idl",
+    "diagnostic": "E_ONEWAY",
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/oneway_bad_exception.idl",
+    "diagnostic": "E_ONEWAY",
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/typeid_conflict.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/local_inheritance.idl",
+    "diagnostic": "E_INHERITANCE",
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/corba_values.idl",
+    "diagnostic": null,
+    "coverage": "corba-values",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/abstract_state.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "corba-values",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/abstract_concrete_base.idl",
+    "diagnostic": "E_INHERITANCE",
+    "coverage": "corba-values",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/custom_truncatable.idl",
+    "diagnostic": "E_INHERITANCE",
+    "coverage": "corba-values",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/component.idl",
+    "diagnostic": null,
+    "coverage": "components-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/component_port_type.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "components-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/component_duplicate.idl",
+    "diagnostic": "E_DUPLICATE",
+    "coverage": "components-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/component_operation.idl",
+    "diagnostic": "E_SYNTAX",
+    "coverage": "components-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/homes.idl",
+    "diagnostic": null,
+    "coverage": "homes",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/home_manages.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "homes",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/home_factory_direction.idl",
+    "diagnostic": "E_PARAMETER",
+    "coverage": "homes",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/ccm.idl",
+    "diagnostic": null,
+    "coverage": "ccm",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/event_wrong_type.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "ccm",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/home_wrong_key.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "ccm",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/ports.idl",
+    "diagnostic": null,
+    "coverage": "ports-connectors",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/empty_porttype.idl",
+    "diagnostic": "E_EMPTY",
+    "coverage": "ports-connectors",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/empty_connector.idl",
+    "diagnostic": "E_EMPTY",
+    "coverage": "ports-connectors",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/port_wrong_target.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "ports-connectors",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/templates.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/template_deferred_arithmetic.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/template_bad_bound.idl",
+    "diagnostic": "E_BOUND",
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/template_bad_kind.idl",
+    "diagnostic": "E_TEMPLATE",
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/template_bad_arity.idl",
+    "diagnostic": "E_SYNTAX",
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/template_unused_invalid.idl",
+    "diagnostic": "E_UNRESOLVED",
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/template_alias.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/alias_outside.idl",
+    "diagnostic": "E_TEMPLATE",
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/extended.idl",
+    "diagnostic": null,
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/integer8_range.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/empty_core_struct.idl",
+    "diagnostic": null,
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/map_bound.idl",
+    "diagnostic": "E_BOUND",
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/bitset.idl",
+    "diagnostic": null,
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/bitset_bad_destination.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/bitset_bad_width.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/bitmask.idl",
+    "diagnostic": null,
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/bitmask_duplicate.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/anonymous.idl",
+    "diagnostic": null,
+    "coverage": "anonymous",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/anonymous_bad_array.idl",
+    "diagnostic": "E_BOUND",
+    "coverage": "anonymous",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotations_custom.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_unknown.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_duplicate_arg.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_wrong_param.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_missing_required.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_custom_required.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_redefine.idl",
+    "diagnostic": "E_DUPLICATE",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_missing_close.idl",
+    "diagnostic": "E_SYNTAX",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/group_general.idl",
+    "diagnostic": null,
+    "coverage": "general",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_general_id_duplicate.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "general",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_general_conflict.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "general",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_general_id_range.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "general",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/group_modeling.idl",
+    "diagnostic": null,
+    "coverage": "modeling",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_modeling_defaults.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "modeling",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_modeling_placement.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "modeling",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/group_units.idl",
+    "diagnostic": null,
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_units_bad_order.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_units_bad_value.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_units_type.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/group_implementation.idl",
+    "diagnostic": null,
+    "coverage": "implementation",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_implementation_bound.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "implementation",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/group_generation.idl",
+    "diagnostic": null,
+    "coverage": "generation",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_generation_missing_text.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "generation",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/group_interfaces.idl",
+    "diagnostic": null,
+    "coverage": "interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_interfaces_bad_oneway.idl",
+    "diagnostic": "E_ONEWAY",
+    "coverage": "interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/group_interfaces_placement.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/float_exact.idl",
+    "diagnostic": null,
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/float_round_tie.idl",
+    "diagnostic": null,
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/float_subnormal.idl",
+    "diagnostic": null,
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/float_large_exponent.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/float_underflow.idl",
+    "diagnostic": null,
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/float_intermediate_overflow.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/float_mixed.idl",
+    "diagnostic": "E_CONST_TYPE",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/float_bitwise.idl",
+    "diagnostic": "E_CONST_TYPE",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/integer_promotions.idl",
+    "diagnostic": null,
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/integer_intermediate_overflow.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/integer_large_literal.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/negative_shift.idl",
+    "diagnostic": "E_SHIFT",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/fixed_precision.idl",
+    "diagnostic": null,
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/fixed_bad_precision.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/fixed_bad_exponent.idl",
+    "diagnostic": "E_LITERAL",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/fixed_zero_divisor.idl",
+    "diagnostic": "E_DIV_ZERO",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/unicode_literal.idl",
+    "diagnostic": null,
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/wide_null.idl",
+    "diagnostic": "E_LITERAL",
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/wide_mismatch.idl",
+    "diagnostic": "E_CONST_TYPE",
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/scope_introduced.idl",
+    "diagnostic": "E_DUPLICATE",
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/scope_nonmodule.idl",
+    "diagnostic": "E_SCOPE",
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/qualified_struct_nested.idl",
+    "diagnostic": null,
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/profile_minimum-corba.idl",
+    "diagnostic": null,
+    "coverage": "profiles",
+    "profile": "minimum-corba"
+  },
+  {
+    "file": "positive/profile_plain-corba.idl",
+    "diagnostic": null,
+    "coverage": "profiles",
+    "profile": "plain-corba"
+  },
+  {
+    "file": "positive/profile_ccm.idl",
+    "diagnostic": null,
+    "coverage": "profiles",
+    "profile": "ccm"
+  },
+  {
+    "file": "positive/profile_ccm-generic.idl",
+    "diagnostic": null,
+    "coverage": "profiles",
+    "profile": "ccm-generic"
+  },
+  {
+    "file": "positive/profile_plain-dds.idl",
+    "diagnostic": null,
+    "coverage": "profiles",
+    "profile": "plain-dds"
+  },
+  {
+    "file": "positive/profile_extensible-dds.idl",
+    "diagnostic": null,
+    "coverage": "profiles",
+    "profile": "extensible-dds"
+  },
+  {
+    "file": "positive/profile_rpc-dds.idl",
+    "diagnostic": null,
+    "coverage": "profiles",
+    "profile": "rpc-dds"
+  },
+  {
+    "file": "negative/profile_reject_minimum-corba.idl",
+    "diagnostic": "E_PROFILE",
+    "coverage": "profiles",
+    "profile": "minimum-corba"
+  },
+  {
+    "file": "negative/profile_reject_plain-corba.idl",
+    "diagnostic": "E_PROFILE",
+    "coverage": "profiles",
+    "profile": "plain-corba"
+  },
+  {
+    "file": "negative/profile_reject_ccm.idl",
+    "diagnostic": "E_PROFILE",
+    "coverage": "profiles",
+    "profile": "ccm"
+  },
+  {
+    "file": "negative/profile_reject_ccm-generic.idl",
+    "diagnostic": "E_PROFILE",
+    "coverage": "profiles",
+    "profile": "ccm-generic"
+  },
+  {
+    "file": "negative/profile_reject_plain-dds.idl",
+    "diagnostic": "E_PROFILE",
+    "coverage": "profiles",
+    "profile": "plain-dds"
+  },
+  {
+    "file": "negative/profile_reject_extensible-dds.idl",
+    "diagnostic": "E_PROFILE",
+    "coverage": "profiles",
+    "profile": "extensible-dds"
+  },
+  {
+    "file": "negative/profile_reject_rpc-dds.idl",
+    "diagnostic": "E_PROFILE",
+    "coverage": "profiles",
+    "profile": "rpc-dds"
+  },
+  {
+    "file": "positive/bool_constants.idl",
+    "diagnostic": null,
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/custom_enum_short.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/float_signed_zero.idl",
+    "diagnostic": null,
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/wide_raw_not_latin1.idl",
+    "diagnostic": "E_LITERAL",
+    "coverage": "core",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/template_sequence.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/template_sequence_wrong.idl",
+    "diagnostic": "E_TEMPLATE",
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/template_exception.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/template_enum_const.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/template_wide_const.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/template_fixed.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/template_alias_literal.idl",
+    "diagnostic": "E_TEMPLATE",
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/template_nested.idl",
+    "diagnostic": "E_TEMPLATE",
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/inherited_type_override.idl",
+    "diagnostic": null,
+    "coverage": "interfaces-full",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/inherited_qualified_types.idl",
+    "diagnostic": null,
+    "coverage": "interfaces-full",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/inherited_ambiguous_type.idl",
+    "diagnostic": "E_AMBIGUOUS",
+    "coverage": "interfaces-full",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/attribute_array.idl",
+    "diagnostic": "E_SYNTAX",
+    "coverage": "interfaces-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/bit_bound_enum_value.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "implementation",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/bit_bound_mask_position.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "implementation",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/bit_bound_type_constant.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "implementation",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/bit_bound_type_valid.idl",
+    "diagnostic": null,
+    "coverage": "implementation",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/range_default.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/min_max_conflict.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/same_extensibility.idl",
+    "diagnostic": null,
+    "coverage": "general",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/typeid_same_twice.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/typeid_wrong_target.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/prefix_bad.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/repository_import.idl",
+    "diagnostic": null,
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/repository_prefix.idl",
+    "diagnostic": null,
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/filename_is_not_import_id.idl",
+    "diagnostic": "E_IMPORT",
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/inherited_id_duplicate.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "general",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/bitmask_value.idl",
+    "diagnostic": null,
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/bitmask_bad_value.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "extended",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/adjacent_typeid.idl",
+    "diagnostic": null,
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/adjacent_typeprefix.idl",
+    "diagnostic": null,
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/adjacent_import.idl",
+    "diagnostic": null,
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/adjacent_context.idl",
+    "diagnostic": null,
+    "coverage": "corba-interfaces",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_float_max.idl",
+    "diagnostic": null,
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_float_default.idl",
+    "diagnostic": null,
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_i64_default.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_i64_argument.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_i64_overflow.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_extended_default.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_extended_argument.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_extended_overflow.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_local_const.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_local_hidden.idl",
+    "diagnostic": "E_SCOPE",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/forward_port_component.idl",
+    "diagnostic": null,
+    "coverage": "ports-connectors",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/forward_port_nested.idl",
+    "diagnostic": null,
+    "coverage": "ports-connectors",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/port_cycle.idl",
+    "diagnostic": "E_PORT_CYCLE",
+    "coverage": "ports-connectors",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/port_cycle_self.idl",
+    "diagnostic": "E_PORT_CYCLE",
+    "coverage": "ports-connectors",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/primary_key_ancestry.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "ccm",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/custom_inheritance.idl",
+    "diagnostic": "E_INHERITANCE",
+    "coverage": "corba-values",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/component_forward_missing.idl",
+    "diagnostic": "E_INCOMPLETE",
+    "coverage": "components-basic",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/standard_any_extended_default.idl",
+    "diagnostic": null,
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/standard_any_intermediate.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_repeat.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_repeat_inconsistent.idl",
+    "diagnostic": "E_ANNOTATION",
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/standard_annotation_repeat.idl",
+    "diagnostic": null,
+    "coverage": "annotations",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/standard_enum_scoped.idl",
+    "diagnostic": null,
+    "coverage": "general",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/generic_annotation_context.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/generic_const_context.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/enum_intermediate_range.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "numeric",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/annotation_float_min.idl",
+    "diagnostic": null,
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/annotation_float_distinct.idl",
+    "diagnostic": "E_RANGE",
+    "coverage": "units-ranges",
+    "profile": "b2"
+  },
+  {
+    "file": "positive/generic_primarykey.idl",
+    "diagnostic": null,
+    "coverage": "templates",
+    "profile": "b2"
+  },
+  {
+    "file": "negative/generic_primarykey_wrong.idl",
+    "diagnostic": "E_TYPE",
+    "coverage": "templates",
+    "profile": "b2"
+  }
+]

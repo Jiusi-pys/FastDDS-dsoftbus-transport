@@ -1,0 +1,1 @@
+module API { interface I { void call(); }; eventtype E { public long id; }; porttype P { provides I endpoint; }; connector Bridge { port P send; mirrorport P receive; }; module T<typename X> { typedef X Payload; component C { provides I endpoint; }; }; module T<long> Instance; component C { port P endpoint; consumes E events; }; };

@@ -1,0 +1,1 @@
+module API { typedef any Payload; abstract interface Base { void call(); }; abstract valuetype AbstractValue { void ping(); }; valuetype Value:AbstractValue { public Payload data; factory create(in long id); }; valuetype Box long; interface Service { Value get(); oneway void notify(in Payload data) context("trace"); }; };

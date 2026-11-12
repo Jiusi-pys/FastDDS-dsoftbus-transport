@@ -1,0 +1,1 @@
+@annotation Note { enum E { A,B }; E kind default A; long priority default 1; }; @Note(kind=Note::B) struct S { @key long id; };

@@ -1,0 +1,1 @@
+@range(min=1,min=2,max=3) typedef long T;

@@ -1,0 +1,1 @@
+@annotation Note { long value; }; @Note struct S { long x; };

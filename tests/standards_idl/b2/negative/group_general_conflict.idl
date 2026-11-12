@@ -1,0 +1,1 @@
+@final @mutable struct S { long x; };

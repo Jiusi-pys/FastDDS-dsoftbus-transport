@@ -1,0 +1,1 @@
+interface A { void f(); }; interface B { void f(); }; interface C:A,B {};

@@ -1,0 +1,1 @@
+module Data { enum E { A,B }; struct Item { long id; string<16> label; sequence<long,8> samples; long grid[2][3]; }; union U switch(E) { case A: Item payload; case B: long code; }; };

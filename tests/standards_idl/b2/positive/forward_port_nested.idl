@@ -1,0 +1,1 @@
+porttype P; porttype Outer { mirrorport P endpoint; }; interface I {}; porttype P { provides I facet; }; connector C { port Outer endpoint; };

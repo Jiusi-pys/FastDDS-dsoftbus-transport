@@ -1,0 +1,1 @@
+bitset S { bitfield<4,string> field; };

@@ -1,0 +1,1 @@
+interface I {}; porttype P; porttype P { provides I endpoint; attribute long count; }; connector C { port P normal; mirrorport P mirrored; }; component Comp { port P endpoint; };

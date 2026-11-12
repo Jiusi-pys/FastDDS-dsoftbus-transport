@@ -132,15 +132,24 @@ Phases:
   [`build/b1-20261113/final-tester/FINDING.md`](../build/b1-20261113/final-tester/FINDING.md)
   plus its `summary.json`; this does not claim full IDL 4.2 conformance,
   non-ASCII identifiers, bit-exact IEEE folding, or any backend/mapping.
-  Full numeric semantic/precision validation remains outside this bounded
-  frontend result and is carried as remaining B2 scope.
+  Numeric semantic/precision behavior is intentionally outside the B1 mode;
+  it is covered by the separate B2 frontend mode below.
   Native/device and DDS/DSoftBus integration are N/A for B1 and begin at the
   applicable B3/B4 gates.
-- **B2 — full building-block and annotation coverage.** The remaining
-  building blocks (interfaces, components if claimed, templates) and the six
-  annotation groups; the seven §9 profiles compile as combination tests.
-  Any block deliberately not claimed is recorded as explicit scope control,
-  not silently skipped.
+- **B2 status — HOST_TESTED PASS (bounded frontend/schema-2 scope).** The
+  Windows-host Python frontend covers all 15 building blocks, six annotation
+  groups with 24 signatures, and the seven §9 named profiles, including the
+  numeric/precision, Latin-1, offline explicit repository-source binding and
+  AST/schema-2 controls listed in [`B2_IDL_LANGUAGE_COVERAGE.md`](standards/B2_IDL_LANGUAGE_COVERAGE.md).
+  The canonical final tester recorded 33 B2 tests, 16 B1 compatibility tests,
+  306 compiler-backed cases, 20 semantic probes, 93 standards-regression
+  tests and 22 XCDR2-regression tests as PASS; review R1–R5/C1 is CLOSED. See
+  [`build/b2-20261113/final-tester/FINDING.md`](../build/b2-20261113/final-tester/FINDING.md)
+  and [`build/b2-20261113/review/C1_CLOSURE.md`](../build/b2-20261113/review/C1_CLOSURE.md).
+  This is host frontend evidence only: no native/generated/DDS/DSoftBus or
+  RK3588A/device artifact is claimed, and exhaustive IDL certification is not
+  inferred. The historical initial census failure and rerun remain retained
+  without changing the historical census numbers.
 - **B3 — DDS backend, C++ first.** Emit the existing generated-C++ shape so
   the current roundtrip harness validates the new frontend against
   Fast DDS-Gen output for the shared subset (differential test: same IDL in,

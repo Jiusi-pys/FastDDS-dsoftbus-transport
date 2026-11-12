@@ -1,0 +1,1 @@
+module T<typename X, const long N> { typedef X Grid[N]; struct S { Grid values; }; }; module T<long,4> Actual; struct Use { Actual::S value; };

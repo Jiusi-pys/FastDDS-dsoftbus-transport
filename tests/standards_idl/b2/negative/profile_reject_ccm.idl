@@ -1,0 +1,1 @@
+interface I {}; porttype P { provides I p; };

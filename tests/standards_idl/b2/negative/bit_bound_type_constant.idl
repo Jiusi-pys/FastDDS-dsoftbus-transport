@@ -1,0 +1,1 @@
+@bit_bound(2) typedef long Small; const Small X=2;

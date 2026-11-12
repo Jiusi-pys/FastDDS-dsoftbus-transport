@@ -1,0 +1,1 @@
+component C {}; home H manages C { factory create(in long id); }; home Derived:H manages C { finder locate(in long id); };

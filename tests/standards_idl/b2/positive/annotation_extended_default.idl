@@ -1,0 +1,1 @@
+@annotation A { long double n default 1.0e400; }; @A struct S { long x; };

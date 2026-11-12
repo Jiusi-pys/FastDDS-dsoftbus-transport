@@ -1,0 +1,1 @@
+module Components { abstract valuetype PrimaryKeyBase {}; }; interface I {}; eventtype Event { public long id; }; valuetype Key:Components::PrimaryKeyBase { public long id; }; component C supports I { uses multiple I source; emits Event out_events; consumes Event in_events; publishes Event all_events; }; home H supports I manages C primarykey Key { finder locate(in long id); };

@@ -1,0 +1,1 @@
+exception Problem { long code; }; interface Service { long call(in long x, out long answer) raises(Problem); readonly attribute long count raises(Problem); attribute long limit getraises(Problem) setraises(Problem); };

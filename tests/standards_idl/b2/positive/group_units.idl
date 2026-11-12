@@ -1,0 +1,1 @@
+@range(min=1,max=10) @unit("m") typedef long Distance; const Distance D=5; struct S { @default(3) @min(1) @max(10) Distance value; };

@@ -1,0 +1,1 @@
+interface I { typedef long T; const T N=2; exception E {}; struct S { T x; }; T call(in S value) raises(E); };

@@ -1,0 +1,1 @@
+module T<typename X> { typedef X Value; }; module U<typename Y> { alias T<Y> Inner; }; module U<long> Actual; struct S { Actual::Inner::Value value; };

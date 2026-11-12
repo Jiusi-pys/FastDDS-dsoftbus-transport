@@ -1,0 +1,1 @@
+struct Base { int8 x; }; struct S:Base { uint8 a; int16 b; uint16 c; int32 d; uint32 e; int64 f; uint64 g; map<string<8>,sequence<long>,4> index; }; struct Empty {}; union U switch(wchar) { case L'x': uint8 a; default: octet b; };

@@ -1,0 +1,1 @@
+bitmask Flags { @value(3) A };

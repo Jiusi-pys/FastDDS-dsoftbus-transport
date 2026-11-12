@@ -1,0 +1,1 @@
+module T<const long D,const long S> { typedef fixed<D,S> Money; }; module T<5,2> Actual;

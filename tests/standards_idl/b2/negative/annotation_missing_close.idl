@@ -1,0 +1,1 @@
+@key(TRUE struct S { long x; };

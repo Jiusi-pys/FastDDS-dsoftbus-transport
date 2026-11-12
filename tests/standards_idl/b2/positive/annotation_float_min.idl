@@ -1,0 +1,1 @@
+@min(0.1) typedef float F; const F X=0.1;

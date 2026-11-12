@@ -1,0 +1,1 @@
+interface I {}; valuetype Base { public long x; }; valuetype V:Base supports I { private long state; factory create(in long value); void call(); };

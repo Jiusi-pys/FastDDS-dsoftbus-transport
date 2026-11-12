@@ -1,0 +1,1 @@
+module T<typename X,sequence<X> S> { typedef S Items; }; typedef sequence<short> Seq; module T<long,Seq> Actual;

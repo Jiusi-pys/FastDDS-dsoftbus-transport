@@ -1,0 +1,1 @@
+struct E { long x; }; interface I { void call() raises(E); };

@@ -1,0 +1,1 @@
+module Data { @appendable struct Base { @key uint32 id; }; @mutable struct Item:Base { @id(2) @optional map<string<8>,sequence<int16>,4> samples; }; @bit_bound(8) bitmask Flags { @position(1) A,B }; @verbatim(text="// fixture") struct Meta { Flags bits; }; };

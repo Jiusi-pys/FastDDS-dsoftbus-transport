@@ -1,0 +1,1 @@
+module T<typename X> { @annotation A { X value default 1.0e400; }; @A struct S { long x; }; }; module T<long double> Actual;
