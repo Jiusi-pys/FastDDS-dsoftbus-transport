@@ -141,6 +141,9 @@ public:
     // Diagnostic snapshot only, never an execution permission. Binding returns
     // NotReady; revoked/foreign generations cannot be replaced with new values.
     NativeOwnerObservation Observe() const noexcept;
+    // Exact original-owner comparison (table, slot, incarnation), never an execution
+    // permission. Takes no gate, so a queue may evaluate it under its own.
+    bool BelongsTo(const NativeOwnerLease&) const noexcept;
 private:
     friend class NativeCallbackLease;
     friend class NativeOwnerTableTestAccess;
@@ -214,6 +217,7 @@ private:
     friend class NativeOwnerTable;
     friend class NamespaceLease;
     friend class NativeCallbackLease;
+    friend class NativeIdentityConstraint;
     friend class NativeOwnerTableTestAccess;
     friend struct detail::NativeState;
     friend class detail::NativeOperationToken;
@@ -222,6 +226,11 @@ private:
     std::size_t slot_ = static_cast<std::size_t>(-1);
     std::uint64_t incarnation_ = 0;
 };
+// Inline: the attachments queue evaluates this and does not link the owner table.
+inline bool NativeIdentityConstraint::BelongsTo(const NativeOwnerLease& owner) const noexcept
+{
+    return state_ && owner.state_ == state_ && owner.slot_ == slot_ && owner.incarnation_ == incarnation_;
+}
 
 namespace detail {
 // No public operation factory. Typed tickets alone expose completion, and every

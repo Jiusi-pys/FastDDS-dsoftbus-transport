@@ -38,6 +38,9 @@ integration, not SDK runtime or device qualification.
 F1 preserves both the first operational failure and cleanup status. F2 keeps
 per-role terminal state and strict TX ownership after role stop. F3 cancels
 accepted RX through the existing allocation-free `TryTake`/destruction path.
+(Updated 2026-11-06: an accepted close now selects by original owner through
+`ApplicationAttachments::DiscardNativeOwner`, because domain circuits share the
+queue; `TryTake` remains the Runtime-end `Close` path.)
 Preparation reserves an original owner, commit publishes that same owner, and
 rollback does not invent a second callback slot or native identity.
 

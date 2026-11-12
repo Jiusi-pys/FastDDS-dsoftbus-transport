@@ -213,6 +213,52 @@ void CircuitRaw(){
     T2Check(!da->create_transport(),"normal last close reopened");const auto end=public_socket_fake::Observe();T2Check(!end.live&&!end.queued&&!end.bytes&&!end.invalid,"raw final residue");
     std::cout<<"CIRCUIT_RAW Await_RX=no_lease Await_TX=DENIED unsupported=AWAIT late_actual=READY mismatch=STICKY queued_provider=NOT_ENTERED Refused_RX=DENIED replacement=FRESH old_lease=NOT_RETARGETED same_native_incarnation=1 SDK_drain=UNKNOWN\n";
 }
+// One domain's accepted connection ends while both domains have received bytes
+// waiting in the runtime's shared queue. PumpReceive advances circuit renewal before
+// it dispatches, so the retirement always runs against a still-populated queue.
+void CrossDomainRetire(){
+    public_socket_fake::Configure(std::make_shared<host_dds::Trace>(),true);
+    public_socket_fake::SetListenerNames({T2Listener(0,0),T2Listener(1,0)});
+    public_socket_fake::SetInitiatorNames({T2Configuration(0,0).identity.service_name,T2Configuration(1,0).identity.service_name});
+    experimental::Runtime a(T2Configuration(0,0)),b(T2Configuration(1,0));
+    std::mutex gate;std::condition_variable changed;unsigned arrived=0;
+    auto barrier=[&]{std::unique_lock<std::mutex> lock(gate);++arrived;changed.notify_all();return changed.wait_for(lock,2s,[&]{return arrived==2;});};
+    T2Check(a.SetPreConnectGate(barrier)&&b.SetPreConnectGate(barrier),"cross-domain preconnect");
+    auto ca=T2Descriptor(0,0),cb=T2Descriptor(1,0);auto da=a.MakeDescriptor(ca),db=b.MakeDescriptor(cb);T2Check(da&&db,"cross-domain descriptors");
+    using Transport=std::unique_ptr<eprosima::fastdds::rtps::TransportInterface>;
+    std::array<Transport,2> ta{Transport(da->create_transport()),Transport(da->create_transport())};
+    std::array<Transport,2> tb{Transport(db->create_transport()),Transport(db->create_transport())};
+    T2Check(ta[0]&&ta[1]&&tb[0]&&tb[1],"two views per side");
+    const auto la=ca.directory.locals.front().local_locator,lb=cb.directory.locals.front().local_locator;
+    auto ar=ca.directory.routes.front().key.remote_locator,br=cb.directory.routes.front().key.remote_locator;
+    std::array<DomainReceiver,2> ra,rb;
+    std::exception_ptr error;std::thread other([&]{try{T2Check(tb[0]->init()&&tb[0]->OpenInputChannel(lb,&rb[0],8192),"first B input");}catch(...){error=std::current_exception();}});
+    const bool first=ta[0]->init()&&ta[0]->OpenInputChannel(la,&ra[0],8192);other.join();if(error)std::rethrow_exception(error);T2Check(first,"first A input");
+    T2Check(ta[1]->init()&&ta[1]->OpenInputChannel(la,&ra[1],8192)&&tb[1]->init()&&tb[1]->OpenInputChannel(lb,&rb[1],8192),"second inputs");
+    const std::array<unsigned,2> domains{151,152};
+    std::array<eprosima::fastdds::rtps::SendResourceList,2> senders;
+    eprosima::fastdds::rtps::LocatorList peers;fastdds_dsoftbus::binding::PortParameters ports;
+    for(unsigned i=0;i<2;++i)T2Check(ta[i]->configureInitialPeerLocator(ar,ports,domains[i],peers)&&
+        tb[i]->configureInitialPeerLocator(br,ports,domains[i],peers)&&tb[i]->OpenOutputChannel(senders[i],br),"domain confirmation and sender");
+    auto wire=[&](unsigned domain,std::uint8_t marker){T2Check(DomainSend(*senders[domain].front(),br,marker),"domain sender");
+        T2Check(b.PumpSend().actual_return_code==0&&public_socket_fake::PumpOne(),"actual native forwarding");};
+    auto queued=[&]{return phase0::RuntimeProbeAccess::ObserveRuntime(a).receive.queued;};
+    wire(0,10);wire(1,20);while(a.PumpReceive()==phase0::BackendStatus::None){}
+    T2Check(ra[0].calls==1&&ra[0].marker==10&&ra[1].calls==1&&ra[1].marker==20,"both circuits deliver to their own view");
+    const auto sockets=a.ObserveSocket();T2Check(sockets.domain_accepted_sockets[0]&&sockets.domain_accepted_sockets[1],"both accepted lanes live");
+    wire(0,11);wire(1,21);wire(0,12);wire(1,22);T2Check(queued()==4,"both domains' bytes wait in the shared queue");
+    public_socket_fake::EndConnection(*sockets.domain_accepted_sockets[0],SHUTDOWN_REASON_PEER);
+    (void)a.PumpReceive();
+    T2Check(!a.ObserveSocket().domain_accepted_sockets[0]&&a.ObserveSocket().domain_accepted_sockets[1],"retired only the ended domain's accepted lane");
+    while(a.PumpReceive()==phase0::BackendStatus::None){}
+    T2Check(ra[0].calls==1,"ended connection's queued bytes were delivered after its close");
+    T2Check(ra[1].calls==3&&ra[1].marker==22,"healthy domain lost queued bytes when a sibling reconnected");
+    wire(1,23);while(a.PumpReceive()==phase0::BackendStatus::None){}
+    T2Check(ra[1].calls==4&&ra[1].marker==23&&!queued(),"healthy domain keeps receiving after the retirement");
+    for(auto& view:ta)view.reset();for(auto& view:tb)view.reset();for(auto& list:senders)list.clear();
+    T2Check(a.Close()&&b.Close(),"cross-domain final close");
+    std::cout<<"CROSS_DOMAIN_RETIRE ended_domain_discarded=2 healthy_domain_delivered=2 after_retire=1\n";
+}
 void SocketIdCollision(){
     T2LifecycleFixture f;f.Pair(0);f.Traffic(0,1);const auto before=public_socket_fake::Observe();
     // Fault injection deliberately returns a known live listener ID. It is not
@@ -309,6 +355,6 @@ void RenewalBindFailure(){
 int main(int argc,char** argv){try{
     T2LoadedDll();T2Check(argc==2,"one circuit case");const std::string c=argv[1];
     if(c=="names")CircuitNames();else if(c=="default-remote")DefaultRemote();else if(c=="identity")CircuitIdentity();
-    else if(c=="socket-collision")SocketIdCollision();else if(c=="raw")CircuitRaw();else if(c=="route-renewal")RouteRenewal();else if(c=="renewal-many-nodes")RouteRenewal(40);else if(c=="renewal-bind-failure")RenewalBindFailure();else throw std::runtime_error("unknown circuit case");
+    else if(c=="socket-collision")SocketIdCollision();else if(c=="raw")CircuitRaw();else if(c=="cross-domain-retire")CrossDomainRetire();else if(c=="route-renewal")RouteRenewal();else if(c=="renewal-many-nodes")RouteRenewal(40);else if(c=="renewal-bind-failure")RenewalBindFailure();else throw std::runtime_error("unknown circuit case");
     std::cout<<"PASS domain_circuit "<<c<<" HOST_FAKE_SOCKET_ONLY DEVICE_TESTED=0\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL domain_circuit "<<e.what()<<'\n';return 1;}}

@@ -856,5 +856,8 @@ if(BUILD_TESTING)
                 --source "${CMAKE_CURRENT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/naming-options"
                 --fastdds-source "${FASTDDS_SOURCE_DIR}")
         set_tests_properties(dsoftbus.naming.configuration PROPERTIES TIMEOUT 180)
+        add_test(NAME release.run_cross_board
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cross_board_tests.py")
+        set_tests_properties(release.run_cross_board PROPERTIES TIMEOUT 30)
     endif()
 endif()

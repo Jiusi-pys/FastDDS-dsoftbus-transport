@@ -1,6 +1,6 @@
 # Fast DDS versions, ROS 2 compatibility and the release workflow
 
-Date: 2026-11-05. Scope: the DSoftBus Transport on two RK3588A OpenHarmony boards (SDK 23,
+Date: 2026-11-05, updated 2026-11-06 (sections 5, 6.5, 7). Scope: the DSoftBus Transport on two RK3588A OpenHarmony boards (SDK 23,
 arm64-v8a). Status words follow AGENTS.md (BUILDS / HOST_TESTED / DEVICE_TESTED).
 
 ## 1. Answer
@@ -110,7 +110,7 @@ Release tooling (`scripts/release/`):
 | `build_fastdds_ohos.sh <2.14.5\|2.14.5-ros\|3.6.2\|3.2.5> <work>` | Fetches pinned upstream tags and builds the closure (OpenSSL 3.5.9, foonathan_memory v0.7-4, tinyxml2 8c8293b, asio ed6aa8a, Fast CDR, Fast DDS) with SECURITY, FASTDDS_STATISTICS, TLS, SQLITE3 and COMPILE_TOOLS. Writes `BUILD_INFO.txt` with commits and SHA-256. |
 | `pull_platform_libs.py <target> <dir>` | Copies the board's `libsoftbus_client.z.so` closure. It is used only for link-time `rpath-link`; nothing on the board changes. |
 | `build_transport_ohos.sh <version> <work> <platform dir>` | Builds the Transport, `dsb_suite` and `cft_race`. On `2.14.5-ros` it also builds the ROS preload libraries and `fdds_dsb_hub`. |
-| `run_cross_board.py` | Deploys to `/data/local/tmp/fdds_dsb/<version>/` and runs one of: the suite (`--groups`), a route outage (`--route 1\|2`), the DSoftBus CFT stress (`--stress wsf1\|wsf0`), or the UDP/TCP race reproducer (`--cft-race udp\|tcp`). |
+| `run_cross_board.py` | Deploys to `/data/local/tmp/fdds_dsb/<version>/` and runs one of: the suite (`--groups`), a route outage (`--route 1\|2`), the DSoftBus CFT stress (`--stress wsf1\|wsf0`), or the UDP/TCP race reproducer (`--cft-race udp\|tcp`). `--groups`, `--route` and `--stress` are validated before anything is deployed (exit 2). Exit codes are in section 5. |
 | `pull_python_target.py <target> <work>` | Copies the Python runtime and third-party modules from a board. Refused unless libpython and the NumPy header match recorded digests. |
 | `build_ros2_thirdparty.py --work <work>` | Builds yaml-cpp, zstd, lz4 and sqlite for OHOS, pinned. |
 | `build_ros2_ohos.py --work <work> [--python-target <dir>]` | Builds pinned, unmodified ROS 2 Jazzy for OHOS against `2.14.5-ros`, with Python bindings when given the target. |
@@ -156,7 +156,20 @@ python scripts/release/run_cross_board.py --version 3.6.2 --work $W --a <A> --b 
 python scripts/release/run_cross_board.py --version 3.6.2 --work $W --a <A> --b <B> --no-deploy --cft-race udp --race-mode wsf0
 ```
 
-Each run writes `run.log` and `result.json` under `$W/runs/` (or `--out`). The script's exit status is 0 only when every case on both boards passes and both Runtimes close.
+Each run writes `run.log` and `result.json` under `$W/runs/` (or `--out`).
+
+For a suite, stress or route run the exit status is:
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | Every case on both boards passed and both Runtimes closed. Both boards also recorded every selected group (the `stress` record for `--stress`), each board has at least one passed case, and a route run shows the route window on both boards and every scheduled outage applied. |
+| 1 | Anything else. What the run cannot show is listed in `scenario_issues` in `result.json` and printed as `scenario:` lines. |
+| 2 | Refused before deploying: an unknown `--groups` name, an invalid `--route` or `--stress` value, `--route` without the `core` group, or `--route` with `--stress`. |
+| 3 | A route-outage DROP rule could not be proven removed from board B. The message names the commands to run by hand. |
+
+- `NOT_APPLICABLE` counts as a record of the group, not as a pass.
+- `result.json` also reports `route_outages`, the number of outages applied.
+- DROP rules are removed on every exit path, including an interrupt, and the removal is checked with `iptables -C`, up to 3 attempts.
 
 ## 6. Results (2026-11-05, both boards; evidence under `E:/fdds-rel-20261105/`)
 
@@ -244,6 +257,48 @@ Conclusion: the defect is still present in Fast DDS 3.6.2. It does not depend on
 
 **ROS path:** `rmw_fastrtps` never sets `reader_filters_allocation`, so the workaround cannot be applied there. ROS applications must not create ContentFilteredTopics while writers are active.
 
+### 6.5 Accepted-close receive cancel and runner verdicts (2026-11-06)
+
+Working tree on HEAD `27d1ed9d`, uncommitted at the time of these runs.
+
+**Change.**
+
+- Closing one accepted connection now cancels only that native owner's queued receive records (`ApplicationAttachments::DiscardNativeOwner`). All domain circuits of a Runtime share one receive queue, so a circuit's reconnect leaves sibling domains' queued records deliverable. The Runtime-end `Close` still cancels the whole queue.
+- `run_cross_board.py` gained the verdict and cleanup rules in section 5.
+
+**Status.**
+
+```text
+Implementation: PRESENT
+Build: PASS
+Host Test: PASS (Release only; see below)
+RK3588A Test: PASS (3.6.2 only; no regression shown)
+Selective discard on device: NOT VERIFIED (HOST_TESTED only)
+Fast DDS 2.14.5 / 3.2.5 boards: NOT_RUN for this change
+Overall: NOT VERIFIED beyond the scope below
+```
+
+| Scope | Result |
+| --- | --- |
+| Root suite, Release, VS2022, SOURCE_PROBE, serial | 134/134 PASS |
+| Stock Fast DDS 2.14 Host Fake suite, Release, serial | 157/157 PASS, including `stock_transport.circuit.cross-domain-retire` (HOST_FAKE_SOCKET_ONLY) |
+| Cross-board 3.6.2, full suite | 70 passed, 0 failed (35 per board); 9 cases `NOT_APPLICABLE` |
+| Cross-board 3.6.2, `--groups core --route 2` | 8 passed, 0 failed; `route_outages=2`, `scenario_issues=[]` |
+| Cross-board 3.6.2, `--groups core --route 1` | 8 passed, 0 failed; `route_outages=1`, `scenario_issues=[]` |
+
+The boards are the two in section 6.2. Transport library `libfastdds_dsoftbus_stock_36.so` SHA-256 `38b1f8a5…`. No DROP rule was left on the boards. Evidence is in `E:/fdds-fix-1106/rel/runs/3.6.2-7cce61b57185c74e`, `3.6.2-ced6b7dd464ee9e9` and `3.6.2-09e53d8dcd10ebf1`.
+
+**Not established.**
+
+- Device logs do not show `DiscardNativeOwner` firing. The selective-discard path is HOST_TESTED; the device runs show only that nothing regressed.
+- The Runtime-end whole-queue cancel in `Close` has no dedicated test that fails without it.
+- The runner's rejection and cleanup-failure paths (exits 2 and 3) are tested on the host only (`release.run_cross_board`, an in-memory iptables model).
+
+**Existing, unchanged by this work.**
+
+- `dsoftbus.native_owner_model` and `dsoftbus.process_receive` hang in Debug, and HEAD hangs at the same points. Release passes.
+- Parallel `ctest -j4` shows flakes in `callback-destroy-fails-fast` and two `views.udp-mapped-*` tests. They pass serially; this was not compared on HEAD.
+
 ## 7. Limitations and open items
 
 - **Content-filter race:** unresolved upstream in 2.14.5 and 3.6.2.
@@ -263,6 +318,7 @@ Conclusion: the defect is still present in Fast DDS 3.6.2. It does not depend on
   - PKCS#11;
   - same-host-only paths (data sharing, SHM, zero-copy, intraprocess).
 - **`TRANSPORT_PRIORITY`** (3.4 and later) reaches the transport and is recorded, but DSoftBus sends are not reordered by priority.
+- **Accepted-close receive cancel:** the selective discard is HOST_TESTED only, and 2.14.5 and 3.2.5 were not run on boards for it (section 6.5).
 - **Root host CONFIG suite:** the 87 link-blocked tests remain an existing gap; this change does not affect it.
 - **Device suite prerequisites:**
   - It requires the provisioned native token and the `com.kaihong.mdds.*` permission entry on both boards. Provisioning them is outside these scripts.

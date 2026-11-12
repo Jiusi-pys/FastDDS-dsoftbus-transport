@@ -42,6 +42,9 @@ void DisconnectDirection(int from,bool outgoing_first);
 // OnShutdown with `reason` (e.g. SHUTDOWN_REASON_LINK_DOWN) and is then retired.
 // Listeners stay live. Returns the number of connections ended.
 unsigned LinkDown(int reason);
+// One live connection ends: both of its IDs receive the original OnShutdown and are
+// retired, every other connection and listener is untouched.
+void EndConnection(int id,int reason);
 int CurrentSocket(int side,int role);
 enum class InjectedOperation {Socket,Listen,Bind};
 void FailNext(InjectedOperation,std::int32_t);

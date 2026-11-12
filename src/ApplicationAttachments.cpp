@@ -204,6 +204,21 @@ void DestroyRecords(std::unique_ptr<AttachmentRecord> records)
     // mutex reentry is hidden in an arbitrary configured queue capacity.
     while (records) { auto next = std::move(records->next); records.reset(); records = std::move(next); }
 }
+// Under the budget mutex. Survivors keep their order and the tail is rebuilt; the
+// returned records still hold their charge, so destroy them after releasing the gate.
+template<class Selected>
+std::unique_ptr<AttachmentRecord> UnlinkQueued(AttachmentsControl& control, Selected selected)
+{
+    std::unique_ptr<AttachmentRecord> discarded;
+    auto* link = &control.queue; control.tail = nullptr;
+    while (*link) {
+        if (selected(**link)) {
+            auto record = std::move(*link); *link = std::move(record->next);
+            record->next = std::move(discarded); discarded = std::move(record);
+        } else { control.tail = link->get(); link = &(*link)->next; }
+    }
+    return discarded;
+}
 void ValidateLimits(const AttachmentLimits& n)
 {
     const auto maximum = static_cast<std::size_t>(std::numeric_limits<std::ptrdiff_t>::max());
@@ -436,13 +451,7 @@ AttachmentControlResult ApplicationAttachments::RequestDetach(const ApplicationC
             app->phase = detail::ApplicationPhase::Detaching;
             --budget.usage.active_applications; ++budget.usage.detaching_applications;
         }
-        auto* link = &control.queue; control.tail = nullptr;
-        while (*link) {
-            if ((*link)->app == app) {
-                auto record = std::move(*link); *link = std::move(record->next);
-                record->next = std::move(discarded); discarded = std::move(record);
-            } else { control.tail = link->get(); link = &(*link)->next; }
-        }
+        discarded = UnlinkQueued(control, [&](const detail::AttachmentRecord& record) { return record.app == app; });
     }
     DestroyRecords(std::move(discarded));
     return AttachmentControlResult::Requested;
@@ -787,6 +796,22 @@ ReceiveWork ApplicationAttachments::TryTake()
     detail::ObserveBudget(budget,host_rx_observation::Kind::Take,record->budget_index,record->diagnostic,record->phase);
 #endif
     return ReceiveWork(std::move(record));
+}
+std::size_t ApplicationAttachments::DiscardNativeOwner(const NativeOwnerLease& owner)
+{
+    auto& control = *control_;
+    std::unique_ptr<detail::AttachmentRecord> discarded;
+    std::size_t count = 0;
+    {
+        std::lock_guard<std::mutex> lock(control.budget->mutex);
+        discarded = UnlinkQueued(control, [&](const detail::AttachmentRecord& record) {
+            const bool selected = record.native.BelongsTo(owner);
+            count += selected ? 1 : 0;
+            return selected;
+        });
+    }
+    DestroyRecords(std::move(discarded));
+    return count;
 }
 AttachmentUsage ApplicationAttachments::SnapshotUsage() const
 { std::lock_guard<std::mutex> lock(control_->budget->mutex); return control_->budget->usage; }

@@ -453,12 +453,13 @@ struct ProviderAdapterState final : ServiceRecordProvider, NativeSendProvider, s
             accepted_closing=true;accepted_phase=AcceptedPhase::Stopping;
             idle.wait(lock,[&]{return active==0&&dispatching==0;});child=accepted;
         }
-        // Dual-only invariant: listener/outgoing RX never enters this one queue.
-        // Cancel captured queued work with its original leases, no external pump.
-        // TryTake only unlinks the existing owned record; unlike NextAdmitted it
-        // does not allocate an execution or admit a receiver. Destruction releases
-        // original payload/identity credits outside the attachment gate.
-        for(;;){auto work=attachments.TryTake();if(!work)break;}
+        // Cancel this accepted connection's captured queued work, no external pump.
+        // Domain circuits share this queue, so select by the original owner: a
+        // sibling circuit's queued records stay deliverable. Discarding only unlinks
+        // existing owned records; unlike NextAdmitted it does not allocate an
+        // execution or admit a receiver. Destruction releases original
+        // payload/identity credits outside the attachment gate.
+        if(child)(void)attachments.DiscardNativeOwner(child->OriginalOwner());
         auto result=child?child->Abandon():NativeStatus::None;
         if(result!=NativeStatus::None&&result!=NativeStatus::AlreadySettled)return BackendStatus::BindingRejected;
         std::lock_guard<std::mutex> lock(gate);accepted_phase=AcceptedPhase::Closed;accepted_closing=false;
@@ -668,6 +669,10 @@ BackendStatus RequestNormalEnd(RecordRole role) noexcept {
         JoinRenewalWorker(); // its attempt has released its control; only thread exit remains
         if(dual||external_listener) {
             const auto accepted_close=CloseAccepted();if(accepted_close!=BackendStatus::None){CloseUndrained(2,accepted_close);return {accepted_close,false};}
+            // Close runs only at runtime end, after every pump stopped. Nothing can
+            // deliver what is left, and DrainComplete below reads the whole shared
+            // queue, so sibling circuits' records are cancelled here as well.
+            for(;;){auto work=attachments.TryTake();if(!work)break;}
         }
         if (binding) {
             const auto before = binding->Observe();

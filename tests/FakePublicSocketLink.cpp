@@ -55,6 +55,16 @@ unsigned LinkDown(int reason){
     link->changed.notify_all();Event("FAKE_LINK_DOWN",0,"connections="+std::to_string(ends.size())+",reason="+std::to_string(reason));
     return static_cast<unsigned>(ends.size());
 }
+void EndConnection(int id,int reason){
+    const ISocketListener *first=nullptr,*second=nullptr;int peer=-1;
+    {std::lock_guard<std::mutex> lock(link->gate);const auto k=Index(id);
+        if(k<0||!link->rows[k].active||link->rows[k].peer<0)throw std::runtime_error("end requires a live connection");
+        auto& x=link->rows[k];peer=x.peer;const auto p=Index(peer);if(p<0||!link->rows[p].active)throw std::runtime_error("end requires a live peer");
+        auto& y=link->rows[p];first=x.listener;second=y.listener;x.active=y.active=false;x.peer=y.peer=-1;
+        ++link->counts.notified[x.side];++link->counts.notified[y.side];}
+    first->OnShutdown(id,static_cast<ShutdownReason>(reason));second->OnShutdown(peer,static_cast<ShutdownReason>(reason));
+    link->changed.notify_all();Event("FAKE_CONNECTION_END",0,"id="+std::to_string(id)+",peer="+std::to_string(peer));
+}
 void FailNext(InjectedOperation op,std::int32_t rc){std::lock_guard<std::mutex> lock(link->gate);injected[static_cast<std::size_t>(op)]=rc;}
 void SetShutdownBarrier(std::function<void()> fn){std::lock_guard<std::mutex> lock(link->gate);shutdown_barrier=std::move(fn);}
 void SetBindBarrier(std::function<void()> fn){std::lock_guard<std::mutex> lock(link->gate);bind_barrier=std::move(fn);}

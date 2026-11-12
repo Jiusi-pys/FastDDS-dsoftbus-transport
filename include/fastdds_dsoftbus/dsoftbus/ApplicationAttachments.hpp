@@ -174,6 +174,11 @@ public:
     ReceiveAdmissionResult AdmitReceive(const Locator& local, const Locator& remote,
             const void* bytes, std::size_t size,ReceiveAdmissionDiagnostic* diagnostic=nullptr);
     ReceiveWork TryTake();
+    // Cancels the queued records pinned to exactly this native owner and returns
+    // how many. The queue is shared by every domain circuit of a runtime, so one
+    // connection's close must leave its siblings' records queued, in order. Takes
+    // nothing already taken; the caller must have stopped this owner's admission.
+    std::size_t DiscardNativeOwner(const NativeOwnerLease& owner);
     AttachmentUsage SnapshotUsage() const;
     void NotifyWork() const noexcept;
     // Pending queue only, not taken/delivering records. The loop which supplies

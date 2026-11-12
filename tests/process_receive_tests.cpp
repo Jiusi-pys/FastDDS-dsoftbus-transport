@@ -252,10 +252,38 @@ void RealPendingExpiry()
     signal->Close();CHECK(Finish(idle)==WorkWaitResult::Closed);
     a.AwaitDetached(claim);
 }
+// Each Fixture is one domain circuit: its own native table feeding one shared queue.
+void DiscardSelectsOneOwner()
+{
+    Fixture closing,healthy;Receiver receiver;ApplicationAttachments a({L(2)});auto c=closing.Claim(a);
+    CHECK(a.OpenReceiver(c,L(2),&receiver).result==ReceiverOpenResult::Opened);
+    const auto closing_pin=closing.Pin(),healthy_pin=healthy.Pin();
+    CHECK(closing_pin.BelongsTo(closing.owner)&&!closing_pin.BelongsTo(healthy.owner)&&!closing_pin.BelongsTo({}));
+    CHECK(!NativeIdentityConstraint{}.BelongsTo({}));
+    CHECK(Admit(a,closing,c,closing_pin)==ReceiveAdmissionResult::Accepted);
+    CHECK(Admit(a,healthy,c,healthy_pin)==ReceiveAdmissionResult::Accepted);
+    CHECK(Admit(a,closing,c,closing_pin)==ReceiveAdmissionResult::Accepted);
+    CHECK(Admit(a,healthy,c,healthy_pin)==ReceiveAdmissionResult::Accepted);
+    CHECK(Admit(a,closing,c,closing_pin)==ReceiveAdmissionResult::Accepted); // Tail is the discarded owner.
+    CHECK(a.DiscardNativeOwner({})==0&&a.SnapshotUsage().queued==5);
+    CHECK(a.DiscardNativeOwner(closing.owner)==3);
+    auto usage=a.SnapshotUsage();
+    CHECK(usage.queued==2&&usage.records==2&&usage.bytes==2*sizeof(payload)&&usage.active_applications==1);
+    CHECK(a.DiscardNativeOwner(closing.owner)==0);
+    // The rebuilt tail must accept new work: this record is unreachable if tail dangles.
+    CHECK(Admit(a,healthy,c,healthy_pin)==ReceiveAdmissionResult::Accepted&&a.SnapshotUsage().queued==3);
+    for(int i=0;i<3;++i){
+        auto next=ProcessReceiveTestAccess::Next(a,*healthy.table,SendQueue::Clock::now());
+        CHECK(next);CHECK(next.value->Run()==InputDeliveryResult::Delivered);
+    }
+    CHECK(receiver.calls==3&&a.SnapshotUsage().records==0&&a.SnapshotUsage().bytes==0);
+    a.AwaitDetached(c);
+}
 int main(){try{
     OriginalIdentityAndLease();std::cout<<"PASS N3-PINNED-LEASE\n";
     ReceiverAndApplicationIsolation();std::cout<<"PASS N3-PINNED-ISOLATION\n";
     BindingHeldAndExpired();std::cout<<"PASS N3-PINNED-BINDING\n";
+    DiscardSelectsOneOwner();std::cout<<"PASS N3-DISCARD-ONE-OWNER\n";
     ExpirySurvivesAllocationFailure();std::cout<<"PASS N3-PINNED-EXPIRY-OOM\n";
     NativeInvalidationAndAbandonedPermit();std::cout<<"PASS N3-PINNED-NATIVE-ABANDON\n";
     CopyCancellation();std::cout<<"PASS N3-PINNED-COPY-CANCEL\n";

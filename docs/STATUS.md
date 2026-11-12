@@ -152,6 +152,27 @@ the documented writer-side-filtering workaround was clean in the corresponding
 controls. Proposed Fast DDS patches are not applied. Follow the
 [CFT workaround and application serialization requirements](FASTDDS_VERSIONS_AND_RELEASE.md#64-content-filter-race-on-fast-dds-3x-re-evaluated-not-assumed).
 
+## Accepted-close receive cancel and cross-board verdicts (2026-11-06)
+
+Working tree on HEAD `27d1ed9d`, uncommitted at the time of the runs.
+
+```text
+Implementation: PRESENT
+Build: PASS
+Host Test: PASS (root Release SOURCE_PROBE 134/134; stock 2.14 Host Fake Release 157/157; serial)
+RK3588A Test: PASS (3.6.2 full suite 70/0; core route 2 8/0; core route 1 8/0)
+Selective discard on device: NOT VERIFIED (HOST_TESTED only)
+Fast DDS 2.14.5 / 3.2.5 boards: NOT_RUN for this change
+Overall: NOT VERIFIED beyond the recorded scope; NOT_PRODUCTION_QUALIFIED
+```
+
+- **Transport:** closing one accepted connection cancels only that native owner's queued receive records (`ApplicationAttachments::DiscardNativeOwner`), so a domain circuit's reconnect leaves sibling domains' queued records deliverable. Runtime-end `Close` still cancels the whole queue.
+- **Runner:** `run_cross_board.py` validates its selection before deploying (exit 2), exits 0 only if both boards recorded the selected scenario, and exits 3 if a route-outage DROP rule cannot be proven removed.
+- **Limits:** device logs do not show `DiscardNativeOwner` firing, so the device runs show no regression only. The Runtime-end whole-queue cancel has no dedicated test that fails without it.
+- **Existing, unchanged:** `dsoftbus.native_owner_model` and `dsoftbus.process_receive` hang in Debug on HEAD as well (Release passes). Parallel `ctest -j4` flakes pass serially and were not compared on HEAD.
+
+Details and evidence paths: [section 6.5 of the version record](FASTDDS_VERSIONS_AND_RELEASE.md#65-accepted-close-receive-cancel-and-runner-verdicts-2026-11-06).
+
 ## Stage 1 direct-goal dual-board DDS (2026-11-04)
 
 **DEVICE_TESTED (bounded) / NOT_PRODUCTION_QUALIFIED.** Root cause of the earlier A `NS_STATE` / B exit:
