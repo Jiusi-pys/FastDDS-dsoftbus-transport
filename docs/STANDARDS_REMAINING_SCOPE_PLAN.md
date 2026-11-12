@@ -1,19 +1,23 @@
 # Remaining standards scope: implementation plan
 
-Date: 2026-11-11. Decision record: on 2026-11-10 the four items below were
+Date: 2026-11-12. Decision record: on 2026-11-10 the four items below were
 excluded from that session's delivery scope; on 2026-11-11 the project owner
 reopened all four for implementation. This plan is the execution brief. It
-does not change any recorded status: every capability stays PLANNED until its
-own evidence exists.
+does not change any recorded status: capabilities without their own evidence
+stay PLANNED.
 
-Baseline: branch `codex/dds-standards-product`, commit `15f7981e`. What
+Baseline: branch `codex/dds-standards-product`, commit `366b6aed`. What
 already exists and is verified: the UDP type probe and evidence runner, bounded
 IDL generation via Fast DDS-Gen (one keyed fixture), the generated C++
 roundtrip (host + both boards), the gated 2.14.5 type-consistency patch
-(DEVICE_TESTED, default off), dsb_suite full-suite DSoftBus evidence for
-2.14.5/3.6.2, and the mixed-version result: **XCDR1 interoperates
+(DEVICE_TESTED, default off), the delivered bounded A2 repair (final host and
+dual-board evidence, default off), dsb_suite full-suite DSoftBus evidence for
+2.14.5/3.6.2, and the stock mixed-version result: **XCDR1 interoperates
 2.14.5↔3.6.2, XCDR2 does not** (both directions fail; known 2.x/3.x wire
-divergence). The documentation linter `scripts/standards/check_docs_consistency.py`
+divergence). A2.0 is now delivered as a finite, approved, default-off Fast DDS
+2.14.5 framing repair with final host and dual-board evidence; its scope and
+limits are recorded in [`A2_XCDR2_INTEROPERABILITY.md`](standards/A2_XCDR2_INTEROPERABILITY.md).
+The documentation linter `scripts/standards/check_docs_consistency.py`
 enforces `docs/standards/` claims against retained evidence.
 
 ## 0. Ground rules for every work item
@@ -41,9 +45,9 @@ enforces `docs/standards/` claims against retained evidence.
    every `N/N` claim. Checkouts without the machine-local `build/` evidence
    run the linter with `--evidence-optional`.
 5. **Known constraints to design around**:
-   - XCDR2 is not interoperable between 2.14.5 and 3.6.2: mixed-version
-     features must pin XCDR1 or same-version pairs, or the work item must
-     include the upstream XCDR2 reconciliation explicitly.
+   - Stock/off XCDR2 remains non-interoperable between 2.14.5 and 3.6.2;
+     A2's finite repair does not generalize beyond its documented profile or
+     establish mixed-version XCDR2 over DSoftBus.
    - Writer-side content filtering must stay disabled wherever CFTs can churn
      (recorded CFT race; workaround-only decision stands).
    - Secure Participants over DSoftBus need transport maxMessageSize ≤ 65535.
@@ -79,16 +83,19 @@ Phases, each its own milestone commit:
   gate off and on; extensibility-kind FINAL-vs-wider rejection case added to
   the probe and passing gate-on (closing the disclosed 2.14.5 gap or
   documenting it as upstream-identical).
-- **A2 — mixed-version XCDR2 reconciliation (investigation first).**
-  Root-cause the recorded XCDR2 failures (delimited CDR / DHEADER handling
-  between Fast CDR 2.2.5 and 2.3.7) to a specific wire difference with
-  captures; then either a gated Fast CDR patch making one line conformant, or
-  a documented, linter-guarded interoperability statement ("XCDR2 requires
-  same-line peers") if the divergence is upstream-intended. **Checkpoint
-  A2.0: section 2.1 approval required only if a patch is proposed.**
-  Acceptance: mixed matrix re-run (the `build/mixed-default-20261111/`
-  harness) with XCDR2 either passing both directions or the exclusion
-  documented as approved scope control.
+- **A2 — mixed-version XCDR2 reconciliation — DELIVERED, bounded.** Root cause
+  was the legacy Fast DDS 2.14.5 DynamicData XCDR2 path omitting the DHEADER;
+  both Fast CDR controls encode the framing correctly. The approved repair is
+  therefore the finite Fast DDS 2.14.5 patch
+  `patches/fastdds/2.14.5/0002-dynamic-xcdr2-framing.patch`, not a Fast CDR,
+  Transport or general RTPS change. The exact gate, supported profile,
+  rejection limits, rollback and evidence are documented in
+  [`A2_XCDR2_INTEROPERABILITY.md`](standards/A2_XCDR2_INTEROPERABILITY.md) and
+  `build/a2-20261112/`. Final host and dual-board testing passed, review was
+  resolved, and the final tester recorded Commit gate PASS. Historical stock,
+  gate-off, overlay/replay and forced-validation controls remain separately
+  labelled; this milestone does not claim general XCDR2/XTypes conformance or
+  mixed-version XCDR2 over DSoftBus.
 - **A3 — XTypes 1.1 interoperability.** Legacy `TypeIdentifier`/`TypeObject`
   (v1) exchange against the 2.14.5 line, measured by new probe cases.
   Acceptance: probe cases on host + both boards, both directions.

@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.22)
+project(DdsXcdr2Contract LANGUAGES CXX)
+find_package(fastrtps 2.14.5 EXACT CONFIG REQUIRED)
+find_package(fastcdr 2 CONFIG REQUIRED)
+add_executable(dds_xcdr2_contract ../../../tests/standards_xcdr2_tests.cpp)
+target_compile_features(dds_xcdr2_contract PRIVATE cxx_std_11)
+target_link_libraries(dds_xcdr2_contract PRIVATE fastrtps fastcdr)
+install(TARGETS dds_xcdr2_contract RUNTIME DESTINATION bin)

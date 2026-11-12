@@ -6,7 +6,10 @@ Documentation sync: 2026-11-12
 The A1.0 label records the approved architecture checkpoint; this document
 records the resulting bounded A1 implementation milestone from
 [`STANDARDS_REMAINING_SCOPE_PLAN.md`](../STANDARDS_REMAINING_SCOPE_PLAN.md).
-It does not mark A2, B, C, D, or full XTypes Complete as complete.
+It does not mark B, C, D, or full XTypes Complete as complete. The earlier
+mixed-version XCDR2 failure stated below is the stock/gate-off result; the
+later finite A2 repair is documented in
+[`A2_XCDR2_INTEROPERABILITY.md`](A2_XCDR2_INTEROPERABILITY.md).
 
 ## Delivered boundary
 
@@ -57,7 +60,9 @@ the stock library is the rollback path; because the gate is read once, restart
 the process after changing or unsetting it. The final tester did not repeat the
 2.14.5 compatibility probe, device gate-off matrix, invalid-gate control, or
 DSoftBus route fault-injection after the review fix; the final record explains
-why those retained results remain bounded historical evidence. Mixed-version
-XCDR2 remains a failure, forced-validation mixed-version runs remain blocked,
-and the new standards probe remains UDP-only rather than a DSoftBus-backed
-standards transport.
+why those retained results remain bounded historical evidence. The retained
+stock/gate-off mixed-version XCDR2 result remains a failure, and
+forced-validation mixed-version runs remain blocked. A2's separately gated
+Fast DDS 2.14.5 framing repair has its own evidence and does not expand A1's
+assignability scope. The new standards probe remains UDP-only rather than a
+DSoftBus-backed standards transport.

@@ -6,7 +6,7 @@ Branch: `codex/dds-standards-product`
 
 This worktree delivers a UDP baseline probe and bounded IDL generation with
 version-bound C++ roundtrip tests, plus gated upstream patches for Fast DDS
-2.14.5 and the bounded A1 3.6.2 assignability subset. The complete capability
+2.14.5 (including the bounded A2 XCDR2 framing repair) and the bounded A1 3.6.2 assignability subset. The complete capability
 status is listed in the architecture table and
 [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
 This document does not claim DDS-XTypes Complete, full IDL 4.2 language
@@ -28,6 +28,7 @@ standards probe. Existing-tree DSoftBus `dsb_suite` state is recorded in
 | `build/dsb-exec-20261110/` | the executed DSoftBus `dsb_suite` runs: `214-all/` and `36-all/` run directories with `run.log` (88 `DSB_CASE` lines each) and `result.json`, deployment receipts, and `FINDING.md` |
 | `build/mixed-default-20261111/` | the mixed-version UDP re-run with the reader at default type validation: raw per-peer `.out`/`.err`, `summary.log`, `deploy-sha.log`, the post-review `confirm-*` re-run, and `FINDING.md` |
 | `build/a1-36/final-tester/` | canonical final A1 rebuild, host/device execution, and commit-gate evidence |
+| `build/a2-20261112/final-tester/` | canonical final A2 host, secure dual-board, LAN matrix, DSoftBus regression, and commit-gate evidence |
 | `build/a1-36/review/` | independent A1 review and P2 resolution records |
 
 Fix-pass and review records: `build/tester-fix-20261110/FINDING.md`,
@@ -318,9 +319,27 @@ Not started:
 - a DSoftBus-backed standards probe (the probe is UDP-only and has no DSoftBus
   deployment runner).
 
-## Mixed-version UDP: XCDR1 PASS, XCDR2 FAIL; forced validation stays BLOCKED
+## A2.0 mixed-version XCDR2 repair
 
-*Updated 2026-11-11.*
+The finite A2 repair is present and its final independent tester reports PASS.
+The canonical clean LAN-controlled matrix passed all scheduled validations with
+no blocked cases; exact case results, commands, hashes and platform details are
+in [`build/a2-20261112/final-tester/FINDING.md`](../../build/a2-20261112/final-tester/FINDING.md),
+[`summary.json`](../../build/a2-20261112/final-tester/summary.json), and
+[`BUILD_INFO.txt`](../../build/a2-20261112/final-tester/BUILD_INFO.txt).
+The secure OHOS build is the accepted device build. The earlier overlay and
+replay failures remain retained diagnostics and are not retroactively PASS.
+
+The repair is default off and enabled only by the exact
+`FASTDDS_XCDR2_DYNAMIC_FRAMING=1` value before type-support construction.
+Restart is required to change or roll back the process-wide, read-once gate.
+Its supported profile and exclusions are bounded; this result is not full
+DynamicData XCDR2 or XTypes conformance, and does not qualify mixed-version
+XCDR2 over DSoftBus.
+
+## Historical mixed-version UDP controls: XCDR1 PASS, stock/off XCDR2 FAIL; forced validation stays BLOCKED
+
+*Updated 2026-11-11; retained as historical stock/off evidence after A2.*
 
 The earlier mixed-version exit 139 is **resolved and was not a Fast DDS
 defect**. The launcher recorded in
@@ -382,12 +401,12 @@ these boards, stock isolated deployments. It does not cover the patched
 
 | Dimension | State |
 | --- | --- |
-| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded IDL generation path, generated C++ roundtrip, OpenHarmony arm64 build path, one gated 2.14.5 patch |
+| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded IDL generation path, generated C++ roundtrip, OpenHarmony arm64 build path, gated 2.14.5 patches and bounded A1 3.6.2 patch |
 | Build | PASS — host MSVC and OHOS arm64, both Fast DDS releases |
 | Host Test | PASS — 93/93 unit tests, CTest 1/1 per release, three-way gate comparison reproduced by the final tester |
 | RK3588A Test | PASS for the UDPv4 scopes, the patched matrix, and the executed DSoftBus `dsb_suite` on 2.14.5 and 3.6.2 against the modified header (route-outage scenarios not re-run); DSoftBus-backed standards probe NOT_RUN |
-| Cross-device Test | PASS for same-version UDPv4, for the patched 2.14.5 matrix, and for the `dsb_suite` runs between both boards; mixed-version UDPv4 at default reader validation XCDR1 PASS and XCDR2 FAIL; the forced-validation configuration stays BLOCKED |
-| Overall | **NOT VERIFIED** — the delivered scope is evidenced on host and device, but 3.6.2 assignability, IDL 4.2, DDS-WEB, DDS-OPCUA and a DSoftBus-backed standards probe are not implemented |
+| Cross-device Test | PASS for same-version UDPv4, the A1/A2 gated matrices, and the `dsb_suite` runs between both boards; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration stays BLOCKED |
+| Overall | **NOT VERIFIED** — A2 is evidenced within its bounded profile, but full XTypes, A3/A4, IDL 4.2, DDS-WEB, DDS-OPCUA and a DSoftBus-backed standards probe are not implemented |
 
 `SKIPPED != PASS`, `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`,
 `BUILDS != TESTED`, `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`.

@@ -17,6 +17,7 @@ Retained evidence roots:
 | `build/final-tester-20261110/f9/` | the final tester's own independent device re-run of `appendable_added_member` |
 | `build/dsb-exec-20261110/` | the executed DSoftBus `dsb_suite` runs: `214-all/` and `36-all/` with `run.log` (88 `DSB_CASE` lines each) and `result.json`, deployment receipts, `hdc_ssh_shim.py`, and `FINDING.md` |
 | `build/mixed-default-20261111/` | the mixed-version UDP re-run with the reader at default type validation: raw per-peer `.out`/`.err`, `summary.log`, `deploy-sha.log`, the post-review `confirm-*` re-run, and `FINDING.md` |
+| `build/a2-20261112/final-tester/` | canonical A2 secure OHOS build, dual-board contracts, clean LAN matrix and final tester evidence |
 
 ## Device path and identity
 
@@ -122,11 +123,26 @@ What the gate relaxes, including the facts that it is **process-wide** and that
 address the separate bounded A1 3.6.2 patch; see
 [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
 
-## Mixed-version result
+## A2.0 bounded XCDR2 repair
 
-*Updated 2026-11-11: a default-validation re-run was executed; see the last
-subsection. The two 2026-11-10 subsections stand unchanged for what they
-describe.*
+The final A2 tester record reports a clean canonical LAN-controlled matrix
+with all scheduled validations passing on the two RK3588A boards. It used the
+SECURITY=ON OHOS library, strict host-key checking and the task-local pinned
+LAN SSH configuration. The exact command, result records, artifact identity,
+and retained earlier failures are in
+`build/a2-20261112/final-tester/{FINDING.md,summary.json,BUILD_INFO.txt}`.
+
+The repair is a Fast DDS 2.14.5 patch with an exact default-off gate. It is
+limited to the documented flat APPENDABLE DynamicData profile; it does not
+claim general XCDR2/XTypes conformance or mixed-version XCDR2 over DSoftBus.
+The same-version DSoftBus suite remains separate regression evidence. Route
+fault injection remains NOT_RUN because iptables authority was unavailable.
+
+## Historical mixed-version result
+
+*Updated 2026-11-11; these stock/off controls remain unchanged after A2. The
+two 2026-11-10 subsections and the default-validation re-run describe their
+own configurations.*
 
 ### The original four attempts are invalid, and exit 139 is resolved
 
@@ -289,12 +305,12 @@ DSoftBus-standards completion claim.
 
 | Dimension | State |
 | --- | --- |
-| Implementation | PRESENT (UDP standards probe, evidence runner, bounded IDL generation, gated 2.14.5 patch) |
+| Implementation | PRESENT (UDP standards probe, evidence runner, bounded IDL generation, gated A1 and A2 patches) |
 | Build | PASS (host MSVC and OHOS arm64, both Fast DDS versions) |
 | Host Test | PASS (93/93 unit, CTest 1/1 per version, three-way gate comparison) |
 | RK3588A Test | PASS for the UDPv4 scopes above and for the executed DSoftBus `dsb_suite` on 2.14.5 and 3.6.2 (route-outage scenarios not re-run); DSoftBus-backed standards probe NOT_RUN |
-| Cross-device Test | PASS for same-version UDPv4, for the patched 2.14.5 matrix, and for the `dsb_suite` runs between both boards; mixed-version UDPv4 at default reader validation XCDR1 PASS and XCDR2 FAIL; the forced-validation configuration stays BLOCKED |
-| Overall | **NOT VERIFIED** for the product scope: Fast DDS 3.6.2 assignability, the complete IDL 4.2 frontend and the C/Java mappings, the DDS-WEB gateway, the DDS-OPCUA gateway and a DSoftBus-backed standards probe are not implemented |
+| Cross-device Test | PASS for same-version UDPv4, bounded A1/A2 matrices, and the `dsb_suite` runs between both boards; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration stays BLOCKED |
+| Overall | **NOT VERIFIED** for the product scope: A2 is bounded; full XTypes/A3/A4, the complete IDL 4.2 frontend and C/Java mappings, DDS-WEB, DDS-OPCUA and a DSoftBus-backed standards probe are not implemented |
 
 Step 5 documentation sync is complete. The pre-commit gate decision of
 AGENTS.md section 11 Step 6 belongs to Main/Orchestrator, not to this document.

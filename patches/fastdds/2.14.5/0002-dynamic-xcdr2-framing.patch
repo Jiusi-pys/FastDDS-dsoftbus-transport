@@ -1,0 +1,316 @@
+diff --git a/src/cpp/dynamic-types/DynamicPubSubType.cpp b/src/cpp/dynamic-types/DynamicPubSubType.cpp
+--- a/src/cpp/dynamic-types/DynamicPubSubType.cpp
++++ b/src/cpp/dynamic-types/DynamicPubSubType.cpp
+@@ -22,10 +22,201 @@
+ #include <fastrtps/types/DynamicType.h>
+ #include <fastrtps/types/DynamicTypeMember.h>
+ #include <fastrtps/types/TypeDescriptor.h>
++#include <fastrtps/types/MemberDescriptor.h>
++#include <cstdlib>
++#include <cstring>
++
+ 
+ namespace eprosima {
+ namespace fastrtps {
+ namespace types {
++
++
++namespace {
++
++// Process-wide opt-in, independent of the EDP type-consistency gate.
++bool dynamic_framing_enabled()
++{
++    static const bool enabled = []()
++            {
++#ifdef _WIN32
++                char* value = nullptr;
++                size_t length = 0;
++                const bool result = _dupenv_s(&value, &length, "FASTDDS_XCDR2_DYNAMIC_FRAMING") == 0 &&
++                        value != nullptr && std::strcmp(value, "1") == 0;
++                std::free(value);
++                return result;
++#else
++                const char* value = std::getenv("FASTDDS_XCDR2_DYNAMIC_FRAMING");
++                return value != nullptr && std::strcmp(value, "1") == 0;
++#endif
++            }();
++    return enabled;
++}
++
++#if FASTCDR_VERSION_MAJOR > 1
++using FlatMembers = std::map<MemberId, DynamicTypeMember*>;
++
++// Deliberately bounded profile; this is not a general legacy DynamicData codec.
++bool flat_appendable_profile(const DynamicType_ptr& type, FlatMembers& members)
++{
++    if (!type || type->get_kind() != TK_STRUCTURE || type->key_annotation())
++    {
++        return false;
++    }
++    const auto* descriptor = type->get_descriptor();
++    if (!descriptor || (!descriptor->annotation_is_appendable() &&
++            descriptor->annotation_get_extensibility() != "appendable") ||
++            descriptor->annotation_is_final() || descriptor->annotation_is_mutable() || descriptor->get_base_type() ||
++            descriptor->annotation_is_non_serialized() || type->get_members_count() == 0 ||
++            type->get_members_count() > 256 || type->get_all_members(members) != ReturnCode_t::RETCODE_OK)
++    {
++        return false;
++    }
++    MemberId expected = 0;
++    for (const auto& entry : members)
++    {
++        const auto* member = entry.second->get_descriptor();
++        if (!member || entry.first != expected || member->get_index() != expected ||
++                member->annotation_is_key() || member->annotation_is_optional() ||
++                member->annotation_is_must_understand() || member->annotation_is_non_serialized())
++        {
++            return false;
++        }
++        const auto field = member->get_type();
++        if (!field || (field->get_kind() != TK_UINT32 &&
++                (field->get_kind() != TK_STRING8 || field->get_bounds() == 0 || field->get_bounds() > 65535)))
++        {
++            return false;
++        }
++        ++expected;
++    }
++    return expected != 0;
++}
++
++bool flat_values_size(DynamicData* data, const FlatMembers& members, uint32_t& size)
++{
++    size = 8; // Encapsulation and DHEADER. Also a safe upper bound for XCDR1.
++    for (const auto& entry : members)
++    {
++        size = (size + 3u) & ~3u;
++        const auto field = entry.second->get_descriptor()->get_type();
++        if (field->get_kind() == TK_UINT32)
++        {
++            uint32_t value = 0;
++            if (data->get_uint32_value(value, entry.first) != ReturnCode_t::RETCODE_OK)
++            {
++                return false;
++            }
++            size += 4;
++        }
++        else
++        {
++            std::string value;
++            if (data->get_string_value(value, entry.first) != ReturnCode_t::RETCODE_OK ||
++                    value.size() > field->get_bounds() || value.find('\0') != std::string::npos)
++            {
++                return false;
++            }
++            size += 5 + static_cast<uint32_t>(value.size());
++        }
++    }
++    return true;
++}
++
++bool serialize_flat(DynamicData* data, eprosima::fastcdr::Cdr& cdr, const FlatMembers& members)
++{
++    uint32_t size = 0;
++    if (!flat_values_size(data, members, size))
++    {
++        return false;
++    }
++    eprosima::fastcdr::Cdr::state state(cdr);
++    cdr.begin_serialize_type(state, eprosima::fastcdr::EncodingAlgorithmFlag::DELIMIT_CDR2);
++    for (const auto& entry : members)
++    {
++        if (entry.second->get_descriptor()->get_type()->get_kind() == TK_UINT32)
++        {
++            uint32_t value = 0;
++            if (data->get_uint32_value(value, entry.first) != ReturnCode_t::RETCODE_OK)
++            {
++                return false;
++            }
++            cdr << value;
++        }
++        else
++        {
++            std::string value;
++            if (data->get_string_value(value, entry.first) != ReturnCode_t::RETCODE_OK)
++            {
++                return false;
++            }
++            cdr << value;
++        }
++    }
++    cdr.end_serialize_type(state);
++    return true;
++}
++
++bool deserialize_flat(DynamicData* data, rtps::SerializedPayload_t* payload, const FlatMembers& members)
++{
++    using namespace eprosima::fastcdr;
++    FastBuffer header(reinterpret_cast<char*>(payload->data), payload->length);
++    Cdr input(header);
++    input.read_encapsulation();
++    if (input.get_encoding_flag() != EncodingAlgorithmFlag::DELIMIT_CDR2)
++    {
++        return false;
++    }
++    uint32_t body_size = 0;
++    input >> body_size;
++    const size_t start = input.get_serialized_data_length();
++    if (body_size > payload->length - start)
++    {
++        return false;
++    }
++    // A bounded view prevents member reads from escaping the declared DHEADER.
++    FastBuffer buffer(reinterpret_cast<char*>(payload->data), start + body_size);
++    Cdr cdr(buffer);
++    cdr.read_encapsulation();
++    cdr >> body_size;
++    for (const auto& entry : members)
++    {
++        const auto field = entry.second->get_descriptor()->get_type();
++        if (field->get_kind() == TK_UINT32)
++        {
++            uint32_t value = 0;
++            cdr >> value;
++            if (data->set_uint32_value(value, entry.first) != ReturnCode_t::RETCODE_OK)
++            {
++                return false;
++            }
++        }
++        else
++        {
++            Cdr::state state(cdr);
++            uint32_t length = 0;
++            cdr >> length;
++            const size_t position = cdr.get_serialized_data_length();
++            if (length == 0 || length > field->get_bounds() + 1 || length > start + body_size - position ||
++                    payload->data[position + length - 1] != 0 ||
++                    std::memchr(payload->data + position, 0, length - 1) != nullptr)
++            {
++                return false;
++            }
++            cdr.set_state(state);
++            std::string value;
++            cdr >> value;
++            if (data->set_string_value(value, entry.first) != ReturnCode_t::RETCODE_OK)
++            {
++                return false;
++            }
++        }
++    }
++    return true; // Unknown appendable trailing fields are skipped; missing local fields fail.
++}
++#endif // FASTCDR_VERSION_MAJOR > 1
++} // anonymous namespace
+ 
+ DynamicPubSubType::DynamicPubSubType()
+     : dynamic_type_(nullptr)
+@@ -119,6 +310,18 @@
+         // Deserialize encapsulation.
+         deser.read_encapsulation();
+         payload->encapsulation = deser.endianness() == eprosima::fastcdr::Cdr::BIG_ENDIANNESS ? CDR_BE : CDR_LE;
++#if FASTCDR_VERSION_MAJOR > 1
++        if (dynamic_framing_enabled() && deser.get_cdr_version() == eprosima::fastcdr::CdrVersion::XCDRv2)
++        {
++            FlatMembers members;
++            if (!flat_appendable_profile(dynamic_type_, members))
++            {
++                EPROSIMA_LOG_ERROR(DYN_TYPES, "XCDR2 dynamic framing: unsupported type profile");
++                return false;
++            }
++            return deserialize_flat(static_cast<DynamicData*>(data), payload, members);
++        }
++#endif
+         //Deserialize the object:
+         ((DynamicData*)data)->deserialize(deser);
+     }
+@@ -179,7 +382,28 @@
+         void* data,
+         fastdds::dds::DataRepresentationId_t data_representation)
+ {
++#if FASTCDR_VERSION_MAJOR > 1
++    if (dynamic_framing_enabled())
++    {
++        FlatMembers members;
++        if (flat_appendable_profile(static_cast<DynamicData*>(data)->type_, members))
++        {
++            // Legacy DataWriterImpl calls this without its negotiated representation.
++            return [data, members]() -> uint32_t
++                   {
++                       uint32_t size = 0;
++                       return flat_values_size(static_cast<DynamicData*>(data), members, size) ? size : 0;
++                   };
++        }
++        if (data_representation == fastdds::dds::DataRepresentationId_t::XCDR2_DATA_REPRESENTATION)
++        {
++            EPROSIMA_LOG_ERROR(DYN_TYPES, "XCDR2 dynamic framing: unsupported type profile");
++            return []() -> uint32_t { return 0; };
++        }
++    }
++#else
+     static_cast<void>(data_representation);
++#endif
+     return [data]() -> uint32_t
+            {
+                return (uint32_t)DynamicData::getCdrSerializedSize((DynamicData*)data) + 4 /*encapsulation*/;
+@@ -196,6 +420,14 @@
+         dynamic_type_ = static_cast<DynamicData*>(data)->type_;
+         UpdateDynamicTypeInfo();
+     }
++
++#if FASTCDR_VERSION_MAJOR > 1
++    if (dynamic_framing_enabled() && data_representation ==
++            fastdds::dds::DataRepresentationId_t::XCDR2_DATA_REPRESENTATION)
++    {
++        payload->length = 0;
++    }
++#endif
+ 
+     // Object that manages the raw buffer.
+     eprosima::fastcdr::FastBuffer fastbuffer((char*)payload->data, payload->max_size);
+@@ -239,7 +471,24 @@
+     {
+         // Serialize encapsulation
+         ser.serialize_encapsulation();
+-        ((DynamicData*)data)->serialize(ser); // Serialize the object:
++#if FASTCDR_VERSION_MAJOR > 1
++        if (dynamic_framing_enabled() && data_representation ==
++                fastdds::dds::DataRepresentationId_t::XCDR2_DATA_REPRESENTATION)
++        {
++            payload->length = 0;
++            FlatMembers members;
++            if (!flat_appendable_profile(dynamic_type_, members) ||
++                    !serialize_flat(static_cast<DynamicData*>(data), ser, members))
++            {
++                EPROSIMA_LOG_ERROR(DYN_TYPES, "XCDR2 dynamic framing: unsupported type profile or value");
++                return false;
++            }
++        }
++        else
++#endif
++        {
++            ((DynamicData*)data)->serialize(ser); // Serialize the object:
++        }
+     }
+     catch (eprosima::fastcdr::exception::Exception& /*exception*/)
+     {
+@@ -268,6 +517,21 @@
+         }
+ 
+         m_typeSize = static_cast<uint32_t>(DynamicData::getMaxCdrSerializedSize(dynamic_type_) + 4);
++#if FASTCDR_VERSION_MAJOR > 1
++        FlatMembers flat_members;
++        if (dynamic_framing_enabled() && flat_appendable_profile(dynamic_type_, flat_members))
++        {
++            // Bounded profile: at most 256 fields, each string at most 65535 bytes.
++            uint32_t maximum = 8;
++            for (const auto& entry : flat_members)
++            {
++                maximum = (maximum + 3u) & ~3u;
++                const auto field = entry.second->get_descriptor()->get_type();
++                maximum += field->get_kind() == TK_UINT32 ? 4 : 5 + field->get_bounds();
++            }
++            m_typeSize = maximum;
++        }
++#endif
+         setName(dynamic_type_->get_name().c_str());
+ 
+         // Retrieve extensibility.

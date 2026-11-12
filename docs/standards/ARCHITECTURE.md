@@ -168,6 +168,7 @@ argument and its own approval under section 2.1.
 | Complete IDL frontend and C/Java mappings | PLANNED | NOT_RUN |
 | XTypes gated 2.14.5 type-consistency patch | PRESENT | DEVICE_TESTED on both boards, both directions, gate off and on |
 | A1 gated 3.6.2 bounded type-assignability patch | PRESENT | BUILDS, HOST_TESTED, and DEVICE_TESTED; see [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md) and final tester evidence |
+| A2 bounded 2.14.5 XCDR2 framing repair | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED, review RESOLVED, final matrix PASS; see [`A2_XCDR2_INTEROPERABILITY.md`](A2_XCDR2_INTEROPERABILITY.md) |
 | XTypes Complete patch set (full Complete conformance) | PLANNED | NOT_RUN |
 | DDS-WEB gateway | PLANNED | NOT_RUN |
 | DDS-OPCUA gateway | PLANNED | NOT_RUN |
@@ -202,6 +203,14 @@ a live peer both ways, failing differently per direction. See
 [`DEVICE_EVIDENCE_20261110.md`](DEVICE_EVIDENCE_20261110.md),
 `build/mixed-default-20261111/FINDING.md` and
 `build/crash-rootcause-20261110/FINDING.md`.
+
+The later A2 milestone adds a separate, default-off Fast DDS 2.14.5 framing
+repair for the finite DynamicData profile. Its canonical final LAN matrix,
+secure OHOS build, dual-board contracts, review resolution and retained
+historical controls are documented in
+[`A2_XCDR2_INTEROPERABILITY.md`](A2_XCDR2_INTEROPERABILITY.md) and
+`build/a2-20261112/final-tester/`. This is not a general XCDR2/XTypes claim or
+mixed-version DSoftBus evidence.
 
 Fast DDS 2.14.5 carrying
 `patches/fastdds/2.14.5/0001-edp-honor-reader-type-consistency-qos.patch`
@@ -292,11 +301,11 @@ Not implemented, and not started:
 
 | Dimension | State |
 | --- | --- |
-| Implementation | PRESENT for the delivered scope above, including the bounded A1 3.6.2 patch |
+| Implementation | PRESENT for the delivered scope above, including bounded A1 and A2 patches |
 | Build | PASS, host MSVC and OHOS arm64, both Fast DDS releases |
 | Host Test | PASS, 93/93 unit tests and CTest 1/1 per release |
 | RK3588A Test | PASS for the UDPv4 scopes, the patched 2.14.5 matrix, and the executed `dsb_suite` against the modified `compat.hpp` on 2.14.5 and 3.6.2; DSoftBus-backed standards probe NOT_RUN |
-| Cross-device Test | PASS same-version UDPv4, patched 2.14.5 and `dsb_suite` in both board directions; mixed-version UDPv4 XCDR1 PASS at default reader validation, XCDR2 FAIL; forced-validation configuration BLOCKED |
+| Cross-device Test | PASS same-version UDPv4, bounded A1/A2 matrices and `dsb_suite` in both board directions; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration BLOCKED |
 | Overall | **NOT VERIFIED** for the product scope |
 
 `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`, `BUILDS != TESTED`,
