@@ -92,8 +92,9 @@ Web/UA clients and servers. Device roles are reversed. Same-version and mixed
 
 The current implementation adds an exact-version CMake entry, a public
 DynamicData UDP probe using two processes, an evidence runner, and a bounded
-keyed IDL fixture with a hash/version-bound generation command. The generated
-C++ serialization roundtrip builds for both 2.14.5 and 3.6.2.
+keyed IDL fixture with a hash/version-bound generation command, and the A1
+bounded 3.6.2 assignability patch and contracts. The generated C++
+serialization roundtrip builds for both 2.14.5 and 3.6.2.
 
 ## AGENTS.md section 2.1: modifying RTPS endpoint matching
 
@@ -138,10 +139,12 @@ cannot simply be enabled are stated in the patch header; this document and
 defaults `FASTDDS_PATCH_DIR` to empty and writes either `fastdds_patch none` or
 the patch sha256 into `BUILD_INFO.txt`; and every `results.json` written by the current runner records `gate_variable`, `gate_value` and `gate_on` per run and per peer, at `schema_version: 2`. Many retained files predate the field; the three cited as the host three-way comparison, `build/prepatch-214/`, `build/patched-gate-off/` and `build/patched-gate-on/`, are `schema_version: 1` and carry none of those keys; see [`BASELINE.md`](BASELINE.md).
 
-**Scope of the approval granted.** Not "patch Fast DDS as needed", but
-this one gated change to 2.14.5 endpoint matching, default off, for the XTypes
-standards deliverable. Fast DDS 3.6.2 is not patched; its missing assignability
-implementation is recorded as an upstream gap.
+**Scope of the approval granted.** Not "patch Fast DDS as needed". The
+2026-11-10 approval below remains limited to the one gated 2.14.5 endpoint
+matching change. A separate user approval on 2026-11-11 covers only the
+default-off, versioned 3.6.2 A1.0 bounded assignability patch documented in
+[`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md). Neither approval is a
+general licence for further Fast DDS changes.
 
 | Item | State |
 | --- | --- |
@@ -164,6 +167,7 @@ argument and its own approval under section 2.1.
 | Generated keyed/bounded C++ roundtrip | PRESENT | 2.14.5 and 3.6.2 CTest 1/1 PASS |
 | Complete IDL frontend and C/Java mappings | PLANNED | NOT_RUN |
 | XTypes gated 2.14.5 type-consistency patch | PRESENT | DEVICE_TESTED on both boards, both directions, gate off and on |
+| A1 gated 3.6.2 bounded type-assignability patch | PRESENT | BUILDS, HOST_TESTED, and DEVICE_TESTED; see [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md) and final tester evidence |
 | XTypes Complete patch set (full Complete conformance) | PLANNED | NOT_RUN |
 | DDS-WEB gateway | PLANNED | NOT_RUN |
 | DDS-OPCUA gateway | PLANNED | NOT_RUN |
@@ -203,10 +207,11 @@ Fast DDS 2.14.5 carrying
 `patches/fastdds/2.14.5/0001-edp-honor-reader-type-consistency-qos.patch`
 delivers appendable and mutable added-member types on both boards in both board
 directions when `FASTDDS_XTYPES_HONOR_TYPE_CONSISTENCY=1`, and reproduces stock
-behaviour exactly when the variable is unset. Fast DDS 3.6.2 has no
-assignability implementation, and neither version implements an XML data
-representation; the `xml` case asserts the rejection both perform and is a
-recorded non-conformance, not a conformance pass.
+behaviour exactly when the variable is unset. The A1 patch adds only the
+bounded 3.6.2 subset documented in [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md);
+neither version implements an XML data representation. The `xml` case asserts
+the rejection both perform and is a recorded non-conformance, not a
+conformance pass.
 
 ### What `FASTDDS_XTYPES_HONOR_TYPE_CONSISTENCY=1` actually relaxes
 
@@ -273,10 +278,11 @@ The plan above describes the full product. This worktree delivers a small part
 of it. Delivered and evidenced: the exact-version UDP type probe, the evidence
 runner, bounded keyed IDL generation with a verified generator, the generated
 C++ roundtrip on host and device, the OpenHarmony arm64 build path, and one
-gated type-consistency patch for Fast DDS 2.14.5. Not implemented, and not
-started:
+gated type-consistency patch for Fast DDS 2.14.5, plus the bounded A1 3.6.2
+assignability patch documented in [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
+Not implemented, and not started:
 
-- Fast DDS 3.6.2 type assignability;
+- full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
 - the complete IDL 4.2 frontend and the C and Java language mappings;
 - the DDS-WEB gateway;
 - the DDS-OPCUA gateway;
@@ -286,7 +292,7 @@ started:
 
 | Dimension | State |
 | --- | --- |
-| Implementation | PRESENT for the delivered scope above |
+| Implementation | PRESENT for the delivered scope above, including the bounded A1 3.6.2 patch |
 | Build | PASS, host MSVC and OHOS arm64, both Fast DDS releases |
 | Host Test | PASS, 93/93 unit tests and CTest 1/1 per release |
 | RK3588A Test | PASS for the UDPv4 scopes, the patched 2.14.5 matrix, and the executed `dsb_suite` against the modified `compat.hpp` on 2.14.5 and 3.6.2; DSoftBus-backed standards probe NOT_RUN |

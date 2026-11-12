@@ -23,6 +23,19 @@ if(DDS_STANDARDS_FASTDDS STREQUAL "2.14.5")
 endif()
 install(TARGETS dds_type_probe RUNTIME DESTINATION bin)
 
+# Optional white-box contract tests against the actual out-of-tree A1 patch.
+# The source path is explicit so stock builds never acquire patched behaviour.
+set(DDS_STANDARDS_ASSIGNABILITY_SOURCE "" CACHE PATH "Patched Fast DDS 3.6.2 source tree")
+if(DDS_STANDARDS_ASSIGNABILITY_SOURCE)
+    if(NOT DDS_STANDARDS_FASTDDS STREQUAL "3.6.2")
+        message(FATAL_ERROR "A1 assignability contract tests require Fast DDS 3.6.2")
+    endif()
+    add_executable(dds_assignability_contract ../../tests/standards_assignability_tests.cpp)
+    target_compile_features(dds_assignability_contract PRIVATE cxx_std_17)
+    target_include_directories(dds_assignability_contract PRIVATE "${DDS_STANDARDS_ASSIGNABILITY_SOURCE}/src/cpp")
+    target_link_libraries(dds_assignability_contract PRIVATE ${dds_target} fastcdr)
+endif()
+
 set(DDS_STANDARDS_GENERATED_DIR "" CACHE PATH "Directory produced by scripts/standards/generate_types.py")
 if(DDS_STANDARDS_GENERATED_DIR)
     file(READ "${DDS_STANDARDS_GENERATED_DIR}/generation.json" generation)

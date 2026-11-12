@@ -23,10 +23,15 @@ void require(bool condition, const char* message)
 
 DynRecord::Type make_type(const std::string& scenario, bool writer)
 {
-    const bool evolution = scenario == "appendable_added_member" || scenario == "mutable_added_member";
+    const bool evolution = scenario == "appendable_added_member" || scenario == "mutable_added_member" ||
+            scenario == "final_added_member" || scenario == "final_vs_appendable" ||
+            scenario == "mutable_vs_appendable" || scenario == "disallow_coercion" ||
+            scenario == "prevent_type_widening";
     const bool text = evolution && writer;
     const bool conflict = scenario == "incompatible_member" && writer;
-    const char* extent = scenario == "mutable_added_member" ? "mutable" : "appendable";
+    const char* extent = (scenario == "final_added_member" || (scenario == "final_vs_appendable" && !writer)) ?
+            "final" : (scenario == "mutable_added_member" || (scenario == "mutable_vs_appendable" && !writer)) ?
+            "mutable" : "appendable";
 #if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
     namespace ft = eprosima::fastrtps::types;
     auto* factory = ft::DynamicTypeBuilderFactory::get_instance();
@@ -46,7 +51,8 @@ DynRecord::Type make_type(const std::string& scenario, bool writer)
     TypeDescriptor::_ref_type descriptor {traits<TypeDescriptor>::make_shared()};
     descriptor->kind(TK_STRUCTURE);
     descriptor->name("DdsStandardsRecord");
-    descriptor->extensibility_kind(scenario == "mutable_added_member" ? ExtensibilityKind::MUTABLE : ExtensibilityKind::APPENDABLE);
+    descriptor->extensibility_kind(std::string(extent) == "final" ? ExtensibilityKind::FINAL :
+            std::string(extent) == "mutable" ? ExtensibilityKind::MUTABLE : ExtensibilityKind::APPENDABLE);
     auto builder = factory->create_type(descriptor);
     require(bool(builder), "create type builder");
     auto add = [&](MemberId id, const char* name, traits<DynamicType>::ref_type type) {
@@ -133,12 +139,18 @@ int run(const std::string& scenario, bool writer, unsigned domain, const std::st
 #if defined(FASTDDS_DSOFTBUS_FASTDDS_214)
         q.type_consistency().representation.m_value = {representation};
         q.type_consistency().type_consistency.m_kind = fd::ALLOW_TYPE_COERCION;
+        if (scenario == "disallow_coercion")
+            q.type_consistency().type_consistency.m_kind = fd::DISALLOW_TYPE_COERCION;
+        if (scenario == "prevent_type_widening")
+            q.type_consistency().type_consistency.m_prevent_type_widening = true;
         if (force_validation) {
             q.type_consistency().type_consistency.m_force_type_validation = true;
         }
 #else
         q.representation().m_value = {representation};
         q.type_consistency().m_kind = fd::ALLOW_TYPE_COERCION;
+        if (scenario == "disallow_coercion") q.type_consistency().m_kind = fd::DISALLOW_TYPE_COERCION;
+        if (scenario == "prevent_type_widening") q.type_consistency().m_prevent_type_widening = true;
         if (force_validation) {
             q.type_consistency().m_force_type_validation = true;
         }
@@ -167,7 +179,10 @@ int run(const std::string& scenario, bool writer, unsigned domain, const std::st
     // rejection that both versions actually perform rather than a delivery that
     // neither can perform. A future XML implementation turns this back into a
     // delivery case; it is not a pass granted to a broken implementation.
-    const bool negative = scenario == "incompatible_member" || scenario == "xml";
+    const bool negative = scenario == "incompatible_member" || scenario == "xml" ||
+            scenario == "final_added_member" || scenario == "final_vs_appendable" ||
+            scenario == "mutable_vs_appendable" || scenario == "disallow_coercion" ||
+            scenario == "prevent_type_widening";
     const char* const expectation = negative ? "rejection" : "delivery";
     const char* const basis = scenario == "xml" ? "documented_non_conformance" : "xtypes";
     bool matched = false, delivered = false;
@@ -241,7 +256,10 @@ int main(int argc, char** argv)
         const std::string scenario = argv[1], role = argv[2];
         require(scenario == "identical_xcdr1" || scenario == "identical_xcdr2" ||
                 scenario == "appendable_added_member" || scenario == "mutable_added_member" ||
-                scenario == "incompatible_member" || scenario == "xml", "unknown case");
+                scenario == "incompatible_member" || scenario == "xml" ||
+                scenario == "final_added_member" || scenario == "final_vs_appendable" ||
+                scenario == "mutable_vs_appendable" || scenario == "disallow_coercion" ||
+                scenario == "prevent_type_widening", "unknown case");
         require(role == "writer" || role == "reader", "unknown role");
         const auto domain = std::stoul(argv[3]), duration = std::stoul(argv[5]);
         require(domain < 233 && duration >= 1 && duration <= 60, "domain or duration out of range");

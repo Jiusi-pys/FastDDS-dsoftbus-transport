@@ -17,6 +17,8 @@ import uuid
 CASES = (
     "identical_xcdr1", "identical_xcdr2", "appendable_added_member",
     "mutable_added_member", "incompatible_member", "xml",
+    "final_added_member", "final_vs_appendable", "mutable_vs_appendable",
+    "disallow_coercion", "prevent_type_widening",
 )
 VERSIONS = ("2.14.5", "3.6.2")
 # What each case must do, decided HERE rather than by the probe.
@@ -32,12 +34,17 @@ CASE_EXPECTATION = {
     "appendable_added_member": "delivery",
     "mutable_added_member": "delivery",
     "incompatible_member": "rejection",
+    "final_added_member": "rejection",
+    "final_vs_appendable": "rejection",
+    "mutable_vs_appendable": "rejection",
+    "disallow_coercion": "rejection",
+    "prevent_type_widening": "rejection",
     # Neither Fast DDS version implements an XML data representation, so this
     # case asserts the rejection both perform. That is a recorded
     # non-conformance, not a conformance pass.
     "xml": "rejection",
 }
-# The environment variable that selects the patched 2.14.5 matching behaviour.
+# The environment variable that selects the versioned matching patches.
 # Every peer record carries its observed value, because a results file that
 # cannot distinguish the two configurations it exists to contrast is not
 # evidence (AGENTS.md section 3).

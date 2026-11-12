@@ -1,12 +1,14 @@
 # Standards baseline evidence
 
-Date: 2026-11-10, updated 2026-11-11
+Date: 2026-11-10, updated 2026-11-11; documentation sync: 2026-11-12
 
 Branch: `codex/dds-standards-product`
 
 This worktree delivers a UDP baseline probe and bounded IDL generation with
-version-bound C++ roundtrip tests, plus one gated upstream patch for Fast DDS
-2.14.5. The complete capability status is listed in the architecture table.
+version-bound C++ roundtrip tests, plus gated upstream patches for Fast DDS
+2.14.5 and the bounded A1 3.6.2 assignability subset. The complete capability
+status is listed in the architecture table and
+[`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
 This document does not claim DDS-XTypes Complete, full IDL 4.2 language
 coverage, DDS-WEB, DDS-OPCUA, or DSoftBus integration for the new UDP-only
 standards probe. Existing-tree DSoftBus `dsb_suite` state is recorded in
@@ -25,6 +27,8 @@ standards probe. Existing-tree DSoftBus `dsb_suite` state is recorded in
 | `build/final-tester/` | an **earlier** pass. Its `unit.log` records `Ran 12 tests` from the then-current suite and is not the current unit-test count |
 | `build/dsb-exec-20261110/` | the executed DSoftBus `dsb_suite` runs: `214-all/` and `36-all/` run directories with `run.log` (88 `DSB_CASE` lines each) and `result.json`, deployment receipts, and `FINDING.md` |
 | `build/mixed-default-20261111/` | the mixed-version UDP re-run with the reader at default type validation: raw per-peer `.out`/`.err`, `summary.log`, `deploy-sha.log`, the post-review `confirm-*` re-run, and `FINDING.md` |
+| `build/a1-36/final-tester/` | canonical final A1 rebuild, host/device execution, and commit-gate evidence |
+| `build/a1-36/review/` | independent A1 review and P2 resolution records |
 
 Fix-pass and review records: `build/tester-fix-20261110/FINDING.md`,
 `build/fix-pass2-20261110/FINDING.md`,
@@ -134,10 +138,10 @@ python scripts/standards/run_type_baseline.py `
 | OpenHarmony arm64 `dds_type_probe` and roundtrip builds | PASS | PASS | BUILDS; the roundtrip also ran on both boards (DEVICE_TESTED PASS) |
 | Same-type XCDR1 and XCDR2 UDP delivery, both directions | PASS | PASS | DEVICE_TESTED on each same-version pair |
 | Incompatible-member rejection with live peer control, both directions | PASS | PASS | DEVICE_TESTED |
-| Appendable added-member case, stock | FAIL | FAIL | Upstream gap; genuine no-match against a live peer |
-| Mutable added-member case, stock | FAIL | FAIL | Upstream gap; genuine no-match against a live peer |
-| Appendable added-member case, patched 2.14.5, gate on | PASS | **not addressed** | DEVICE_TESTED, 129 received A to B and 130 received B to A; 3.6.2 is not patched |
-| Mutable added-member case, patched 2.14.5, gate on | PASS | **not addressed** | DEVICE_TESTED, 130 received in each board direction; 3.6.2 is not patched |
+| Appendable added-member case, stock | FAIL | FAIL | Retained stock baseline; genuine no-match against a live peer |
+| Mutable added-member case, stock | FAIL | FAIL | Retained stock baseline; genuine no-match against a live peer |
+| Appendable added-member case, patched 2.14.5, gate on | PASS | **not addressed by this 2.14.5 row** | DEVICE_TESTED, 129 received A to B and 130 received B to A; the separate A1 3.6.2 subset is documented independently |
+| Mutable added-member case, patched 2.14.5, gate on | PASS | **not addressed by this 2.14.5 row** | DEVICE_TESTED, 130 received in each board direction; the separate A1 3.6.2 subset is documented independently |
 | XML data representation case | asserted **rejection** | asserted **rejection** | **Documented non-conformance, NOT a conformance pass**; see below |
 | Reader with no writer | exit 3 / BLOCKED | exit 3 / BLOCKED | Evidence guard |
 | Python evidence and failure-path tests | 93/93 PASS | 93/93 PASS | UNIT_TESTED; version-independent, measured today |
@@ -146,7 +150,7 @@ python scripts/standards/run_type_baseline.py `
 | Mixed-version UDP XCDR1, reader at default validation (`DDS_STANDARDS_FORCE_TYPE_VALIDATION=0`) | PASS | PASS | DEVICE_TESTED with a live peer in both board directions: `received: 514` (2.14.5 writer, 3.6.2 reader), `received: 495` (reverse); post-review confirm re-run `received: 513`, `received: 496`; see `build/mixed-default-20261111/FINDING.md` |
 | Mixed-version UDP XCDR2, reader at default validation | FAIL | FAIL | Genuine FAIL with a live peer in both directions: the matched 3.6.2 reader records `received: 0`; the 2.14.5 reader receives samples that decode to wrong values (sample value mismatch); see `build/mixed-default-20261111/FINDING.md` |
 | Existing-tree DSoftBus `dsb_suite` execution | PASS | PASS | DEVICE_TESTED 2026-11-10 over DSoftBus between both boards: 70 passed, 0 failed per version (35 per board), `DSB_EXIT=0` on both boards, 88 `DSB_CASE` lines retained per `run.log` plus `result.json`; nine same-host-only cases NOT_APPLICABLE (recorded, not passes); route-outage scenarios NOT run; see `build/dsb-exec-20261110/FINDING.md` |
-| New standards probe over DSoftBus | NOT_RUN | NOT_RUN | The probe is UDP-only and has no DSoftBus deployment runner |
+| New standards probe over DSoftBus | NOT_RUN | NOT_RUN | The probe is UDP-only and has no DSoftBus deployment runner; A1 candidate DSoftBus evidence is linked from `A1_TYPE_ASSIGNABILITY.md` |
 | HDC target enumeration | N/A | N/A | `hdc list targets` was empty; SSH/Tailscale was the executed device path |
 
 The unit-test count is the one measured in this working tree:
@@ -241,9 +245,10 @@ assignability, and two properties must be read before enabling it:
   is upstream behaviour, not introduced by the patch, but it is reachable only
   with the gate on.
 
-Both are set out in full in [`ARCHITECTURE.md`](ARCHITECTURE.md). Fast DDS
-3.6.2 has no assignability implementation at all and is **not patched**, so
-these cases are not addressed there.
+Both are set out in full in [`ARCHITECTURE.md`](ARCHITECTURE.md). The A1
+3.6.2 patch is bounded and separately documented in
+[`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md); it does not claim
+full XTypes assignability or alter this retained 2.14.5 comparison.
 
 Patch file identity — all three versions differ only in the explanatory header
 and produce the same `EDP.cpp`:
@@ -301,11 +306,12 @@ still applies to it.
 
 ## What is not implemented
 
-One XTypes upstream patch is delivered, for Fast DDS 2.14.5 only, default off.
+Gated XTypes patches are delivered for Fast DDS 2.14.5 and for the bounded A1
+Fast DDS 3.6.2 subset, both default off.
 The original product plan covers considerably more than this worktree delivers.
 Not started:
 
-- Fast DDS 3.6.2 type assignability;
+- full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
 - the complete IDL 4.2 frontend and the C and Java language mappings;
 - the DDS-WEB gateway;
 - the DDS-OPCUA gateway;
