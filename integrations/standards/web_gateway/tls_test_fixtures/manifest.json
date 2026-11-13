@@ -1,0 +1,14 @@
+{
+  "purpose": "PUBLIC TEST ONLY, never deploy these keys",
+  "generator": "scripts/standards/generate_web_test_certs.py",
+  "validity": "2025-01-01 through 2035-01-01 UTC; expired control ends 2025-12-01",
+  "hashes": {
+    "ca.pem": "cb2acfcf54ba0977481c9a13b01ee103e3af412ea9fe78a43ff52bb85747f722",
+    "expired.pem": "7dcb75984153ce81fb3fa4655907df73aec1aebfd5406805d39facfb00e18652",
+    "mismatched.key": "39beede6c1863281d2bc429613615bfb919660982e69b1811a116e33352b296c",
+    "server.key": "533bdc487f2889446e0d7eeb2688413e0c7643e5ca122dc367960fa526bc42cb",
+    "server.pem": "1f42e87d0813eaf29d9d7885b83f82338fa03d3abd5441e2a47ed0a3a07eff83",
+    "untrusted-ca.pem": "f5d35450d394e2efaa722355c81ce5caf2b31da3061670a4c0185b1e2ea5dcce",
+    "wrong-host.pem": "4be4548d30353626ceedfacd0082652d95101002f8e2870020a018fd596e9c2a"
+  }
+}

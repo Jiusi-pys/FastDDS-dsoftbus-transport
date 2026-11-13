@@ -12,3 +12,4 @@ patches/** text eol=lf
 # Preserve the downloaded OMG artifact bytes, including their original line endings.
 # prepare_web_schema.py verifies these files against the published provenance hashes.
 integrations/standards/web_gateway/schemas/original/*.xsd -text
+integrations/standards/web_gateway/tls_test_fixtures/** -text

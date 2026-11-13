@@ -482,7 +482,17 @@ Response Gateway::wait(std::shared_ptr<Node> n,const std::map<std::string,std::s
     } while(true);
     return {200,entity("condition_name_list","",active?"<item>"+escape(n->condition_ref)+"</item>":""),"",std::chrono::system_clock::now()};
 }
-Response Gateway::handle(const Request& req) {
+Binding Gateway::bind(const std::string& key,const std::string& uri,bool reader) {
+    auto principal=authenticate(key);need(principal.permissions.count(reader?"read":"write"),403,"binding permission denied");
+    auto t=target(uri);need(t.query.empty()&&t.path.size()==8&&t.path[0]=="applications"&&
+        t.path[6]==(reader?"data_readers":"data_writers"),422,"binding requires an endpoint URI");
+    std::lock_guard<std::mutex> lock(mutex_);need(!stopping_&&!poisoned_,503,"gateway unavailable");
+    auto app=lookup({"applications",t.path[1]});
+    need(app->owner==principal.owner&&domains_allowed(app,principal),403,"application not permitted");
+    auto node=lookup(t.path);need(reader?node->reader!=nullptr:node->writer!=nullptr,422,"binding endpoint kind differs");
+    app->expires=Clock::now()+std::chrono::seconds(ttl_);return {node,path_for(node),reader};
+}
+Response Gateway::handle(const Request& req,const Binding* binding) {
     auto principal=authenticate(req.key);
     need(accepts_xml(req.accept),406,"DDS-WEB XML required");
     need(!trim(req.cache_control).empty(),400,"Cache-Control required");
@@ -498,6 +508,11 @@ Response Gateway::handle(const Request& req) {
     } else need(req.body.empty(),422,"request body not allowed");
     std::unique_lock<std::mutex> lock(mutex_);need(!stopping_,503,"gateway stopping");
     need(!poisoned_||method=="DELETE",503,"cleanup retry required");
+    if(binding) {
+        auto expected=binding->node.lock();
+        need(expected&&!expected->closing&&!expected->dead&&lookup(t.path)==expected,404,"bound endpoint expired");
+        need((binding->reader&&method=="GET")||(!binding->reader&&method=="POST"),422,"bound operation differs");
+    }
     Response out;
     if(t.path[0]=="types") {
         need(method=="GET",422,"type creation outside fixed catalog profile");

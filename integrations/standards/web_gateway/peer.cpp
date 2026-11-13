@@ -31,8 +31,8 @@ static Standards::BoundedRecord sample(unsigned n) {
 int main(int argc,char** argv) {
     fd::DomainParticipant* p=nullptr;auto* factory=fd::DomainParticipantFactory::get_instance();
     try {
-        check(argc==6,"usage: writer|reader DOMAIN TOPIC REPRESENTATION REGISTERED_TYPE");
-        auto role=std::string(argv[1]);check(role=="writer"||role=="reader","invalid role");int rep=std::stoi(argv[4]);check(rep==0||rep==2,"invalid representation");
+        check(argc==6,"usage: writer|reader|reader-ready DOMAIN TOPIC REPRESENTATION REGISTERED_TYPE");
+        auto role=std::string(argv[1]);check(role=="writer"||role=="reader"||role=="reader-ready","invalid role");int rep=std::stoi(argv[4]);check(rep==0||rep==2,"invalid representation");
         fd::DomainParticipantQos pq;pq.transport().use_builtin_transports=false;pq.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
         p=factory->create_participant(static_cast<unsigned>(std::stoul(argv[2])),pq);check(p,"participant");
         fd::TypeSupport type(new Standards::BoundedRecordPubSubType);check(type.register_type(p,argv[5])==OK,"register type");
@@ -63,14 +63,24 @@ int main(int argc,char** argv) {
             auto* r=sub->create_datareader(topic,q);check(r,"reader");bool matched=false;
             while(std::chrono::steady_clock::now()<until){fd::SubscriptionMatchedStatus s;check(r->get_subscription_matched_status(s)==OK,"match status");if(s.current_count>0){matched=true;break;}std::this_thread::sleep_for(std::chrono::milliseconds(10));}
             check(matched,"discovery timeout");std::cout<<"C1_PEER_MATCHED\n"<<std::flush;
+            bool ready=role!="reader-ready";
+            if(!ready)until=std::chrono::steady_clock::now()+std::chrono::seconds(15);
             std::array<bool,10> seen{};bool complete=false;
             while(std::chrono::steady_clock::now()<until) {
                 Standards::BoundedRecord value;fd::SampleInfo info;auto code=r->take_next_sample(&value,&info);
-                if(code==OK&&info.valid_data){check(value.id()>=17&&value.id()<27,"id");unsigned n=value.id()-17;check(value==sample(n),"exact sample");seen[n]=true;}
+                if(code==OK&&info.valid_data){
+                    if(role=="reader-ready"&&value.id()==17&&value.sequence_number()==UINT32_MAX&&value.label()=="C2_READY"&&value.payload().empty()) {
+                        if(!ready){ready=true;until=std::chrono::steady_clock::now()+std::chrono::seconds(15);std::cout<<"C1_PEER_READY\n"<<std::flush;}
+                        continue;
+                    }
+                    check(ready,"data arrived before readiness barrier");check(value.id()>=17&&value.id()<27,"id");unsigned n=value.id()-17;check(value==sample(n),"exact sample");seen[n]=true;
+                }
                 else check(code==OK||code==NO_DATA,"take");
                 complete=std::all_of(seen.begin(),seen.end(),[](bool b){return b;});if(complete)break;
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            }check(complete,"data timeout");
+            }
+            if(!complete){std::cerr<<"C1_PEER_SEEN";for(size_t i=0;i<seen.size();++i)std::cerr<<" "<<i<<"="<<seen[i];std::cerr<<"\n";}
+            check(complete,"data timeout");
         }
         check(p->delete_contained_entities()==OK,"delete entities");check(factory->delete_participant(p)==OK,"delete participant");p=nullptr;
         std::cout<<"C1_PEER PASS role="<<role<<"\n";return 0;

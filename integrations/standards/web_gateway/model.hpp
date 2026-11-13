@@ -11,6 +11,7 @@ struct Request { std::string method,target,body,key,accept,content_type,cache_co
 struct Response { int status=200;std::string body,location;std::chrono::system_clock::time_point modified{}; };
 struct Principal {std::string name,owner;std::set<unsigned> domains;std::set<std::string> permissions;unsigned char digest[32]{};};
 struct Node;
+struct Binding {std::weak_ptr<Node> node;std::string uri;bool reader=false;};
 class Gateway {
     Schemas schemas_;
     std::mutex mutex_;
@@ -32,7 +33,9 @@ class Gateway {
     Response wait(std::shared_ptr<Node>,const std::map<std::string,std::string>&,std::unique_lock<std::mutex>&);
 public:
     Gateway(const std::string& schemas,const std::string& policy,unsigned representation,unsigned ttl);
-    Response handle(const Request&);
+    Response handle(const Request&,const Binding* binding=nullptr);
+    std::string principal_name(const std::string& key) const {return authenticate(key).name;}
+    Binding bind(const std::string& key,const std::string& uri,bool reader);
     bool expire();
     void stop() noexcept { stopping_=true; }
     bool shutdown();

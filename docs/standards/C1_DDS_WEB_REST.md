@@ -75,8 +75,9 @@ are not emitted in receipts. Missing/invalid keys return 401, denied operations
 403. REST ownership separates resources; domain grants allow DDS communication
 with other entities in that domain and are not per-topic data isolation.
 
-Only loopback HTTP is served in C1. TLS, WebSocket/WSS and notifications belong
-to C2; SOAP to C3; the native gateway and cross-board DSoftBus path to C4. A
+Only loopback HTTP is served in C1. TLS, WebSocket/WSS and notifications are
+implemented in C2's separate bounded host gateway; SOAP remains C3; the native
+gateway and cross-board DSoftBus path remain C4. A
 single gateway owns the process-wide libxml2 external loader. Header/body limits
 are 8 KiB/64 KiB, with 32 live connections, eight backend workers, bounded I/O
 and no keep-alive. XML DTD/entity declarations and external resource loading
@@ -159,9 +160,10 @@ revert/build the previous accepted revision for the components that existed
 there. The pre-C1 revision has no gateway or C1 resources to restart; there is
 no persistent migration. Use the validated C1 artifact again only when its
 matched dependencies are retained. C1 resources are in memory and are not
-persisted; recreate the bounded profile after restart. TLS, WS/WSS,
-notifications, SOAP, native board gateway and cross-board DSoftBus acceptance
-remain outside C1 and are planned/deferred to C2, C3 and C4.
+persisted; recreate the bounded profile after restart. TLS, WS/WSS and
+notifications are outside C1 and are documented in C2; SOAP, native board
+gateway and cross-board DSoftBus acceptance remain planned/deferred to C3 and
+C4.
 
 RK3588A and DSoftBus verification are N/A for this host-only C1 milestone; the
 required native cross-device acceptance remains deferred to C4. The

@@ -195,8 +195,13 @@ Phases:
   peer process. Final dual-ABI/XCDR1/XCDR2 host acceptance PASS; this is not a
   full DDS-WEB conformance claim. See [`C1_DDS_WEB_REST.md`](standards/C1_DDS_WEB_REST.md)
   and `build/c1-20261113/final-tester/`.
-- **C2 — notifications + WebSocket/WSS — PLANNED.** Client notification endpoints, WS
-  and WSS with distinct interop tests (OpenSSL certs recorded as fixtures).
+- **C2 — notifications + WebSocket/WSS — DELIVERED, bounded host profile.** Client
+  notification endpoints, WS and WSS are implemented with distinct XCDR1/XCDR2
+  interoperability lanes. Final independent dual-ABI host acceptance PASS
+  (68 C1 regression and 152 C2 executions); see
+  [`C2_DDS_WEB_NOTIFICATIONS.md`](standards/C2_DDS_WEB_NOTIFICATIONS.md) and
+  [`build/c2-20261113/final-tester/FINDING.md`](../build/c2-20261113/final-tester/FINDING.md).
+  This does not claim full DDS-WEB conformance or device/DSoftBus validation.
 - **C3 — SOAP mapping — PLANNED.** Only after C1/C2 are green; SIMPLE-REST contract
   documented separately with its provenance.
 - **C4 — device path — PLANNED/DEFERRED.** Board A runs the gateway natively (KaihongOS arm64),

@@ -103,9 +103,10 @@ It also delivers C1 as a finite, loopback-HTTP REST profile over public Fast
 DDS APIs. C1 is HOST_TESTED and INTEGRATION_TESTED PASS on Fast DDS 2.14.5 and
 3.6.2 with XCDR1 and XCDR2, including the bounded authorization, lifecycle,
 read/wait, identity and timestamp contracts documented in
-[`C1_DDS_WEB_REST.md`](C1_DDS_WEB_REST.md). The architecture diagram remains
-aspirational for the full product: C2 notifications/WS/WSS, C3 SOAP and C4
-native/DSoftBus gateway execution are not delivered by C1.
+[`C1_DDS_WEB_REST.md`](C1_DDS_WEB_REST.md). C2 adds a separate bounded
+loopback WS/WSS notification gateway over the same public DDS model; it is
+HOST_TESTED and INTEGRATION_TESTED on both ABIs, while C3 SOAP and C4
+native/DSoftBus gateway execution remain outside the delivered scope.
 
 ## AGENTS.md section 2.1: modifying RTPS endpoint matching
 
@@ -185,8 +186,8 @@ argument and its own approval under section 2.1.
 | A1 gated 3.6.2 bounded type-assignability patch | PRESENT | BUILDS, HOST_TESTED, and DEVICE_TESTED; see [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md) and final tester evidence |
 | A2 bounded 2.14.5 XCDR2 framing repair | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED, review RESOLVED, final matrix PASS; see [`A2_XCDR2_INTEROPERABILITY.md`](A2_XCDR2_INTEROPERABILITY.md) |
 | XTypes Complete patch set (full Complete conformance) | PLANNED | NOT_RUN |
-| C1 bounded DDS-WEB REST host profile | PRESENT | HOST_TESTED and INTEGRATION_TESTED PASS on both ABIs; final evidence in `build/c1-20261113/final-tester/`; full DDS-WEB conformance, C2/C3/C4 remain unverified |
-| C2 notifications + WS/WSS | PLANNED | NOT_RUN |
+| C1 bounded DDS-WEB REST host profile | PRESENT | HOST_TESTED and INTEGRATION_TESTED PASS on both ABIs; final evidence in `build/c1-20261113/final-tester/`; full DDS-WEB conformance and C3/C4 remain unverified (C2 is separately validated) |
+| C2 notifications + WS/WSS | PRESENT | BUILDS, HOST_TESTED and INTEGRATION_TESTED PASS on both ABIs for the bounded profile; see [`C2_DDS_WEB_NOTIFICATIONS.md`](C2_DDS_WEB_NOTIFICATIONS.md) and final tester evidence |
 | C3 SOAP mapping | PLANNED | NOT_RUN |
 | C4 native gateway and cross-board DSoftBus path | PLANNED | NOT_RUN; DSoftBus-backed standards probe NOT_RUN |
 | DDS-OPCUA gateway | PLANNED | NOT_RUN |
@@ -313,8 +314,8 @@ Not implemented:
 
 - full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
 - B5 Java/JNI mapping (B4 bounded C mapping is delivered; the broader C mapping remains unsupported);
-- C2 notifications/WS/WSS, C3 SOAP, and C4 native/DSoftBus DDS-WEB gateway
-  execution (C1's bounded host REST profile is delivered);
+- C3 SOAP and C4 native/DSoftBus DDS-WEB gateway execution (C1 and bounded C2
+  host profiles are delivered);
 - the DDS-OPCUA gateway;
 - a DSoftBus-backed standards probe.
 
@@ -327,7 +328,7 @@ Not implemented:
 | Host Test | PASS, 93/93 unit tests and CTest 1/1 per release; B2 frontend final host validation PASS (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes) |
 | RK3588A Test | PASS for the UDPv4 scopes, the patched 2.14.5 matrix, and the executed `dsb_suite` against the modified `compat.hpp` on 2.14.5 and 3.6.2; DSoftBus-backed standards probe NOT_RUN |
 | Cross-device Test | PASS same-version UDPv4, bounded A1/A2 matrices and `dsb_suite` in both board directions; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration BLOCKED |
-| Overall | **NOT VERIFIED** for the product scope; C1 is a bounded host profile, while full DDS-WEB conformance and C2/C3/C4 remain outside the verified scope |
+| Overall | **NOT VERIFIED** for the product scope; C1 and C2 are bounded host profiles, while full DDS-WEB conformance and C3/C4 remain outside the verified scope |
 
 `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`, `BUILDS != TESTED`,
 `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`. Existing transport,

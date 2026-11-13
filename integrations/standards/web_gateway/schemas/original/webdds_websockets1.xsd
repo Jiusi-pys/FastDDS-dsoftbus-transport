@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+    
+    <xs:simpleType name="httpMethod">
+        <xs:annotation>
+            <xs:documentation>
+                &lt;GET|PUT|POST|DELETE&gt;
+            </xs:documentation>
+        </xs:annotation>
+        <xs:restriction base="xs:string">
+            <xs:whiteSpace value="collapse"/>
+            <xs:enumeration value="GET"/>
+            <xs:enumeration value="PUT"/>
+            <xs:enumeration value="POST"/>
+            <xs:enumeration value="DELETE"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+     <xs:simpleType name="returnCode">
+        <xs:annotation>
+            <xs:documentation>
+                &lt;OK|DDS_ERROR|INVALID_INPUT|INVALID_OBJECT|ACCESS_DENIED|PERMISSIONS_ERROR|GENERIC_SERVICE_ERROR&gt;
+            </xs:documentation>
+        </xs:annotation>
+        <xs:restriction base="xs:string">
+            <xs:whiteSpace value="collapse"/>
+            <xs:enumeration value="OK" />
+            <xs:enumeration value="DDS_ERROR" />
+            <xs:enumeration value="INVALID_INPUT" />
+            <xs:enumeration value="INVALID_OBJECT" />
+            <xs:enumeration value="ACCESS_DENIED" />
+            <xs:enumeration value="PERMISSIONS_ERROR" />
+            <xs:enumeration value="GENERIC_SERVICE_ERROR" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="correlationId">
+        <xs:annotation>
+            <xs:documentation>
+             Uses to correlate two related commands. 
+             E.g. a reply to its request or a bind name to the corresponding URI
+            </xs:documentation>
+        </xs:annotation>
+        <xs:restriction base="xs:string">
+            <xs:whiteSpace value="collapse"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="anyElement">
+        <xs:sequence>
+            <xs:any processContents="lax" minOccurs="1" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="webddsRequest">
+        <xs:sequence>
+            <xs:element name="id" type="correlationId" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="uri" type="xs:anyURI" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="method" type="httpMethod" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="body" type="anyElement" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="webddsResponse">
+        <xs:sequence>
+            <xs:element name="id" type="correlationId" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="return_code" type="returnCode" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="body" type="anyElement" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="wsBindURI">
+        <xs:sequence>
+            <xs:element name="bind_id" type="correlationId" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="uri" type="xs:anyURI" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="wsBindRequest">
+        <xs:sequence>
+            <xs:choice maxOccurs="unbounded">
+                <xs:element name="bind_datawriter" type="wsBindURI" minOccurs="1" maxOccurs="unbounded"/>
+                <xs:element name="bind_datareader" type="wsBindURI" minOccurs="1" maxOccurs="unbounded"/>
+            </xs:choice>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="webddsBoundRequest">
+        <xs:sequence>
+            <xs:element name="bind_id" type="correlationId" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="body" type="anyElement" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="webddsBoundPush">
+        <xs:sequence>
+            <xs:element name="bind_id" type="correlationId" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="body" type="anyElement" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+
+
+    <xs:element name="request" type="webddsRequest"/>
+    <xs:element name="response" type="webddsResponse"/>
+    <xs:element name="bind" type="wsBindRequest"/>
+
+    <xs:element name="b_req" type="webddsBoundRequest"/>
+    <xs:element name="b_push" type="webddsBoundPush"/>
+
+</xs:schema>
+

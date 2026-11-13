@@ -1,7 +1,9 @@
 # DDS-WEB schema provenance
 
-The files in `original/` are unchanged OMG machine-readable artifacts. Their
-download URLs, resolved URLs and SHA-256 values are in `provenance.json`.
+The files in `original/` are unchanged OMG machine-readable artifacts. The C1
+REST artifacts' download URLs, resolved URLs and SHA-256 values are in
+`provenance.json`; the separate WebSocket envelope artifact is pinned in
+`websocket-provenance.json`.
 The REST artifact is attachment 12351 to the official resolved DDSWEB-25 issue;
 the landing-page/PDF links returned 404 during implementation. The normative
 PDF is DDS-WEB 1.0, formal/2016-03-01. Copyright belongs to OMG, RTI, THALES
@@ -27,3 +29,8 @@ replacement schema presented as an untouched OMG artifact. Generated files,
 hashes and patch descriptions are recorded in `schema-set.json`. The original
 compiler failures are retained with C1 build evidence. This adapter and the
 bounded data profile do not establish complete DDS-WEB conformance.
+
+The WebSocket envelope XSD (`original/webdds_websockets1.xsd`) is the fourth
+original DDS-WEB artifact, resolved from the official DDSWEB-30 attachment. It
+has no imports and has no adapter repairs; its raw bytes remain separately
+pinned and are not imported into the C1 REST repair set.

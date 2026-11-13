@@ -138,6 +138,20 @@ class GatewayFixture:
         row=next(x for x in self.peers if x[0] is p)
         if code!=0 or 'C1_PEER PASS' not in row[3].read_text(encoding='utf-8'): raise AssertionError('DDS peer failed: '+str(row[3]))
 
+    def ready_reader(self,topic,writer):
+        # Subscriber-side MATCHED alone does not prove writer-side discovery.
+        # Only the readiness marker is retried. Every actual acceptance sample is sent once.
+        peer=self.peer('reader-ready',topic);row=next(x for x in self.peers if x[0] is peer)
+        marker=f'<BoundedRecord xmlns="{S}"><id>17</id><sequence_number>4294967295</sequence_number><label>C2_READY</label><payload/></BoundedRecord>'.encode()
+        end=time.monotonic()+15;attempts=0
+        while time.monotonic()<end:
+            if 'C1_PEER_READY' in row[3].read_text(encoding='utf-8'):
+                (self.out/'readiness.json').write_text(json.dumps({'status':'PASS','marker_attempts':attempts,'actual_samples_retried':False}),encoding='utf-8')
+                return peer
+            if peer.poll() is not None:raise AssertionError('Reader exited before readiness; '+str(row[3]))
+            self.request('POST',writer,200,marker);attempts+=1;time.sleep(.05)
+        raise AssertionError('Data-path readiness deadline; '+str(row[3]))
+
     def close(self):
         for p,a,b,log,cmd in self.peers:
             if p.poll() is None: p.terminate();p.wait(timeout=5)
@@ -192,7 +206,7 @@ class WebGatewayTests(unittest.TestCase):
         g.app()
 
     def test_independent_dds_reader_receives_http_writes(self):
-        g=self.g;_,_,topic,w,_=g.graph();peer=g.peer('reader',topic)
+        g=self.g;_,_,topic,w,_=g.graph();peer=g.ready_reader(topic,w)
         for n in range(10): g.request('POST',w,200,record(n,n%2==0))
         g.finish_peer(peer)
 
