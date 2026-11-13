@@ -158,11 +158,17 @@ Phases:
   measured 3.6.2 named-inner-collection typedef boundary; the SDK and pinned
   generator also reject the raw form. The 2.14.5 data path supports the raw
   form and B2 semantics are unchanged. See
-  [`B3_CPP_BACKEND.md`](standards/B3_CPP_BACKEND.md). B4 and B5 remain
-  PLANNED.
-- **B4 — C mapping.** Opaque handles, explicit ownership, error codes;
-  real send/receive acceptance: a C writer/reader pair over UDP on host,
-  then over DSoftBus on the boards (link against the stock transport).
+  [`B3_CPP_BACKEND.md`](standards/B3_CPP_BACKEND.md).
+- **B4 — C mapping — DELIVERED, bounded SDK milestone.** Opaque handles,
+  explicit ownership, error codes and close-only retry semantics are present.
+  The hand-written C11 SDK maps the keyed `BoundedRecord` through B3 support;
+  it is not a generic IDL-to-C generator, a complete OMG C mapping, a complete
+  QoS/loan/lifecycle surface, or a claim that all B3 types are mapped. Fresh
+  exact-ABI host and OHOS builds, ownership/close-failure tests, four host UDP
+  pairs and the canonical dual-board DSoftBus matrix pass. Review R1/R2 is
+  CLOSED. See [`B4_C_MAPPING.md`](standards/B4_C_MAPPING.md) and its linked
+  final host/native findings. Close-failure fault injection is synthetic
+  fake-Runtime/helper coverage, not physical Socket failure injection.
 - **B5 — Java/JNI mapping.** Per-ABI JNI library, Windows runtime;
   acceptance: Java writer ↔ C++ reader (and reverse) real send/receive on
   the Windows host; document that device-side Java is out of scope.
