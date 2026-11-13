@@ -1,6 +1,6 @@
 # Remaining standards scope: implementation plan
 
-Date: 2026-11-13. Decision record: on 2026-11-10 the four items below were
+Date: 2026-11-14. Decision record: on 2026-11-10 the four items below were
 excluded from that session's delivery scope; on 2026-11-11 the project owner
 reopened all four for implementation. This plan is the execution brief. It
 does not change any recorded status: capabilities without their own evidence
@@ -171,9 +171,17 @@ Phases:
   CLOSED. See [`B4_C_MAPPING.md`](standards/B4_C_MAPPING.md) and its linked
   final host/native findings. Close-failure fault injection is synthetic
   fake-Runtime/helper coverage, not physical Socket failure injection.
-- **B5 — Java/JNI mapping.** Per-ABI JNI library, Windows runtime;
-  acceptance: Java writer ↔ C++ reader (and reverse) real send/receive on
-  the Windows host; document that device-side Java is out of scope.
+- **B5 — Java/JNI mapping — PRESENT, tested bounded Windows host milestone.** The
+  hand-written `BoundedRecord` facade over unchanged B4 is present with one
+  exact ABI per JVM. Fresh 3.6.2 and 2.14.5 builds pass 9/9 CTest contracts
+  each; final acceptance passes 12 exact Java↔independent-B3 C++ lanes (same
+  ABI rep0/2 and mixed ABI rep0 only), 24 process exits 0, ten keyed samples
+  per Java process, and 42 module-closure records. Reviews and final tester
+  PASS; the main pre-commit/commit gate remains pending. Device Java/DSoftBus
+  is N/A for this Windows-only scope. This is not a
+  generic IDL-to-Java generator or full OMG Java mapping. See
+  [`B5_JAVA_JNI_MAPPING.md`](standards/B5_JAVA_JNI_MAPPING.md) and
+  [`B4_C_MAPPING.md`](standards/B4_C_MAPPING.md).
 - Each of B3–B5 ends with the same milestone protocol; B4's device leg uses
   the dsb_suite deployment layout.
 

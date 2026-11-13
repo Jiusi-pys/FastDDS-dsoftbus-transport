@@ -40,7 +40,9 @@ The exposed profile is reliable KEEP_LAST depth 16, data sharing disabled,
 domain 0 through 232, and one representation: XCDR1 (0) or XCDR2 (2).
 Write copies the sample before calling public DDS APIs. Wait-match and ACK
 timeouts are bounded by 60000 ms. This API does not expose the complete DDS QoS,
-entity, discovery, key lifecycle or loan surface. B5 Java/JNI remains planned.
+entity, discovery, key lifecycle or loan surface. B5 adds a separate bounded
+Windows Java/JNI facade over this unchanged C SDK; see
+[`B5_JAVA_JNI_MAPPING.md`](B5_JAVA_JNI_MAPPING.md).
 
 The default build explicitly selects UDPv4 with built-in transports disabled.
 The optional OHOS adapter uses the installed stock DSoftBus Transport and the

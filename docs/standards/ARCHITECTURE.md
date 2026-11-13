@@ -185,7 +185,7 @@ argument and its own approval under section 2.1.
 | B2 IDL building blocks, annotations and §9 profiles | PRESENT | HOST_TESTED PASS; review R1–R5/C1 CLOSED; see [`B2_IDL_LANGUAGE_COVERAGE.md`](B2_IDL_LANGUAGE_COVERAGE.md) and final tester evidence |
 | B3 DDS C++ backend, bounded shared subset | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED and INTEGRATION_TESTED PASS; see [`B3_CPP_BACKEND.md`](B3_CPP_BACKEND.md) |
 | B4 bounded C mapping | PRESENT | BUILDS, HOST_TESTED and DEVICE_TESTED/INTEGRATION_TESTED PASS; bounded milestone and limits in [`B4_C_MAPPING.md`](B4_C_MAPPING.md) with final host/native findings |
-| B5 Java/JNI mapping | PLANNED | NOT_RUN |
+| B5 bounded Java/JNI mapping | PRESENT | BUILDS, HOST_TESTED and Java↔independent-B3 C++ INTEGRATION_TESTED PASS on Windows x64 for 3.6.2 and 2.14.5; 18 CTest cases, 12 exact lanes/24 zero exits, 10 keyed samples per Java process; review PASS. Device Java/DSoftBus is N/A by scope. See [`B5_JAVA_JNI_MAPPING.md`](B5_JAVA_JNI_MAPPING.md) and `build/b5-20261114/final-tester/`. |
 | XTypes gated 2.14.5 type-consistency patch | PRESENT | DEVICE_TESTED on both boards, both directions, gate off and on |
 | A1 gated 3.6.2 bounded type-assignability patch | PRESENT | BUILDS, HOST_TESTED, and DEVICE_TESTED; see [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md) and final tester evidence |
 | A2 bounded 2.14.5 XCDR2 framing repair | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED, review RESOLVED, final matrix PASS; see [`A2_XCDR2_INTEROPERABILITY.md`](A2_XCDR2_INTEROPERABILITY.md) |
@@ -322,7 +322,7 @@ loopback REST profile documented in [`C1_DDS_WEB_REST.md`](C1_DDS_WEB_REST.md).
 Not implemented:
 
 - full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
-- B5 Java/JNI mapping (B4 bounded C mapping is delivered; the broader C mapping remains unsupported);
+- full Java/IDL mapping beyond the bounded B5 Java/JNI facade (B4 bounded C mapping and B5 bounded Windows Java/JNI are delivered; broader mappings remain unsupported);
 - C3 SOAP mapping remains BLOCKED because its formal contract artifacts are
   unavailable (public URLs 404, member artifact 401, and no owner files);
 - full DDS-WEB conformance (C1/C2/C4 are bounded profiles; C4 device evidence is
@@ -339,7 +339,7 @@ Not implemented:
 | Host Test | PASS, 93/93 unit tests and CTest 1/1 per release; B2 frontend final host validation PASS (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes) |
 | RK3588A Test | PASS for the prior UDPv4/A1/A2/`dsb_suite` scopes and the bounded C4 native gateway matrix; DSoftBus-backed UDP standards probe NOT_RUN |
 | Cross-device Test | PASS for prior UDPv4/A1/A2/`dsb_suite` scopes and C4's 12-lane/660-execution native gateway replay; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration BLOCKED |
-| Overall | **NOT VERIFIED** for the product scope; C1/C2/C4 are bounded profiles, C3 is BLOCKED, and full DDS-WEB/SOAP conformance plus the remaining A/B/D work are unfinished |
+| Overall | **NOT VERIFIED** for the product scope; C1/C2/C4 and B5 are bounded profiles, C3 is BLOCKED, and full DDS-WEB/SOAP conformance plus the remaining A3/A4/D work are unfinished |
 
 `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`, `BUILDS != TESTED`,
 `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`. Existing transport,
