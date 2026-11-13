@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gateway>
+  <principal name="Manager" owner="Team" key_env="C1_MANAGER_KEY" domains="219,223" permissions="read write manage"/>
+  <principal name="Reader" owner="Team" key_env="C1_READER_KEY" domains="219,223" permissions="read"/>
+  <principal name="Other" owner="Other" key_env="C1_OTHER_KEY" domains="219" permissions="read write manage"/>
+</gateway>

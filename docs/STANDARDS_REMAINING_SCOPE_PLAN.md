@@ -1,6 +1,6 @@
 # Remaining standards scope: implementation plan
 
-Date: 2026-11-12. Decision record: on 2026-11-10 the four items below were
+Date: 2026-11-13. Decision record: on 2026-11-10 the four items below were
 excluded from that session's delivery scope; on 2026-11-11 the project owner
 reopened all four for implementation. This plan is the execution brief. It
 does not change any recorded status: capabilities without their own evidence
@@ -17,6 +17,8 @@ dual-board evidence, default off), dsb_suite full-suite DSoftBus evidence for
 divergence). A2.0 is now delivered as a finite, approved, default-off Fast DDS
 2.14.5 framing repair with final host and dual-board evidence; its scope and
 limits are recorded in [`A2_XCDR2_INTEROPERABILITY.md`](standards/A2_XCDR2_INTEROPERABILITY.md).
+The C1 implementation was validated from branch commit `a959f240` and is
+recorded separately below as a bounded host REST profile.
 The documentation linter `scripts/standards/check_docs_consistency.py`
 enforces `docs/standards/` claims against retained evidence.
 
@@ -185,17 +187,19 @@ documented contract derived from OMG clarifications or a reproducible peer.
 
 Phases:
 
-- **C1 — REST core.** WebDDS object model over the public DDS API
+- **C1 — REST core — DELIVERED, bounded host profile.** WebDDS object model over the public DDS API
   (applications, participants, topics, readers, writers), API-key
   authorization, XML payloads validated against the spec XSDs. Acceptance:
   an independent client (plain `curl`/Python `requests`, not gateway code)
-  exercising the standard REST mapping on the Windows host against a live
-  DDS peer process.
-- **C2 — notifications + WebSocket/WSS.** Client notification endpoints, WS
+  exercising the bounded REST mapping on the Windows host against a live DDS
+  peer process. Final dual-ABI/XCDR1/XCDR2 host acceptance PASS; this is not a
+  full DDS-WEB conformance claim. See [`C1_DDS_WEB_REST.md`](standards/C1_DDS_WEB_REST.md)
+  and `build/c1-20261113/final-tester/`.
+- **C2 — notifications + WebSocket/WSS — PLANNED.** Client notification endpoints, WS
   and WSS with distinct interop tests (OpenSSL certs recorded as fixtures).
-- **C3 — SOAP mapping.** Only after C1/C2 are green; SIMPLE-REST contract
+- **C3 — SOAP mapping — PLANNED.** Only after C1/C2 are green; SIMPLE-REST contract
   documented separately with its provenance.
-- **C4 — device path.** Board A runs the gateway natively (KaihongOS arm64),
+- **C4 — device path — PLANNED/DEFERRED.** Board A runs the gateway natively (KaihongOS arm64),
   board B a DDS peer over DSoftBus, Windows runs the independent Web client;
   roles reversed. Mind constraint 5 (XCDR1 for any mixed-version pairing).
   Acceptance: the C1/C2 suites replayed against the board-hosted gateway.

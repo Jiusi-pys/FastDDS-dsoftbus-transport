@@ -99,6 +99,14 @@ assignability patch and contracts. The generated C++ serialization roundtrip
 builds for both 2.14.5 and 3.6.2. B1 does not deliver generated code or change
 Fast DDS, Transport, or device communication.
 
+It also delivers C1 as a finite, loopback-HTTP REST profile over public Fast
+DDS APIs. C1 is HOST_TESTED and INTEGRATION_TESTED PASS on Fast DDS 2.14.5 and
+3.6.2 with XCDR1 and XCDR2, including the bounded authorization, lifecycle,
+read/wait, identity and timestamp contracts documented in
+[`C1_DDS_WEB_REST.md`](C1_DDS_WEB_REST.md). The architecture diagram remains
+aspirational for the full product: C2 notifications/WS/WSS, C3 SOAP and C4
+native/DSoftBus gateway execution are not delivered by C1.
+
 ## AGENTS.md section 2.1: modifying RTPS endpoint matching
 
 `patches/fastdds/2.14.5/0001-edp-honor-reader-type-consistency-qos.patch`
@@ -177,7 +185,10 @@ argument and its own approval under section 2.1.
 | A1 gated 3.6.2 bounded type-assignability patch | PRESENT | BUILDS, HOST_TESTED, and DEVICE_TESTED; see [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md) and final tester evidence |
 | A2 bounded 2.14.5 XCDR2 framing repair | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED, review RESOLVED, final matrix PASS; see [`A2_XCDR2_INTEROPERABILITY.md`](A2_XCDR2_INTEROPERABILITY.md) |
 | XTypes Complete patch set (full Complete conformance) | PLANNED | NOT_RUN |
-| DDS-WEB gateway | PLANNED | NOT_RUN |
+| C1 bounded DDS-WEB REST host profile | PRESENT | HOST_TESTED and INTEGRATION_TESTED PASS on both ABIs; final evidence in `build/c1-20261113/final-tester/`; full DDS-WEB conformance, C2/C3/C4 remain unverified |
+| C2 notifications + WS/WSS | PLANNED | NOT_RUN |
+| C3 SOAP mapping | PLANNED | NOT_RUN |
+| C4 native gateway and cross-board DSoftBus path | PLANNED | NOT_RUN; DSoftBus-backed standards probe NOT_RUN |
 | DDS-OPCUA gateway | PLANNED | NOT_RUN |
 | Native arm64 probe and generated roundtrip | PRESENT | BUILDS for 2.14.5 and 3.6.2 |
 | New dual-board standards tests | PRESENT | DEVICE_TESTED for the UDPv4 matrix; no DSoftBus deployment runner |
@@ -296,11 +307,14 @@ runner, bounded keyed IDL generation with a verified generator, the B1 and B2
 host-only IDL frontend scopes, the generated C++ roundtrip on host and device,
 the OpenHarmony arm64 build path, and one gated type-consistency patch for
 Fast DDS 2.14.5, plus the bounded A1 3.6.2 assignability patch documented in
-[`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md). Not implemented:
+[`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md), and the bounded C1
+loopback REST profile documented in [`C1_DDS_WEB_REST.md`](C1_DDS_WEB_REST.md).
+Not implemented:
 
 - full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
 - B5 Java/JNI mapping (B4 bounded C mapping is delivered; the broader C mapping remains unsupported);
-- the DDS-WEB gateway;
+- C2 notifications/WS/WSS, C3 SOAP, and C4 native/DSoftBus DDS-WEB gateway
+  execution (C1's bounded host REST profile is delivered);
 - the DDS-OPCUA gateway;
 - a DSoftBus-backed standards probe.
 
@@ -313,7 +327,7 @@ Fast DDS 2.14.5, plus the bounded A1 3.6.2 assignability patch documented in
 | Host Test | PASS, 93/93 unit tests and CTest 1/1 per release; B2 frontend final host validation PASS (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes) |
 | RK3588A Test | PASS for the UDPv4 scopes, the patched 2.14.5 matrix, and the executed `dsb_suite` against the modified `compat.hpp` on 2.14.5 and 3.6.2; DSoftBus-backed standards probe NOT_RUN |
 | Cross-device Test | PASS same-version UDPv4, bounded A1/A2 matrices and `dsb_suite` in both board directions; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration BLOCKED |
-| Overall | **NOT VERIFIED** for the product scope |
+| Overall | **NOT VERIFIED** for the product scope; C1 is a bounded host profile, while full DDS-WEB conformance and C2/C3/C4 remain outside the verified scope |
 
 `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`, `BUILDS != TESTED`,
 `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`. Existing transport,

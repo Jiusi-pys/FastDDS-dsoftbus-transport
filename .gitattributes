@@ -8,3 +8,7 @@ scripts/release/** text eol=lf
 # time, so a CRLF conversion on a Windows clone would change the digest and
 # break `git apply` for no real reason.
 patches/** text eol=lf
+
+# Preserve the downloaded OMG artifact bytes, including their original line endings.
+# prepare_web_schema.py verifies these files against the published provenance hashes.
+integrations/standards/web_gateway/schemas/original/*.xsd -text

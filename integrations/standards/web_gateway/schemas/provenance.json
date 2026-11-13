@@ -1,0 +1,23 @@
+[
+  {
+    "name": "dds-xtypes_type_definition.xsd",
+    "url": "https://www.omg.org/spec/DDS-XTypes/20120202/dds-xtypes_type_definition.xsd",
+    "final_url": "https://www.omg.org/spec/DDS-XTypes/20120202/dds-xtypes_type_definition.xsd",
+    "sha256": "89cbc76b33f5f3c429cc876a6e0e81f84d246b4af7d388b338c45b68b24387d7",
+    "bytes": 20759
+  },
+  {
+    "name": "DDS_QoSProfile.xsd",
+    "url": "https://www.omg.org/spec/dds4ccm/20110201/DDS_QoSProfile.xsd",
+    "final_url": "https://www.omg.org/spec/DDS4CCM/20110201/DDS_QoSProfile.xsd",
+    "sha256": "b844fa4ca388b7a634684b26ce7cb2558f08024994587a70f5f358732070c577",
+    "bytes": 22740
+  },
+  {
+    "name": "webdds_rest1.xsd",
+    "url": "https://issues.omg.org/secure/attachment/12351/webdds_rest1.xsd",
+    "final_url": "https://issues.omg.org/secure/attachment/12351/webdds_rest1.xsd",
+    "sha256": "4471ee76c17ceb6aea05427321ae0a775bd3569fcf6ce27ddccc59adf2409e72",
+    "bytes": 25771
+  }
+]

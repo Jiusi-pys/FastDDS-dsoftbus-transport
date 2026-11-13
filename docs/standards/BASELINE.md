@@ -11,11 +11,19 @@ plus gated upstream patches for Fast DDS
 status is listed in the architecture table and
 [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
 This document does not claim DDS-XTypes Complete, full IDL 4.2 language
-coverage beyond the B2 frontend scope, DDS-WEB, DDS-OPCUA, or DSoftBus integration for
+coverage beyond the B2 frontend scope, full DDS-WEB, DDS-OPCUA, or DSoftBus integration for
 the new UDP-only standards probe. Existing-tree DSoftBus `dsb_suite` state is recorded in
 [`DEVICE_EVIDENCE_20261110.md`](DEVICE_EVIDENCE_20261110.md).
 
 ## Evidence roots
+
+The bounded C1 host REST profile is implemented and its final tester evidence is
+canonical under `build/c1-20261113/final-tester/`: both Fast DDS 3.6.2 and
+2.14.5 passed the fresh build/schema/native-DDS/HTTP matrix at XCDR1 and XCDR2,
+with the retained review closures under `build/c1-20261113/review/`. This is
+HOST_TESTED and INTEGRATION_TESTED evidence for the finite public-Fast-DDS UDP
+profile only. Native gateway/DSoftBus board verification is N/A for C1 and
+deferred to C4. The DSoftBus-backed standards probe is NOT_RUN.
 
 | Root | Holds |
 | --- | --- |
@@ -317,7 +325,8 @@ Not started:
 - B5 Java/JNI mapping (B3's bounded C++ backend and B4's bounded hand-written
   C11 SDK are delivered in their documented scopes; see
   [`B3_CPP_BACKEND.md`](B3_CPP_BACKEND.md) and [`B4_C_MAPPING.md`](B4_C_MAPPING.md));
-- the DDS-WEB gateway;
+- C2 notifications/WS/WSS, C3 SOAP, and C4 native/DSoftBus DDS-WEB gateway
+  execution (C1's bounded host REST profile is delivered separately);
 - the DDS-OPCUA gateway;
 - a DSoftBus-backed standards probe (the probe is UDP-only and has no DSoftBus
   deployment runner).
@@ -404,12 +413,12 @@ these boards, stock isolated deployments. It does not cover the patched
 
 | Dimension | State |
 | --- | --- |
-| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded B1/B2 host frontends, bounded IDL generation path, generated C++ roundtrip, OpenHarmony arm64 build path, gated 2.14.5 patches and bounded A1 3.6.2 patch; B4 bounded hand-written C11 SDK is present ([final source snapshot](../../build/b4-20261113/final-implementation-snapshot.json)) |
-| Build | PASS — host MSVC and OHOS arm64, both Fast DDS releases; B2 compiler-backed frontend sweep PASS; B4 both-ABI host/native builds PASS ([final host](../../build/b4-20261113/final-host/FINDING.md), [final native](../../build/b4-20261113/final-native/FINDING.md)) |
-| Host Test | PASS — 93/93 unit tests, CTest 1/1 per release, recorded three-way gate comparison; B1 evidence: [canonical finding](../../build/b1-20261113/final-tester/FINDING.md); B2 final host validation: [FINDING](../../build/b2-20261113/final-tester/FINDING.md) and [validsummary.json](../../build/b2-20261113/final-tester/validsummary.json) (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes); B4 final host validation: [FINDING](../../build/b4-20261113/final-host/FINDING.md) |
+| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded B1/B2 host frontends, bounded IDL generation path, generated C++ roundtrip, bounded C1 host REST profile, OpenHarmony arm64 build path, gated 2.14.5 patches and bounded A1 3.6.2 patch; B4 bounded hand-written C11 SDK is present ([final source snapshot](../../build/b4-20261113/final-implementation-snapshot.json)) |
+| Build | PASS — host MSVC and OHOS arm64, both Fast DDS releases; C1 dual-ABI builds PASS; B2 compiler-backed frontend sweep PASS; B4 both-ABI host/native builds PASS ([final host](../../build/b4-20261113/final-host/FINDING.md), [final native](../../build/b4-20261113/final-native/FINDING.md)) |
+| Host Test | PASS — C1 final dual-ABI/XCDR1/XCDR2 host and native-DDS acceptance PASS; 93/93 unit tests, CTest 1/1 per release, recorded three-way gate comparison; B1 evidence: [canonical finding](../../build/b1-20261113/final-tester/FINDING.md); B2 final host validation: [FINDING](../../build/b2-20261113/final-tester/FINDING.md) and [validsummary.json](../../build/b2-20261113/final-tester/validsummary.json) (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes); B4 final host validation: [FINDING](../../build/b4-20261113/final-host/FINDING.md) |
 | RK3588A Test | PASS for the UDPv4 scopes, the patched matrix, and the executed DSoftBus `dsb_suite` on 2.14.5 and 3.6.2 against the modified header (route-outage scenarios not re-run); DSoftBus-backed standards probe NOT_RUN; B4 canonical DSoftBus matrix also PASS on both boards ([final native](../../build/b4-20261113/final-native/FINDING.md)) |
 | Cross-device Test | PASS for same-version UDPv4, the A1/A2 gated matrices, and the `dsb_suite` runs between both boards; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration stays BLOCKED; B4 canonical 8-case matrix PASS ([canonical result](../../build/b4-20261113/final-native/final-canonical-result.json)) |
-| Overall | **NOT VERIFIED** — delivered items are bounded (including B4); full XTypes, A3/A4, B5, DDS-WEB, DDS-OPCUA and a DSoftBus-backed standards probe remain outside the verified product scope |
+| Overall | **NOT VERIFIED** — delivered items are bounded (including C1); full XTypes, A3/A4, B5, full DDS-WEB conformance (C2/C3/C4), DDS-OPCUA and a DSoftBus-backed standards probe remain outside the verified product scope |
 
 `SKIPPED != PASS`, `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`,
 `BUILDS != TESTED`, `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`.
