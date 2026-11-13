@@ -1,6 +1,6 @@
 # Standards baseline evidence
 
-Date: 2026-11-10, updated 2026-11-11; documentation sync: 2026-11-13
+Date: 2026-11-10, updated 2026-11-11; documentation sync: 2026-11-14
 
 Branch: `codex/dds-standards-product`
 
@@ -12,7 +12,9 @@ status is listed in the architecture table and
 [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
 This document does not claim DDS-XTypes Complete, full IDL 4.2 language
 coverage beyond the B2 frontend scope, full DDS-WEB, DDS-OPCUA, or DSoftBus integration for
-the new UDP-only standards probe. Existing-tree DSoftBus `dsb_suite` state is recorded in
+the new UDP-only standards probe. The bounded C4 native gateway/device profile is
+separately verified below; this does not turn the UDP-only standards probe into a
+DSoftBus test. Existing-tree DSoftBus `dsb_suite` state is recorded in
 [`DEVICE_EVIDENCE_20261110.md`](DEVICE_EVIDENCE_20261110.md).
 
 ## Evidence roots
@@ -22,11 +24,14 @@ canonical under `build/c1-20261113/final-tester/`: both Fast DDS 3.6.2 and
 2.14.5 passed the fresh build/schema/native-DDS/HTTP matrix at XCDR1 and XCDR2,
 with the retained review closures under `build/c1-20261113/review/`. This is
 HOST_TESTED and INTEGRATION_TESTED evidence for the finite public-Fast-DDS UDP
-profile only. Native gateway/DSoftBus board verification is N/A for C1 and
-deferred to C4. The bounded C2 host WS/WSS notification profile is also
+profile only. Native gateway/DSoftBus board verification is N/A for C1 and is
+covered by the separate bounded C4 profile. The bounded C2 host WS/WSS notification profile is also
 implemented and its canonical final tester evidence is under
 `build/c2-20261113/final-tester/`; C2 device/DSoftBus verification is N/A and
-the DSoftBus-backed standards probe is NOT_RUN.
+the DSoftBus-backed standards probe is NOT_RUN. The bounded C4 native gateway
+and cross-board profile is independently evidenced under
+`build/c4-20261113/final-retest/`; C4 is not a SOAP implementation and does not
+depend on C3.
 
 | Root | Holds |
 | --- | --- |
@@ -42,6 +47,7 @@ the DSoftBus-backed standards probe is NOT_RUN.
 | `build/a1-36/final-tester/` | canonical final A1 rebuild, host/device execution, and commit-gate evidence |
 | `build/a2-20261112/final-tester/` | canonical final A2 host, secure dual-board, LAN matrix, DSoftBus regression, and commit-gate evidence |
 | `build/a1-36/review/` | independent A1 review and P2 resolution records |
+| `build/c4-20261113/final-retest/` | canonical final C4 independent tester result: 12 lanes, 36 suites, 660 client executions, native/device receipts and census |
 
 Fix-pass and review records: `build/tester-fix-20261110/FINDING.md`,
 `build/fix-pass2-20261110/FINDING.md`,
@@ -163,7 +169,7 @@ python scripts/standards/run_type_baseline.py `
 | Mixed-version UDP XCDR1, reader at default validation (`DDS_STANDARDS_FORCE_TYPE_VALIDATION=0`) | PASS | PASS | DEVICE_TESTED with a live peer in both board directions: `received: 514` (2.14.5 writer, 3.6.2 reader), `received: 495` (reverse); post-review confirm re-run `received: 513`, `received: 496`; see `build/mixed-default-20261111/FINDING.md` |
 | Mixed-version UDP XCDR2, reader at default validation | FAIL | FAIL | Genuine FAIL with a live peer in both directions: the matched 3.6.2 reader records `received: 0`; the 2.14.5 reader receives samples that decode to wrong values (sample value mismatch); see `build/mixed-default-20261111/FINDING.md` |
 | Existing-tree DSoftBus `dsb_suite` execution | PASS | PASS | DEVICE_TESTED 2026-11-10 over DSoftBus between both boards: 70 passed, 0 failed per version (35 per board), `DSB_EXIT=0` on both boards, 88 `DSB_CASE` lines retained per `run.log` plus `result.json`; nine same-host-only cases NOT_APPLICABLE (recorded, not passes); route-outage scenarios NOT run; see `build/dsb-exec-20261110/FINDING.md` |
-| New standards probe over DSoftBus | NOT_RUN | NOT_RUN | The probe is UDP-only and has no DSoftBus deployment runner; A1 candidate DSoftBus evidence is linked from `A1_TYPE_ASSIGNABILITY.md` |
+| New standards probe over DSoftBus | NOT_RUN | NOT_RUN | The probe is UDP-only and has no DSoftBus deployment runner; A1 candidate DSoftBus evidence remains linked from `A1_TYPE_ASSIGNABILITY.md`; this remains separate from the verified C4 native gateway path |
 | HDC target enumeration | N/A | N/A | `hdc list targets` was empty; SSH/Tailscale was the executed device path |
 
 The unit-test count is the one measured in this working tree:
@@ -328,8 +334,10 @@ Not started:
 - B5 Java/JNI mapping (B3's bounded C++ backend and B4's bounded hand-written
   C11 SDK are delivered in their documented scopes; see
   [`B3_CPP_BACKEND.md`](B3_CPP_BACKEND.md) and [`B4_C_MAPPING.md`](B4_C_MAPPING.md));
-- C3 SOAP and C4 native/DSoftBus DDS-WEB gateway execution (bounded C1 and C2
-  host profiles are delivered separately);
+- C3 SOAP mapping remains BLOCKED because its formal contract artifacts are
+  unavailable (public URLs 404, member artifact 401, and no owner files);
+- full DDS-WEB conformance (C1/C2/C4 are bounded profiles; C4 device evidence is
+  retained separately);
 - the DDS-OPCUA gateway;
 - a DSoftBus-backed standards probe (the probe is UDP-only and has no DSoftBus
   deployment runner).
@@ -416,12 +424,12 @@ these boards, stock isolated deployments. It does not cover the patched
 
 | Dimension | State |
 | --- | --- |
-| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded B1/B2 host frontends, bounded IDL generation path, generated C++ roundtrip, bounded C1 REST and C2 WS/WSS host profiles, OpenHarmony arm64 build path, gated 2.14.5 patches and bounded A1 3.6.2 patch; B4 bounded hand-written C11 SDK is present ([final source snapshot](../../build/b4-20261113/final-implementation-snapshot.json)) |
+| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded B1/B2 host frontends, bounded IDL generation path, generated C++ roundtrip, bounded C1 REST/C2 WS-WSS host profiles, bounded C4 native gateway/device path, OpenHarmony arm64 build path, gated 2.14.5 patches and bounded A1 3.6.2 patch; B4 bounded hand-written C11 SDK is present ([final source snapshot](../../build/b4-20261113/final-implementation-snapshot.json)) |
 | Build | PASS — host MSVC and OHOS arm64, both Fast DDS releases; C1/C2 dual-ABI builds PASS; B2 compiler-backed frontend sweep PASS; B4 both-ABI host/native builds PASS ([final host](../../build/b4-20261113/final-host/FINDING.md), [final native](../../build/b4-20261113/final-native/FINDING.md)) |
 | Host Test | PASS — C1/C2 final dual-ABI host and native-DDS acceptance PASS (C2 evidence: [canonical finding](../../build/c2-20261113/final-tester/FINDING.md)); 93/93 unit tests, CTest 1/1 per release, recorded three-way gate comparison; B1 evidence: [canonical finding](../../build/b1-20261113/final-tester/FINDING.md); B2 final host validation: [FINDING](../../build/b2-20261113/final-tester/FINDING.md) and [validsummary.json](../../build/b2-20261113/final-tester/validsummary.json) (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes); B4 final host validation: [FINDING](../../build/b4-20261113/final-host/FINDING.md) |
-| RK3588A Test | PASS for the UDPv4 scopes, the patched matrix, and the executed DSoftBus `dsb_suite` on 2.14.5 and 3.6.2 against the modified header (route-outage scenarios not re-run); DSoftBus-backed standards probe NOT_RUN; B4 canonical DSoftBus matrix also PASS on both boards ([final native](../../build/b4-20261113/final-native/FINDING.md)) |
-| Cross-device Test | PASS for same-version UDPv4, the A1/A2 gated matrices, and the `dsb_suite` runs between both boards; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration stays BLOCKED; B4 canonical 8-case matrix PASS ([canonical result](../../build/b4-20261113/final-native/final-canonical-result.json)) |
-| Overall | **NOT VERIFIED** — delivered items are bounded (including C1 and C2); full XTypes, A3/A4, B5, full DDS-WEB conformance (C3/C4 remain unverified), DDS-OPCUA and a DSoftBus-backed standards probe remain outside the verified product scope |
+| RK3588A Test | PASS for the UDPv4/A1/A2/`dsb_suite` scopes, the B4 canonical DSoftBus matrix ([final native](../../build/b4-20261113/final-native/FINDING.md)), and bounded C4 native gateway matrix ([C4 final](../../build/c4-20261113/final-retest/FINDING.md)); DSoftBus-backed standards probe NOT_RUN |
+| Cross-device Test | PASS for prior UDPv4/A1/A2/`dsb_suite` scopes, B4 canonical 8-case matrix ([canonical result](../../build/b4-20261113/final-native/final-canonical-result.json)), and C4's 12-lane/660-execution native gateway replay; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration stays BLOCKED |
+| Overall | **NOT VERIFIED** — delivered items are bounded (including C1, C2 and C4); C3 is BLOCKED, while full XTypes, A3/A4, B5, full DDS-WEB/SOAP conformance, DDS-OPCUA and a DSoftBus-backed standards probe remain outside the verified product scope |
 
 `SKIPPED != PASS`, `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`,
 `BUILDS != TESTED`, `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`.

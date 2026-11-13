@@ -156,7 +156,11 @@ class WebSocketTests(unittest.TestCase):
         g.finish_peer(peer)
     def test_bound_writer_to_native_dds_reader(self):
         g=self.g;_,_,topic,writer,_=g.graph();peer=g.ready_reader(topic,writer);s=g.connect();g.bind(s,'writer','W',writer);g.request_ws(s,'GET','/types')
-        for n in range(10):s.send('<b_req><bind_id>W</bind_id><body>'+record(n,n%2==0).decode()+'</body></b_req>')
+        for n in range(10):
+            s.send('<b_req><bind_id>W</bind_id><body>'+record(n,n%2==0).decode()+'</body></b_req>')
+            # B_REQUEST has no ACK. Respect the bounded command window using
+            # REQUEST's ordering barrier, independently of TCP segmentation.
+            g.request_ws(s,'GET','/types')
         g.request_ws(s,'GET','/types');g.finish_peer(peer)
     def test_native_dds_unsolicited_push_and_cancellation(self):
         g=self.g;_,_,topic,_,reader=g.graph();s=g.connect();g.bind(s,'reader','Notify',reader);g.request_ws(s,'GET','/types')
@@ -232,7 +236,20 @@ class WebSocketTests(unittest.TestCase):
         g=self.g;_,_,_,writer,_=g.graph();s=g.connect()
         s.send('<bind>'+''.join(f'<bind_datawriter><bind_id>W{n}</bind_id><uri>{writer}</uri></bind_datawriter>' for n in range(16))+'</bind>')
         g.request_ws(s,'GET','/types');g.bind(s,'writer','Overflow',writer);g.expect_close(s)
-        s=g.connect();s.send('x'*65537);g.expect_close(s,1009)
+        s=g.connect()
+        text='<request><id>Max</id><uri>/types</uri><method>GET</method></request>'
+        # The complete legal maximum must still reach the application.
+        s.send(text+' '*(65536-len(text)));doc=g.read(s)
+        self.assertEqual(doc.findtext('id'),'Max');self.assertEqual(doc.findtext('return_code'),'OK')
+        # Beast rejects from the declared length. Send the complete masked
+        # header first so TLS cannot abort a still-writing oversized body
+        # before the client observes the required 1009 Close frame.
+        frame=websocket.ABNF.create_frame('x'*65537,websocket.ABNF.OPCODE_TEXT).format()
+        self.assertEqual(len(frame),65537+14);s.sock.sendall(frame[:14]);g.expect_close(s,1009)
+        # Accumulated fragments must obey the same message-size bound.
+        s=g.connect();s.send_frame(websocket.ABNF.create_frame(' '*32768,websocket.ABNF.OPCODE_TEXT,fin=0))
+        frame=websocket.ABNF.create_frame(' '*32769,websocket.ABNF.OPCODE_CONT,fin=1).format()
+        self.assertEqual(len(frame),32769+8);s.sock.sendall(frame[:8]);g.expect_close(s,1009)
         g.request('GET','/types')
     def test_tls_verification_and_https(self):
         g=self.g;s=g.connect(secure=True);self.assertIn(s.sock.version(),('TLSv1.2','TLSv1.3'))

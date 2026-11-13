@@ -105,8 +105,12 @@ DDS APIs. C1 is HOST_TESTED and INTEGRATION_TESTED PASS on Fast DDS 2.14.5 and
 read/wait, identity and timestamp contracts documented in
 [`C1_DDS_WEB_REST.md`](C1_DDS_WEB_REST.md). C2 adds a separate bounded
 loopback WS/WSS notification gateway over the same public DDS model; it is
-HOST_TESTED and INTEGRATION_TESTED on both ABIs, while C3 SOAP and C4
-native/DSoftBus gateway execution remain outside the delivered scope.
+HOST_TESTED and INTEGRATION_TESTED on both ABIs. C4 adds the finite native
+gateway/device path above these profiles: the gateway and an independent peer
+are built for KaihongOS arm64, use the existing Socket Transport for inter-board
+DDS, and are exercised by independent Windows clients through a byte-only SSH
+forwarder. C3 remains BLOCKED on its unavailable formal SOAP contract; C4 does
+not depend on C3.
 
 ## AGENTS.md section 2.1: modifying RTPS endpoint matching
 
@@ -186,17 +190,22 @@ argument and its own approval under section 2.1.
 | A1 gated 3.6.2 bounded type-assignability patch | PRESENT | BUILDS, HOST_TESTED, and DEVICE_TESTED; see [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md) and final tester evidence |
 | A2 bounded 2.14.5 XCDR2 framing repair | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED, review RESOLVED, final matrix PASS; see [`A2_XCDR2_INTEROPERABILITY.md`](A2_XCDR2_INTEROPERABILITY.md) |
 | XTypes Complete patch set (full Complete conformance) | PLANNED | NOT_RUN |
-| C1 bounded DDS-WEB REST host profile | PRESENT | HOST_TESTED and INTEGRATION_TESTED PASS on both ABIs; final evidence in `build/c1-20261113/final-tester/`; full DDS-WEB conformance and C3/C4 remain unverified (C2 is separately validated) |
+| C1 bounded DDS-WEB REST host profile | PRESENT | HOST_TESTED and INTEGRATION_TESTED PASS on both ABIs; final evidence in `build/c1-20261113/final-tester/`; full DDS-WEB conformance remains unverified (C2/C4 are separately validated) |
 | C2 notifications + WS/WSS | PRESENT | BUILDS, HOST_TESTED and INTEGRATION_TESTED PASS on both ABIs for the bounded profile; see [`C2_DDS_WEB_NOTIFICATIONS.md`](C2_DDS_WEB_NOTIFICATIONS.md) and final tester evidence |
-| C3 SOAP mapping | PLANNED | NOT_RUN |
-| C4 native gateway and cross-board DSoftBus path | PLANNED | NOT_RUN; DSoftBus-backed standards probe NOT_RUN |
+| C3 SOAP mapping | BLOCKED | Formal SOAP contract unavailable: public URLs 404, member artifact 401, no owner-supplied files; no implementation started |
+| C4 native gateway and cross-board DSoftBus path | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED, INTEGRATION_TESTED and cross-device PASS for the bounded profile; final evidence in `build/c4-20261113/final-retest/`; original UDP standards probe remains NOT_RUN |
 | DDS-OPCUA gateway | PLANNED | NOT_RUN |
 | Native arm64 probe and generated roundtrip | PRESENT | BUILDS for 2.14.5 and 3.6.2 |
-| New dual-board standards tests | PRESENT | DEVICE_TESTED for the UDPv4 matrix; no DSoftBus deployment runner |
+| New dual-board standards tests | PRESENT | DEVICE_TESTED for the UDP-only standards-probe UDPv4 matrix; no DSoftBus deployment runner for that probe |
 | Existing DSoftBus `dsb_suite` core and feature probes | PRESENT in current tree | DEVICE_TESTED: executed over DSoftBus between both boards against the modified `compat.hpp`, 70 passed, 0 failed on each of 2.14.5 and 3.6.2 with per-case `DSB_CASE` lines retained; route-outage scenarios not re-run; see `build/dsb-exec-20261110/FINDING.md` |
 
-The HDC channel was empty, but it did not establish device unavailability:
-the canonical run used Tailscale SSH to reach both KaihongOS boards
+The HDC channel was empty, but it did not establish device unavailability. For
+C4, the explicit HDC-over-SSH shim and pinned logical-to-LAN map were used and
+live board UDIDs, permissions, token identity and mutual DSoftBus network
+queries were retained; no system policy, token database or network settings
+were changed.
+
+The earlier UDPv4 standards-probe run used Tailscale SSH to reach both KaihongOS boards
 (`root@100.97.6.8` and `root@100.97.143.74`, KaihongOS 6.1.0.04,
 kernel 6.6.101). The standards-probe device evidence is UDPv4 between the two
 boards. The existing DSoftBus `dsb_suite`, rebuilt from this tree against the
@@ -314,8 +323,10 @@ Not implemented:
 
 - full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
 - B5 Java/JNI mapping (B4 bounded C mapping is delivered; the broader C mapping remains unsupported);
-- C3 SOAP and C4 native/DSoftBus DDS-WEB gateway execution (C1 and bounded C2
-  host profiles are delivered);
+- C3 SOAP mapping remains BLOCKED because its formal contract artifacts are
+  unavailable (public URLs 404, member artifact 401, and no owner files);
+- full DDS-WEB conformance (C1/C2/C4 are bounded profiles; C4 device evidence is
+  retained separately);
 - the DDS-OPCUA gateway;
 - a DSoftBus-backed standards probe.
 
@@ -326,9 +337,9 @@ Not implemented:
 | Implementation | PRESENT for the delivered scope above, including bounded A1 and A2 patches |
 | Build | PASS, host MSVC and OHOS arm64, both Fast DDS releases |
 | Host Test | PASS, 93/93 unit tests and CTest 1/1 per release; B2 frontend final host validation PASS (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes) |
-| RK3588A Test | PASS for the UDPv4 scopes, the patched 2.14.5 matrix, and the executed `dsb_suite` against the modified `compat.hpp` on 2.14.5 and 3.6.2; DSoftBus-backed standards probe NOT_RUN |
-| Cross-device Test | PASS same-version UDPv4, bounded A1/A2 matrices and `dsb_suite` in both board directions; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration BLOCKED |
-| Overall | **NOT VERIFIED** for the product scope; C1 and C2 are bounded host profiles, while full DDS-WEB conformance and C3/C4 remain outside the verified scope |
+| RK3588A Test | PASS for the prior UDPv4/A1/A2/`dsb_suite` scopes and the bounded C4 native gateway matrix; DSoftBus-backed UDP standards probe NOT_RUN |
+| Cross-device Test | PASS for prior UDPv4/A1/A2/`dsb_suite` scopes and C4's 12-lane/660-execution native gateway replay; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration BLOCKED |
+| Overall | **NOT VERIFIED** for the product scope; C1/C2/C4 are bounded profiles, C3 is BLOCKED, and full DDS-WEB/SOAP conformance plus the remaining A/B/D work are unfinished |
 
 `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`, `BUILDS != TESTED`,
 `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`. Existing transport,

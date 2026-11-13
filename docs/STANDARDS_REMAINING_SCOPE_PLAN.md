@@ -202,12 +202,19 @@ Phases:
   [`C2_DDS_WEB_NOTIFICATIONS.md`](standards/C2_DDS_WEB_NOTIFICATIONS.md) and
   [`build/c2-20261113/final-tester/FINDING.md`](../build/c2-20261113/final-tester/FINDING.md).
   This does not claim full DDS-WEB conformance or device/DSoftBus validation.
-- **C3 — SOAP mapping — PLANNED.** Only after C1/C2 are green; SIMPLE-REST contract
-  documented separately with its provenance.
-- **C4 — device path — PLANNED/DEFERRED.** Board A runs the gateway natively (KaihongOS arm64),
-  board B a DDS peer over DSoftBus, Windows runs the independent Web client;
-  roles reversed. Mind constraint 5 (XCDR1 for any mixed-version pairing).
-  Acceptance: the C1/C2 suites replayed against the board-hosted gateway.
+- **C3 — SOAP mapping — BLOCKED.** The formal SOAP materials referenced by the
+  retained 2026-11-13 investigation are unavailable (public URLs return 404 and the
+  member artifact returns 401); the owner has no local copies. The beta-1 drafts
+  differ and are not a formal contract. No SOAP implementation or SIMPLE-REST
+  mapping is inferred from those drafts. See the retained C3 finding records.
+- **C4 — device path — PRESENT, bounded and verified.** Board A runs the native
+  KaihongOS arm64 gateway and board B an independently built DDS peer over the
+  existing Socket Transport; roles are reversed. Windows runs the independent
+  REST/WS/WSS clients through a byte-only SSH forwarder. The final matrix replayed
+  the bounded C1/C2 suites on both boards and both Fast DDS ABIs. C4 does not
+  depend on C3 and does not establish full DDS-WEB conformance. See
+  [`C4_DDS_WEB_DEVICE_PATH.md`](standards/C4_DDS_WEB_DEVICE_PATH.md) and the
+  canonical final result under `build/c4-20261113/final-retest/`.
 
 ## D. DDS-OPCUA gateway
 

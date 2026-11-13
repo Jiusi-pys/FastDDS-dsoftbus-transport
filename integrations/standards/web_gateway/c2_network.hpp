@@ -91,6 +91,7 @@ struct State {
     std::shared_ptr<ssl::context> tls;
     net::thread_pool& workers;
     std::atomic<unsigned> count{0};bool stopping=false;
+    bool websocket_enabled=true;
     std::vector<std::weak_ptr<Closable>> sessions;
     std::mutex registry_mutex;
     std::map<std::string,uint64_t> registry;uint64_t next_id=0;
@@ -256,7 +257,7 @@ template<class Stream> class HttpSession:public Closable,public std::enable_shar
             if(s->stopped_||s->state_->stopping)return;
             if(ec){if(ec==http::error::body_limit)s->reply(413);else if(ec==http::error::header_limit)s->reply(431);else s->stop();return;}
             auto request=s->parser_.release();
-            if(ws::is_upgrade(request)) {
+            if(s->state_->websocket_enabled&&ws::is_upgrade(request)) {
                 auto target=std::string(request.target());auto name=target.rfind("/dds/v1/",0)==0?target.substr(8):"";
                 bool valid=!name.empty()&&name.size()<=48&&std::all_of(name.begin(),name.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='-'||c=='_';});
                 auto protocols=std::string(request[http::field::sec_websocket_protocol]);bool offered=false;std::istringstream in(protocols);std::string p;

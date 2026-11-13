@@ -102,9 +102,11 @@ Fast DDS 3.6.2/domain 219 and 2.14.5/domain 223 summaries both PASS. It records
 the intentional negative readiness control (reader exit 1, no READY/PASS),
 source-unchanged checks, staged raw-XSD checks, and strict documentation PASS.
 The interrupted first 2.14.5 run is retained but excluded; the fresh rerun is
-canonical. Device/DSoftBus gateway tests remain C4 scope; SOAP remains C3.
-Device validation is N/A for C2 and the DSoftBus-backed standards probe was not
-run. Overall product status remains NOT VERIFIED.
+canonical. Device/DSoftBus gateway tests remain the separate C4 scope; C4's
+bounded native profile is now independently verified. SOAP remains C3 and is
+BLOCKED on its unavailable formal contract. Device validation is N/A for C2 and
+the DSoftBus-backed standards probe was not run. Overall product status remains
+NOT VERIFIED.
 
 The C1/C2 acceptance tools use an explicit readiness marker before gateway-to-
 native-reader data tests. A subscriber MATCHED receipt alone does not prove that

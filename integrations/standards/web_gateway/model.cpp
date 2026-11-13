@@ -241,8 +241,8 @@ std::string filter_name(const std::string& category) {
     return names.at(category);
 }
 }
-Gateway::Gateway(const std::string& schemas,const std::string& policy,unsigned representation,unsigned ttl)
-    :schemas_(schemas),root_(std::make_shared<Node>()),representation_(representation),ttl_(ttl) {
+Gateway::Gateway(const std::string& schemas,const std::string& policy,unsigned representation,unsigned ttl,ParticipantTransport transport)
+    :schemas_(schemas),root_(std::make_shared<Node>()),representation_(representation),ttl_(ttl),transport_(std::move(transport)) {
     need((representation==0||representation==2)&&ttl>=5&&ttl<=3600,500,"invalid gateway profile");
     quarantine_.reserve(128);
     std::ifstream in(policy,std::ios::binary);need(bool(in),500,"policy file missing");
@@ -342,7 +342,8 @@ std::shared_ptr<Node> Gateway::create(std::shared_ptr<Node> parent,const std::st
     try {
         if(category=="domain_participants") {
             fd::DomainParticipantQos q;q.transport().use_builtin_transports=false;
-            q.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
+            if(transport_.configure)transport_.configure(n->domain,q);
+            else q.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
             n->participant=fd::DomainParticipantFactory::get_instance()->create_participant(n->domain,q);
             need(n->participant!=nullptr,500,"DDS participant creation failed");
         } else if(category!="applications" && category!="waitsets") {
@@ -507,6 +508,7 @@ Response Gateway::handle(const Request& req,const Binding* binding) {
         doc=parse(req.body);if(writing)schemas_.sample(doc.get());else schemas_.rest(doc.get());
     } else need(req.body.empty(),422,"request body not allowed");
     std::unique_lock<std::mutex> lock(mutex_);need(!stopping_,503,"gateway stopping");
+    need(method=="DELETE"||!transport_.healthy||transport_.healthy(),503,"transport unavailable");
     need(!poisoned_||method=="DELETE",503,"cleanup retry required");
     if(binding) {
         auto expected=binding->node.lock();
