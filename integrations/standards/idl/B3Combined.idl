@@ -1,0 +1,23 @@
+#include "BoundedRecord.idl"
+#include "B3Cases.idl"
+module Combined {
+    @final struct Envelope {
+        Standards::BoundedRecord first;
+        StandardsB3::Record second;
+    };
+};
+module Shadow {
+    module std { @final struct Value { long n; }; };
+    module b3 { @final struct Value { long n; }; };
+    module eprosima { @final struct Value { long n; }; };
+    typedef string<2> int32_t;
+    enum Mode { OFF, ON };
+    @final struct Carrier {
+        sequence<long, 2> items;
+        unsigned long number;
+        string<8> label;
+        Mode selection;
+        int32_t short_name;
+    };
+};
+@final struct Shadow_Carrier { sequence<long, 3> items; };

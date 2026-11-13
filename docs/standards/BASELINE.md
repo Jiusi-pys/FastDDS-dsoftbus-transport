@@ -314,7 +314,8 @@ The original product plan covers considerably more than this worktree delivers.
 Not started:
 
 - full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
-- the B3–B5 generated DDS backend and C and Java language mappings;
+- B4 C and B5 Java/JNI mappings (B3's bounded C++ backend is delivered and
+  documented in [`B3_CPP_BACKEND.md`](B3_CPP_BACKEND.md));
 - the DDS-WEB gateway;
 - the DDS-OPCUA gateway;
 - a DSoftBus-backed standards probe (the probe is UDP-only and has no DSoftBus
@@ -407,7 +408,7 @@ these boards, stock isolated deployments. It does not cover the patched
 | Host Test | PASS — 93/93 unit tests, CTest 1/1 per release, recorded three-way gate comparison; B1 evidence: [canonical finding](../../build/b1-20261113/final-tester/FINDING.md); B2 final host validation: [FINDING](../../build/b2-20261113/final-tester/FINDING.md) and [validsummary.json](../../build/b2-20261113/final-tester/validsummary.json) (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes) |
 | RK3588A Test | PASS for the UDPv4 scopes, the patched matrix, and the executed DSoftBus `dsb_suite` on 2.14.5 and 3.6.2 against the modified header (route-outage scenarios not re-run); DSoftBus-backed standards probe NOT_RUN |
 | Cross-device Test | PASS for same-version UDPv4, the A1/A2 gated matrices, and the `dsb_suite` runs between both boards; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration stays BLOCKED |
-| Overall | **NOT VERIFIED** — A2 is evidenced within its bounded profile and B1/B2 are host-tested within their bounded frontend scopes, but full XTypes, A3/A4, B3–B5 mappings/backend, DDS-WEB, DDS-OPCUA and a DSoftBus-backed standards probe are not implemented |
+| Overall | **NOT VERIFIED** — A2 is evidenced within its bounded profile and B1/B2/B3 are evidenced within their bounded scopes, but full XTypes, A3/A4, B4/B5 mappings, DDS-WEB, DDS-OPCUA and a DSoftBus-backed standards probe are not implemented |
 
 `SKIPPED != PASS`, `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`,
 `BUILDS != TESTED`, `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`.

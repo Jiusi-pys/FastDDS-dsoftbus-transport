@@ -1,0 +1,46 @@
+module StandardsB3 {
+    const unsigned long long MAX_SERIAL = 18446744073709551615;
+    typedef long long Counter;
+    const Counter MIN_TOTAL = -9223372036854775808;
+    enum State { IDLE, ACTIVE, PAUSED };
+    typedef long Matrix[2][3];
+    @final struct Point { double x; float y; };
+    @final struct Record {
+        @key unsigned long id;
+        boolean ready;
+        char letter;
+        short delta;
+        unsigned short count;
+        Counter total;
+        unsigned long long serial;
+        float ratio;
+        double scale;
+        State mode;
+        string<32> label;
+        sequence<long, 4> samples;
+        Matrix coordinates;
+        Point origin;
+        sequence<Point, 3> points;
+    };
+    @appendable struct Appended {
+        @key string<24> label;
+        double magnitude;
+        sequence<octet, 8> payload;
+    };
+    @final struct Tiny {
+        @key unsigned long long one;
+        @key unsigned long long two;
+        octet value;
+    };
+    @final struct AlignedKey {
+        @key unsigned long first;
+        @key unsigned long long second;
+        @key octet third;
+    };
+    typedef sequence<Point, 2> PointGroup;
+    @final struct Collections {
+        PointGroup groups[2][2];
+        sequence<long, 2> primitive_groups[2][2];
+        sequence<sequence<long, 3>, 2> layers;
+    };
+};

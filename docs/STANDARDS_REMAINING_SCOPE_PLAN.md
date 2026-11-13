@@ -150,10 +150,16 @@ Phases:
   RK3588A/device artifact is claimed, and exhaustive IDL certification is not
   inferred. The historical initial census failure and rerun remain retained
   without changing the historical census numbers.
-- **B3 — DDS backend, C++ first.** Emit the existing generated-C++ shape so
-  the current roundtrip harness validates the new frontend against
-  Fast DDS-Gen output for the shared subset (differential test: same IDL in,
-  equivalent types out, hash-recorded).
+- **B3 — DDS backend, C++ first — DELIVERED WITHIN BOUNDED SHARED SUBSET.**
+  The existing generated-C++ shape is emitted and independently validated
+  against pinned Fast DDS-Gen output, host DDS, combined and legacy CTest
+  lanes, and exact cross-board UDP scenarios on both boards. Raw anonymous
+  nested collections containing named elements (`E_BACKEND`) require the
+  measured 3.6.2 named-inner-collection typedef boundary; the SDK and pinned
+  generator also reject the raw form. The 2.14.5 data path supports the raw
+  form and B2 semantics are unchanged. See
+  [`B3_CPP_BACKEND.md`](standards/B3_CPP_BACKEND.md). B4 and B5 remain
+  PLANNED.
 - **B4 — C mapping.** Opaque handles, explicit ownership, error codes;
   real send/receive acceptance: a C writer/reader pair over UDP on host,
   then over DSoftBus on the boards (link against the stock transport).

@@ -170,7 +170,8 @@ argument and its own approval under section 2.1.
 | Generated keyed/bounded C++ roundtrip | PRESENT | 2.14.5 and 3.6.2 CTest 1/1 PASS |
 | B1 IDL frontend core | PRESENT | HOST_TESTED PASS; review R1–R3 closed; see [`B1_IDL_FRONTEND.md`](B1_IDL_FRONTEND.md) and final tester evidence |
 | B2 IDL building blocks, annotations and §9 profiles | PRESENT | HOST_TESTED PASS; review R1–R5/C1 CLOSED; see [`B2_IDL_LANGUAGE_COVERAGE.md`](B2_IDL_LANGUAGE_COVERAGE.md) and final tester evidence |
-| B3–B5 generated DDS backend and C/Java mappings | PLANNED | NOT_RUN |
+| B3 DDS C++ backend, bounded shared subset | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED and INTEGRATION_TESTED PASS; see [`B3_CPP_BACKEND.md`](B3_CPP_BACKEND.md) |
+| B4 C mapping and B5 Java/JNI mapping | PLANNED | NOT_RUN |
 | XTypes gated 2.14.5 type-consistency patch | PRESENT | DEVICE_TESTED on both boards, both directions, gate off and on |
 | A1 gated 3.6.2 bounded type-assignability patch | PRESENT | BUILDS, HOST_TESTED, and DEVICE_TESTED; see [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md) and final tester evidence |
 | A2 bounded 2.14.5 XCDR2 framing repair | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED, review RESOLVED, final matrix PASS; see [`A2_XCDR2_INTEROPERABILITY.md`](A2_XCDR2_INTEROPERABILITY.md) |
@@ -297,7 +298,7 @@ Fast DDS 2.14.5, plus the bounded A1 3.6.2 assignability patch documented in
 [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md). Not implemented:
 
 - full Fast DDS 3.6.2/XTypes Complete assignability beyond the A1 bounded subset;
-- the B3–B5 generated DDS backend and C and Java language mappings;
+- B4 C and B5 Java/JNI mappings;
 - the DDS-WEB gateway;
 - the DDS-OPCUA gateway;
 - a DSoftBus-backed standards probe.
