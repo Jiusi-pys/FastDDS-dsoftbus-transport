@@ -261,11 +261,21 @@ Phases:
   The bounded five-second public-DDS acknowledgment fence and client budget
   are documented operational constraints; retained unfenced failures remain
   historical evidence.
-- **D3 — request/reply groundwork — PLANNED.** Fast DDS exposes no DDS-RPC and the
-  board closures ship none: implement the needed request/reply layer on
-  public DDS APIs (reuse dsb_suite's `request_reply_related_sample_identity`
-  pattern) or adopt an approved library; this is a named dependency, not an
-  assumed one.
+- **D3 — request/reply groundwork — PRESENT, bounded and HOST_TESTED PASS.**
+  The Windows host layer uses public DataWriter/DataReader APIs and the full
+  `SampleIdentity` plus `related_sample_identity` correlation pattern. It is
+  shared by exact Fast DDS 3.6.2 and 2.14.5 builds, with an unkeyed bounded
+  message, separate request/reply Topics, explicit local timeout/cancellation,
+  bounded capacity and terminal-result ownership. The final tester recorded
+  40 acceptance cases, 82 natural child exits, no forced cleanup, 175/175
+  regression tests, and strict documentation checks; the independent
+  add_subdirectory consumer passed configure/build/run for both ABIs without
+  workaround macros or extra generated sources. The local 3.6.2 SDK does have
+  high-level RPC headers, while 2.14.5 has no equivalent public RPC surface;
+  D3 therefore claims the common public-DDS foundation, not native
+  Requester/Replier interoperability or normative DDS-RPC conformance. See
+  [`D3_REQUEST_REPLY.md`](standards/D3_REQUEST_REPLY.md) and the retained
+  [final tester finding](../build/d3-20261114/final-tester/FINDING.md).
 - **D4 — Complete — PLANNED.** Service sets over D3, historical reads with explicit
   retention; independent UA implementations validate Query and history.
 - **D5 — device path — PLANNED.** Same dual-board arrangement as C4, DSoftBus-only

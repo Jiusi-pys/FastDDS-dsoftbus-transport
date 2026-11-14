@@ -137,7 +137,8 @@ establish correctness; these are bounded host execution results. The bounded
 profile excludes arbitrary types, dynamic multi-topic discovery, normative
 Nodeset completeness, full Basic conformance, authenticated remote UA,
 Service Sets, Query, history, exactly-once delivery and device validation.
-D3/D4 and D5 remain planned and own their separate dependencies and acceptance.
+D3 is now PRESENT as a separate bounded public-DDS request/reply foundation;
+D4 and D5 remain planned and own their separate dependencies and acceptance.
 
 Sources: [OMG DDS-OPCUA 1.0](https://www.omg.org/spec/DDS-OPCUA/1.0/PDF),
 [open62541 versioned source](https://github.com/open62541/open62541/tree/v1.4.21),

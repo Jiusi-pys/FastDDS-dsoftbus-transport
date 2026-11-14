@@ -1,0 +1,9 @@
+module Standards {
+    @final
+    struct RpcMessage {
+        unsigned long operation;
+        unsigned long status;
+        string<64> label;
+        sequence<octet, 4096> payload;
+    };
+};
