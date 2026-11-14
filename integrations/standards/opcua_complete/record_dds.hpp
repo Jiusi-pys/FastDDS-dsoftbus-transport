@@ -1,5 +1,6 @@
 #pragma once
 #include B3_HEADER
+#include "../cpp_backend/participant_transport.hpp"
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -28,7 +29,7 @@ public:
     fd::DataReader* reader=nullptr;
     RecordDds()=default;
     void open(const Config& c){
-        fd::DomainParticipantQos pq;pq.transport().use_builtin_transports=false;pq.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
+        fd::DomainParticipantQos pq;standards_transport::configure(c.domain,pq);
         participant_=fd::DomainParticipantFactory::get_instance()->create_participant(c.domain,pq);check(participant_,"D4 DDS participant");check(type_.register_type(participant_)==D4_DDS_OK,"D4 DDS type");
         auto* topic=participant_->create_topic(c.topic,type_.get_type_name(),fd::TOPIC_QOS_DEFAULT);auto* sub=participant_->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);check(topic&&sub,"D4 DDS topic/subscriber");
         fd::DataReaderQos rq;rq.reliability().kind=fd::RELIABLE_RELIABILITY_QOS;rq.history().kind=fd::KEEP_ALL_HISTORY_QOS;rq.data_sharing().off();

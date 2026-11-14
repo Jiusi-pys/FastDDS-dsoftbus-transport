@@ -1,5 +1,6 @@
 #pragma once
 #include D3_HEADER
+#include "../cpp_backend/participant_transport.hpp"
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -72,7 +73,7 @@ public:
                 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")==std::string::npos,"D3 service name");
         try{
             fd::DomainParticipantQos pq;pq.transport().use_builtin_transports=false;
-            pq.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
+            standards_transport::configure(c.domain,pq);
             participant_=fd::DomainParticipantFactory::get_instance()->create_participant(c.domain,pq);
             require(participant_,"D3 participant");require(type_.register_type(participant_)==OK,"D3 type registration");
             auto* request=participant_->create_topic(c.service+"_Request",type_.get_type_name(),fd::TOPIC_QOS_DEFAULT);

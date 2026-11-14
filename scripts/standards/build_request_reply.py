@@ -17,7 +17,7 @@ def sha(path):
 
 def snapshot():
     files = [p for p in (ROOT / 'integrations/standards/request_reply').rglob('*') if p.is_file()]
-    files += [ROOT / 'integrations/standards/idl/RpcMessage.idl']
+    files += [ROOT / 'integrations/standards/idl/RpcMessage.idl', ROOT / 'integrations/standards/cpp_backend/participant_transport.hpp']
     directory = ROOT / 'scripts/standards'
     files += list(directory.glob('idl_*.py')) + list((directory / 'templates').glob('*.hpp'))
     files += [directory / name for name in ('generate_cpp.py', 'compile_idl.py', 'build_request_reply.py', 'run_request_reply_acceptance.py')]

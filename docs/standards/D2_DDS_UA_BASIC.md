@@ -3,7 +3,8 @@
 Implementation PRESENT; BUILDS, HOST_TESTED and bounded host
 INTEGRATION_TESTED PASS. The final independent tester and both focused reviews
 are closed for this finite Windows AMD64 host profile above public DDS APIs.
-D5 owns RK3588A/DSoftBus/dual-board validation; it is N/A here. C3 remains
+D5 is a separate bounded RK3588A/DSoftBus/dual-board profile; it is outside
+this host executable. C3 remains
 BLOCKED, and the full standards product remains NOT VERIFIED.
 
 Canonical final evidence is retained in
@@ -139,8 +140,8 @@ Nodeset completeness, full Basic conformance, authenticated remote UA,
 Service Sets, Query, history, exactly-once delivery and device validation.
 D3 is now PRESENT as a separate bounded public-DDS request/reply foundation;
 D4 is PRESENT as a separate bounded services/history host profile and does not
-modify this D2 executable. D5 remains planned and owns device dependencies and
-acceptance.
+modify this D2 executable. D5 owns the separate native/device dependencies and
+acceptance; its bounded device result does not expand this D2 host profile.
 
 Sources: [OMG DDS-OPCUA 1.0](https://www.omg.org/spec/DDS-OPCUA/1.0/PDF),
 [open62541 versioned source](https://github.com/open62541/open62541/tree/v1.4.21),

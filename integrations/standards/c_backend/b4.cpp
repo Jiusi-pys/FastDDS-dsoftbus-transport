@@ -1,5 +1,6 @@
 #include "b4.h"
 #include "runtime_owner.hpp"
+#include "../cpp_backend/participant_transport.hpp"
 #include B3_HEADER
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
@@ -128,7 +129,7 @@ static b4_result open_impl(const b4_options *o,const b4_dsoftbus_options *d,b4_e
 #else
             return B4_UNSUPPORTED;
 #endif
-        } else pq.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
+        } else standards_transport::configure(o->domain,pq);
         auto factory=fd::DomainParticipantFactory::get_instance();
         e->participant=factory->create_participant(o->domain,pq);
         if(!e->participant || e->type.register_type(e->participant)!=ok) throw std::runtime_error("participant/type");

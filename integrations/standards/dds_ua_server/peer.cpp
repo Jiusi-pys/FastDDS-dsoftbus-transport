@@ -1,5 +1,6 @@
 // Independent public DDS fixture. No gateway, B4, UA model or UA headers.
 #include B3_HEADER
+#include "../cpp_backend/participant_transport.hpp"
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -34,7 +35,7 @@ int main(int argc,char** argv){
     fd::DomainParticipant* participant=nullptr;int result=0;bool written=false;
     try{
         check(argc==5,"usage: d2_peer DOMAIN TOPIC REP CONTROL_DIR");unsigned domain=std::stoul(argv[1]),rep=std::stoul(argv[3]);check(domain<=225&&(rep==0||rep==2),"DDS options");std::filesystem::path dir=argv[4];
-        fd::DomainParticipantQos pq;pq.transport().use_builtin_transports=false;pq.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
+        fd::DomainParticipantQos pq;standards_transport::configure(domain,pq);
         participant=fd::DomainParticipantFactory::get_instance()->create_participant(domain,pq);check(participant,"participant");fd::TypeSupport type(new Standards::BoundedRecordPubSubType());check(type.register_type(participant)==OK,"registertype");
         auto* topic=participant->create_topic(argv[2],type.get_type_name(),fd::TOPIC_QOS_DEFAULT);check(topic,"topic");auto* pub=participant->create_publisher(fd::PUBLISHER_QOS_DEFAULT);auto* sub=participant->create_subscriber(fd::SUBSCRIBER_QOS_DEFAULT);check(pub&&sub,"pubsub");
         fd::DataWriterQos wq;wq.reliability().kind=fd::RELIABLE_RELIABILITY_QOS;wq.history().depth=16;wq.data_sharing().off();wq.writer_data_lifecycle().autodispose_unregistered_instances=false;wq.representation().m_value={static_cast<fd::DataRepresentationId_t>(rep)};

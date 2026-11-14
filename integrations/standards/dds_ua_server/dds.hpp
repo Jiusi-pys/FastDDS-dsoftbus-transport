@@ -1,5 +1,6 @@
 #pragma once
 #include B3_HEADER
+#include "../cpp_backend/participant_transport.hpp"
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -28,7 +29,7 @@ public:
     fd::TypeSupport type{new Standards::BoundedRecordPubSubType};
     void open(unsigned domain,const std::string& name,unsigned rep) {
         fd::DomainParticipantQos pq;pq.transport().use_builtin_transports=false;
-        pq.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
+        standards_transport::configure(domain,pq);
         participant=fd::DomainParticipantFactory::get_instance()->create_participant(domain,pq);require(participant,"DDS participant");
         require(type.register_type(participant)==DDS_OK,"DDS type");
         auto* topic=participant->create_topic(name,type.get_type_name(),fd::TOPIC_QOS_DEFAULT);require(topic,"DDS topic");

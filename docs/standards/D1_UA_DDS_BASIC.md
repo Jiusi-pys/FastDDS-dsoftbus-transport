@@ -5,8 +5,9 @@ documentation checks and both focused Tier-2 reviews PASS/CLOSED. This is a
 bounded Windows AMD64 host milestone, not the full OMG Basic conformance point.
 D2 is now PRESENT as a separate bounded DDS→UA Windows host profile;
 D3 is now PRESENT as a separate bounded public-DDS request/reply host foundation;
-D4 is PRESENT as a separate bounded services/history host profile. D5 owns RK3588A/DSoftBus/dual-board validation and remains
-N/A for these host scopes. C3 stays BLOCKED and the complete standards product
+D4 is PRESENT as a separate bounded services/history host profile. D5 is a
+separate bounded native/device profile; its device evidence does not change
+these host-scope results. C3 stays BLOCKED and the complete standards product
 remains NOT VERIFIED. Canonical execution evidence is retained in
 [`build/d1-20261114/final-tester/FINDING.md`](../../build/d1-20261114/final-tester/FINDING.md),
 [`summary.json`](../../build/d1-20261114/final-tester/summary.json),

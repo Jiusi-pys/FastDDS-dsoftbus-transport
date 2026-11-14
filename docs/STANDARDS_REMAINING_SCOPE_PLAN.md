@@ -4,7 +4,8 @@ Date: 2026-11-14. Decision record: on 2026-11-10 the four items below were
 excluded from that session's delivery scope; on 2026-11-11 the project owner
 reopened all four for implementation. This plan is the execution brief. It
 does not change any recorded status: capabilities without their own evidence
-stay PLANNED.
+stay PLANNED. D5 now has its own bounded native/device evidence; this does not
+make the remaining full-conformance capabilities complete.
 
 Baseline: branch `codex/dds-standards-product`, commit `366b6aed`. What
 already exists and is verified: the UDP type probe and evidence runner, bounded
@@ -284,8 +285,16 @@ Phases:
   [`D4_UA_SERVICES_HISTORY.md`](standards/D4_UA_SERVICES_HISTORY.md) and
   `build/d4-20261114/final-tester/`. This Windows profile is not normative
   DDS-RPC or full DDS-OPCUA Complete conformance and does not alter D2.
-- **D5 — device path — PLANNED.** Same dual-board arrangement as C4, DSoftBus-only
-  between boards, roles reversed.
+- **D5 — device path — PRESENT, BUILDS, HOST_TESTED, DEVICE_TESTED and bounded
+  INTEGRATION_TESTED PASS.** The separate OpenHarmony arm64 native wrapper
+  reuses the D1–D4 public-DDS applications and validates both Fast DDS ABIs
+  across the two logical RK3588A board roles. The final matrix covers 12 lanes
+  and 120 phases, with 396 natural OS-zero exits, 120 native jobs, zero forced
+  cleanup and 104 deployed paths. Evidence is retained in
+  [`D5_UA_DEVICE_PATH.md`](standards/D5_UA_DEVICE_PATH.md),
+  `build/d5-20261114/final-tester/`, and
+  `build/d5-20261114/host-final-tester/`. This is a finite device path, not
+  full DDS-OPCUA, DDS-RPC or OMG conformance.
 
 ## Order and dependencies
 

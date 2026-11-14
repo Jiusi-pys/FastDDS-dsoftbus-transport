@@ -1,5 +1,6 @@
 // Independent fixture: generated data types and public DDS only; no D3/D4 core.
 #include D3_HEADER
+#include "../cpp_backend/participant_transport.hpp"
 #include B3_HEADER
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
@@ -42,7 +43,7 @@ int main(int argc,char** argv){
         require(argc==6,"usage: d4_native_peer rpc|publish DOMAIN NAME REP DIR");std::string mode=argv[1],name=argv[3];unsigned domain=integer(argv[2]),rep=integer(argv[4]);fs::path directory=fs::absolute(argv[5]);
         require((mode=="rpc"||mode=="publish")&&domain<=225&&(rep==0||rep==2),"peer configuration");auto end=Clock::now()+std::chrono::seconds(90);
         auto pause=[&]{require(Clock::now()<end,"peer supervision deadline");std::this_thread::sleep_for(std::chrono::milliseconds(2));};
-        fd::DomainParticipantQos pq;pq.transport().use_builtin_transports=false;pq.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());owner=fd::DomainParticipantFactory::get_instance()->create_participant(domain,pq);require(owner,"peer participant");
+        fd::DomainParticipantQos pq;standards_transport::configure(domain,pq);owner=fd::DomainParticipantFactory::get_instance()->create_participant(domain,pq);require(owner,"peer participant");
         fd::TypeSupport type(mode=="rpc"?static_cast<fd::TopicDataType*>(new Standards::RpcMessagePubSubType):static_cast<fd::TopicDataType*>(new Standards::BoundedRecordPubSubType));require(type.register_type(owner)==GOOD,"peer type");
         auto* tx=owner->create_topic(mode=="rpc"?name+"_Request":name,type.get_type_name(),fd::TOPIC_QOS_DEFAULT);auto* pub=owner->create_publisher(fd::PUBLISHER_QOS_DEFAULT);require(tx&&pub,"peer topic/pub");
         fd::DataWriterQos wq;wq.reliability().kind=fd::RELIABLE_RELIABILITY_QOS;wq.reliability().max_blocking_time={0,100000000};wq.history().kind=fd::KEEP_ALL_HISTORY_QOS;wq.data_sharing().off();

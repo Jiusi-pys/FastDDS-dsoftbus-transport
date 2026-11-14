@@ -1,6 +1,6 @@
 # D3 bounded request/reply groundwork
 
-D3 is PRESENT as a bounded Windows public-DDS foundation for the later DDS-OPCUA Complete work. It is IMPLEMENTED, BUILDS, HOST_TESTED and bounded INTEGRATION_TESTED PASS for exact Fast DDS 3.6.2 and 2.14.5 host SDKs. Device validation is N/A: this milestone contains no DSoftBus path; D5 owns RK3588A and cross-device validation. The complete standards product remains NOT VERIFIED, C3 remains BLOCKED, D4 is now a separate bounded services/history host profile, and D5 remains PLANNED.
+D3 is PRESENT as a bounded Windows public-DDS foundation for the later DDS-OPCUA Complete work. It is IMPLEMENTED, BUILDS, HOST_TESTED and bounded INTEGRATION_TESTED PASS for exact Fast DDS 3.6.2 and 2.14.5 host SDKs. Device validation is N/A: this milestone contains no DSoftBus path; D5 is the separate bounded RK3588A and cross-device profile. The complete standards product remains NOT VERIFIED, C3 remains BLOCKED, and D4 is a separate bounded services/history host profile.
 
 ## What is implemented
 

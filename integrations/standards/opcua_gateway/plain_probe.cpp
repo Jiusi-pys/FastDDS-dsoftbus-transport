@@ -1,5 +1,6 @@
 // Independent public-DDS reader: deliberately has no gateway/B4/open62541 dependency.
 #include B3_HEADER
+#include "../cpp_backend/participant_transport.hpp"
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/subscriber/Subscriber.hpp>
@@ -32,7 +33,7 @@ int main(int argc,char** argv) {
         unsigned domain=std::stoul(argv[1]),rep=std::stoul(argv[3]),runtime=std::stoul(argv[5]);
         check(domain<=225 && (rep==0||rep==2) && runtime<=120000,"probe option bounds");
         fd::DomainParticipantQos pq;pq.transport().use_builtin_transports=false;
-        pq.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
+        standards_transport::configure(domain,pq);
         participant=factory->create_participant(domain,pq);check(participant,"participant");
         fd::TypeSupport type(new Standards::BoundedRecordPubSubType());check(type.register_type(participant)==OK,"register type");
         auto* topic=participant->create_topic(argv[2],type.get_type_name(),fd::TOPIC_QOS_DEFAULT);check(topic,"topic");

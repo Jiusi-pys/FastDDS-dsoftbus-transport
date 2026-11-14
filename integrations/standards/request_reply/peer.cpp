@@ -1,5 +1,6 @@
 // Independent SDK fixture: no D3 headers, implementation, tables or library linkage.
 #include D3_HEADER
+#include "../cpp_backend/participant_transport.hpp"
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
 #include <fastdds/dds/publisher/Publisher.hpp>
@@ -58,7 +59,7 @@ int main(int argc,char** argv){
         std::string role=argv[1],service=argv[3],mode=argv[5];unsigned domain=std::stoul(argv[2]),rep=std::stoul(argv[4]),peers=std::stoul(argv[7]),count=std::stoul(argv[8]);
         check((role=="client"||role=="server")&&domain<=225&&(rep==0||rep==2)&&peers>=1&&peers<=4&&count>=1&&count<=16,"peer bounds");
         fs::path dir=fs::absolute(argv[6]);auto end=Clock::now()+std::chrono::seconds(60);
-        fd::DomainParticipantQos pq;pq.transport().use_builtin_transports=false;pq.transport().user_transports.push_back(std::make_shared<eprosima::fastdds::rtps::UDPv4TransportDescriptor>());
+        fd::DomainParticipantQos pq;standards_transport::configure(domain,pq);
         participant=fd::DomainParticipantFactory::get_instance()->create_participant(domain,pq);check(participant,"peer participant");
         fd::TypeSupport type(new Standards::RpcMessagePubSubType);check(type.register_type(participant)==GOOD,"peer type");
         auto* request=participant->create_topic(service+"_Request",type.get_type_name(),fd::TOPIC_QOS_DEFAULT);

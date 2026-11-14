@@ -6,8 +6,9 @@ D4 is PRESENT, BUILDS, HOST_TESTED and bounded INTEGRATION_TESTED PASS for the
 Windows AMD64 public-DDS/open62541 profile. It is a separate milestone above
 the unchanged D3 request/reply foundation. D4 does not modify D1, D2, D3,
 Fast DDS, Fast CDR, RTPS, Transport, discovery or reliability semantics, and it
-does not add history to the D2 executable. D5 remains PLANNED for RK3588A,
-DSoftBus and cross-device validation. The overall standards product remains
+does not add history to the D2 executable. D5 is a separate bounded native
+profile for RK3588A, DSoftBus and cross-device validation; its result does not
+expand this Windows profile. The overall standards product remains
 NOT VERIFIED; C3 remains BLOCKED.
 
 This is bounded application coverage, not full OMG DDS-RPC, DDS-OPCUA Complete,
