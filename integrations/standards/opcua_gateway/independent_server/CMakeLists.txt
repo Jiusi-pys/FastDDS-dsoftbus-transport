@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22)
+project(D1IndependentUaServer LANGUAGES C CXX)
+find_package(open62541 1.4.21 EXACT CONFIG REQUIRED)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../verify_ua.cmake")
+add_executable(d1_ua_server server.cpp)
+target_compile_features(d1_ua_server PRIVATE cxx_std_17)
+target_link_libraries(d1_ua_server PRIVATE open62541::open62541)

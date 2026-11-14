@@ -235,10 +235,18 @@ historical reads.
 
 Phases:
 
-- **D1 — UA→DDS Basic.** open62541 client side, bounded work queues,
-  reconnect state, per-direction configuration and shutdown. Acceptance:
-  independent UA server (e.g. open62541 example server built separately,
-  version+hash recorded) feeding DDS samples observed by a plain probe.
+- **D1 — UA→DDS Basic — PRESENT, bounded host profile.** The Windows AMD64
+  open62541 client path has bounded work queues, reconnect state,
+  per-direction configuration and shutdown. Final host acceptance PASS covers
+  the finite `ua_to_dds` scalar UInt32/Good-quality profile, independent
+  separately built UA server and plain public-DDS probe; fresh 3.6.2 and
+  2.14.5 ABI builds, acceptance, regression and strict documentation checks
+  passed (exact measured results are in `build/d1-20261114/final-tester/`).
+  This is not full OMG Basic/type/Variant/
+  Event/XML mapping or service conformance. See
+  [`D1_UA_DDS_BASIC.md`](standards/D1_UA_DDS_BASIC.md) and
+  `build/d1-20261114/final-tester/`. D5 device/RK3588A/DSoftBus validation is
+  separate and remains N/A here.
 - **D2 — DDS→UA Basic.** UA server surface exposing DDS types/topics/keyed
   instances; validated by an independent UA client.
 - **D3 — request/reply groundwork.** Fast DDS exposes no DDS-RPC and the

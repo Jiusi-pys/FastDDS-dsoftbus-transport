@@ -44,6 +44,11 @@ entity, discovery, key lifecycle or loan surface. B5 adds a separate bounded
 Windows Java/JNI facade over this unchanged C SDK; see
 [`B5_JAVA_JNI_MAPPING.md`](B5_JAVA_JNI_MAPPING.md).
 
+D1 uses this unchanged public-DDS boundary from a separate Windows gateway;
+the D1 milestone does not modify B4 DDS semantics, QoS, transport or retry
+behavior. D1's plain probe consumes generated support and public DDS only, and
+its DSoftBus/device leg is explicitly out of scope (D5 owns that validation).
+
 The default build explicitly selects UDPv4 with built-in transports disabled.
 The optional OHOS adapter uses the installed stock DSoftBus Transport and the
 existing device deployment/Socket runtime. It supplies transport configuration

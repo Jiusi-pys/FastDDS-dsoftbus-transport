@@ -194,7 +194,8 @@ argument and its own approval under section 2.1.
 | C2 notifications + WS/WSS | PRESENT | BUILDS, HOST_TESTED and INTEGRATION_TESTED PASS on both ABIs for the bounded profile; see [`C2_DDS_WEB_NOTIFICATIONS.md`](C2_DDS_WEB_NOTIFICATIONS.md) and final tester evidence |
 | C3 SOAP mapping | BLOCKED | Formal SOAP contract unavailable: public URLs 404, member artifact 401, no owner-supplied files; no implementation started |
 | C4 native gateway and cross-board DSoftBus path | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED, INTEGRATION_TESTED and cross-device PASS for the bounded profile; final evidence in `build/c4-20261113/final-retest/`; original UDP standards probe remains NOT_RUN |
-| DDS-OPCUA gateway | PLANNED | NOT_RUN |
+| D1 bounded UA→DDS host gateway | PRESENT | BUILDS and HOST_TESTED PASS on Windows AMD64 for exact 3.6.2/2.14.5 ABIs; final acceptance/regression evidence and review closure are retained in `build/d1-20261114/`; device/DSoftBus is N/A for D1 and owned by D5 — see [`D1_UA_DDS_BASIC.md`](D1_UA_DDS_BASIC.md) |
+| DDS-OPCUA D2–D5 / full gateway | PLANNED | D2–D4 not started; D5 device/RK3588A/dual-board path not run |
 | Native arm64 probe and generated roundtrip | PRESENT | BUILDS for 2.14.5 and 3.6.2 |
 | New dual-board standards tests | PRESENT | DEVICE_TESTED for the UDP-only standards-probe UDPv4 matrix; no DSoftBus deployment runner for that probe |
 | Existing DSoftBus `dsb_suite` core and feature probes | PRESENT in current tree | DEVICE_TESTED: executed over DSoftBus between both boards against the modified `compat.hpp`, 70 passed, 0 failed on each of 2.14.5 and 3.6.2 with per-case `DSB_CASE` lines retained; route-outage scenarios not re-run; see `build/dsb-exec-20261110/FINDING.md` |
@@ -327,7 +328,8 @@ Not implemented:
   unavailable (public URLs 404, member artifact 401, and no owner files);
 - full DDS-WEB conformance (C1/C2/C4 are bounded profiles; C4 device evidence is
   retained separately);
-- the DDS-OPCUA gateway;
+- DDS-OPCUA D2–D5 and full gateway conformance beyond the bounded D1
+  UA→DDS host profile;
 - a DSoftBus-backed standards probe.
 
 ## Overall status

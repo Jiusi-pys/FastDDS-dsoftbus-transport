@@ -11,7 +11,7 @@ plus gated upstream patches for Fast DDS
 status is listed in the architecture table and
 [`A1_TYPE_ASSIGNABILITY.md`](A1_TYPE_ASSIGNABILITY.md).
 This document does not claim DDS-XTypes Complete, full IDL 4.2 language
-coverage beyond the B2 frontend scope, full DDS-WEB, DDS-OPCUA, or DSoftBus integration for
+coverage beyond the B2 frontend scope, full DDS-WEB, full DDS-OPCUA, or DSoftBus integration for
 the new UDP-only standards probe. The bounded C4 native gateway/device profile is
 separately verified below; this does not turn the UDP-only standards probe into a
 DSoftBus test. Existing-tree DSoftBus `dsb_suite` state is recorded in
@@ -340,7 +340,8 @@ Not started:
   unavailable (public URLs 404, member artifact 401, and no owner files);
 - full DDS-WEB conformance (C1/C2/C4 are bounded profiles; C4 device evidence is
   retained separately);
-- the DDS-OPCUA gateway;
+- DDS-OPCUA D2–D5 and full DDS-OPCUA conformance (D1 is now a bounded,
+  Windows-host-tested UA→DDS profile; see [`D1_UA_DDS_BASIC.md`](D1_UA_DDS_BASIC.md));
 - a DSoftBus-backed standards probe (the probe is UDP-only and has no DSoftBus
   deployment runner).
 
@@ -426,12 +427,12 @@ these boards, stock isolated deployments. It does not cover the patched
 
 | Dimension | State |
 | --- | --- |
-| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded B1/B2 host frontends, bounded IDL generation path, generated C++ roundtrip, bounded C1 REST/C2 WS-WSS host profiles, bounded C4 native gateway/device path, OpenHarmony arm64 build path, gated 2.14.5 patches and bounded A1 3.6.2 patch; B4 bounded hand-written C11 SDK and bounded B5 Windows Java/JNI facade are present ([B4 snapshot](../../build/b4-20261113/final-implementation-snapshot.json), [B5 summary](../../build/b5-20261114/final-tester/summary.json)) |
-| Build | PASS — host MSVC and OHOS arm64, both Fast DDS releases; C1/C2 dual-ABI builds PASS; B2 compiler-backed frontend sweep PASS; B4 both-ABI host/native builds PASS ([final host](../../build/b4-20261113/final-host/FINDING.md), [final native](../../build/b4-20261113/final-native/FINDING.md)); B5 fresh 3.6.2 and 2.14.5 builders exit 0 with 9/9 CTest contracts each ([B5 finding](../../build/b5-20261114/final-tester/FINDING.md)) |
-| Host Test | PASS — C1/C2 final dual-ABI host and native-DDS acceptance PASS (C2 evidence: [canonical finding](../../build/c2-20261113/final-tester/FINDING.md)); 93/93 unit tests, CTest 1/1 per release, recorded three-way gate comparison; B1 evidence: [canonical finding](../../build/b1-20261113/final-tester/FINDING.md); B2 final host validation: [FINDING](../../build/b2-20261113/final-tester/FINDING.md) and [validsummary.json](../../build/b2-20261113/final-tester/validsummary.json) (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes); B4 final host validation: [FINDING](../../build/b4-20261113/final-host/FINDING.md); B5 final Windows x64 validation adds 18 CTest cases, 12 exact Java↔independent-B3 C++ lanes, 24 process exits 0, ten keyed samples per Java process and 42 module records; regression 175 nofail/error/skip and docs guard 93 tests/7 digests ([B5 finding](../../build/b5-20261114/final-tester/FINDING.md)) |
+| Implementation | PRESENT — version-bound baseline probe, evidence runner, bounded B1/B2 host frontends, bounded IDL generation path, generated C++ roundtrip, bounded C1 REST/C2 WS-WSS host profiles, bounded C4 native gateway/device path, bounded D1 UA→DDS Windows host gateway, OpenHarmony arm64 build path, gated 2.14.5 patches and bounded A1 3.6.2 patch; B4 bounded hand-written C11 SDK and bounded B5 Windows Java/JNI facade are present ([B4 snapshot](../../build/b4-20261113/final-implementation-snapshot.json), [B5 summary](../../build/b5-20261114/final-tester/summary.json), [D1 finding](../../build/d1-20261114/final-tester/FINDING.md)) |
+| Build | PASS — host MSVC and OHOS arm64, both Fast DDS releases; C1/C2 dual-ABI builds PASS; B2 compiler-backed frontend sweep PASS; B4 both-ABI host/native builds PASS ([final host](../../build/b4-20261113/final-host/FINDING.md), [final native](../../build/b4-20261113/final-native/FINDING.md)); B5 fresh 3.6.2 and 2.14.5 builders exit 0 with 9/9 CTest contracts each ([B5 finding](../../build/b5-20261114/final-tester/FINDING.md)); D1 fresh exact-ABI host builds PASS ([D1 finding](../../build/d1-20261114/final-tester/FINDING.md)) |
+| Host Test | PASS — C1/C2 final dual-ABI host and native-DDS acceptance PASS (C2 evidence: [canonical finding](../../build/c2-20261113/final-tester/FINDING.md)); 93/93 unit tests, CTest 1/1 per release, recorded three-way gate comparison; B1 evidence: [canonical finding](../../build/b1-20261113/final-tester/FINDING.md); B2 final host validation: [FINDING](../../build/b2-20261113/final-tester/FINDING.md) and [validsummary.json](../../build/b2-20261113/final-tester/validsummary.json) (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes); B4 final host validation: [FINDING](../../build/b4-20261113/final-host/FINDING.md); B5 final Windows x64 validation adds 18 CTest cases, 12 exact Java↔independent-B3 C++ lanes, 24 process exits 0, ten keyed samples per Java process and 42 module records; D1 final Windows host validation PASS with canonical acceptance, regression and documentation records ([D1 finding](../../build/d1-20261114/final-tester/FINDING.md)); regression 175 nofail/error/skip and docs guard 93 tests/7 digests ([B5 finding](../../build/b5-20261114/final-tester/FINDING.md)) |
 | RK3588A Test | PASS for the UDPv4/A1/A2/`dsb_suite` scopes, the B4 canonical DSoftBus matrix ([final native](../../build/b4-20261113/final-native/FINDING.md)), and bounded C4 native gateway matrix ([C4 final](../../build/c4-20261113/final-retest/FINDING.md)); DSoftBus-backed standards probe NOT_RUN |
 | Cross-device Test | PASS for prior UDPv4/A1/A2/`dsb_suite` scopes, B4 canonical 8-case matrix ([canonical result](../../build/b4-20261113/final-native/final-canonical-result.json)), and C4's 12-lane/660-execution native gateway replay; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration stays BLOCKED |
-| Overall | **NOT VERIFIED** — delivered items are bounded (including B5, C1, C2 and C4); C3 is BLOCKED, while full XTypes, A3/A4, full Java/IDL mapping, full DDS-WEB/SOAP conformance, DDS-OPCUA and a DSoftBus-backed standards probe remain outside the verified product scope |
+| Overall | **NOT VERIFIED** — delivered items are bounded (including B5, C1, C2, C4 and D1); C3 is BLOCKED, while full XTypes, A3/A4, full Java/IDL mapping, full DDS-WEB/SOAP conformance, D2–D5/full DDS-OPCUA and a DSoftBus-backed standards probe remain outside the verified product scope |
 
 `SKIPPED != PASS`, `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`,
 `BUILDS != TESTED`, `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`.
