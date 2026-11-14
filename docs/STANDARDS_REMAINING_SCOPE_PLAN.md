@@ -247,16 +247,28 @@ Phases:
   [`D1_UA_DDS_BASIC.md`](standards/D1_UA_DDS_BASIC.md) and
   `build/d1-20261114/final-tester/`. D5 device/RK3588A/DSoftBus validation is
   separate and remains N/A here.
-- **D2 — DDS→UA Basic.** UA server surface exposing DDS types/topics/keyed
-  instances; validated by an independent UA client.
-- **D3 — request/reply groundwork.** Fast DDS exposes no DDS-RPC and the
+- **D2 — DDS→UA Basic — PRESENT, bounded and HOST_TESTED PASS.** The Windows
+  AMD64 server exposes the finite `BoundedRecord` type, one configured topic,
+  keyed instances, value reads/subscriptions and bounded lifecycle methods via
+  public DDS APIs. Exact 3.6.2 and 2.14.5 builds, independent asyncua client,
+  native lifecycle witnesses, reviews and final tester passed. The final
+  tester recorded 20 acceptance cases, 46 expected child exits, no forced
+  cleanup, 175/175 regression tests and strict documentation checks; see
+  [`D2_DDS_UA_BASIC.md`](standards/D2_DDS_UA_BASIC.md) and
+  [`final-tester/FINDING.md`](../build/d2-20261114/final-tester/FINDING.md).
+  This is not full DDS-OPCUA Basic/Complete or device evidence: D5 owns
+  RK3588A/DSoftBus/cross-device validation, N/A for this Windows milestone.
+  The bounded five-second public-DDS acknowledgment fence and client budget
+  are documented operational constraints; retained unfenced failures remain
+  historical evidence.
+- **D3 — request/reply groundwork — PLANNED.** Fast DDS exposes no DDS-RPC and the
   board closures ship none: implement the needed request/reply layer on
   public DDS APIs (reuse dsb_suite's `request_reply_related_sample_identity`
   pattern) or adopt an approved library; this is a named dependency, not an
   assumed one.
-- **D4 — Complete.** Service sets over D3, historical reads with explicit
+- **D4 — Complete — PLANNED.** Service sets over D3, historical reads with explicit
   retention; independent UA implementations validate Query and history.
-- **D5 — device path.** Same dual-board arrangement as C4, DSoftBus-only
+- **D5 — device path — PLANNED.** Same dual-board arrangement as C4, DSoftBus-only
   between boards, roles reversed.
 
 ## Order and dependencies

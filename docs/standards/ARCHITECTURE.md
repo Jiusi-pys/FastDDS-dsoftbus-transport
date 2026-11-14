@@ -112,6 +112,15 @@ DDS, and are exercised by independent Windows clients through a byte-only SSH
 forwarder. C3 remains BLOCKED on its unavailable formal SOAP contract; C4 does
 not depend on C3.
 
+The D2 DDS-to-UA direction is present as a separate bounded Windows AMD64 host
+profile. It uses public DDS plus generated B3 support and an independent asyncua
+client over a finite custom `BoundedRecord` namespace. Exact 3.6.2 and 2.14.5
+host builds, lifecycle witnesses, review closures and final-tester evidence
+pass within that scope. D2 uses explicit UDPv4 for its host fixture; it does
+not claim Transport, DSoftBus, RK3588A, full DDS-OPCUA Basic/Complete or
+cross-device verification. D3 request/reply, D4 Complete/history and D5 device
+path remain planned.
+
 ## AGENTS.md section 2.1: modifying RTPS endpoint matching
 
 `patches/fastdds/2.14.5/0001-edp-honor-reader-type-consistency-qos.patch`
@@ -195,7 +204,8 @@ argument and its own approval under section 2.1.
 | C3 SOAP mapping | BLOCKED | Formal SOAP contract unavailable: public URLs 404, member artifact 401, no owner-supplied files; no implementation started |
 | C4 native gateway and cross-board DSoftBus path | PRESENT | BUILDS, HOST_TESTED, DEVICE_TESTED, INTEGRATION_TESTED and cross-device PASS for the bounded profile; final evidence in `build/c4-20261113/final-retest/`; original UDP standards probe remains NOT_RUN |
 | D1 bounded UA→DDS host gateway | PRESENT | BUILDS and HOST_TESTED PASS on Windows AMD64 for exact 3.6.2/2.14.5 ABIs; final acceptance/regression evidence and review closure are retained in `build/d1-20261114/`; device/DSoftBus is N/A for D1 and owned by D5 — see [`D1_UA_DDS_BASIC.md`](D1_UA_DDS_BASIC.md) |
-| DDS-OPCUA D2–D5 / full gateway | PLANNED | D2–D4 not started; D5 device/RK3588A/dual-board path not run |
+| D2 bounded DDS→UA host gateway | PRESENT | BUILDS, HOST_TESTED and bounded INTEGRATION_TESTED PASS on Windows AMD64 for exact 3.6.2/2.14.5 ABIs; final matrix, regression, strict-doc and review closures are retained in `build/d2-20261114/`; device/DSoftBus is N/A by scope — see [`D2_DDS_UA_BASIC.md`](D2_DDS_UA_BASIC.md) |
+| DDS-OPCUA D3–D5 / full gateway | PLANNED | D3 request/reply, D4 Complete/history and D5 device/RK3588A/dual-board path remain planned |
 | Native arm64 probe and generated roundtrip | PRESENT | BUILDS for 2.14.5 and 3.6.2 |
 | New dual-board standards tests | PRESENT | DEVICE_TESTED for the UDP-only standards-probe UDPv4 matrix; no DSoftBus deployment runner for that probe |
 | Existing DSoftBus `dsb_suite` core and feature probes | PRESENT in current tree | DEVICE_TESTED: executed over DSoftBus between both boards against the modified `compat.hpp`, 70 passed, 0 failed on each of 2.14.5 and 3.6.2 with per-case `DSB_CASE` lines retained; route-outage scenarios not re-run; see `build/dsb-exec-20261110/FINDING.md` |
@@ -328,8 +338,8 @@ Not implemented:
   unavailable (public URLs 404, member artifact 401, and no owner files);
 - full DDS-WEB conformance (C1/C2/C4 are bounded profiles; C4 device evidence is
   retained separately);
-- DDS-OPCUA D2–D5 and full gateway conformance beyond the bounded D1
-  UA→DDS host profile;
+- DDS-OPCUA D3–D5 and full gateway conformance beyond the bounded D1/D2
+  UA→DDS and DDS→UA host profiles;
 - a DSoftBus-backed standards probe.
 
 ## Overall status
@@ -341,7 +351,7 @@ Not implemented:
 | Host Test | PASS, 93/93 unit tests and CTest 1/1 per release; B2 frontend final host validation PASS (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes) |
 | RK3588A Test | PASS for the prior UDPv4/A1/A2/`dsb_suite` scopes and the bounded C4 native gateway matrix; DSoftBus-backed UDP standards probe NOT_RUN |
 | Cross-device Test | PASS for prior UDPv4/A1/A2/`dsb_suite` scopes and C4's 12-lane/660-execution native gateway replay; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration BLOCKED |
-| Overall | **NOT VERIFIED** for the product scope; C1/C2/C4 and B5 are bounded profiles, C3 is BLOCKED, and full DDS-WEB/SOAP conformance plus the remaining A3/A4/D work are unfinished |
+| Overall | **NOT VERIFIED** for the product scope; C1/C2/C4, B5, D1 and D2 are bounded profiles, C3 is BLOCKED, and full DDS-WEB/SOAP/DDS-OPCUA conformance plus the remaining A3/A4/D3–D5 work are unfinished |
 
 `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`, `BUILDS != TESTED`,
 `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`. Existing transport,

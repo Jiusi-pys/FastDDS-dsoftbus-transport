@@ -3,8 +3,9 @@
 Implementation PRESENT; fresh host builds, acceptance, regression, strict
 documentation checks and both focused Tier-2 reviews PASS/CLOSED. This is a
 bounded Windows AMD64 host milestone, not the full OMG Basic conformance point.
-D2–D5 remain PLANNED. D5 owns RK3588A/DSoftBus/dual-board validation and is N/A
-for this host scope. C3 stays BLOCKED and the complete standards product
+D2 is now PRESENT as a separate bounded DDS→UA Windows host profile;
+D3–D5 remain PLANNED. D5 owns RK3588A/DSoftBus/dual-board validation and is
+N/A for these host scopes. C3 stays BLOCKED and the complete standards product
 remains NOT VERIFIED. Canonical execution evidence is retained in
 [`build/d1-20261114/final-tester/FINDING.md`](../../build/d1-20261114/final-tester/FINDING.md),
 [`summary.json`](../../build/d1-20261114/final-tester/summary.json),
@@ -117,4 +118,4 @@ test-only and is not DSoftBus socket fault injection or a production proxy.
 | Host test | PASS — final tester acceptance, ABI CTest contracts and regression; exact counts are in the canonical finding/census |
 | Review | CLOSED — [`review-native/CLOSURE.md`](../../build/d1-20261114/review-native/CLOSURE.md) and [`review-evidence/CLOSURE.md`](../../build/d1-20261114/review-evidence/CLOSURE.md), with matching closure JSON records |
 | Device / RK3588A / DSoftBus | N/A — D5 is a separate milestone; host success is not device evidence |
-| Full DDS-OPCUA Basic / Complete | NOT VERIFIED — D1 is only the bounded UA→DDS host profile; D2–D5 remain PLANNED |
+| Full DDS-OPCUA Basic / Complete | NOT VERIFIED — D1 and D2 are separate bounded host profiles; D3–D5 remain PLANNED |
