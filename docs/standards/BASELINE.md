@@ -340,9 +340,10 @@ Not started:
   unavailable (public URLs 404, member artifact 401, and no owner files);
 - full DDS-WEB conformance (C1/C2/C4 are bounded profiles; C4 device evidence is
   retained separately);
-- DDS-OPCUA D4–D5 and full DDS-OPCUA conformance (D1 is a bounded UA→DDS
-  profile, D2 is a separate bounded, Windows-host-tested DDS→UA profile, and
-  D3 is a bounded public-DDS request/reply foundation;
+- DDS-OPCUA D5 and full DDS-OPCUA conformance (D1 is a bounded UA→DDS profile,
+  D2 is a separate bounded Windows-host-tested DDS→UA profile, D3 is a bounded
+  public-DDS request/reply foundation, and D4 is a separate bounded Windows
+  services/history profile;
   see [`D1_UA_DDS_BASIC.md`](D1_UA_DDS_BASIC.md) and
   [`D2_DDS_UA_BASIC.md`](D2_DDS_UA_BASIC.md));
 - a DSoftBus-backed standards probe (the probe is UDP-only and has no DSoftBus
@@ -435,7 +436,7 @@ these boards, stock isolated deployments. It does not cover the patched
 | Host Test | PASS — C1/C2 final dual-ABI host and native-DDS acceptance PASS (C2 evidence: [canonical finding](../../build/c2-20261113/final-tester/FINDING.md)); 93/93 unit tests, CTest 1/1 per release, recorded three-way gate comparison; B1 evidence: [canonical finding](../../build/b1-20261113/final-tester/FINDING.md); B2 final host validation: [FINDING](../../build/b2-20261113/final-tester/FINDING.md) and [validsummary.json](../../build/b2-20261113/final-tester/validsummary.json) (33 B2 tests, 16 B1 compatibility tests, 306 compiler-backed cases, 20 semantic probes); B4 final host validation: [FINDING](../../build/b4-20261113/final-host/FINDING.md); B5 final Windows x64 validation adds 18 CTest cases, 12 exact Java↔independent-B3 C++ lanes, 24 process exits 0, ten keyed samples per Java process and 42 module records; D1 final Windows host validation PASS with canonical acceptance, regression and documentation records ([D1 finding](../../build/d1-20261114/final-tester/FINDING.md)); D2 final Windows host validation PASS with canonical acceptance and review records ([D2 finding](../../build/d2-20261114/final-tester/FINDING.md)); D3 final Windows host validation PASS with 40 acceptance cases, 82 natural child exits and independent two-ABI consumer checks ([D3 finding](../../build/d3-20261114/final-tester/FINDING.md)); regression 175 nofail/error/skip and docs guard 93 tests/7 digests ([B5 finding](../../build/b5-20261114/final-tester/FINDING.md)) |
 | RK3588A Test | PASS for the UDPv4/A1/A2/`dsb_suite` scopes, the B4 canonical DSoftBus matrix ([final native](../../build/b4-20261113/final-native/FINDING.md)), and bounded C4 native gateway matrix ([C4 final](../../build/c4-20261113/final-retest/FINDING.md)); DSoftBus-backed standards probe NOT_RUN |
 | Cross-device Test | PASS for prior UDPv4/A1/A2/`dsb_suite` scopes, B4 canonical 8-case matrix ([canonical result](../../build/b4-20261113/final-native/final-canonical-result.json)), and C4's 12-lane/660-execution native gateway replay; historical stock/off mixed-version UDPv4 XCDR1 PASS and XCDR2 FAIL; forced-validation configuration stays BLOCKED |
-| Overall | **NOT VERIFIED** — delivered items are bounded (including B5, C1, C2, C4, D1, D2 and D3); C3 is BLOCKED, while full XTypes, A3/A4, full Java/IDL mapping, full DDS-WEB/SOAP conformance, D4–D5/full DDS-OPCUA and a DSoftBus-backed standards probe remain outside the verified product scope |
+| Overall | **NOT VERIFIED** — delivered items are bounded (including B5, C1, C2, C4, D1, D2, D3 and D4); C3 is BLOCKED, while full XTypes, A3/A4, full Java/IDL mapping, full DDS-WEB/SOAP conformance, D5/full DDS-OPCUA and a DSoftBus-backed standards probe remain outside the verified product scope |
 
 `SKIPPED != PASS`, `BLOCKED != PASS`, `IMPLEMENTED != VERIFIED`,
 `BUILDS != TESTED`, `HOST_TESTED != DEVICE_TESTED`, `COMPILED != TESTED`.

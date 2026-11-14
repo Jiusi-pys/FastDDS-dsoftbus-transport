@@ -276,8 +276,14 @@ Phases:
   Requester/Replier interoperability or normative DDS-RPC conformance. See
   [`D3_REQUEST_REPLY.md`](standards/D3_REQUEST_REPLY.md) and the retained
   [final tester finding](../build/d3-20261114/final-tester/FINDING.md).
-- **D4 — Complete — PLANNED.** Service sets over D3, historical reads with explicit
-  retention; independent UA implementations validate Query and history.
+- **D4 — bounded Complete/history host profile — PRESENT, BUILDS, HOST_TESTED and
+  bounded INTEGRATION_TESTED PASS.** Separate service and history gateways extend
+  D3 with twelve bounded UA operations and receipt-retained historical reads.
+  Fresh exact-ABI builds, 14-case acceptance (64 natural exits), D3 regression
+  (40 cases/82 exits), independent probes and strict docs checks pass; see
+  [`D4_UA_SERVICES_HISTORY.md`](standards/D4_UA_SERVICES_HISTORY.md) and
+  `build/d4-20261114/final-tester/`. This Windows profile is not normative
+  DDS-RPC or full DDS-OPCUA Complete conformance and does not alter D2.
 - **D5 — device path — PLANNED.** Same dual-board arrangement as C4, DSoftBus-only
   between boards, roles reversed.
 
